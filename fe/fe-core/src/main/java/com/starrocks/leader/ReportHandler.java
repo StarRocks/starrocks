@@ -850,6 +850,7 @@ public class ReportHandler extends Daemon {
             AgentTaskExecutor.submit(createReplicaBatchTask);
         }
     }
+
     private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
                                            long tabletId, int schemaHash, String reason, boolean force) {
         DropReplicaTask task =
@@ -1262,8 +1263,10 @@ public class ReportHandler extends Daemon {
                     continue;
                 }
                 db.readLock();
+
+                boolean needToCheck = false;
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
                 try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
                     if (olapTable == null) {
                         continue;
                     }
@@ -1277,9 +1280,23 @@ public class ReportHandler extends Daemon {
                     if (beBinlogConfigVersion < feBinlogConfigVersion) {
                         tabletToBinlogConfig.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
                                 olapTable.getCurBinlogConfig()));
+                    } else if (beBinlogConfigVersion == feBinlogConfigVersion) {
+                        if (olapTable.enableBinlog() && olapTable.getBinlogAvailableVersion().size() == 0) {
+                            // not to check here is that the function may need to get the write db lock
+                            needToCheck = true;
+                        }
+                    } else {
+                        LOG.warn("table {} binlog config version of tabletId: {}, BeId: {}, is {} " +
+                                        "greater than version of FE, which is {}", olapTable.getName(), tabletId, backendId,
+                                beBinlogConfigVersion, feBinlogConfigVersion);
                     }
                 } finally {
                     db.readUnlock();
+                }
+
+                if (needToCheck) {
+                    GlobalStateMgr.getCurrentState().getBinlogManager().checkAndSetBinlogAvailableVersion(db,
+                            olapTable, tabletId, backendId);
                 }
             }
         }
@@ -1292,6 +1309,7 @@ public class ReportHandler extends Daemon {
             AgentTaskExecutor.submit(batchTask);
         }
     }
+
     private static void handleClearTransactions(ListMultimap<Long, Long> transactionsToClear, long backendId) {
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Long transactionId : transactionsToClear.keySet()) {

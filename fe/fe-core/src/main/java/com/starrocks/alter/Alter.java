@@ -652,8 +652,11 @@ public class Alter {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateBinlogConfigMeta(db, olapTable.getId(),
-                            properties, null, TTabletMetaType.BINLOG_CONFIG);
+                    boolean isSuccess = ((SchemaChangeHandler) schemaChangeHandler).updateBinlogConfigMeta(db, olapTable.getId(),
+                            properties, TTabletMetaType.BINLOG_CONFIG);
+                    if (!isSuccess) {
+                        throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
+                    }
                 } else {
                     throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
                 }

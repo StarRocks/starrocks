@@ -197,8 +197,6 @@ import com.starrocks.persist.Storage;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
-import com.starrocks.persist.UpdateBinlogAvailableVersionInfo;
-import com.starrocks.persist.UpdateBinlogConfigInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.PrivilegeManager;
@@ -1868,7 +1866,6 @@ public class GlobalStateMgr {
 
         streamLoadManager.cancelUnDurableTaskAfterRestart();
 
-        binlogManager.setLeftTableBinlogAvailableVersion();
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -3055,14 +3052,6 @@ public class GlobalStateMgr {
         localMetastore.replayModifyTableProperty(opCode, info);
     }
 
-    public void replayModifyBinlogConfig(short opCode, UpdateBinlogConfigInfo info) {
-        localMetastore.replayModifyBinlogConfig(opCode, info);
-    }
-
-    public void replayModifyBinlogAvailableVersion(short opCode, UpdateBinlogAvailableVersionInfo info) {
-        localMetastore.replayModifyBinlogAvailableVersion(opCode, info);
-    }
-
     /*
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
@@ -3551,7 +3540,6 @@ public class GlobalStateMgr {
             LOG.warn("task manager clean expire task runs history failed", t);
         }
     }
-
 
     public StateChangeExecution getStateChangeExecution() {
         return execution;

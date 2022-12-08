@@ -114,8 +114,6 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
-import com.starrocks.persist.UpdateBinlogAvailableVersionInfo;
-import com.starrocks.persist.UpdateBinlogConfigInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
@@ -607,19 +605,13 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+            case OperationType.OP_MODIFY_BINLOG_CONFIG:
+            case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MODIFY_BINLOG_CONFIG:
-                data = UpdateBinlogConfigInfo.read(in);
-                isRead = true;
-                break;
-            case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
-                data = UpdateBinlogAvailableVersionInfo.read(in);
-                isRead = true;
-                break;
             case OperationType.OP_REPLACE_TEMP_PARTITION: {
                 data = ReplacePartitionOperationLog.read(in);
                 isRead = true;

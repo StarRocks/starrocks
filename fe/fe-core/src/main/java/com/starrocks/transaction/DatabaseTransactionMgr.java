@@ -40,7 +40,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -1040,7 +1039,6 @@ public class DatabaseTransactionMgr {
             Span updateCatalogSpan = TraceManager.startSpan("updateCatalogAfterVisible", finishSpan);
             try {
                 updateCatalogAfterVisible(transactionState, db);
-                checkAndUpdateBinlogAvaiableVersionIfNeed(transactionId, db);
             } finally {
                 updateCatalogSpan.end();
             }
@@ -1049,15 +1047,6 @@ public class DatabaseTransactionMgr {
             finishSpan.end();
         }
         LOG.info("finish transaction {} successfully", transactionState);
-    }
-
-
-    public void checkAndUpdateBinlogAvaiableVersionIfNeed(Long transactionId, Database db) {
-        BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
-        if (binlogManager.isBinlogWaitingTransactionId(transactionId)) {
-            binlogManager.checkAndSetBinlogAvailableVersion(transactionId,
-                    idToRunningTransactionState.keySet(), db);
-        }
     }
 
     protected void unprotectedCommitTransaction(TransactionState transactionState,
@@ -1290,14 +1279,6 @@ public class DatabaseTransactionMgr {
         if (db == null) {
             return;
         }
-        db.writeLock();
-        try {
-            // check binlog
-            checkAndUpdateBinlogAvaiableVersionIfNeed(transactionId, db);
-        } finally {
-            db.writeUnlock();
-        }
-
         List<TransactionStateListener> listeners = Lists.newArrayListWithCapacity(transactionState.getTableIdList().size());
         db.readLock();
         try {
@@ -1720,9 +1701,5 @@ public class DatabaseTransactionMgr {
             return "";
         }
         return transactionState.getPublishTimeoutDebugInfo();
-    }
-
-    public Set<Long> getRunningTransactionsId() {
-        return idToRunningTransactionState.keySet();
     }
 }

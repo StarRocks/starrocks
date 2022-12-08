@@ -194,21 +194,33 @@ public class AlterTableStatementAnalyzer {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
-                try {
-                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)) {
-                        Boolean.parseBoolean(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE);
+
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)) {
+                    String binlogEnable = properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE);
+                    if (!(binlogEnable.equals("false") || binlogEnable.equals("true"))) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE +
+                                        " must be true of false");
                     }
                     if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)) {
-                        Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_TTL));
+                        try {
+                            Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_TTL));
+                        } catch (NumberFormatException e) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                    "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_TTL +
+                                            " must be long");
+                        }
                     }
                     if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
-                        Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE));
+                        try {
+                            Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE));
+                        } catch (NumberFormatException e) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                    "Property " + PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE +
+                                            " must be long");
+                        }
                     }
-                } catch (NumberFormatException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property binlog_"  + " must be bool or long");
                 }
-
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_TYPE)) {

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.binlog;
 
@@ -7,158 +19,174 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.UpdateBinlogAvailableVersionInfo;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletMetaType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class BinlogManager {
 
     private static final Logger LOG = LogManager.getLogger(BinlogManager.class);
 
-    private Map<Long, Long> binlogTxnIdToTableId;
+    // tablet statistics through report handler
+    // tableId -> tabletId -> beId
+    private Map<Long, Map<Long, Set<Long>>> tabletStatistics;
 
-    // all tableIds to be set binlogAvailableVersions
-    // persistence is required, because if the mater is switched when the binlog has been enabled
-    // but the binlogAvailableVersion has not been set through publish verison,
-    // the information loss will cause the binlogAvailabeVersion to be unable to be set all the time
+    // tableId -> number of reported tablet from different BE
+    private Map<Long, Long> tableIdToReportedNum;
 
-    //tableId -> dbId
-    private Map<Long, Long> allTableIds;
+    // tableId -> binlog version
+    private Map<Long, Long> tableIdToBinlogVersion;
 
-    // When enable binlog, there may be concurrent imports
-    // record the map between all txnIds of concurrently imports
-    // and binlogTxnId
-    private Map<Long, Set<Long>> transcationidToBinlogTxnId;
+    // tableId -> ReplicaCount
+    private Map<Long, Long> tableIdToReplicaCount;
 
-    private ReentrantReadWriteLock binlogLock = new ReentrantReadWriteLock(true);
+    // tableId -> PartitionId
+    private Map<Long, Set<Long>> tableIdToPartitions;
 
     public static final long INVALID = -1;
 
+    QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
+
     public BinlogManager() {
-        binlogTxnIdToTableId = new HashMap<>();
-        transcationidToBinlogTxnId = new HashMap<>();
-        allTableIds = new HashMap<>();
+        tableIdToReportedNum = new HashMap<>();
+        tableIdToBinlogVersion = new HashMap<>();
+        tableIdToReplicaCount = new HashMap<>();
+        tabletStatistics = new HashMap<>();
+        tableIdToPartitions = new HashMap<>();
     }
 
-    public Map<Long, Long> getAllTableIds() {
-        return allTableIds;
-    }
-
-    public void setAllTableIds(Map<Long, Long> allTableIds) {
-        this.allTableIds = allTableIds;
-    }
-
-    public void recordBinlogTxnId(long binlogTxnId, long dbId, long tableId, Set<Long> transactionIds) {
-        if (binlogTxnIdToTableId.containsKey(binlogTxnId)) {
-            // should not happen, for the binlogTxnId can not be duplicate
-            LOG.warn("the binlogTxnId has added to the binlog manager");
-            return;
+    private boolean checkIsPartitionChanged(Set<Long> prePartitions, Collection<Partition> curPartitions) {
+        if (prePartitions.size() != curPartitions.size()) {
+            return false;
         }
-        binlogLock.writeLock().lock();
-        try {
-            binlogTxnIdToTableId.put(binlogTxnId, tableId);
-            allTableIds.put(tableId, dbId);
-
-            // null when replay editlog
-            if (transactionIds != null) {
-                for (Long transactionId : transactionIds) {
-                    transcationidToBinlogTxnId.putIfAbsent(transactionId, new HashSet<Long>());
-                    transcationidToBinlogTxnId.get(transactionId).add(binlogTxnId);
-                }
+        for (Partition partition : curPartitions) {
+            if (!prePartitions.contains(partition.getId())) {
+                return false;
             }
-        } finally {
-            binlogLock.writeLock().unlock();
         }
-
+        return true;
     }
 
-    // if the mater is switched when the binlog has been enabled
-    // but the binlogAvailableVersion has not been set through publish verison,
-    // then new FE master need to check and set the binlogAvaiableVesion of the table to visibleVersion
-    public void setLeftTableBinlogAvailableVersion() {
-        for (Map.Entry<Long, Long> entry : allTableIds.entrySet()) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(entry.getValue());
-            if (db != null) {
-                OlapTable table = (OlapTable) db.getTable(entry.getKey());
-                if (table != null && table.enableBinlog()) {
-                    Optional<Partition> fisrtPartition = table.getAllPartitions().stream().findFirst();
-                    if (fisrtPartition.isPresent() && fisrtPartition.get().getBinlogAvailableVersion() == INVALID) {
-                        HashMap<Long, Long> allPartitionToAvailableVesion = new HashMap<>();
-                        table.getAllPartitions().forEach(partition -> {
-                            partition.setBinlogAvailableVersion(partition.getVisibleVersion() + 1);
-                            allPartitionToAvailableVesion.put(partition.getId(), partition.getBinlogAvailableVersion());
-                        });
+    // the caller should not hold the write lock of Database
+    public void checkAndSetBinlogAvailableVersion(Database db, OlapTable table, long tabletId, long beId) {
+        lock.writeLock().lock();
+        try {
+            try {
+                // check if partitions has changed
+                db.readLock();
+                Set<Long> partitions = tableIdToPartitions.computeIfAbsent(table.getId(), key -> new HashSet<>());
+                boolean isPartitionChanged = checkIsPartitionChanged(partitions, table.getAllPartitions());
+                if (isPartitionChanged) {
+                    // for the sake of simplicity, if the partition have been changed, re-statistics
+                    partitions.clear();
+                    partitions.addAll(table.getAllPartitions().stream().
+                            map(partition -> partition.getId()).
+                            collect(Collectors.toSet()));
+                    tableIdToReportedNum.clear();
+                    tableIdToBinlogVersion.clear();
+                    tableIdToReplicaCount.clear();
+                    tabletStatistics.clear();
+                }
 
-                        UpdateBinlogAvailableVersionInfo info = new UpdateBinlogAvailableVersionInfo(entry.getValue(),
-                                entry.getKey(), true, allPartitionToAvailableVesion);
+                Map<Long, Set<Long>> allTabletIds = tabletStatistics.computeIfAbsent(table.getId(), key -> new HashMap<>());
+
+                // the previous version binlog config was not completed,
+                // and a new version was generated,
+                // the tablets counted need to be cleared
+                if (tableIdToBinlogVersion.containsKey(table.getId()) &&
+                        tableIdToBinlogVersion.get(table.getId()) != table.getBinlogVersion()) {
+                    allTabletIds.clear();
+                    tableIdToReportedNum.remove(table.getId());
+                }
+                tableIdToBinlogVersion.put(table.getId(), table.getBinlogVersion());
+                if (!tableIdToReplicaCount.containsKey(table.getId())) {
+                    long totalReplicaCount = table.getAllPartitions().stream().
+                            map(partition -> partition.getBaseIndex().getReplicaCount()).
+                            reduce(0L, (acc, n) -> acc + n);
+                    tableIdToReplicaCount.put(table.getId(), totalReplicaCount);
+                }
+                long num = tableIdToReportedNum.computeIfAbsent(table.getId(), key -> 0L);
+
+                Set<Long> allBeIds = allTabletIds.computeIfAbsent(tabletId, key -> new HashSet<>());
+                if (!allBeIds.contains(beId)) {
+                    num++;
+                    tableIdToReportedNum.put(table.getId(), num);
+                    allBeIds.add(beId);
+                }
+            } finally {
+                db.readUnlock();
+            }
+
+            if (tableIdToReportedNum.get(table.getId()).equals(tableIdToReplicaCount.get(table.getId()))) {
+                db.writeLock();
+                try {
+                    // check again if all replicas have been reported
+                    long totalReplicaCount = table.getAllPartitions().stream().
+                            map(partition -> partition.getBaseIndex().getReplicaCount()).
+                            reduce(0L, (acc, n) -> acc + n);
+
+                    if (totalReplicaCount != tableIdToReplicaCount.get(table.getId())) {
+                        tableIdToBinlogVersion.put(table.getId(), totalReplicaCount);
+                        return;
                     }
 
+                    long binlogTxnId = table.getBinlogTxnId();
+                    if (binlogTxnId == INVALID) {
+                        // the binlog config takes effect in all tablets of the table in BE for now
+                        Long nextTxnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().
+                                getTransactionIDGenerator().getNextTransactionId();
+                        table.setBinlogTxnId(binlogTxnId);
+                        binlogTxnId = nextTxnId;
+                    }
+                    // check whether the concurrent imports when binlog is enabled have completed
+                    List<Long> tableList = new ArrayList<>();
+                    tableList.add(table.getId());
+                    boolean isFinished = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                            getDatabaseTransactionMgr(db.getId()).isPreviousTransactionsFinished(
+                                    binlogTxnId, tableList);
+
+                    if (isFinished) {
+                        Map<String, String> properties = table.buildBinlogAvailableVersion();
+                        ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(db.getId(),
+                                table.getId(), properties);
+                        GlobalStateMgr.getCurrentState().getEditLog().logModifyBinlogAvailableVersion(log);
+                        table.setBinlogAvailableVersion(properties);
+                        LOG.info("set binlog available version tableName : {}, partitions : {}",
+                                table.getName(), properties.toString());
+                        tabletStatistics.remove(table.getId());
+                        tableIdToReportedNum.remove(table.getId());
+                        tableIdToReplicaCount.remove(table.getId());
+                        tableIdToPartitions.remove(table.getId());
+                    }
+                } catch (AnalysisException e) {
+                    LOG.warn(e);
+                } finally {
+                    db.writeUnlock();
                 }
-            }
-        }
-        allTableIds.clear();
-    }
-    public boolean isBinlogWaitingTransactionId(long transactionId) {
-        binlogLock.readLock().lock();
-        try {
-            if (transcationidToBinlogTxnId.containsKey(transactionId)) {
-                return true;
             }
         } finally {
-            binlogLock.readLock().unlock();
+            lock.writeLock().unlock();
         }
-        return false;
-    }
-
-    // the caller hold the write lock of Database
-    public void checkAndSetBinlogAvailableVersion(long toPublishTxnId, Set<Long> runningTransactionId,
-                                                  Database db) {
-        binlogLock.readLock().lock();
-        Set<Long> binlogTxnIds = transcationidToBinlogTxnId.get(toPublishTxnId);
-        if (binlogTxnIds == null) {
-            return;
-        }
-        for (Long binlogTxnId : transcationidToBinlogTxnId.get(toPublishTxnId)) {
-            boolean isLast = true;
-            for (Long transactionId : runningTransactionId) {
-                if (transactionId != toPublishTxnId && transactionId < binlogTxnId) {
-                    isLast = false;
-                }
-            }
-            if (isLast) {
-                Long tableId = binlogTxnIdToTableId.get(binlogTxnId);
-                OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                Map<Long, Long> partitionIdToAvailableVersion = olapTable.setBinlogAvailableVersin();
-                UpdateBinlogAvailableVersionInfo updateBinlogAvailableVersionInfo = new UpdateBinlogAvailableVersionInfo(
-                        db.getId(), olapTable.getId(), true, partitionIdToAvailableVersion);
-                GlobalStateMgr.getCurrentState().getEditLog().
-                        logModifyBinlogAvailableVersion(updateBinlogAvailableVersionInfo);
-
-                allTableIds.remove(tableId);
-                binlogTxnIdToTableId.remove(binlogTxnId);
-            }
-        }
-        transcationidToBinlogTxnId.remove(toPublishTxnId);
-        binlogLock.readLock().lock();
     }
 
     // the caller don't need to hold the db lock
+    // for updateBinlogConfigMeta will get the db writelock
+    // return true means that the modification of FEMeta is successful
     public boolean tryEnableBinlog(Database db, long tableId, long binlogTtL, long binlogMaxSize) {
-        // after the FE metadata is successfully modified,
-        // flag of context will be set to true
-        BinlogContext context = new BinlogContext();
         // pass properties not binlogConfig is for
         // unify the logic of alter table manaul and alter table of mv trigger
         HashMap<String, String> properties = new HashMap<>();
@@ -170,81 +198,79 @@ public class BinlogManager {
             properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, String.valueOf(binlogMaxSize));
         }
 
-        try {
-            SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-            schemaChangeHandler.updateBinlogConfigMeta(db, tableId, properties, context, TTabletMetaType.BINLOG_CONFIG);
-        } catch (DdlException exception) {
-            return context.isModifyFeMetaSuccess();
-        }
-        return true;
-
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        return schemaChangeHandler.updateBinlogConfigMeta(db, tableId, properties, TTabletMetaType.BINLOG_CONFIG);
     }
 
     // the caller don't need to hold the db lock
-    public boolean tryCloseBinlog(Database db, long tableId) {
-        try {
-            // modify FE meta, return true
-            // try to distrucite BE task best effort
-            HashMap<String, String> properties = new HashMap<>();
-            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, "false");
-            SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-            schemaChangeHandler.updateBinlogConfigMeta(db, tableId, properties, null, TTabletMetaType.DISABLE_BINLOG);
-        } catch (DdlException e) {
-            return false;
-        }
-        return true;
+    // for updateBinlogConfigMeta will get the db writelock
+    // return true means that the modification of FEMeta is successful,
+    public boolean tryDisableBinlog(Database db, long tableId) {
+        // modify FE meta, return true
+        // try best effort to distribute BE tasks
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, "false");
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        return schemaChangeHandler.updateBinlogConfigMeta(db, tableId, properties, TTabletMetaType.DISABLE_BINLOG);
     }
 
-    // Check whether the binlogAvailableVersion of all partitions of the table is available,
-    // return true if available
-    // return false if anyone is unavailable,
-    public boolean isBinlogAvailable(long tableId, long dbId) {
-        OlapTable olaptable = (OlapTable) GlobalStateMgr.getCurrentState().getDb(dbId).getTable(tableId);
-        long failedNum = olaptable.getPartitions().stream().filter(partition -> {
-            return partition.getBinlogAvailableVersion() == -1;
-        }).count();
 
-        if (failedNum != 0) {
-            return false;
+    public boolean isBinlogAvailable(long dbId, long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db != null) {
+            db.readLock();
+            try {
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable != null) {
+                    return olapTable.getBinlogAvailableVersion().size() != 0;
+                }
+            } finally {
+                db.readUnlock();
+            }
         }
-        return true;
+        return false;
     }
 
     // isBinlogavailable should be called first to make sure that
     // the binlog is available
-    public HashMap<Partition, Long> getBinlogAvailableVersion(long tableId, long dbId) {
-        HashMap<Partition, Long> partionToAvilableVersionMap = new HashMap<>();
-        OlapTable olaptable = (OlapTable) GlobalStateMgr.getCurrentState().getDb(dbId).getTable(tableId);
-        olaptable.getPartitions().stream().forEach(
-                partiton -> partionToAvilableVersionMap.put(partiton, partiton.getBinlogAvailableVersion()));
-        return partionToAvilableVersionMap;
+    // result : partitionId -> binlogAvailableVersion, null indicates the db or table is dropped
+    public Map<Long, Long> getBinlogAvailableVersion(long dbId, long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db != null) {
+            db.readLock();
+            try {
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable != null) {
+                    return olapTable.getBinlogAvailableVersion();
+                }
+            } finally {
+                db.readUnlock();
+            }
+        }
+        return null;
     }
 
-    // return all tables with binlog enabled and the latest version itls current binlogConfig
-    // result : <tableId,BinlogConfig>
+    // return all tables with binlog enabled and current binlogConfig with the latest version
+    // result : <tableId, BinlogConfig>
     public HashMap<Long, BinlogConfig> showAllBinlog() {
         HashMap<Long, BinlogConfig> allTablesWithBinlogConfigMap = new HashMap<>();
         List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : allDbIds) {
-            List<Table> tables = GlobalStateMgr.getCurrentState().getDb(dbId).getTables();
-            for (Table table : tables) {
-                if (table.isOlapTable() && ((OlapTable) table).enableBinlog()) {
-                    allTablesWithBinlogConfigMap.put(table.getId(), ((OlapTable) table).getCurBinlogConfig());
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null) {
+                db.readLock();
+                try {
+                    List<Table> tables = db.getTables();
+                    for (Table table : tables) {
+                        if (table.isOlapTable() && ((OlapTable) table).enableBinlog()) {
+                            allTablesWithBinlogConfigMap.put(table.getId(), ((OlapTable) table).getCurBinlogConfig());
+                        }
+                    }
+                } finally {
+                    db.readUnlock();
                 }
             }
         }
         return allTablesWithBinlogConfigMap;
-    }
-
-    public static class BinlogContext {
-        boolean isModifyFeMetaSuccess = false;
-
-        public void setModifyFeMetaSuccess(boolean modifyFeMetaSuccess) {
-            isModifyFeMetaSuccess = modifyFeMetaSuccess;
-        }
-
-        public boolean isModifyFeMetaSuccess() {
-            return isModifyFeMetaSuccess;
-        }
     }
 }

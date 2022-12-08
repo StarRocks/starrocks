@@ -194,6 +194,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     protected BinlogConfig curBinlogConfig;
 
+    // After ensuring that all binlog config of tablets in BE have taken effect,
+    // apply for a transaction id as binlogtxnId.
+    // The purpose is to ensure that in the case of concurrent imports,
+    // need to wait for the completion of concurrent imports,
+    // that is, all transactions which id is smaller than binlogTxnId have been finished/aborted,
+    // then binlog is available
+    protected long binlogTxnId = -1;
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -257,15 +264,51 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     public BinlogConfig getCurBinlogConfig() {
-        return curBinlogConfig;
+        if (tableProperty != null) {
+            return tableProperty.getBinlogConfig();
+        }
+        return null;
     }
 
     public void setCurBinlogConfig(BinlogConfig curBinlogConfig) {
-        this.curBinlogConfig = curBinlogConfig;
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(Maps.newHashMap());
+        }
+        Map<String, String> properties = curBinlogConfig.toProperties();
+
+        // log binlogAvilableVerison when it's valid
+        // need't log if it's invalid
+        // for replay updateBinlogConfigInfo will invalidate binlogAvailableVersion
+        if (curBinlogConfig.getBinlogEnable()) {
+            Collection<Partition> allPartitions = getAllPartitions();
+            Map<String, String> partitonIdToAvailableVersion = new HashMap<>();
+            allPartitions.forEach(partition -> partitonIdToAvailableVersion.put(
+                    TableProperty.BINLOG_PARTITION + partition.getId(),
+                    String.valueOf(partition.getVisibleVersion())));
+            properties.putAll(partitonIdToAvailableVersion);
+        }
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setBinlogConfig(curBinlogConfig);
+        if (curBinlogConfig.getBinlogEnable()) {
+            tableProperty.buildBinlogAvailableVersion();
+        }
     }
 
-    public boolean isBinlogConfigNull() {
-        return curBinlogConfig == null;
+    public boolean isHaveBinlogConfig() {
+        if (tableProperty == null ||
+                tableProperty.getBinlogConfig() == null ||
+                tableProperty.getBinlogConfig().getVersion() == BinlogConfig.INVALID) {
+            return false;
+        }
+        return true;
+    }
+
+    public long getBinlogTxnId() {
+        return binlogTxnId;
+    }
+
+    public void setBinlogTxnId(long binlogTxnId) {
+        this.binlogTxnId = binlogTxnId;
     }
     public void setTableProperty(TableProperty tableProperty) {
         this.tableProperty = tableProperty;
@@ -1671,17 +1714,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     public Boolean enableBinlog() {
-        if (curBinlogConfig == null) {
+        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
             return false;
         }
-        return curBinlogConfig.getBinlogEnable();
+        return tableProperty.getBinlogConfig().getBinlogEnable();
     }
 
-    public void incBinlogVersion() {
-        curBinlogConfig.incVersion();
-    }
-    public Long getBinlogVersion() {
-        return curBinlogConfig.getVersion();
+    public long getBinlogVersion() {
+        if (tableProperty == null || tableProperty.getBinlogConfig() == null) {
+            return BinlogConfig.INVALID;
+        }
+        return tableProperty.getBinlogConfig().getVersion();
     }
 
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
@@ -1949,16 +1992,37 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
-    public Map<Long, Long> setBinlogAvailableVersin() {
-        Map<Long, Long> result = new HashMap<>();
+    public Map<String, String> buildBinlogAvailableVersion() {
+        Map<String, String> result = new HashMap<>();
         Collection<Partition> partitions =  getPartitions();
         for (Partition partition : partitions) {
-            partition.setBinlogAvailableVersion(partition.getVisibleVersion() + 1);
-            result.put(partition.getId(), partition.getBinlogAvailableVersion());
+            result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
+                    String.valueOf(partition.getVisibleVersion()));
         }
         return result;
     }
 
+    public void setBinlogAvailableVersion(Map<String, String> properties) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.buildBinlogAvailableVersion();
+    }
+
+    public Map<Long, Long> getBinlogAvailableVersion() {
+        if (tableProperty == null) {
+            return new HashMap<>();
+        }
+        return tableProperty.getBinlogAvailaberVersions();
+    }
+
+    public void clearBinlogAvailableVersion() {
+        if (tableProperty == null) {
+            return;
+        }
+        tableProperty.clearBinlogAvailableVersion();
+    }
 
     @Override
     public void onCreate() {

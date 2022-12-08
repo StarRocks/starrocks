@@ -88,7 +88,6 @@ public class CreateReplicaTask extends AgentTask {
 
     private boolean enablePersistentIndex;
 
-    //private boolean enableBinlog;
     private BinlogConfig binlogConfig;
 
     private TTabletType tabletType;

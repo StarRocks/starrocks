@@ -46,7 +46,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -1340,19 +1339,24 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-
-    public void updateBinlogConfigMeta(Database db, Long tableId, Map<String, String> properties,
-                                       BinlogManager.BinlogContext context, TTabletMetaType metaType) throws DdlException {
+    // return true means that the modification of FEMeta is successful,
+    // and as long as the modification of metadata is successful,
+    // the final consistency will be achieved through the report handler
+    public boolean updateBinlogConfigMeta(Database db, Long tableId, Map<String, String> properties,
+                                          TTabletMetaType metaType) {
         List<Partition> partitions = Lists.newArrayList();
         OlapTable olapTable;
         BinlogConfig newBinlogConfig;
         boolean hasChanged = false;
-
+        boolean isModifiedSuccess = true;
         db.readLock();
         try {
             olapTable = (OlapTable) db.getTable(tableId);
+            if (olapTable == null) {
+                return false;
+            }
             partitions.addAll(olapTable.getPartitions());
-            if (olapTable.isBinlogConfigNull()) {
+            if (!olapTable.isHaveBinlogConfig()) {
                 newBinlogConfig = new BinlogConfig();
                 hasChanged = true;
             } else {
@@ -1389,30 +1393,53 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
         if (!hasChanged) {
-            if (context != null) {
-                context.setModifyFeMetaSuccess(true);
-            }
-            return;
+            LOG.info("table {} binlog config is same as the previous version, so nothing need to do", olapTable.getName());
+            return true;
+        }
+
+        if (olapTable.getCurBinlogConfig() != null) {
+            LOG.info("update binlog config of table {}, the current binlog is : {}",
+                    olapTable.getName(), olapTable.getCurBinlogConfig().toString());
+        } else {
+            LOG.info("update binlog config of table {}, it has no binlog config previously",
+                    olapTable.getName());
         }
 
         db.writeLock();
+        // check for concurrent modifications by version
+        if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
+            // binlog config has been modified,
+            // no need to judge whether the binlog config is the same as previous one,
+            // just modify even if they are the same
+            Map<String, String> newProperties = olapTable.getCurBinlogConfig().toProperties();
+            newProperties.putAll(properties);
+            newBinlogConfig.buildFromProperties(newProperties);
+        }
+        newBinlogConfig.incVersion();
         try {
             GlobalStateMgr.getCurrentState().modifyBinlogMeta(db, olapTable, newBinlogConfig);
-            // alter table manual
-            if (context != null) {
-                context.setModifyFeMetaSuccess(true);
-            }
+        } catch (Exception e) {
+            // defensive programming, it normally should not throw an exception,
+            // here is just to ensure that a correct result can be returned
+            isModifiedSuccess = false;
         } finally {
             db.writeUnlock();
         }
 
-        // TODO Optimize by asynchronous rpc
+        // TODO optimize by asynchronous rpc
         if (metaType != TTabletMetaType.DISABLE_BINLOG) {
-            for (Partition partition : partitions) {
-                updateBinlogPartitionTabletMeta(db, olapTable.getName(), partition.getName(), olapTable.getCurBinlogConfig(),
-                        TTabletMetaType.BINLOG_CONFIG);
+            try {
+                for (Partition partition : partitions) {
+                    updateBinlogPartitionTabletMeta(db, olapTable.getName(), partition.getName(), olapTable.getCurBinlogConfig(),
+                            TTabletMetaType.BINLOG_CONFIG);
+                }
+            } catch (DdlException e) {
+                LOG.warn(e);
+                return isModifiedSuccess;
             }
+
         }
+        return isModifiedSuccess;
     }
 
     /**
@@ -1475,10 +1502,6 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             MaterializedIndex baseIndex = partition.getBaseIndex();
-            if (baseIndex.getState().equals(IndexExtState.VISIBLE)) {
-                throw new DdlException("The state of partition[" + partitionName + "] " +
-                        "is [" + baseIndex.getState() + "] not visible in table[" + olapTable.getName() + "]");
-            }
             int schemaHash = olapTable.getSchemaHashByIndexId(baseIndex.getId());
             for (Tablet tablet : baseIndex.getTablets()) {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

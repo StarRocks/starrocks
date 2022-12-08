@@ -651,7 +651,7 @@ public class CreateTableTest {
         Assert.assertTrue(table.enableBinlog());
 
         long version = table.getBinlogVersion();
-        Assert.assertEquals(1, version);
+        Assert.assertEquals(0, version);
         long binlogMaxSize = table.getCurBinlogConfig().getBinlogMaxSize();
         Assert.assertEquals(100, binlogMaxSize);
         long binlogTtlSecond = table.getCurBinlogConfig().getBinlogTtlSecond();
@@ -661,7 +661,7 @@ public class CreateTableTest {
                 () -> alterTableWithNewParser("ALTER TABLE test.binlog_table SET " +
                         "(\"binlog_enable\" = \"false\",\"binlog_max_size\" = \"200\")"));
         Assert.assertFalse(table.enableBinlog());
-        Assert.assertEquals(2, table.getBinlogVersion().longValue());
+        Assert.assertEquals(1, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
 
     }
@@ -684,14 +684,14 @@ public class CreateTableTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("not_binlog_table");
 
-        Assert.assertTrue(table.isBinlogConfigNull());
+        Assert.assertFalse(table.isHaveBinlogConfig());
         Assert.assertFalse(table.enableBinlog());
 
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTableWithNewParser("ALTER TABLE test.not_binlog_table SET " +
                         "(\"binlog_enable\" = \"true\",\"binlog_max_size\" = \"200\")"));
         Assert.assertTrue(table.enableBinlog());
-        Assert.assertEquals(1, table.getBinlogVersion().longValue());
+        Assert.assertEquals(0, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
     }
 }

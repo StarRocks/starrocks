@@ -1980,9 +1980,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
 
-    @ConfField(mutable = true)
-    public static long binlog_ttl_second = 60 * 60 * 24L; // 1day
+    @ConfField
+    public static long binlog_ttl_second = 60 * 30; // 30min
 
     @ConfField
-    public static long binlog_max_size = 1024 * 1024 * 1024L; // 1Gb
+    public static long binlog_max_size = Integer.MAX_VALUE; // no limit
 }

@@ -196,7 +196,7 @@ public:
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
-    void set_binlog_config(const TBinlogConfig binlog_config) {
+    void set_binlog_config(const TBinlogConfig& binlog_config) {
         if (_binlog_config == nullptr) {
             _binlog_config = std::make_shared<BinlogConfig>();
         } else if (_binlog_config->version > binlog_config.version) {

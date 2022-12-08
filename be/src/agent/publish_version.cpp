@@ -41,7 +41,6 @@ struct TabletPublishVersionTask {
     int64_t tablet_id{0};
     int64_t version{0}; // requested publish version
     RowsetSharedPtr rowset;
-    TBinlogConfig tbinlog_config;
     // output params
     Status st;
     // max continuous version after publish is done
@@ -80,10 +79,6 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
             task.tablet_id = itr.first.tablet_id;
             task.version = publish_version_req.partition_version_infos[i].version;
             task.rowset = std::move(itr.second);
-            if (publish_version_req.partition_version_infos[i].__isset.binlog_config) {
-                LOG(INFO) << "publish version binlog";
-                task.tbinlog_config = publish_version_req.partition_version_infos[i].binlog_config;
-            }
         }
     }
     std::mutex affected_dirs_lock;
@@ -116,11 +111,6 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                     std::lock_guard lg(affected_dirs_lock);
                     affected_dirs.insert(tablet->data_dir());
                 }
-
-                // update binlogConfig
-                tablet->set_binlog_config(task.tbinlog_config);
-                LOG(INFO) << "tablet set binlog config success";
-
                 task.st = StorageEngine::instance()->txn_manager()->publish_txn(task.partition_id, tablet, task.txn_id,
                                                                                 task.version, task.rowset);
                 if (!task.st.ok()) {
