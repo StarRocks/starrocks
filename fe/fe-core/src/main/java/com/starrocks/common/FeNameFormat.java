@@ -39,7 +39,11 @@ public class FeNameFormat {
     // the future new design will improve this problem and open this limitation
     private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1024}$";
 
+<<<<<<< HEAD
     // The username  by kerberos authentication may include the host name, so additional adaptation is required.
+=======
+    // The username by kerberos authentication may include the host name, so additional adaptation is required.
+>>>>>>> c3ee16dbb (Fix turn on table name typos (#14917))
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
