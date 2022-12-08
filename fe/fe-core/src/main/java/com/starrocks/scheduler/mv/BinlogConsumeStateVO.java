@@ -52,7 +52,7 @@ public class BinlogConsumeStateVO implements Writable {
             scan.setTable_id(meta.getTableId());
             scan.setTablet_id(key.getTabletId());
             scan.setPartition_id(meta.getPartitionId());
-            scan.setLsn(value.toThrift());
+            scan.setOffset(value.toThrift());
             res.add(scan);
         });
         return res;

@@ -1268,7 +1268,7 @@ public class CoordinatorPreprocessor {
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
     // FragmentExecParams
-    static class FInstanceExecParam {
+    public static class FInstanceExecParam {
         static final int ABSENT_PIPELINE_DOP = -1;
         static final int ABSENT_DRIVER_SEQUENCE = -1;
 
@@ -1325,6 +1325,10 @@ public class CoordinatorPreprocessor {
 
         public Map<Integer, Map<Integer, List<TScanRangeParams>>> getNodeToPerDriverSeqScanRanges() {
             return nodeToPerDriverSeqScanRanges;
+        }
+
+        public int getBackendNum() {
+            return backendNum;
         }
 
         public TNetworkAddress getHost() {
