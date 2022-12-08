@@ -1358,6 +1358,11 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
             OlapTable table = (OlapTable) db.getTable(tableId);
+            // table may be dropped by force after transaction committed
+            // so that it will be a visible edit log after drop table
+            if (table == null) {
+                continue;
+            }
             List<String> validDictCacheColumns = Lists.newArrayList();
             long maxPartitionVersionTime = -1;
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
