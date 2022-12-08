@@ -835,7 +835,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         OlapTable basePartitionTable = (OlapTable) partitionTable;
 
         // check partition-by table
-        // Set<String> needRefreshMvPartitionNames = getUpdatedPartitionNames(basePartitionTable);
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
 
         Map<String, Range<PartitionKey>> basePartitionMap = basePartitionTable.getRangePartitionMap();
