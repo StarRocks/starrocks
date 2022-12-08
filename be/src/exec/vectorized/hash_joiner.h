@@ -116,7 +116,7 @@ class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers);
 
-    ~HashJoiner() {
+    ~HashJoiner() override {
         if (_runtime_state != nullptr) {
             close(_runtime_state);
         }

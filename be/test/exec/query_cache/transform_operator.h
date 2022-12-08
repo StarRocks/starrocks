@@ -75,7 +75,7 @@ using Reducers = std::vector<ReducerPtr>;
 class Reducer final : public pipeline::ContextWithDependency {
 public:
     Reducer(double init_value, ReduceFunc reduce_func, size_t output_num_rows);
-    ~Reducer() = default;
+    ~Reducer() override = default;
     void close(starrocks::RuntimeState* state) override{};
     Status reset_state(RuntimeState* state, const Chunks& chunks, pipeline::Operator* op);
 
