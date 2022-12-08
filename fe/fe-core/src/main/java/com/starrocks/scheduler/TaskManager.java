@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.scheduler;
 
@@ -23,6 +36,7 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,12 +53,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+
+import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
 public class TaskManager {
 
@@ -125,8 +142,12 @@ public class TaskManager {
             if (initialDelay < 0) {
                 initialDelay = 0;
             }
+            // Tasks that run automatically have the lowest priority,
+            // but are automatically merged if they are found to be merge-able.
+            ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+                    true, task.getProperties());
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                            executeTask(task.getName()), initialDelay,
+                            executeTask(task.getName(), option), initialDelay,
                     TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
                             taskSchedule.getTimeUnit()), TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);
@@ -262,6 +283,24 @@ public class TaskManager {
         return taskRunManager.killTaskRun(task.getId());
     }
 
+    public Constants.TaskRunState executeTaskSync(String taskName) throws ExecutionException, InterruptedException {
+        return executeTaskSync(taskName, new ExecuteOption());
+    }
+
+    public Constants.TaskRunState executeTaskSync(String taskName, ExecuteOption option)
+            throws ExecutionException, InterruptedException {
+        Task task = nameToTaskMap.get(taskName);
+        if (task == null) {
+            throw new DmlException("execute task:" + taskName + " failed");
+        }
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        SubmitResult submitResult = taskRunManager.submitTaskRun(taskRun, option);
+        if (submitResult.getStatus() != SUBMITTED) {
+            throw new DmlException("execute task:" + taskName + " failed");
+        }
+        return taskRun.getFuture().get();
+    }
+
     public SubmitResult executeTask(String taskName) {
         return executeTask(taskName, new ExecuteOption());
     }
@@ -271,7 +310,9 @@ public class TaskManager {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build(), option);
+        return taskRunManager
+                .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).build(),
+                        option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -477,7 +518,10 @@ public class TaskManager {
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
             case FAILED:
+                taskRunManager.getTaskRunHistory().addHistory(status);
+                break;
             case SUCCESS:
+                status.setProgress(100);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
         }
@@ -546,6 +590,7 @@ public class TaskManager {
                     status.setErrorCode(statusChange.getErrorCode());
                 }
                 status.setState(toStatus);
+                status.setProgress(100);
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
             }
@@ -562,6 +607,17 @@ public class TaskManager {
         }
         taskRunManager.getTaskRunHistory().getAllHistory()
                 .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
+    }
+
+    public void replayAlterRunningTaskRunProgress(Map<Long, Integer> taskRunProgresMap) {
+        Map<Long, TaskRun> runningTaskRunMap = taskRunManager.getRunningTaskRunMap();
+        for (Map.Entry<Long, Integer> entry : taskRunProgresMap.entrySet()) {
+            // When replaying the log, the task run may have ended
+            // and the status has changed to success or failed
+            if (runningTaskRunMap.containsKey(entry.getKey())) {
+                runningTaskRunMap.get(entry.getKey()).getStatus().setProgress(entry.getValue());
+            }
+        }
     }
 
     public void removeExpiredTasks() {

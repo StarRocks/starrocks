@@ -1,10 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -19,22 +34,33 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final String name;
     private boolean nullable;
 
-    private boolean isLambdaArgument;
+    // TODO(SmithCruise) Ugly code, remove it in future.
+    // Empty list for default
+    // If it's empty, means select all
+    // Only used for map and struct type
+    private final List<ImmutableList<Integer>> usedSubfieldPosGroup = new ArrayList<>();
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isLambdaArgument = false;
+    }
+
+    public void addUsedSubfieldPos(ImmutableList<Integer> usedNestFieldPos) {
+        this.usedSubfieldPosGroup.add(usedNestFieldPos);
+    }
+
+    public List<ImmutableList<Integer>> getUsedSubfieldPosGroup() {
+        return this.usedSubfieldPosGroup;
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
-        super(OperatorType.VARIABLE, type);
+        // lambda arguments cannot be seen by outer scopes, so set it a different operator type.
+        super(isLambdaArgument ? OperatorType.LAMBDA_ARGUMENT : OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isLambdaArgument = isLambdaArgument;
     }
 
     public int getId() {
@@ -80,7 +106,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
-        if (isLambdaArgument) {
+        if (getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
             return new ColumnRefSet();
         }
         return new ColumnRefSet(id);

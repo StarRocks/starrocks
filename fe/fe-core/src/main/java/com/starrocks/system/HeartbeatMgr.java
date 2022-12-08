@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/system/HeartbeatMgr.java
 
@@ -75,7 +88,7 @@ public class HeartbeatMgr extends LeaderDaemon {
     private static AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
 
     public HeartbeatMgr(SystemInfoService nodeMgr, boolean needRegisterMetric) {
-        super("heartbeat mgr", Config.heartbeat_timeout_second * 1000);
+        super("heartbeat mgr", Config.heartbeat_timeout_second * 1000L);
         this.nodeMgr = nodeMgr;
         this.executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
@@ -216,7 +229,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                     computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
                 }
                 if (computeNode != null) {
-                    boolean isChanged = computeNode.handleHbResponse(hbResponse);
+                    boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
                         ClientPool.backendPool.clearPool(new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
@@ -243,7 +256,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
                         hbResponse.getName(), hbResponse.getHost(), hbResponse.getPort());
                 if (broker != null) {
-                    boolean isChanged = broker.handleHbResponse(hbResponse);
+                    boolean isChanged = broker.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
                         ClientPool.brokerPool.clearPool(new TNetworkAddress(broker.ip, broker.port));
@@ -321,7 +334,8 @@ public class HeartbeatMgr extends LeaderDaemon {
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
-                LOG.warn("backend heartbeat got exception", e);
+                LOG.warn("backend heartbeat got exception, addr: {}:{}",
+                        computeNode.getHost(), computeNode.getHeartbeatPort(), e);
                 return new BackendHbResponse(computeNodeId,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {

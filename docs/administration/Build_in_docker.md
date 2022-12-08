@@ -24,7 +24,7 @@ docker pull starrocks/dev-env:{version}
   # Run git clone starrocks in any path which in the container
   git clone https://github.com/StarRocks/starrocks.git
   cd starrocks
-  sh build.sh
+  ./build.sh
   ```
 
 - Run the container by mounting the local path (**recommended**)
@@ -41,7 +41,7 @@ docker pull starrocks/dev-env:{version}
   
   docker exec -it {container-name} /bin/bash
   cd /root/starrocks
-  sh build.sh
+  ./build.sh
   ```
 
 ## Third party tool

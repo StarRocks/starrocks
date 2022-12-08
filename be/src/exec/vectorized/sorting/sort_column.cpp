@@ -1,6 +1,19 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <algorithm>
+#include <utility>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -30,7 +43,7 @@ public:
               _sort_desc(sort_desc),
               _permutation(permutation),
               _tie(tie),
-              _range(range),
+              _range(std::move(range)),
               _build_tie(build_tie) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
@@ -73,6 +86,11 @@ public:
 
         return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
                                    _build_tie);
+    }
+
+    Status do_visit(const vectorized::StructColumn& column) {
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
     }
 
     template <typename T>
@@ -136,16 +154,16 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, std::vector<ColumnPtr> columns,
                                   const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
                                   std::pair<int, int> range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
-              _vertical_columns(columns),
+              _vertical_columns(std::move(columns)),
               _permutation(permutation),
               _tie(tie),
-              _range(range),
+              _range(std::move(range)),
               _build_tie(build_tie),
               _limit(limit),
               _pruned_limit(permutation.size()) {}
@@ -287,6 +305,11 @@ public:
                                             _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
+    }
+
+    Status do_visit(const vectorized::StructColumn& column) {
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
     }
 
     template <typename T>
@@ -476,6 +499,7 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
         DCHECK_GT(perm.size(), 0);
 
         std::vector<ColumnPtr> vertical_columns;
+        vertical_columns.reserve(vertical_chunks.size());
         for (const auto& columns : vertical_chunks) {
             vertical_columns.push_back(columns[col]);
         }
@@ -504,39 +528,6 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     }
 
     return Status::OK();
-}
-
-void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
-    if (chunks.empty() || perm.empty()) {
-        return;
-    }
-
-    std::vector<const Chunk*> src;
-    src.reserve(chunks.size());
-    for (auto& chunk : chunks) {
-        src.push_back(chunk.get());
-    }
-    DCHECK_LT(std::max_element(perm.begin(), perm.end(),
-                               [](auto& lhs, auto& rhs) { return lhs.chunk_index < rhs.chunk_index; })
-                      ->chunk_index,
-              chunks.size());
-    append_by_permutation(dst, src, perm);
-}
-
-void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm) {
-    if (chunks.empty() || perm.empty()) {
-        return;
-    }
-
-    DCHECK_EQ(dst->num_columns(), chunks[0]->columns().size());
-    for (size_t col_index = 0; col_index < dst->columns().size(); col_index++) {
-        Columns tmp_columns;
-        tmp_columns.reserve(chunks.size());
-        for (auto chunk : chunks) {
-            tmp_columns.push_back(chunk->get_column_by_index(col_index));
-        }
-        append_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
-    }
 }
 
 } // namespace starrocks::vectorized

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/runtime/mem_pool_test.cpp
 
@@ -135,7 +148,7 @@ TEST(MemPoolTest, MaxAllocation) {
     // Allocate a single LARGE_ALLOC_SIZE chunk
     MemPool p1;
     uint8_t* ptr = p1.allocate(LARGE_ALLOC_SIZE);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(int_max_rounded, p1.total_reserved_bytes());
     EXPECT_EQ(int_max_rounded, p1.total_allocated_bytes());
     p1.free_all();
@@ -146,7 +159,7 @@ TEST(MemPoolTest, MaxAllocation) {
     EXPECT_EQ(p2.total_reserved_bytes(), 4096);
     EXPECT_EQ(p2.total_allocated_bytes(), 8);
     ptr = p2.allocate(LARGE_ALLOC_SIZE);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(p2.total_reserved_bytes(), 4096LL + int_max_rounded);
     EXPECT_EQ(p2.total_allocated_bytes(), 8LL + int_max_rounded);
     p2.free_all();
@@ -158,12 +171,12 @@ TEST(MemPoolTest, MaxAllocation) {
     // Allocates new int_max_rounded * 2 chunk
     // NOTE: exceed MAX_CHUNK_SIZE limit, will not *2
     ptr = p3.allocate(LARGE_ALLOC_SIZE);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(int_max_rounded * 2, p3.total_reserved_bytes());
     EXPECT_EQ(int_max_rounded * 2, p3.total_allocated_bytes());
     // Uses existing int_max_rounded * 2 chunk
     ptr = p3.allocate(LARGE_ALLOC_SIZE);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(int_max_rounded * 3, p3.total_reserved_bytes());
     EXPECT_EQ(int_max_rounded * 3, p3.total_allocated_bytes());
 
@@ -171,12 +184,12 @@ TEST(MemPoolTest, MaxAllocation) {
     // NOTE: exceed MAX_CHUNK_SIZE limit, will not *2
 #if !defined(ADDRESS_SANITIZER) || (__clang_major__ >= 3 && __clang_minor__ >= 7)
     ptr = p3.allocate(8);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(int_max_rounded * 3 + 512 * 1024, p3.total_reserved_bytes());
     EXPECT_EQ(int_max_rounded * 3 + 8, p3.total_allocated_bytes());
     // Uses existing int_max_rounded * 4 chunk
     ptr = p3.allocate(LARGE_ALLOC_SIZE);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(int_max_rounded * 4 + 512 * 1024, p3.total_reserved_bytes());
     EXPECT_EQ(int_max_rounded * 4 + 8, p3.total_allocated_bytes());
 #endif

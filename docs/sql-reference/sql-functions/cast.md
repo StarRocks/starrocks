@@ -6,7 +6,7 @@ Converts an input into the specified type. For example, `cast (input as BIGINT)`
 
 From v2.4, StarRocks supports conversion to the ARRAY type.
 
-### Syntax
+## Syntax
 
 ```Haskell
 cast (input as type)

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/rle_page_test.cpp
 
@@ -29,6 +42,7 @@
 #include "gtest/gtest.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
@@ -41,23 +55,19 @@ namespace starrocks {
 
 class RlePageTest : public testing::Test {
 public:
-    virtual ~RlePageTest() {}
+    ~RlePageTest() override = default;
 
-    template <FieldType type, class PageDecoderType>
+    template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        MemPool pool;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(1, true, get_type_info(type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
+        auto column = ChunkHelper::column_from_field_type(type, false);
 
         size_t n = 1;
-        decoder->next_batch(&n, &column_block_view);
+        decoder->next_batch(&n, column.get());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(block.cell_ptr(0));
+        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
-    template <FieldType Type, class PageBuilderType = RlePageBuilder<Type>>
+    template <LogicalType Type, class PageBuilderType = RlePageBuilder<Type>>
     OwnedSlice rle_encode(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         PageBuilderOptions builder_options;
@@ -68,16 +78,16 @@ public:
         CHECK_EQ(size, rle_page_builder.count());
 
         //check first value and last value
-        CppType first_value;
+        CppType first_value = {};
         rle_page_builder.get_first_value(&first_value);
         CHECK_EQ(src[0], first_value);
-        CppType last_value;
+        CppType last_value = {};
         rle_page_builder.get_last_value(&last_value);
         CHECK_EQ(src[size - 1], last_value);
         return s;
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);
@@ -89,17 +99,13 @@ public:
         ASSERT_EQ(0, rle_page_decoder.current_index());
         ASSERT_EQ(size, rle_page_decoder.count());
 
-        MemPool pool;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(size, true, get_type_info(Type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
+        auto column = ChunkHelper::column_from_field_type(Type, true);
         size_t size_to_fetch = size;
-        status = rle_page_decoder.next_batch(&size_to_fetch, &column_block_view);
+        status = rle_page_decoder.next_batch(&size_to_fetch, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(size, size_to_fetch);
 
-        CppType* values = reinterpret_cast<CppType*>(block.data());
+        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
         for (uint i = 0; i < size; i++) {
             if (src[i] != values[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
@@ -108,7 +114,7 @@ public:
 
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
-            int seek_off = random() % size;
+            uint32_t seek_off = random() % size;
             rle_page_decoder.seek_to_position_in_page(seek_off);
             EXPECT_EQ((int32_t)(seek_off), rle_page_decoder.current_index());
             CppType ret;
@@ -117,7 +123,7 @@ public:
         }
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_encode_decode_page_vectorized(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);
@@ -168,21 +174,21 @@ public:
 TEST_F(RlePageTest, TestRleInt32BlockEncoderRandom) {
     const uint32_t size = 10000;
 
-    // OLAP_FIELD_TYPE_INT
+    // TYPE_INT
     {
-        using CppType = TypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
+        using CppType = TypeTraits<TYPE_INT>::CppType;
         std::vector<CppType> ints(size, 0);
         std::generate(std::begin(ints), std::end(ints), []() -> CppType { return rand(); });
-        test_encode_decode_page_template<OLAP_FIELD_TYPE_INT>(ints.data(), size);
-        test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_INT>(ints.data(), size);
+        test_encode_decode_page_template<TYPE_INT>(ints.data(), size);
+        test_encode_decode_page_vectorized<TYPE_INT>(ints.data(), size);
     }
-    // OLAP_FIELD_TYPE_BIGINT
+    // TYPE_BIGINT
     {
-        using CppType = TypeTraits<OLAP_FIELD_TYPE_BIGINT>::CppType;
+        using CppType = TypeTraits<TYPE_BIGINT>::CppType;
         std::vector<CppType> ints(size, 0);
         std::generate(std::begin(ints), std::end(ints), []() -> CppType { return rand(); });
-        test_encode_decode_page_template<OLAP_FIELD_TYPE_BIGINT>(ints.data(), size);
-        test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_BIGINT>(ints.data(), size);
+        test_encode_decode_page_template<TYPE_BIGINT>(ints.data(), size);
+        test_encode_decode_page_vectorized<TYPE_BIGINT>(ints.data(), size);
     }
 }
 
@@ -194,7 +200,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderEqual) {
         ints.get()[i] = 12345;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT>(ints.get(), size);
 }
 
 TEST_F(RlePageTest, TestRleInt32BlockEncoderSequence) {
@@ -205,7 +211,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderSequence) {
         ints.get()[i] = 12345 + i;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT>(ints.get(), size);
 }
 
 TEST_F(RlePageTest, TestRleInt32BlockEncoderSize) {
@@ -217,7 +223,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderSize) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    RlePageBuilder<OLAP_FIELD_TYPE_INT> rle_page_builder(builder_options);
+    RlePageBuilder<TYPE_INT> rle_page_builder(builder_options);
     size = rle_page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
     OwnedSlice s = rle_page_builder.finish()->build();
     // 4 bytes header
@@ -234,7 +240,7 @@ TEST_F(RlePageTest, TestRleBoolBlockEncoderRandom) {
         bools.get()[i] = (random() % 2 == 0);
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_BOOL>(bools.get(), size);
+    test_encode_decode_page_template<TYPE_BOOLEAN>(bools.get(), size);
 }
 
 TEST_F(RlePageTest, TestRleBoolBlockEncoderSize) {
@@ -246,7 +252,7 @@ TEST_F(RlePageTest, TestRleBoolBlockEncoderSize) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    RlePageBuilder<OLAP_FIELD_TYPE_BOOL> rle_page_builder(builder_options);
+    RlePageBuilder<TYPE_BOOLEAN> rle_page_builder(builder_options);
     size = rle_page_builder.add(reinterpret_cast<const uint8_t*>(bools.get()), size);
     OwnedSlice s = rle_page_builder.finish()->build();
     // 4 bytes header

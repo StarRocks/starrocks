@@ -1,52 +1,62 @@
 # BACKUP
 
-## description
+## Description
 
-This statement is used to backup data under the specified database. This command is an asynchronous operation. After successful submission, you can check progress through the SHOW BACKUP command. Only tables of OLAP type are backed up.
+Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables.
 
-Syntax:
+BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../data-definition/CANCEL%20BACKUP.md).
 
-```sql
-BACKUP SNAPSHOT [db_name].{snapshot_name}
-TO `repository_name`
-ON (
-`table_name` [PARTITION (`p1`, ...)],
-...
-)
-PROPERTIES ("key"="value", ...);
+> **CAUTION**
+>
+> - Only users with the ADMIN privilege can back up data.
+> - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
+
+## Syntax
+
+```SQL
+BACKUP SNAPSHOT <db_name>.<snapshot_name>
+TO <repository_name>
+[ ON ( <table_name> [ PARTITION ( <partition_name> [, ...] ) ]
+       [, ...] ) ]
+[ PROPERTIES ("key"="value" [, ...] ) ]
 ```
 
-Note:
+## Parameters
 
-1. Only one ongoing BACKUP or RESTORE task under the same database.
+| **Parameter**   | **Description**                                              |
+| --------------- | ------------------------------------------------------------ |
+| db_name         | Name of the database that stores the data to be backed up.   |
+| snapshot_name   | Specify a name for the data snapshot. Globally unique.       |
+| repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](../data-definition/CREATE%20REPOSITORY.md). |
+| ON              | Name of the tables to be backed up. The whole database is backed up if this parameter is not specified. |
+| PARTITION       | Name of the partitions to be backed up. The whole table is backed up if this parameter is not specified. |
+| PROPERTIES      | Properties of the data snapshot. Valid keys:`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.`timeout`: Task timeout. Unit: second. Default: `86400`. |
 
-2. The ON clause identifies the tables and partitions that need to be backed up. If no partition is specified, all partitions of the table are backed up by default.
+## Examples
 
-3. PROPERTIES currently supports the following attributes:
+Example 1: Backs up the database `example_db` to the repository `example_repo`.
 
-  "type" = "full": means that this is a full update (default).
+```SQL
+BACKUP SNAPSHOT example_db.snapshot_label1
+TO example_repo
+PROPERTIES ("type" = "full");
+```
 
-  "timeout" = "3600": Task timeout: one day by default. Unit: second.
+Example 2: Backs up the table `example_tbl` in `example_db` to `example_repo`.
 
-## example
+```SQL
+BACKUP SNAPSHOT example_db.snapshot_label2
+TO example_repo
+ON (example_tbl);
+```
 
-1. Conduct full backup of the table example_tbl under example_db to the repository example_repo:
+Example 2: Backs up the partitions `p1` and `p2` of `example_tbl` and the table `example_tbl2` in `example_db` to `example_repo`.
 
-    ```sql
-    BACKUP SNAPSHOT example_db.snapshot_label1
-    TO example_repo
-    ON (example_tbl)
-    PROPERTIES ("type" = "full");
-    ```
-
-2. Conduct full backup of the P1 and P2 partitions of table example_tbl, and table example_tbl2 under example_db, to repository example_repo:
-
-    ```sql
-    BACKUP SNAPSHOT example_db.snapshot_label2
-    TO example_repo
-    ON
-    (
-    example_tbl PARTITION (p1,p2),
+```SQL
+BACKUP SNAPSHOT example_db.snapshot_label3
+TO example_repo
+ON(
+    example_tbl PARTITION (p1, p2),
     example_tbl2
-    );
-    ```
+);
+```

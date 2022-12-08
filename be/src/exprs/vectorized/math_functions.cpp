@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/math_functions.h"
 
@@ -14,6 +26,8 @@
 
 namespace starrocks::vectorized {
 
+static const double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
+
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
     return value < 0;
@@ -28,7 +42,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NanCheck, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(ExpCheck, value) {
-    return std::isnan(value) || value > MathFunctions::MAX_EXP_PARAMETER;
+    return std::isnan(value) || value > MAX_EXP_PARAMETER;
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
@@ -38,7 +52,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
 // ====== evaluation + check rules ========
 
 #define DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                          \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                          \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                \
         using VectorizedUnaryFunction = VectorizedStrictUnaryFunction<NAME##Impl>;                             \
         if constexpr (pt_is_decimal<TYPE>) {                                                                   \
             const auto& type = context->get_return_type();                                                     \
@@ -50,37 +64,37 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     }
 
 #define DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(NAME, TYPE, RESULT_TYPE)                             \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {             \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {   \
         using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, ZeroCheck>; \
         return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));       \
     }
 
 #define DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                             \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                 \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {       \
         using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NegativeCheck>; \
         return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));           \
     }
 
 #define DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                            \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                    \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {          \
         using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NonPositiveCheck>; \
         return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));              \
     }
 
 #define DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                       \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {             \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {   \
         using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NanCheck>; \
         return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));       \
     }
 
 #define DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN(NAME, TYPE, RESULT_TYPE, NULL_FN)                 \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {            \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {  \
         using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NULL_FN>; \
         return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));      \
     }
 
 #define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                 \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {      \
         using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>;   \
         return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
                                                                              VECTORIZED_FN_ARGS(1)); \
@@ -97,13 +111,13 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE);
 
 #define DEFINE_MATH_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                         \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                                  \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                        \
         return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
                                                                                                VECTORIZED_FN_ARGS(1)); \
     }
 
 #define DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(NAME, LTYPE, RTYPE, RESULT_TYPE)                                 \
-    ColumnPtr MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                         \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {               \
         return VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>::evaluate<LTYPE, RTYPE, RESULT_TYPE>( \
                 VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                                \
     }
@@ -133,11 +147,11 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
 
 // ============ math function impl ==========
-ColumnPtr MathFunctions::pi(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::pi(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_PI, 1);
 }
 
-ColumnPtr MathFunctions::e(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::e(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_E, 1);
 }
 
@@ -164,9 +178,9 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(logImpl, base, v) {
     return (double)(std::log(v) / std::log(base));
 }
 
-ColumnPtr MathFunctions::log(FunctionContext* context, const Columns& columns) {
-    auto l = VECTORIZED_FN_ARGS(0);
-    auto r = VECTORIZED_FN_ARGS(1);
+StatusOr<ColumnPtr> MathFunctions::log(FunctionContext* context, const Columns& columns) {
+    const auto& l = VECTORIZED_FN_ARGS(0);
+    const auto& r = VECTORIZED_FN_ARGS(1);
     return VectorizedUnstrictBinaryFunction<logProduceNullImpl, logImpl>::evaluate<TYPE_DOUBLE>(l, r);
 }
 
@@ -200,7 +214,7 @@ DEFINE_MATH_UNARY_FN(degrees, TYPE_DOUBLE, TYPE_DOUBLE);
 
 // bin
 DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
-    uint64_t n = static_cast<uint64_t>(v);
+    auto n = static_cast<uint64_t>(v);
     const size_t max_bits = sizeof(uint64_t) * 8;
     char result[max_bits];
     uint32_t index = max_bits;
@@ -210,7 +224,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
     return std::string(result + index, max_bits - index);
 }
 
-ColumnPtr MathFunctions::bin(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::bin(FunctionContext* context, const Columns& columns) {
     return VectorizedStringStrictUnaryFunction<binImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -250,10 +264,13 @@ DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(cot, TYPE_DOUBLE, TYPE_DOUBLE);
 
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(sin, TYPE_DOUBLE, TYPE_DOUBLE, std::sin);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(asin, TYPE_DOUBLE, TYPE_DOUBLE, std::asin);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(sinh, TYPE_DOUBLE, TYPE_DOUBLE, std::sinh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cos, TYPE_DOUBLE, TYPE_DOUBLE, std::cos);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(acos, TYPE_DOUBLE, TYPE_DOUBLE, std::acos);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cosh, TYPE_DOUBLE, TYPE_DOUBLE, std::cosh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tan, TYPE_DOUBLE, TYPE_DOUBLE, std::tan);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan, TYPE_DOUBLE, TYPE_DOUBLE, std::atan);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tanh, TYPE_DOUBLE, TYPE_DOUBLE, std::tanh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(ceil, TYPE_DOUBLE, TYPE_BIGINT, std::ceil);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(floor, TYPE_DOUBLE, TYPE_BIGINT, std::floor);
 DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, std::exp, ExpCheck);
@@ -459,7 +476,7 @@ void MathFunctions::decimal_round(const int128_t& lv, const int32_t& original_sc
 }
 
 template <DecimalRoundRule rule>
-ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const Columns& columns) {
     const auto& type = context->get_return_type();
 
     ColumnPtr c0 = columns[0];
@@ -549,23 +566,23 @@ ColumnPtr MathFunctions::decimal_round(FunctionContext* context, const Columns& 
     }
 }
 
-ColumnPtr MathFunctions::truncate_decimal128(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::truncate_decimal128(FunctionContext* context, const Columns& columns) {
     return decimal_round<DecimalRoundRule::ROUND_TRUNCATE>(context, columns);
 }
 
-ColumnPtr MathFunctions::round_decimal128(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::round_decimal128(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     Columns new_columns;
     new_columns.push_back(columns[0]);
-    new_columns.push_back(ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(0, columns[0]->size()));
+    new_columns.push_back(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(0, columns[0]->size()));
     return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, new_columns);
 }
 
-ColumnPtr MathFunctions::round_up_to_decimal128(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::round_up_to_decimal128(FunctionContext* context, const Columns& columns) {
     return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, columns);
 }
 
-ColumnPtr MathFunctions::conv_int(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::conv_int(FunctionContext* context, const Columns& columns) {
     auto bigint = ColumnViewer<TYPE_BIGINT>(columns[0]);
     auto src_base = ColumnViewer<TYPE_TINYINT>(columns[1]);
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
@@ -600,7 +617,7 @@ ColumnPtr MathFunctions::conv_int(FunctionContext* context, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const Columns& columns) {
     auto string_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto src_base = ColumnViewer<TYPE_TINYINT>(columns[1]);
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
@@ -631,9 +648,9 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
         bool negative = data_ptr[digit_start_offset] == '-';
         digit_start_offset += negative;
         StringParser::ParseResult parse_res;
-        uint64_t decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
-                                                                       string_value.size - digit_start_offset,
-                                                                       std::abs(src_base_value), &parse_res);
+        auto decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
+                                                                   string_value.size - digit_start_offset,
+                                                                   std::abs(src_base_value), &parse_res);
         if (parse_res == StringParser::PARSE_SUCCESS) {
             if (is_signed) {
                 if (negative && decimal64_num > 0ull - std::numeric_limits<int64_t>::min()) {
@@ -657,7 +674,7 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
             CHECK(false) << "unreachable path, parse_res: " << parse_res;
         }
         if (negative) {
-            decimal64_num = -decimal64_num;
+            decimal64_num = (~decimal64_num + 1);
         }
 
         result.append(Slice(decimal_to_base(decimal64_num, dest_base_value)));
@@ -666,11 +683,19 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t seed) {
+    for (int i = 0; i < num_rows; ++i) {
+        seed = ::rand_r(&seed);
+        // Normalize to [0,1].
+        result->append(static_cast<double>(seed) / RAND_MAX);
+    }
+    return seed;
+}
+
 Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint32_t*>(context->allocate(sizeof(uint32_t)));
-        context->set_function_state(scope, seed);
+        int64_t seed = 0;
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -687,35 +712,33 @@ Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
             }
 
             int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
-            *seed = seed_value;
+            seed = seed_value;
         } else {
-            *seed = GetCurrentTimeNanos();
+            seed = GetCurrentTimeNanos();
         }
+        context->set_function_state(scope, reinterpret_cast<void*>(seed));
     }
     return Status::OK();
 }
 
 Status MathFunctions::rand_close(starrocks_udf::FunctionContext* context,
                                  starrocks_udf::FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint8_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-        context->free(seed);
-    }
     return Status::OK();
 }
 
-ColumnPtr MathFunctions::rand(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    auto* seed = reinterpret_cast<uint32_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-    DCHECK(seed != nullptr);
+    void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
 
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
-    generate_randoms(&result, num_rows, seed);
+    int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
+    state = reinterpret_cast<void*>(res);
+    context->set_function_state(FunctionContext::THREAD_LOCAL, state);
 
     return result.build(false);
 }
 
-ColumnPtr MathFunctions::rand_seed(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     if (columns[0]->only_null()) {

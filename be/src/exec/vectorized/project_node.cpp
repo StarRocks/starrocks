@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/project_node.h"
 
@@ -54,7 +66,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -65,7 +77,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }
@@ -143,25 +155,8 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         SCOPED_TIMER(_expr_compute_timer);
         for (size_t i = 0; i < _slot_ids.size(); ++i) {
             ASSIGN_OR_RETURN(result_columns[i], _expr_ctxs[i]->evaluate((*chunk).get()));
-
-            if (result_columns[i]->only_null()) {
-                result_columns[i] = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), true);
-                result_columns[i]->append_nulls((*chunk)->num_rows());
-            } else if (result_columns[i]->is_constant()) {
-                // Note: we must create a new column every time here,
-                // because result_columns[i] is shared_ptr
-                ColumnPtr new_column = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), false);
-                ConstColumn* const_column = down_cast<ConstColumn*>(result_columns[i].get());
-                new_column->append(*const_column->data_column(), 0, 1);
-                new_column->assign((*chunk)->num_rows(), 0);
-                result_columns[i] = std::move(new_column);
-            }
-
-            // follow SlotDescriptor is_null flag
-            if (_type_is_nullable[i] && !result_columns[i]->is_nullable()) {
-                result_columns[i] =
-                        NullableColumn::create(result_columns[i], NullColumn::create(result_columns[i]->size(), 0));
-            }
+            result_columns[i] = ColumnHelper::align_return_type(result_columns[i], _expr_ctxs[i]->root()->type(),
+                                                                (*chunk)->num_rows(), _type_is_nullable[i]);
         }
         RETURN_IF_HAS_ERROR(_expr_ctxs);
     }

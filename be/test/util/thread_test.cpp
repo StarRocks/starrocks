@@ -38,8 +38,8 @@ namespace starrocks {
 
 class ThreadTest : public ::testing::Test {
 public:
-    virtual void SetUp() {}
-    virtual void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 // Join with a thread and emit warnings while waiting to join.

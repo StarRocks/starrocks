@@ -1,8 +1,10 @@
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -113,13 +115,14 @@ if (NOT MSVC)
 endif ()
 message(STATUS "compiler ${CMAKE_CXX_COMPILER_ID} version ${CMAKE_CXX_COMPILER_VERSION}")
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set (CXX11_FLAGS "-std=c++11")
+  set (CMAKE_CXX_STANDARD 17)
   set (WARN_FLAGS "-Weverything -Wno-c++98-compat -Wno-missing-prototypes")
   set (WARN_FLAGS "${WARN_FLAGS} -Wno-c++98-compat-pedantic -Wno-padded")
   set (WARN_FLAGS "${WARN_FLAGS} -Wno-covered-switch-default")
   set (WARN_FLAGS "${WARN_FLAGS} -Wno-missing-noreturn -Wno-unknown-pragmas")
   set (WARN_FLAGS "${WARN_FLAGS} -Wno-gnu-zero-variadic-macro-arguments")
-  set (WARN_FLAGS "${WARN_FLAGS} -Wconversion")
+  set (WARN_FLAGS "${WARN_FLAGS} -Wno-conversion -Wno-ignored-qualifiers -Wno-shadow")
+  set (WARN_FLAGS "${WARN_FLAGS} -Wno-sign-conversion -Wno-double-promotion")
   if (CMAKE_HOST_APPLE AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0")
     set (WARN_FLAGS "${WARN_FLAGS} -Wno-c++2a-compat")
   endif ()
@@ -127,7 +130,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set (WARN_FLAGS "${WARN_FLAGS} -Werror")
   endif ()
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set (WARN_FLAGS "-Wall -Wno-unknown-pragmas -Wconversion")
+  set (WARN_FLAGS "-Wall -Wno-unknown-pragmas -Wno-conversion")
   if (STOP_BUILD_ON_WARNING)
     set (WARN_FLAGS "${WARN_FLAGS} -Werror")
   endif ()
@@ -135,7 +138,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.7")
     set (CXX11_FLAGS "-std=c++0x")
   else ()
-    set (CXX11_FLAGS "-std=c++11")
+    set (CMAKE_CXX_STANDARD 17)
   endif ()
 elseif (MSVC)
   add_definitions (-D_SCL_SECURE_NO_WARNINGS)

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.privilege;
 
@@ -83,5 +96,17 @@ public class ActionSetTest {
         res = new ActionSet(Arrays.asList(INSERT, DELETE)).difference(new ActionSet(Arrays.asList(INSERT)));
         Assert.assertTrue(res.isEmpty());
         Assert.assertEquals(0L, res.bitSet);
+    }
+
+    @Test
+    public void testCopyConstructor() {
+        ActionSet set1 = new ActionSet(Arrays.asList(SELECT, INSERT));
+        ActionSet set2 = new ActionSet(set1);
+        set2.add(new ActionSet(Arrays.asList(DELETE)));
+        Assert.assertEquals(6, set1.bitSet);
+        Assert.assertEquals(14, set2.bitSet);
+        set1.remove(new ActionSet(Arrays.asList(INSERT)));
+        Assert.assertEquals(2, set1.bitSet);
+        Assert.assertEquals(14, set2.bitSet);
     }
 }

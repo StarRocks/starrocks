@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.base.Preconditions;
@@ -96,6 +109,10 @@ public class Projection {
         return AddDecodeNodeForDictStringRule.DecodeVisitor.couldApplyDictOptimize(operator, sids);
     }
 
+    public static boolean cannotApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {
+        return AddDecodeNodeForDictStringRule.DecodeVisitor.cannotApplyDictOptimize(operator, sids);
+    }
+
     private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet, Set<Integer> sids) {
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
@@ -125,7 +142,7 @@ public class Projection {
     }
 
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet, Set<Integer> sids) {
-        if (!couldApplyDictOptimize(operator, sids)) {
+        if (cannotApplyDictOptimize(operator, sids)) {
             columnRefSet.union(operator.getUsedColumns());
         }
     }

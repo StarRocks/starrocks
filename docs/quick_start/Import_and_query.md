@@ -86,10 +86,10 @@ StarRocks is compatible with SQL-92.
 
 ## What to do next
 
-To learn more about the data ingestion methods of StarRocks, see [Ingestion Overview](../loading/Loading_intro.md). In addition to a huge number of built-in functions, StarRocks also supports [Java UDFs](../using_starrocks/JAVA_UDF.md), which allows you to create your own data processing functions that suit your business scenarios.
+To learn more about the data ingestion methods of StarRocks, see [Ingestion Overview](../loading/Loading_intro.md). In addition to a huge number of built-in functions, StarRocks also supports [Java UDFs](../sql-reference/sql-functions/JAVA_UDF.md), which allows you to create your own data processing functions that suit your business scenarios.
 
 You can also learn how to:
 
 - Perform [ETL when loading](../loading/Etl_in_loading.md).
-- Create an [external table](../using_starrocks/External_table.md) to access external data sources.
+- Create an [external table](../data_source/External_table.md) to access external data sources.
 - [Analyze the query plan](../administration/Query_planning.md) to learn how to optimize the query performance.

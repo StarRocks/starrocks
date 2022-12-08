@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/util/parse_util_test.cpp
 
@@ -58,19 +71,19 @@ TEST(TestParseMemSpec, Normal) {
 
 TEST(TestParseMemSpec, Bad) {
     std::vector<std::string> bad_values;
-    bad_values.push_back("1gib");
-    bad_values.push_back("1%b");
-    bad_values.push_back("1b%");
-    bad_values.push_back("gb");
-    bad_values.push_back("1GMb");
-    bad_values.push_back("1b1Mb");
-    bad_values.push_back("1kib");
-    bad_values.push_back("1Bb");
-    bad_values.push_back("1%%");
-    bad_values.push_back("1.1");
-    bad_values.push_back("1pb");
-    bad_values.push_back("1eb");
-    bad_values.push_back("%");
+    bad_values.emplace_back("1gib");
+    bad_values.emplace_back("1%b");
+    bad_values.emplace_back("1b%");
+    bad_values.emplace_back("gb");
+    bad_values.emplace_back("1GMb");
+    bad_values.emplace_back("1b1Mb");
+    bad_values.emplace_back("1kib");
+    bad_values.emplace_back("1Bb");
+    bad_values.emplace_back("1%%");
+    bad_values.emplace_back("1.1");
+    bad_values.emplace_back("1pb");
+    bad_values.emplace_back("1eb");
+    bad_values.emplace_back("%");
     for (const auto& value : bad_values) {
         int64_t bytes = ParseUtil::parse_mem_spec(value, test_memory_limit);
         ASSERT_EQ(-1, bytes);

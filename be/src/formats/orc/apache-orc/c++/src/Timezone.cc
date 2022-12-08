@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/orc/tree/main/c++/src/Timezone.cc
 
@@ -285,7 +298,7 @@ void FutureRuleImpl::print(std::ostream& out) const {
 class FutureRuleParser {
 public:
     FutureRuleParser(const std::string& str, FutureRuleImpl* rule)
-            : ruleString(str), length(str.size()), position(0), output(*rule) {
+            : ruleString(str), length(str.size()), output(*rule) {
         output.ruleString = str;
         if (position != length) {
             parseName(output.standard.name);
@@ -313,7 +326,7 @@ public:
 private:
     const std::string& ruleString;
     size_t length;
-    size_t position;
+    size_t position{0};
     FutureRuleImpl& output;
 
     void throwError(const char* msg) {
@@ -647,13 +660,13 @@ const char* getTimezoneDirectory() {
 const Timezone& getTimezoneByFilename(const std::string& filename) {
     // ORC-110
     std::lock_guard<std::mutex> timezone_lock(timezone_mutex);
-    std::map<std::string, std::shared_ptr<Timezone> >::iterator itr = timezoneCache.find(filename);
+    auto itr = timezoneCache.find(filename);
     if (itr != timezoneCache.end()) {
         return *itr->second;
     }
     try {
         ORC_UNIQUE_PTR<InputStream> file = readFile(filename);
-        size_t size = static_cast<size_t>(file->getLength());
+        auto size = static_cast<size_t>(file->getLength());
         std::vector<unsigned char> buffer(size);
         file->read(&buffer[0], size, 0);
         timezoneCache[filename] = std::shared_ptr<Timezone>(new TimezoneImpl(filename, buffer));

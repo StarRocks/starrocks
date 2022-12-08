@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/topn_node.h"
 
@@ -39,11 +51,13 @@ TopNNode::~TopNNode() {
 Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
-    RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool));
+    RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool, state));
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
+                                                &_analytic_partition_exprs, state));
+        RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, runtime_state()));
         for (auto& expr : _analytic_partition_exprs) {
             auto& type_desc = expr->root()->type();
             if (!type_desc.support_groupby()) {
@@ -212,9 +226,9 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     std::any context_factory;
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
-                degree_of_parallelism, _tnode.sort_node.partition_exprs, _sort_exec_exprs, _is_asc_order,
-                _is_null_first, _sort_keys, _offset, partition_limit, _tnode.sort_node.topn_type, _order_by_types,
-                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
+                degree_of_parallelism, _tnode.sort_node.partition_exprs, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
+                _is_asc_order, _is_null_first, _sort_keys, _offset, partition_limit, _tnode.sort_node.topn_type,
+                _order_by_types, _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
     } else {
         context_factory = std::make_shared<SortContextFactory>(
                 runtime_state(), _tnode.sort_node.topn_type, is_merging, _offset, _limit, degree_of_parallelism,

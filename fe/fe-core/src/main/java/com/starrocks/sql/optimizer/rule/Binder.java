@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule;
 
@@ -6,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 
 import java.util.List;
@@ -76,7 +90,11 @@ public class Binder {
      * Pattern tree match groupExpression tree
      */
     private OptExpression match(Pattern pattern, GroupExpression groupExpression) {
-        if (!pattern.matchWithoutChild(groupExpression)) {
+        return match(pattern, groupExpression, 0);
+    }
+
+    private OptExpression match(Pattern pattern, GroupExpression groupExpression, int level) {
+        if (!pattern.matchWithoutChild(groupExpression, level)) {
             return null;
         }
 
@@ -86,11 +104,18 @@ public class Binder {
         int patternIndex = 0;
         int groupExpressionIndex = 0;
 
-        while (patternIndex < pattern.children().size() && groupExpressionIndex < groupExpression.getInputs().size()) {
+        while ((pattern.isPatternMultiJoin() || patternIndex < pattern.children().size())
+                && groupExpressionIndex < groupExpression.getInputs().size()) {
             trace();
             Group group = groupExpression.getInputs().get(groupExpressionIndex);
-            Pattern childPattern = pattern.childAt(patternIndex);
-            OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group));
+            Pattern childPattern;
+            if (pattern.isPatternMultiJoin()) {
+                childPattern = Pattern.create(OperatorType.PATTERN_MULTIJOIN);
+            } else {
+                childPattern = pattern.childAt(patternIndex);
+            }
+            level = pattern.isPatternMultiJoin() && childPattern.isPatternMultiJoin() ? level + 1 : 0;
+            OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group), level);
 
             if (opt == null) {
                 return null;
@@ -98,9 +123,9 @@ public class Binder {
                 resultInputs.add(opt);
             }
 
-            if (!(childPattern.isPatternMultiLeaf()
+            if (!(pattern.isPatternMultiJoin() || (childPattern.isPatternMultiLeaf()
                     && (groupExpression.getInputs().size() - groupExpressionIndex) >
-                    (pattern.children().size() - patternIndex))) {
+                    (pattern.children().size() - patternIndex)))) {
                 patternIndex++;
             }
 
@@ -123,7 +148,7 @@ public class Binder {
      * extract GroupExpression by groupExpressionIndex
      */
     private GroupExpression extractGroupExpression(Pattern pattern, Group group) {
-        if (pattern.isPatternLeaf() || pattern.isPatternMultiLeaf()) {
+        if (pattern.isPatternLeaf() || pattern.isPatternMultiLeaf() || pattern.isPatternMultiJoin()) {
             if (groupExpressionIndex.get(groupTraceKey) > 0) {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;

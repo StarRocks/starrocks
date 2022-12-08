@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exec/pipeline/query_context.h"
 
 #include <memory>
@@ -24,16 +37,17 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
           _num_fragments(0),
-          _num_active_fragments(0) {
+          _num_active_fragments(0),
+          _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
 }
 
-QueryContext::~QueryContext() {
+QueryContext::~QueryContext() noexcept {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
     // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will
-    // be freed before it is adopted to account memory usage of ChunkAllocator. In destructor of FragmentContextManager,
+    // be freed before it is adopted to account memory usage of MemChunkAllocator. In destructor of FragmentContextManager,
     // the per-instance RuntimeStates that contain instance-level MemTracker is freed one by one, if there are
-    // remaining other RuntimeStates after the current RuntimeState is freed, ChunkAllocator uses the MemTracker of the
+    // remaining other RuntimeStates after the current RuntimeState is freed, MemChunkAllocator uses the MemTracker of the
     // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
     // segmentation fault.
     {
@@ -87,18 +101,23 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
 void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
-        auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+        auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
         mem_tracker_counter->set(bytes_limit);
         _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
     });
 }
 
-Status QueryContext::init_query(workgroup::WorkGroup* wg) {
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
     Status st = Status::OK();
     if (wg != nullptr) {
         std::call_once(_init_query_once, [this, &st, wg]() {
             this->init_query_begin_time();
-            st = wg->try_incr_num_queries();
+            auto maybe_token = wg->acquire_running_query_token();
+            if (maybe_token.ok()) {
+                _wg_running_query_token_ptr = std::move(maybe_token.value());
+            } else {
+                st = maybe_token.status();
+            }
         });
     }
 
@@ -186,7 +205,7 @@ void QueryContextManager::_clean_func(QueryContextManager* manager) {
 }
 
 size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
-    return std::hash<size_t>()(query_id.lo) & _slot_mask;
+    return HashUtil::hash(&query_id.hi, sizeof(query_id.hi), 0) & _slot_mask;
 }
 
 QueryContextManager::~QueryContextManager() {
@@ -312,8 +331,8 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
 void QueryContextManager::clear() {
     std::vector<std::unique_lock<std::shared_mutex>> locks;
     locks.reserve(_mutexes.size());
-    for (int i = 0; i < _mutexes.size(); ++i) {
-        locks.emplace_back(_mutexes[i]);
+    for (auto& _mutexe : _mutexes) {
+        locks.emplace_back(_mutexe);
     }
     _second_chance_maps.clear();
     _context_maps.clear();
@@ -356,6 +375,7 @@ void QueryContextManager::report_fragments_with_same_host(
 
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                     runtime_state->update_report_load_status(&params);
+                    params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
                 auto backend_id = get_backend_id();
@@ -367,6 +387,28 @@ void QueryContextManager::report_fragments_with_same_host(
                 cur_batch_report_indexes.push_back(i);
                 reported[i] = true;
             }
+        }
+    }
+}
+
+void QueryContextManager::collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                                   PCollectQueryStatisticsResult* response) {
+    for (int i = 0; i < request->query_ids_size(); i++) {
+        const PUniqueId& p_query_id = request->query_ids(i);
+        TUniqueId id;
+        id.__set_hi(p_query_id.hi());
+        id.__set_lo(p_query_id.lo());
+        if (auto query_ctx = get(id); query_ctx != nullptr) {
+            int64_t cpu_cost = query_ctx->cpu_cost();
+            int64_t scan_rows = query_ctx->cur_scan_rows_num();
+            int64_t scan_bytes = query_ctx->get_scan_bytes();
+            auto query_statistics = response->add_query_statistics();
+            auto query_id = query_statistics->mutable_query_id();
+            query_id->set_hi(p_query_id.hi());
+            query_id->set_lo(p_query_id.lo());
+            query_statistics->set_cpu_cost_ns(cpu_cost);
+            query_statistics->set_scan_rows(scan_rows);
+            query_statistics->set_scan_bytes(scan_bytes);
         }
     }
 }
@@ -440,6 +482,7 @@ void QueryContextManager::report_fragments(
 
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                 runtime_state->update_report_load_status(&params);
+                params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 
             auto backend_id = get_backend_id();

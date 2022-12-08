@@ -1,10 +1,26 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -16,9 +32,12 @@ import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.PartitionColPredicateEvaluator;
 import com.starrocks.sql.optimizer.rewrite.PartitionColPredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -26,8 +45,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
@@ -56,7 +79,10 @@ public class PartitionPruneRule extends TransformationRule {
 
         if (partitionInfo.getType() == PartitionType.RANGE) {
             selectedPartitionIds =
-                    partitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
+                    rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
+        } else if (partitionInfo.getType() == PartitionType.LIST) {
+            selectedPartitionIds =
+                    listPartitionPrune((ListPartitionInfo) partitionInfo, olapScanOperator);
         }
 
         if (selectedPartitionIds == null) {
@@ -84,9 +110,71 @@ public class PartitionPruneRule extends TransformationRule {
                 input.getInputs()));
     }
 
+    private void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> partitionValueToIds,
+                                 Long partitionId,
+                                 LiteralExpr value) {
+        Set<Long> partitionIdSet = partitionValueToIds.get(value);
+        if (partitionIdSet == null) {
+            partitionIdSet = new HashSet<>();
+        }
+        partitionIdSet.add(partitionId);
+        partitionValueToIds.put(value, partitionIdSet);
+    }
 
-    private List<Long> partitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
-                                      LogicalOlapScanOperator operator) {
+    private List<Long> listPartitionPrune(ListPartitionInfo listPartitionInfo,
+                                          LogicalOlapScanOperator olapScanOperator) {
+
+        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = new HashMap<>();
+        Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = new HashMap<>();
+
+        // single item list partition has only one column mapper
+        Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
+        if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
+            TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
+            literalExprValuesMap.forEach((partitionId, values) ->
+                    values.forEach(value ->
+                            putValueMapItem(partitionValueToIds, partitionId, value)));
+            // single item list partition has only one column
+            Column column = listPartitionInfo.getPartitionColumns().get(0);
+            ColumnRefOperator columnRefOperator = olapScanOperator.getColumnReference(column);
+            columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
+            columnToNullPartitions.put(columnRefOperator, new HashSet<>());
+        }
+
+        // multiItem list partition mapper
+        Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
+        if (multiLiteralExprValues != null && multiLiteralExprValues.size() > 0) {
+            List<Column> columnList = listPartitionInfo.getPartitionColumns();
+            for (int i = 0; i < columnList.size(); i++) {
+                TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
+                for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
+                    Long partitionId = entry.getKey();
+                    List<List<LiteralExpr>> multiValues = entry.getValue();
+                    for (List<LiteralExpr> values : multiValues) {
+                        LiteralExpr value = values.get(i);
+                        putValueMapItem(partitionValueToIds, partitionId, value);
+                    }
+                }
+                Column column = columnList.get(i);
+                ColumnRefOperator columnRefOperator = olapScanOperator.getColumnReference(column);
+                columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
+                columnToNullPartitions.put(columnRefOperator, new HashSet<>());
+            }
+        }
+
+        List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(olapScanOperator.getPredicate());
+        PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
+                columnToNullPartitions, scalarOperatorList);
+        try {
+            return partitionPruner.prune();
+        } catch (AnalysisException e) {
+            LOG.warn("PartitionPrune Failed. ", e);
+        }
+        return null;
+    }
+
+    private List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
+                                           LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
         if (operator.getPartitionNames() != null) {
             keyRangeById = Maps.newHashMap();

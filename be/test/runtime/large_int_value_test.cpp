@@ -32,11 +32,11 @@ namespace starrocks {
 
 class LargeIntValueTest : public testing::Test {
 public:
-    LargeIntValueTest() {}
+    LargeIntValueTest() = default;
 
 protected:
-    virtual void SetUp() {}
-    virtual void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 TEST_F(LargeIntValueTest, string_to_largeint) {

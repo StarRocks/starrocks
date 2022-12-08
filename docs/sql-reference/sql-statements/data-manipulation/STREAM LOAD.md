@@ -1,230 +1,480 @@
 # STREAM LOAD
 
-## description
+## Description
 
-```plain text
-NAME:
-stream-load: load data to table in streaming
+StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result. For information about the application scenarios, limits, principles, and supported data file formats of Stream Load, see [Load data from a local file system or a streaming data source using HTTP PUT](../../../loading/StreamLoad.md).
 
-SYNOPSIS
-curl --location-trusted -u user:passwd [-H ""...] -T data.file -XPUT \
-    http://fe_host:http_port/api/{db}/{table}/_stream_load
+Note that Stream Load operations not only load data into StarRocks tables but also update the data in the materialized views that are created on the tables.
 
-DESCRIPTION
-This statement is used to import data into the specified table. The difference from normal Load is that this import method is synchronous import.
-This import method can still ensure the atomicity of a batch of import tasks. Either all data is imported successfully or all data fails.
-This operation will update the data of rollup table related to this base table at the same time.
-This is a synchronous operation. After the entire data import is completed, the import results will be returned to the user.
-Currently, HTTP chunked and non chunked uploads are supported. For non chunked uploads, Content_Length must be used to indicate the length of the uploaded content, so as to ensure the integrity of the data.
-In addition, you'd better set the Expected Header field content 100_ continue to avoid unnecessary data transmission in some error scenarios.
+## Syntax
+
+```Bash
+curl --location-trusted -u <username>:<password> -XPUT <url>
+(
+    data_desc
+)
+[opt_properties]        
 ```
 
-```plain text
-OPTIONS
-Users can pass in import parameters through the Header part of HTTP
+This topic uses curl as an example to describe how to load data by using Stream Load. In addition to curl, you can also use other HTTP-compatible tools or languages to perform Stream Load. Load-related parameters are included in HTTP request header fields. When you input these parameters, take note of the following points:
 
-label: label imported at one time. Data of the same label cannot be imported multiple times. Users can avoid the problem of repeated import of a copy of data by specifying a Label.
-Currently, StarRocks keeps the most recently successful label within 30 minutes.
+- You can use HTTP chunked transfer encoding. If you do not choose chunked encoding, you must input a `Content-Length` header field to indicate the length of content to be transferred, thereby ensuring data integrity.
 
-column_separator：used to specify the column separator in the import file. The default is \t. If it is an invisible character, you need to prefix it with \x and use hexadecimal to represent the separator.
-For example, the separator of hive file \x01 should be specified as - H "column_separator: \x01"
+  > **NOTE**
+  >
+  > If you use curl to perform Stream Load, StarRocks automatically adds a `Content-Length` header field and you do not need manually input it.
 
-columns：used to specify the correspondence between the columns in the import file and the columns in the table. If the column in the source file exactly corresponds to the content in the table, you do not need to specify the content of this field.
-If the source file does not correspond to the table schema, this field needs some data conversion. There are two forms of column. One is to directly correspond to the fields in the import file, which are directly represented by the field name;
-One is derived column, and the syntax is column - name = expression. Give a few examples to help understand.
-Example 1: there are three columns "c1, c2, c3" in the table, and the three columns in the source file correspond to "c3, c2, c1" at one time; Then you need to specify - H "columns: c3, c2, c1"
-Example 2: there are three columns "c1, c2, c3" in the table. The first three columns in the source file correspond in turn, but there is more than one column. Then you need to specify - H "columns: c1, c2, c3, XXX";
-The last column can be filled with any name
-Example 3: there are three columns "year, month and day" in the table, and there is only one time column in the source file in the format of "2018-06-01 01:02:03";
-Then you can specify - H "columns: column, year = year (column), month = month (column), day = day (Col)" to complete the import
+- We recommend that you add an `Expect` header field and specify its value as `100-continue`, as in `"Expect:100-continue"`. This helps prevent unnecessary data transfers and reduce resource overheads in case your job request is denied.
 
-where: used to extract some data. If users need to filter out unwanted data, they can set this option.
-Example 1: if you only import data with columns greater than K1 and equal to 20180601, you can specify - H "where: k1 = 20180601" during import
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Parameter configuration](../sql-reference/sql-statements/keywords.md).
 
-max_filter_ratio：the maximum allowable data proportion that can be filtered (due to data irregularity, etc.). The default is zero tolerance. Data irregularity does not include rows filtered through the where condition.
+## Parameters
 
-partitions: used to specify the partition designed for this import. If the user can determine the partition corresponding to the data, it is recommended to specify this item. Data that does not meet these partitions will be filtered out.
-For example, specify to import to p1, p2 partitions, - H "partitions: p1, p2"
+### `username` and `password`
 
-timeout: Specifies the timeout of import. The unit is seconds. The default is 600 seconds. The settable range is 1 second ~ 259200 seconds.
+Specify the username and password of the account that you use to connect to your StarRocks cluster. This is a required parameter. If you use the account `root` for which no password is set, you need to input only `root:`.
 
-strict_mode: the user specifies whether strict mode is enabled for this import. It is off by default. The enabling method is - H "strict_mode: true".
+### `XPUT`
 
-timezone: Specifies the time zone used for this import. The default is Dongba zone. This parameter will affect the results of all functions related to time zone involved in import.
+Specifies the HTTP request method. This is a required parameter. Stream Load supports only the PUT method.
 
-exec_mem_limit: import memory limit. The default is 2GB. The unit is bytes.
+### `url`
 
-format: Specifies the import data format. The default is csv. json format is supported.
+Specifies the URL of the StarRocks table. Syntax:
+
+```Plain
+http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 ```
 
-```PALIN TEXT
-jsonpaths: there are two ways to import json: simple mode and precise mode.
-Simple mode: it is a simple mode without setting the jsonpaths parameter. In this mode, json data is required to be an object type, for example:
-{"k1": 1, "k2": 2, "k3": "hello"}, where k1, k2 and k3 are column names.
+The following table describes the parameters in the URL.
 
-Matching pattern: the json data is relatively complex, and the corresponding value needs to be matched through the jsonpaths parameter.
+| Parameter     | Required | Description                                                  |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host       | Yes      | The IP address of the FE node in your StarRocks cluster.<br/>**NOTE**<br/>If you submit the load job to a specific BE node, you must input the IP address of the BE node. |
+| fe_http_port  | Yes      | The HTTP port number of the FE node in your StarRocks cluster. The default port number is `8030`.<br/>**NOTE**<br/>If you submit the load job to a specific BE node, you must input the HTTP port number of the BE node. The default port number is `8030`. |
+| database_name | Yes      | The name of the database to which the StarRocks table belongs. |
+| table_name    | Yes      | The name of the StarRocks table.                             |
 
-strip_ outer_ array: Boolean type. true means that json data starts with an array object and flattens the array object. The default value is false. For example:
-[
-{"k1" : 1, "v1" : 2},
-{"k1" : 3, "v1" : 4}
-]
-When strip_ outer_ array is true, and two rows of data will be generated when it is finally imported into starrocks.
+### `data_desc`
 
-json_ root: json_ root is a legal jsonpath string, which is used to specify the root node of json document. The default value is' '.
+Describes the data file that you want to load. The `data_desc` descriptor can include the data file's name, format, column separator, row separator, destination partitions, and column mapping against the StarRocks table. Syntax:
 
-RETURN VALUES
-After the import is completed, the relevant contents of the import will be returned in Json format. The following fields are currently included:
-Status: imports the last status.
-Success: indicates that the import is successful and the data is visible;
-Publish Timeout: indicates that the import job has been successfully committed, but it cannot be seen immediately for some reason. The user can be regarded as having succeeded without having to retry the import
-Label Already Exists: indicates that the Label has been occupied by other jobs. It may be imported successfully or being imported.
-Users need to use the get label state command to determine subsequent operations
-Other: the import failed. The user can specify Label to retry the job
-Message: detailed description of import status. The specific failure reason will be returned in case of failure.
-NumberTotalRows: the total number of rows read from the data stream
-NumberLoadedRows: the number of data rows imported this time, which is valid only when Success
-NumberFilteredRows: the number of rows filtered in this import, that is, the number of rows with unqualified data quality
-Numberunselectedrows: the number of rows filtered through the where condition in this import
-LoadBytes: the amount of source file data imported this time
-LoadTimeMs: time taken for this import
-ErrorURL: the specific content of the filtered data. Only the first 1000 items are reserved
+```Bash
+-T <file_name>
+-H "format: CSV | JSON"
+-H "column_separator: <column_separator>"
+-H "row_delimiter: <row_delimiter>"
+-H "columns: <column1_name>[, <column2_name>，... ]"
+-H "partitions: <partition1_name>[, <partition2_name>, ...]"
+-H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
+-H "strip_outer_array:  true | false"
+-H "json_root: <json_path>"
 ```
 
-ERRORS
-Errors you can view the import error details through the following statement:
+The parameters in the `data_desc` descriptor can be divided into three types: common parameters, CSV parameters, and JSON parameters.
+
+#### Common parameters
+
+| Parameter  | Required | Description                                                  |
+| ---------- | -------- | ------------------------------------------------------------ |
+| file_name  | Yes      | The name of the data file. You can optionally include the extension of the file name. |
+| format     | No       | The format of the data file. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
+| partitions | No       | The partitions into which you want to load the data file. By default, if you do not specify this parameter, StarRocks loads the data file into all partitions of the StarRocks table. |
+| columns    | No       | The column mapping between the data file and the StarRocks table.<br/>If the fields in the data file can be mapped in sequence onto the columns in the StarRocks table, you do not need to specify this parameter. Instead, you can use this parameter to implement data conversions. For example, if you load a CSV data file and the file consists of two columns that can be mapped in sequence onto the two columns, `id` and `city`, of the StarRocks table, you can specify `"columns: city,tmp_id, id = tmp_id * 100"`. For more information, see the "[Column mapping](#column-mapping)" section in this topic. |
+
+#### CSV parameters
+
+| Parameter        | Required | Description                                                  |
+| ---------------- | -------- | ------------------------------------------------------------ |
+| column_separator | No       | The characters that are used in the data file to separate fields. If you do not specify this parameter, this parameter defaults to `\t`, which indicates tab.<br/>Make sure that the column separator you specify by using this parameter is the same as the column separator used in the data file.<br/>**NOTE**<br/>For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (\|), whose length does not exceed 50 bytes as a text delimiter. |
+| row_delimiter    | No       | The characters that are used in the data file to separate rows. If you do not specify this parameter, this parameter defaults to `\n`. |
+
+#### JSON parameters
+
+| Parameter         | Required | Description                                                  |
+| ----------------- | -------- | ------------------------------------------------------------ |
+| jsonpaths         | No       | The names of the fields that you want to load from the JSON data file. The value of this parameter is in JSON format. Stream Load supports loading JSON data in one of the following modes:<ul><li>Simple mode: You do not need to specify the `jsonpaths` parameter. This mode is suitable when the JSON data is in a simple structure and can be mapped onto the StarRocks table data without complex data conversions. The JSON data must be an object as indicated by curly brackets `{}`, such as `{"category": 1, "author": 2, "price": "3"}`. In this example, `category`, `author`, and `price` are field names, and these fields can be mapped by name onto the columns `category`, `author`, and `price` of the StarRocks table.</li><li>Strict mode: You need to specify the `jsonpaths` parameter. This mode is suitable when the JSON data is in a complex structure and can be mapped onto the StarRocks table data only after complex data conversions. For more information, see the "[Load JSON data using strict mode](#load-json-data-using-strict-mode)" section of this topic.</li></ul> |
+| strip_outer_array | No       | Specifies whether to strip the outermost array structure. Valid values: `true` and `false`. Default value: `false`.<br/>In real-world business scenarios, the JSON data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON data file into one array and loads the array as a single data record.<br/>For example, the JSON data is `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`. If you set this parameter to `true`,  `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed into separate data records that are loaded into separate StarRocks table rows. |
+| json_root         | No       | The root element of the JSON data that you want to load from the JSON data file. This parameter is valid only when you load JSON data by using the strict mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using strict mode with root element specified](#load-json-data-using-strict-mode-with-root-element-specified)" section of this topic. |
+| ignore_json_size  | No       | Specifies whether to check the size of the JSON body in the HTTP request.<br/>**NOTE**<br/>By default, the size of the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB in size, an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." is reported. To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to instruct StarRocks not to check the JSON body size. |
+
+When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
+
+### `opt_properties`
+
+Specifies some optional parameters, which are applied to the entire load job. Syntax:
+
+```Bash
+-H "label: <label_name>"
+-H "where: <condition1>[, <condition2>, ...]"
+-H "max_filter_ratio: <num>"
+-H "timeout: <num>"
+-H "strict_mode: true | false"
+-H "timezone: <string>"
+-H "load_mem_limit: <num>"
+```
+
+The following table describes the optional parameters.
+
+| Parameter        | Required | Description                                                  |
+| ---------------- | -------- | ------------------------------------------------------------ |
+| label            | No       | The label of the load job. If you do not specify this parameter, StarRocks automatically generates a label for the load job.<br/>StarRocks does not allow you to use one label to load a data batch multiple times. As such, StarRocks prevents the same data from being repeatedly loaded. For label naming conventions, see [System limits](../../../reference/System_limit.md).<br/>By default, StarRocks retains the labels of load jobs that were successfully completed over the most recent three days. You can use the [FE parameter](../../../administration/Configuration.md) `label_keep_max_second` to change the label retention period. |
+| where            | No       | The conditions based on which StarRocks filters the pre-processed data. StarRocks loads only the pre-processed data that meets the filter conditions specified in the WHERE clause. |
+| max_filter_ratio | No       | The maximum error tolerance of the load job. The error tolerance is the maximum percentage of data records that can be filtered out due to inadequate data quality in all data records requested by the load job. Valid values: `0` to `1`. Default value: `0`.<br/>We recommend that you retain the default value `0`. This way, if unqualified data records are detected, the load job fails, thereby ensuring data correctness.<br/>If you want to ignore unqualified data records, you can set this parameter to a value greater than `0`. This way, the load job can succeed even if the data file contains unqualified data records.<br/>**NOTE**<br/>Unqualified data records do not include data records that are filtered out by the WHERE clause. |
+| timeout          | No       | The timeout period of the load job. Valid values: `1` to `259200`. Unit: second. Default value: `600`.<br/>**NOTE**In addition to the `timeout` parameter, you can also use the [FE parameter](../../../administration/Configuration.md) `stream_load_default_timeout_second` to centrally control the timeout period for all Stream Load jobs in your StarRocks cluster. If you specify the `timeout` parameter, the timeout period specified by the `timeout` parameter prevails. If you do not specify the `timeout` parameter, the timeout period specified by the `stream_load_default_timeout_second` parameter prevails. |
+| strict_mode      | No       | Specifies whether to enable the strict mode. Valid values: `true` and `false`. Default value: `false`.  The value `true` specifies to enable the strict mode, and the value `false` specifies to disable the strict mode. |
+| timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
+| load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE. |
+| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates. |
+
+## Column mapping
+
+### Configure column mapping for CSV data loading
+
+When you load CSV data, you can configure column mapping between the data file and the StarRocks table by using only the `columns` parameter. If the columns of the data file can be mapped in sequence onto the columns of the StarRocks table, you do not need to specify the `columns` parameter. Otherwise, you must specify the `columns` parameter, as shown in the following two use cases:
+
+- The columns of the data file can be mapped one on one onto the columns of the StarRocks table, and the data does not need to be computed by functions before it is loaded into the StarRocks table columns.
+
+  In the `columns` parameter, you need to input the names of the StarRocks table columns in the same sequence as how the data file columns are arranged. 
+
+  For example, the StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped onto the StarRocks table columns `col3`, `col2`, and `col1`. In this case, you need to specify `"columns: col3, col2, col1"`.
+
+- The columns of the data file cannot be mapped one on one onto the columns of the StarRocks table, and the data needs to be computed by functions before it is loaded into the mapping StarRocks table columns.
+
+  In the `columns` parameter, you need to input the names of the StarRocks table columns in the same sequence as how the data file columns are arranged, and you also need to specify the functions you want to use to compute the data. Two examples are as follows:
+
+  - The StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence onto the StarRocks table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped onto any of the StarRocks table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the StarRocks table column names. For example, you can specify `"columns: col1, col2, col3, temp"`, in which the fourth column of the data file is temporarily named `temp`. 
+  - The StarRocks table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `"columns: col, year = year(col), month=month(col), day=day(col)"`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping StarRocks table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the StarRocks table column `year`.
+
+### Configure column mapping for JSON data loading
+
+When you load JSON data, you can configure column mapping between the data file and the StarRocks table by using the `jsonpaths` and `columns` parameters:
+
+- The fields declared in `jsonpaths` are mapped by name onto the JSON fields in the data file.
+
+- The columns declared in `columns` are mapped in sequence onto the fields declared in `jsonpaths`.
+
+- The columns declared in `columns` are mapped by name onto the columns in the StarRocks table.
+
+## Return value
+
+After the load job finishes, StarRocks returns the job result in JSON format. Example:
+
+```JSON
+{
+    "TxnId": 1003,
+    "Label": "label123",
+    "Status": "Success",
+    "Message": "OK",
+    "NumberTotalRows": 1000000,
+    "NumberLoadedRows": 999999,
+    "NumberFilteredRows": 1,
+    "NumberUnselectedRows": 0,
+    "LoadBytes": 40888898,
+    "LoadTimeMs": 2144,
+    BeginTxnTimeMs: 0,
+    StreamLoadPutTimeMS: 1,
+    ReadDataTimeMs: 0,
+    WriteDataTimeMs: 11,
+    CommitAndPublishTimeMs: 16,
+}
+```
+
+The following table describes the parameters in the returned job result.
+
+| Parameter              | Description                                                  |
+| ---------------------- | ------------------------------------------------------------ |
+| TxnId                  | The transaction ID of the load job.                          |
+| Label                  | The label of the load job.                                   |
+| Status                 | The final status of the data loaded.<ul><li>`Success`: The data is successfully loaded and can be queried.</li><li>`Publish Timeout`: The load job is successfully submitted, but the data still cannot be queried. You do not need to retry to load the data.</li><li>`Label Already Exists`: The label of the load job has been used for another load job. The data may have been successfully loaded or is being loaded.</li><li>`Fail`: The data failed to be loaded. You can retry the load job.</li></ul> |
+| Message                | The status of the load job. If the load job fails, the detailed failure cause is returned. |
+| NumberTotalRows        | The total number of data records that are read.              |
+| NumberLoadedRows       | The total number of data records that are successfully loaded. This parameter is valid only when the value returned for `Status` is `Success`. |
+| NumberFilteredRows     | The number of data records that are filtered out due to inadequate data quality. |
+| NumberUnselectedRows   | The number of data records that are filtered out by the WHERE clause. |
+| LoadBytes              | The amount of data that is loaded. Unit: bytes.              |
+| LoadTimeMs             | The amount of time that is taken by the load job. Unit: ms.  |
+| BeginTxnTimeMs         | The amount of time that is taken to run a transaction for the load job. |
+| StreamLoadPutTimeMS    | The amount of time that is taken to generate a execution plan for the load job. |
+| ReadDataTimeMs         | The amount of time that is taken to read data for the load job. |
+| WriteDataTimeMs        | The amount of time that is taken to write data for the load job. |
+| CommitAndPublishTimeMs | The amount of time that is taken to commit and publish data for the load job. |
+
+If the load job fails, StarRocks also returns `ErrorURL`. Example:
+
+```JSON
+{"ErrorURL": "http://172.26.195.68:8045/api/_load_error_log?file=error_log_3a4eb8421f0878a6_9a54df29fd9206be"}
+```
+
+`ErrorURL` provides a URL from which you can obtain details about unqualified data records that have been filtered out. StarRocks retains 1,000 unqualified data records.
+
+You can run `curl "url"` to directly view details about the filtered-out, unqualified data records. You can also run `wget "url"` to export the details about these data records:
+
+```Bash
+wget http://172.26.195.68:8045/api/_load_error_log?file=error_log_3a4eb8421f0878a6_9a54df29fd9206be
+```
+
+The exported data record details are saved to a local file with a name similar to `_load_error_log?file=error_log_3a4eb8421f0878a6_9a54df29fd9206be`. You can use the `cat` command to view the file.
+
+Then, you can adjust the configuration of the load job, and submit the load job again.
+
+## Examples
+
+### Load CSV data
+
+This section CSV data as an example to describe how you can employ various parameter settings and combinations to meet your diverse loading requirements.
+
+#### Set timeout period
+
+Your StarRocks database `test_db` contains a table named `table1`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example1.csv` also consists of three columns, which can be mapped in sequence onto `col1`, `col2`, and `col3` of `table1`.
+
+If you want to load all data from `example1.csv` into `table1` within up to 100 seconds, run the following command:
+
+```Bash
+curl --location-trusted -u root: -H "label:label1" \
+    -H "timeout:100" \
+    -H "max_filter_ratio:0.2" \
+    -T example1.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
+```
+
+#### Set error tolerance
+
+Your StarRocks database `test_db` contains a table named `table2`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example2.csv` also consists of three columns, which can be mapped in sequence onto `col1`, `col2`, and `col3` of `table2`.
+
+If you want to load all data from `example2.csv` into `table2` with a maximum error tolerance of `0.2`, run the following command:
+
+```Bash
+curl --location-trusted -u root: -H "label:label2" \
+    -H "max_filter_ratio:0.2" \
+    -T example2.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
+```
+
+#### Configure column mapping
+
+Your StarRocks database `test_db` contains a table named `table3`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example3.csv` also consists of three columns, which can be mapped in sequence onto `col2`, `col1`, and `col3` of `table3`.
+
+If you want to load all data from `example3.csv` into `table3`, run the following command:
+
+```Bash
+curl --location-trusted -u root:  -H "label:label3" \
+    -H "columns: col2, col1, col3" \
+    -T example3.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
+```
+
+> **NOTE**
+>
+> In the preceding example, the columns of `example3.csv` cannot be mapped onto the columns of `table3` in the same sequence as how these columns are arranged in `table3`. Therefore, you need to use the `columns` parameter to configure the column mapping between `example3.csv` and `table3`.
+
+#### Set filter conditions
+
+Your StarRocks database `test_db` contains a table named `table4`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example4.csv` also consists of three columns, which can be mapped in sequence onto `col1`, `col2`, and `col3` of `table4`.
+
+If you want to load only the data records whose values in the first column of `example4.csv` are equal to `20180601` into `table4`, run the following command:
+
+```Bash
+curl --location-trusted -u root: -H "label:label4" \
+    -H "columns: col1, col2，col3]"\
+    -H "where: col1 = 20180601" \
+    -T example4.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
+```
+
+> **NOTE**
+>
+> In the preceding example, `example4.csv` and `table4` have the same number of columns that can be mapped in sequence, but you need to use the WHERE clause to specify column-based filter conditions. Therefore, you need to use the `columns` parameter to define temporary names for the columns of `example4.csv`.
+
+#### Set destination partitions
+
+Your StarRocks database `test_db` contains a table named `table5`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example5.csv` also consists of three columns, which can be mapped in sequence onto `col1`, `col2`, and `col3` of `table5`.
+
+If you want to load all data from `example5.csv` into partitions `p1` and `p2` of `table5`, run the following command:
+
+```Bash
+curl --location-trusted -u root:  -H "label:label5" \
+    -H "partitions: p1, p2" \
+    -T example5.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
+```
+
+#### Set strict mode and time zone
+
+Your StarRocks database `test_db` contains a table named `table6`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example6.csv` also consists of three columns, which can be mapped in sequence onto `col1`, `col2`, and `col3` of `table6`.
+
+If you want to load all data from `example6.csv` into `table6` by using the strict mode and the time zone `Africa/Abidjan`, run the following command:
+
+```Bash
+curl --location-trusted -u root: \
+    -H "strict_mode: true" \
+    -H "timezone: Africa/Abidjan" \
+    -T example6.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table6/_stream_load
+```
+
+#### Load data into tables containing HLL-type columns
+
+Your StarRocks database `test_db` contains a table named `table7`. The table consists of two HLL-type columns, which are `col1` and `col2` in sequence.
+
+Your data file `example7.csv` also consists of two columns, among which the first column can be mapped onto `col1` of `table7` and the second column cannot be mapped onto any column of `table7`. The values in the first column of `example7.csv` can be converted into HLL-type data by using functions before they are loaded into `col1` of `table7`.
+
+If you want to load data from `example7.csv` into `table7`, run the following command:
+
+```Bash
+curl --location-trusted -u root: \
+    -H "columns: temp1, temp2, col1=hll_hash(temp1), col2=hll_empty()" \
+    -T example7.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table7/_stream_load
+```
+
+> **NOTE**
+>
+> In the preceding example, the two columns of `example7.csv` are named `temp1` and `temp2` in sequence by using the `columns` parameter. Then, functions are used to convert data as follows:
+>
+> - The `hll_hash` function is used to convert the values in `temp1` of `example7.csv` into HLL-type data and map `temp1` of `example7.csv` onto `col1` of `table7`.
+>
+> - The `empty_hll` function is used to fill the specified default value into `col2` of `table7`.
+
+For usage of the functions `hll_hash` and `hll_empty`, see [HLL](../../../sql-reference/sql-statements/data-definition/HLL.md).
+
+#### Load data into tables containing BITMAP-type columns
+
+Your StarRocks database `test_db` contains a table named `table8`. The table consists of two BITMAP-type columns, which are `col1` and `col2`, in sequence.
+
+Your data file `example8.csv` also consists of two columns, among which the first column can be mapped onto `col1` of `table8` and the second column cannot be mapped onto any column of `table8`. The values in the first column of `example8.csv` can be converted by using functions before they are loaded into `col1` of `table8`.
+
+If you want to load data from `example8.csv` into `table8`, run the following command:
+
+```Bash
+curl --location-trusted -u root: \
+    -H "columns: temp1, temp2, col1=to_bitmap(temp1), col2=bitmap_empty()" \
+    -T example8.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table8/_stream_load
+```
+
+> **NOTE**
+>
+> In the preceding example, the two columns of `example8.csv` are named `temp1` and `temp2` in sequence by using the `columns` parameter. Then, functions are used to convert data as follows:
+>
+> - The `to_bitmap` function is used to convert the values in `temp1` of `example8.csv` into BITMAP-type data and map `temp1` of `example8.csv` onto `col1` of `table8`.
+>
+> - The `bitmap_empty` function is used to fill the specified default value into `col2` of `table8`.
+
+For usage of the functions `to_bitmap` and `bitmap_empty`, see [to_bitmap](../../../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) and [bitmap_empty](../../../sql-reference/sql-functions/bitmap-functions/bitmap_empty.md).
+
+### Load JSON data
+
+This section describes the parameter settings that you need to take note of when you load JSON data.
+
+Your StarRocks database `test_db` contains a table named `tbl1`, whose schema is as follows:
 
 ```SQL
-SHOW LOAD WARNINGS ON 'url'
+`category` varchar(512) NULL COMMENT "",`author` varchar(512) NULL COMMENT "",`title` varchar(512) NULL COMMENT "",`price` double NULL COMMENT ""
 ```
 
-Where url is the url given by ErrorURL.
+#### Load JSON data using simple mode
 
-## example
+Suppose that your data file `example1.json` consists of the following data:
 
-1. Import the data in the local file 'testData' into the table 'testTbl' in the database 'testDb', and use label for deduplication. Specify a timeout of 100 seconds
+```JSON
+{"category":"C++","author":"avc","title":"C++ primer","price":895}
+```
 
-    ```bash
-    curl --location-trusted -u root -H "label:123" -H "timeout:100" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+To load all data from `example1.json` into `tbl1`, run the following command:
 
-2. Import the data in the local file 'testData' into the table testTbl' in the database 'testDb', use label for de duplication, and only import the data with k1 equal to 20180601
+```Bash
+curl --location-trusted -u root: -H "label:label6" \
+    -H "format: json" \
+    -T example1.json -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
+```
 
-    ```bash
-    curl --location-trusted -u root -H "label:123" -H "where: k1=20180601" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+> **NOTE**
+>
+> In the preceding example, the parameters `columns` and `jsonpaths` are not specified. Therefore, the fields in `example1.json` are mapped by name onto the columns of `tbl1`.
 
-3. Import the data in the local file 'testData' into the table 'testTbl' in the database 'testDb', allowing an error rate of 20% (the user is in the defalut_cluster)
+To increase throughput, Stream Load supports loading multiple data records all at once. Example:
 
-    ```bash
-    curl --location-trusted -u root -H "label:123" -H "max_filter_ratio:0.2" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+```JSON
+[{"category":"C++","author":"avc","title":"C++ primer","price":89.5},{"category":"Java","author":"avc","title":"Effective Java","price":95},{"category":"Linux","author":"avc","title":"Linux kernel","price":195}]
+```
 
-4. Import the data in the local file 'testData' into the table 'testTbl' in the database 'testDb', allow an error rate of 20%, and specify the column name of the file (the user is in the defalut_cluster)
+#### Load JSON data using strict mode
 
-    ```bash
-    curl --location-trusted -u root  -H "label:123" -H "max_filter_ratio:0.2" \
-        -H "columns: k2, k1, v1" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+StarRocks performs the following steps to match and process JSON data:
 
-5. Import the data in the local file 'testData' into the p1 and p2 partitions in the table 'testTbl' in the database 'testDb', allowing an error rate of 20%.
+1. (Optional) Strips the outermost array structure as instructed by the `strip_outer_array` parameter setting.
 
-    ```bash
-    curl --location-trusted -u root  -H "label:123" -H "max_filter_ratio:0.2" \
-        -H "partitions: p1, p2" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+   > **NOTE**
+   >
+   > This step is performed only when the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. You need to set `strip_outer_array` to `true`.
 
-6. Import using streaming (the user is from the default_cluster)
+2. (Optional) Matches the root element of the JSON data as instructed by the `json_root` parameter setting.
 
-    ```sql
-    seq 1 10 | awk '{OFS="\t"}{print $1, $1 * 10}' | curl --location-trusted -u root -T - \
-     http://host:port/api/testDb/testTbl/_stream_load
-    ```
+   > **NOTE**
+   >
+   > This step is performed only when the JSON data has a root element. You need to specify the root element by using the `json_root` parameter.
 
-7. Import a table containing HLL columns, which can be columns in the table or columns in the data. It can be used to generate HLL columns, or use hll_ empty to supplement columns that are not in the data
+3. Extracts the specified JSON data as instructed by the `jsonpaths` parameter setting.
 
-    ```bash
-    curl --location-trusted -u root \
-        -H "columns: k1, k2, v1=hll_hash(k1), v2=hll_empty()" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+##### Load JSON data using strict mode without root element specified
 
-8. Import data for strict mode filtering, and set the time zone to Africa / Abidjan
+Suppose that your data file `example2.json` consists of the following data:
 
-    ```bash
-    curl --location-trusted -u root -H "strict_mode: true" \
-        -H "timezone: Africa/Abidjan" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+```JSON
+[{"category":"xuxb111","author":"1avc","title":"SayingsoftheCentury","price":895},{"category":"xuxb222","author":"2avc","title":"SayingsoftheCentury","price":895},{"category":"xuxb333","author":"3avc","title":"SayingsoftheCentury","price":895}]
+```
 
-9. Import a table containing BITMAP columns, which can be columns in the table or columns in the data. It can be used to generate BITMAP columns or use bitmap_ empty to fill
+To load only `category`, `author`, and `price` from `example2.json`, run the following command:
 
-    ```bash
-    curl --location-trusted -u root \
-        -H "columns: k1, k2, v1=to_bitmap(k1), v2=bitmap_empty()" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+```Bash
+curl --location-trusted -u root: -H "label:label7" \
+    -H "format: json" \
+    -H "strip_outer_array: true" \
+    -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" \
+    -H "columns: category, price, author" \
+    -T example2.json -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
+```
 
-10. Simple mode, importing json data
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The field **title** that you do not want to load is ignored during loading.
 
-    ```plain text
-    Table structure:
-    `category` varchar(512) NULL COMMENT "",
-    `author` varchar(512) NULL COMMENT "",
-    `title` varchar(512) NULL COMMENT "",
-    `price` double NULL COMMENT ""
-    json data format:
-    {"category":"C++","author":"avc","title":"C++ primer","price":895}
-    Import command:
-    curl --location-trusted -u root  -H "label:123" -H "format: json" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    In order to improve throughput, it supports one-time import of data. json data format:
-    [
-    {"category":"C++","author":"avc","title":"C++ primer","price":89.5},
-    {"category":"Java","author":"avc","title":"Effective Java","price":95},
-    {"category":"Linux","author":"avc","title":"Linux kernel","price":195}
-    ]
-    ```
+##### Load JSON data using strict mode with root element specified
 
-11. Matching patterns, importing json data
+Suppose your data file `example3.json` consists of the following data:
 
-     ```plain text
-     json data format:
-     [
-     {"category":"xuxb111","author":"1avc","title":"SayingsoftheCentury","price":895},
-     {"category":"xuxb222","author":"2avc","title":"SayingsoftheCentury","price":895},
-     {"category":"xuxb333","author":"3avc","title":"SayingsoftheCentury","price":895}
-     ]
-     Import precisely by specifying jsonpath. For example, only category, author and price attributes are imported
-     curl --location-trusted -u root \
-         -H "columns: category, price, author" -H "label:123" -H "format: json" -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" -H "strip_outer_array: true" -T testData \
-         http://host:port/api/testDb/testTbl/_stream_load
-     ```
+```JSON
+{"id": 10001,"RECORDS":[{"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},{"category":"22","author":"2avc","price":895,"timestamp":1589191487},{"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}],"comments": ["3 records", "there will be 3 rows"]}
+```
 
-     ```plain text
-     Note：
-     1) If the json data starts with an array and each object in the array is a record, you need to set strip_ outer_ array to true to flatten the array.
-     2) If the json data starts with an array and each object in the array is a record, when setting the jsonpath, our ROOT node is actually an object in the array.
-     ```
+To load only `category`, `author`, and `price` from `example3.json`, run the following command:
 
-12. User specified json root node
+```Bash
+curl --location-trusted -u root: \
+    -H "format: json" \
+    -H "json_root: $.RECORDS" \
+    -H "strip_outer_array: true" \
+    -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" \
+    -H "columns: category, price, author" -H "label:label8" \
+    -T example3.json -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
+```
 
-    ```plain text
-    json data format:
-    {
-    "RECORDS":[
-    {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
-    {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
-    {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
-    ]
-    }
-    Import precisely by specifying jsonpath. For example, only category, author and price attributes are imported
-    curl --location-trusted -u root \
-        -H "columns: category, price, author" -H "label:123" -H "format: json" -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" -H "strip_outer_array: true" -H "json_root: $.RECORDS" -T testData \
-        http://host:port/api/testDb/testTbl/_stream_load
-    ```
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The fields `title` and `timestamp` that you do not want to load are ignored during loading. Additionally, the `json_root` parameter is used to specify the root element, which is an array, of the JSON data.

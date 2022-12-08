@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/cumulative_compaction.h"
 
@@ -13,7 +25,7 @@ namespace starrocks::vectorized {
 CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
 
-CumulativeCompaction::~CumulativeCompaction() {}
+CumulativeCompaction::~CumulativeCompaction() = default;
 
 Status CumulativeCompaction::compact() {
     if (!_tablet->init_succeeded()) {
@@ -92,7 +104,7 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
     // (5) means version 5 is delete version
     // <4,5> means version 4,5 selected for cumulative compaction
     int64_t prev_end_version = _tablet->cumulative_layer_point() - 1;
-    for (auto rowset : candidate_rowsets) {
+    for (const auto& rowset : candidate_rowsets) {
         // meet missed version
         if (rowset->start_version() != prev_end_version + 1) {
             if (!transient_rowsets.empty() &&
@@ -160,7 +172,7 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
         prev_end_version = rowset->end_version();
     }
 
-    if (_input_rowsets.empty() && transient_rowsets.size() >= config::min_cumulative_compaction_num_singleton_deltas) {
+    if (_input_rowsets.empty() && compaction_score >= config::min_cumulative_compaction_num_singleton_deltas) {
         _input_rowsets = transient_rowsets;
     }
 

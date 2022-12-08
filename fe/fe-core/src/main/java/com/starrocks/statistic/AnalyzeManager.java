@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.statistic;
 
@@ -21,6 +34,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -59,6 +73,14 @@ public class AnalyzeManager implements Writable {
         analyzeStatusMap = Maps.newConcurrentMap();
         basicStatsMetaMap = Maps.newConcurrentMap();
         histogramStatsMetaMap = Maps.newConcurrentMap();
+    }
+
+    public AnalyzeJob getAnalyzeJob(long id) {
+        return analyzeJobMap.get(id);
+    }
+
+    public AnalyzeStatus getAnalyzeStatus(long id) {
+        return analyzeStatusMap.get(id);
     }
 
     public void addAnalyzeJob(AnalyzeJob job) {
@@ -149,14 +171,13 @@ public class AnalyzeManager implements Writable {
     }
 
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (null == db) {
+        Table table;
+        try {
+            table = MetaUtils.getTable(dbId, tableId);
+        } catch (SemanticException e) {
             return;
         }
-        Table table = db.getTable(tableId);
-        if (null == table) {
-            return;
-        }
+
         GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
         if (async) {
             GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
@@ -234,11 +255,14 @@ public class AnalyzeManager implements Writable {
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
         tableIdHasDeleted.removeAll(tables);
 
-        dropBasicStatsMetaAndData(tableIdHasDeleted);
-        dropHistogramStatsMetaAndData(tableIdHasDeleted);
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setThreadLocalInfo();
+
+        dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+        dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
     }
 
-    public void dropBasicStatsMetaAndData(Set<Long> tableIdHasDeleted) {
+    public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         for (Long tableId : tableIdHasDeleted) {
             BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
@@ -247,14 +271,14 @@ public class AnalyzeManager implements Writable {
             }
             // Both types of tables need to be deleted, because there may have been a switch of
             // collecting statistics types, leaving some discarded statistics data.
-            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.SAMPLE);
-            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.FULL);
+            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.SAMPLE);
+            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.FULL);
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
             basicStatsMetaMap.remove(tableId);
         }
     }
 
-    public void dropHistogramStatsMetaAndData(Set<Long> tableIdHasDeleted) {
+    public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
         Map<Long, List<String>> expireHistogram = new HashMap<>();
         for (Pair<Long, String> entry : histogramStatsMetaMap.keySet()) {
             if (tableIdHasDeleted.contains(entry.first)) {
@@ -268,7 +292,7 @@ public class AnalyzeManager implements Writable {
 
         for (Map.Entry<Long, List<String>> histogramItem : expireHistogram.entrySet()) {
             StatisticExecutor statisticExecutor = new StatisticExecutor();
-            statisticExecutor.dropHistogram(histogramItem.getKey(), histogramItem.getValue());
+            statisticExecutor.dropHistogram(statsConnectCtx, histogramItem.getKey(), histogramItem.getValue());
 
             for (String histogramColumn : histogramItem.getValue()) {
                 Pair<Long, String> histogramKey = new Pair<>(histogramItem.getKey(), histogramColumn);

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/IntLiteral.java
 
@@ -25,6 +38,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TIntLiteral;
@@ -207,8 +222,6 @@ public class IntLiteral extends LiteralExpr {
         return new IntLiteral(value);
     }
 
-
-
     public static IntLiteral read(DataInput in) throws IOException {
         IntLiteral literal = new IntLiteral();
         literal.readFields(in);
@@ -274,8 +287,20 @@ public class IntLiteral extends LiteralExpr {
     }
 
     @Override
-    public Object getRealValue() {
-        return getLongValue();
+    public Object getRealObjectValue() {
+        switch (type.getPrimitiveType()) {
+            case TINYINT:
+                return (byte) value;
+            case SMALLINT:
+                return (short) value;
+            case INT:
+                return (int) value;
+            case BIGINT:
+                return value;
+            default:
+                throw new StarRocksPlannerException("Error int literal type " + type.getPrimitiveType(),
+                        ErrorType.INTERNAL_ERROR);
+        }
     }
 
     public long getValue() {
@@ -359,5 +384,10 @@ public class IntLiteral extends LiteralExpr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), value);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
     }
 }

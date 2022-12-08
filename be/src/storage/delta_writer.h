@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -16,7 +28,7 @@ namespace starrocks {
 class FlushToken;
 class ReplicateToken;
 class MemTracker;
-class Schema;
+class VectorizedSchema;
 class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
@@ -25,6 +37,14 @@ namespace vectorized {
 
 class MemTable;
 class MemTableSink;
+
+enum ReplicaState {
+    // peer storage engine
+    Peer,
+    // replicated storage engine
+    Primary,
+    Secondary,
+};
 
 struct DeltaWriterOptions {
     int64_t tablet_id;
@@ -38,18 +58,11 @@ struct DeltaWriterOptions {
     Span parent_span;
     int64_t index_id;
     int64_t node_id;
-    bool is_replicated_storage = false;
     std::vector<PNetworkAddress> replicas;
     int64_t timeout_ms;
     WriteQuorumTypePB write_quorum;
-};
-
-enum ReplicaState {
-    // peer storage engine
-    Peer,
-    // replicated storage engine
-    Primary,
-    Secondary,
+    std::string merge_condition;
+    ReplicaState replica_state;
 };
 
 enum State {
@@ -123,10 +136,12 @@ public:
 
     ReplicaState replica_state() const { return _replica_state; }
 
-    State get_state() const { return _state.load(std::memory_order_acquire); }
+    State get_state() const;
+
+    Status get_err_status() const;
 
 private:
-    DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine);
+    DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
     Status _flush_memtable_async(bool eos = false);
@@ -138,9 +153,12 @@ private:
 
     void _reset_mem_table();
 
-    void _set_state(State state) { _state.store(state, std::memory_order_release); }
+    void _set_state(State state, const Status& st);
 
-    std::atomic<State> _state;
+    State _state;
+    Status _err_status;
+    mutable std::mutex _state_lock;
+
     ReplicaState _replica_state;
     DeltaWriterOptions _opt;
     MemTracker* _mem_tracker;
@@ -150,7 +168,7 @@ private:
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
     bool _schema_initialized;
-    Schema _vectorized_schema;
+    VectorizedSchema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;

@@ -1,15 +1,28 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
 #include <random>
+#include <utility>
 
 #include "butil/time.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 typedef std::tuple<std::string, int32_t, std::string, bool, std::string, std::string> TestCaseType;
 typedef std::vector<TestCaseType> TestCaseArray;
@@ -87,8 +100,8 @@ void test_pad(int num_rows, TestCaseArray const& cases, NullColumnsType null_col
         ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
     }
 
-    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns);
-    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
+    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
 
     ASSERT_EQ(lpad_result->size(), num_rows);
     ASSERT_EQ(rpad_result->size(), num_rows);
@@ -154,7 +167,7 @@ TEST_F(StringFunctionPadTest, padNotConstASCIITest) {
     test_pad(num_rows, cases, {nullptr, nulls_11_1, nulls_17_13}, nullptr);
     test_pad(num_rows, cases, {nulls_7_3, nulls_11_1, nulls_17_13}, nullptr);
 }
-std::string repeat(size_t n, std::string s) {
+std::string repeat(size_t n, const std::string& s) {
     std::string dst;
     dst.reserve(s.size() * n);
     for (auto i = 0; i < n; ++i) {
@@ -230,8 +243,8 @@ void test_const_pad(size_t num_rows, TestCaseType& c) {
     ctx->impl()->set_constant_columns({nullptr, nullptr, const_pad_col});
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto lpad_result = StringFunctions::lpad(ctx.get(), columns);
-    auto rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
+    auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
     StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_EQ(lpad_result->size(), num_rows);
     ASSERT_EQ(rpad_result->size(), num_rows);
@@ -312,8 +325,8 @@ void test_const_len_and_pad(size_t num_rows, TestCaseType& c) {
     columns[1] = const_len_col;
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto lpad_result = StringFunctions::lpad(ctx.get(), columns);
-    auto rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
+    auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
     StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     if (lpad_result->is_constant()) {
         ASSERT_EQ(lpad_result->size(), 1);
@@ -414,7 +427,7 @@ TEST_F(StringFunctionPadTest, lpadNullTest) {
     columns.emplace_back(len);
     columns.emplace_back(NullableColumn::create(fill, null));
 
-    ColumnPtr result = StringFunctions::lpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::lpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
     ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -445,7 +458,7 @@ TEST_F(StringFunctionPadTest, rpadTest) {
     columns.emplace_back(len);
     columns.emplace_back(fill);
 
-    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -473,7 +486,7 @@ TEST_F(StringFunctionPadTest, rpadChineseTest) {
     columns.emplace_back(len);
     columns.emplace_back(fill);
 
-    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -500,7 +513,7 @@ TEST_F(StringFunctionPadTest, rpadConstTest) {
     columns.emplace_back(len);
     columns.emplace_back(ConstColumn::create(fill));
 
-    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
     ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -526,16 +539,16 @@ struct PadNullableStrConstLenFillTestCase {
     std::vector<std::string> lpad_expected_results;
     std::vector<bool> lpad_expected_nulls;
 
-    PadNullableStrConstLenFillTestCase(const vector<std::string>& strs, const vector<bool>& str_nulls, int len,
-                                       const string& fill, bool rpad_expected_null,
-                                       const vector<std::string>& rpad_expected_results,
-                                       const vector<bool>& rpad_expected_nulls, bool lpad_expected_null,
-                                       const vector<std::string>& lpad_expected_results,
-                                       const vector<bool>& lpad_expected_nulls)
+    PadNullableStrConstLenFillTestCase(const std::vector<std::string>& strs, const std::vector<bool>& str_nulls,
+                                       int len, std::string fill, bool rpad_expected_null,
+                                       const std::vector<std::string>& rpad_expected_results,
+                                       const std::vector<bool>& rpad_expected_nulls, bool lpad_expected_null,
+                                       const std::vector<std::string>& lpad_expected_results,
+                                       const std::vector<bool>& lpad_expected_nulls)
             : strs(strs),
               str_nulls(str_nulls),
               len(len),
-              fill(fill),
+              fill(std::move(fill)),
               rpad_expected_null(rpad_expected_null),
               rpad_expected_results(rpad_expected_results),
               rpad_expected_nulls(rpad_expected_nulls),
@@ -574,7 +587,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     columns.emplace_back(fill);
 
     // Check rpad result.
-    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns);
+    ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(num_rows, rpad_result->size());
     ASSERT_EQ(c.rpad_expected_null, rpad_result->is_nullable());
     std::shared_ptr<BinaryColumn> rpad_v;
@@ -592,7 +605,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     }
 
     // Check lpad result.
-    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns);
+    ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     ASSERT_EQ(num_rows, lpad_result->size());
     ASSERT_EQ(c.lpad_expected_null, lpad_result->is_nullable());
     std::shared_ptr<BinaryColumn> lpad_v;
@@ -640,5 +653,4 @@ INSTANTIATE_TEST_SUITE_P(StringFunctionPadTest, PadNullableStrConstLenFillTestFi
                                                    // lpad expected results.
                                                    false, {"1231abc", "1231edf", "1abcdef"}, {false, false, false})));
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

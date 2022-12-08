@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/lake/schema_change.h"
+
+#include <memory>
 
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -15,7 +29,7 @@ namespace starrocks::lake {
 
 using ChunkChanger = vectorized::ChunkChanger;
 using ChunkPtr = vectorized::ChunkPtr;
-using Schema = vectorized::Schema;
+using VectorizedSchema = vectorized::VectorizedSchema;
 using SchemaChangeUtils = vectorized::SchemaChangeUtils;
 using TabletReaderParams = vectorized::TabletReaderParams;
 
@@ -60,8 +74,8 @@ protected:
 
     TabletReaderParams _read_params;
     std::shared_ptr<const TabletSchema> _new_tablet_schema;
-    Schema _base_schema;
-    Schema _new_schema;
+    VectorizedSchema _base_schema;
+    VectorizedSchema _new_schema;
     ChunkPtr _base_chunk;
     ChunkPtr _new_chunk;
     std::vector<size_t> _char_field_indexes;
@@ -119,7 +133,7 @@ Status ConvertedSchemaChange::init() {
     _new_chunk = ChunkHelper::new_chunk(_new_schema, config::vector_chunk_size);
 
     _char_field_indexes = ChunkHelper::get_char_field_indexes(_new_schema);
-    _mem_pool.reset(new MemPool());
+    _mem_pool = std::make_unique<MemPool>();
     return Status::OK();
 }
 

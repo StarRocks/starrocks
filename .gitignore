@@ -39,6 +39,7 @@ tags
 .tags
 .cache
 *.vim
+*.swo
 compile_commands.json
 .factorypath
 .classpath

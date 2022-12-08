@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exec/vectorized/parquet_reader.h"
 
 #include <arrow/array.h>
@@ -123,7 +136,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             //save column type
             std::shared_ptr<arrow::Schema> field_schema = _batch->schema();
             if (!field_schema) {
-                LOG(INFO) << "Ignore the parquet file because of an expected nullptr Schema";
+                LOG(INFO) << "Ignore the parquet file because of an expected nullptr VectorizedSchema";
                 return Status::EndOfFile("Unexpected nullptr RecordBatch");
             }
         }
@@ -137,7 +150,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 }
 
 void ParquetReaderWrap::close() {
-    _parquet->Close();
+    [[maybe_unused]] auto st = _parquet->Close();
 }
 
 Status ParquetReaderWrap::size(int64_t* size) {
@@ -279,37 +292,11 @@ using ArrowStatusCode = ::arrow::StatusCode;
 using StarRocksStatus = ::starrocks::Status;
 using ArrowStatus = ::arrow::Status;
 
-static inline ArrowStatusCode convert_status_code(StarRocksStatusCode code) {
-    switch (code) {
-    case StarRocksStatusCode::OK:
-        return ArrowStatusCode::OK;
-    case StarRocksStatusCode::NOT_FOUND:
-    case StarRocksStatusCode::END_OF_FILE:
-        return ArrowStatusCode::IOError;
-    case StarRocksStatusCode::NOT_IMPLEMENTED_ERROR:
-        return ArrowStatusCode::NotImplemented;
-    case StarRocksStatusCode::MEM_ALLOC_FAILED:
-    case StarRocksStatusCode::BUFFER_ALLOCATION_FAILED:
-    case StarRocksStatusCode::MEM_LIMIT_EXCEEDED:
-        return ArrowStatusCode::OutOfMemory;
-    default:
-        return ArrowStatusCode::ExecutionError;
-    }
-}
-
-static inline ArrowStatus convert_status(const StarRocksStatus& status) {
-    if (LIKELY(status.ok())) {
-        return ArrowStatus::OK();
-    } else {
-        return ArrowStatus(convert_status_code(status.code()), status.get_error_msg());
-    }
-}
-
 ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos)
         : _file(std::move(file)), _pos(pos) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
-    Close();
+    [[maybe_unused]] auto st = Close();
 }
 
 arrow::Status ParquetChunkFile::Close() {

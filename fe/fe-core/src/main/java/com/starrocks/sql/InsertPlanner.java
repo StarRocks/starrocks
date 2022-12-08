@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
@@ -9,7 +22,6 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -19,6 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -61,7 +74,8 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -77,6 +91,9 @@ import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
+    private boolean shuffleServiceEnable = false;
+
+    private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
@@ -108,10 +125,7 @@ public class InsertPlanner {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
-        boolean canUsePipeline =
-                isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
-                        logicalPlan.canUsePipeline() && session.getSessionVariable().getParallelExecInstanceNum() <= 1;
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         try {
             if (forceDisablePipeline) {
@@ -120,6 +134,7 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            LOG.info("property" + requiredPropertySet.toString());
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
@@ -157,10 +172,10 @@ public class InsertPlanner {
             DataSink dataSink;
             if (insertStmt.getTargetTable() instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-                TWriteQuorumType writeQuorum = olapTable.writeQuorum();
 
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                        insertStmt.getTargetPartitionIds(), canUsePipeline, writeQuorum);
+                        insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
+                        olapTable.enableReplicatedStorage());
                 // At present, we only support dop=1 for olap table sink.
                 // because tablet writing needs to know the number of senders in advance
                 // and guaranteed order of data writing
@@ -170,6 +185,26 @@ public class InsertPlanner {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            }
+
+            if (canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
+                PlanFragment sinkFragment = execPlan.getFragments().get(0);
+                if (shuffleServiceEnable) {
+                    // For shuffle insert into, we only support tablet sink dop = 1
+                    // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
+                    // which may lead to inconsisten replica for primary key.
+                    // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
+                    sinkFragment.setPipelineDop(1);
+                } else {
+                    if (ConnectContext.get().getSessionVariable().getPipelineSinkDop() <= 0) {
+                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    } else {
+                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getPipelineSinkDop());
+                    }
+                }
+                sinkFragment.setHasOlapTableSink();
+                sinkFragment.setForceSetTableSinkDop();
+                sinkFragment.setForceAssignScanRangesPerDriverSeq();
             }
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
@@ -296,7 +331,7 @@ public class InsertPlanner {
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
                                         .map(col -> new Field(col.getName(), col.getType(),
-                                                new TableName(null, insertStatement.getTargetTable().getName()), null))
+                                                insertStatement.getTableName(), null))
                                         .collect(Collectors.toList()))), session);
 
                 ExpressionMapping expressionMapping =
@@ -390,6 +425,10 @@ public class InsertPlanner {
             return new PhysicalPropertySet();
         }
 
+        if (table.enableReplicatedStorage()) {
+            return new PhysicalPropertySet();
+        }
+
         List<Column> columns = table.getFullSchema();
         Preconditions.checkState(columns.size() == outputColumns.size(),
                 "outputColumn's size must equal with table's column size");
@@ -406,6 +445,9 @@ public class InsertPlanner {
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
         DistributionProperty property = new DistributionProperty(spec);
+
+        shuffleServiceEnable = true;
+
         return new PhysicalPropertySet(property);
     }
 }

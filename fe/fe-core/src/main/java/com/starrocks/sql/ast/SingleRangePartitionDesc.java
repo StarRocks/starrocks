@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.ast;
 
@@ -44,7 +57,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         this.partitionKeyDesc = partitionKeyDesc;
         this.properties = properties;
 
-        this.partitionDataProperty = DataProperty.DEFAULT_DATA_PROPERTY;
+        this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
         this.replicationNum = FeConstants.default_replication_num;
     }
 
@@ -116,7 +129,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         // analyze data property
         partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                DataProperty.DEFAULT_DATA_PROPERTY);
+                DataProperty.getInferredDefaultDataProperty());
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num
@@ -137,18 +150,18 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
                 properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
-                properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.lake_default_storage_cache_ttl_seconds);
         boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
                 properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
 
         if (storageCacheTtlS < -1) {
             throw new AnalysisException("Storage cache ttl should not be less than -1");
         }
-        if (!enableStorageCache && storageCacheTtlS != 0) {
+        if (!enableStorageCache && storageCacheTtlS != 0 && storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
             throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
         }
         if (enableStorageCache && storageCacheTtlS == 0) {
-            storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+            throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
         }
         if (!enableStorageCache && allowAsyncWriteBack) {
             throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");

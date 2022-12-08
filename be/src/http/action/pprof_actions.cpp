@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/http/action/pprof_actions.cpp
 
@@ -63,9 +76,13 @@ void HeapAction::handle(HttpRequest* req) {
     std::string str;
     std::stringstream tmp_prof_file_name;
     tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
-    const char* file_name = tmp_prof_file_name.str().c_str();
-    if (je_mallctl("prof.dump", NULL, NULL, &file_name, sizeof(const char*)) == 0) {
-        std::ifstream f(file_name);
+
+    // NOTE: Use fname to make the content which fname_cstr references to is still valid
+    // when je_mallctl is executing
+    auto fname = tmp_prof_file_name.str();
+    const char* fname_cstr = fname.c_str();
+    if (je_mallctl("prof.dump", nullptr, nullptr, &fname_cstr, sizeof(const char*)) == 0) {
+        std::ifstream f(fname_cstr);
         str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
     } else {
         std::string str = "dump jemalloc prof file failed";

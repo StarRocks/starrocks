@@ -1,28 +1,36 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.hudi;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
+import com.starrocks.connector.CachingRemoteFileConf;
+import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ReentrantExecutor;
-import com.starrocks.external.CachingRemoteFileConf;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.RemoteFileIO;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.CachingHiveMetastoreConf;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.IHiveMetastore;
-import com.starrocks.external.hudi.HudiRemoteFileIO;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.hive.CachingHiveMetastore;
+import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.connector.hive.IHiveMetastore;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HudiConnectorInternalMgr {
     private final String catalogName;
@@ -68,7 +76,7 @@ public class HudiConnectorInternalMgr {
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = createHiveMetaClient();
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(properties);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
@@ -108,14 +116,6 @@ public class HudiConnectorInternalMgr {
         }
 
         return baseRemoteFileIO;
-    }
-
-    public HiveMetaClient createHiveMetaClient() {
-        HiveConf conf = new HiveConf();
-        conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
-        return new HiveMetaClient(conf);
     }
 
     public ExecutorService getPullRemoteFileExecutor() {

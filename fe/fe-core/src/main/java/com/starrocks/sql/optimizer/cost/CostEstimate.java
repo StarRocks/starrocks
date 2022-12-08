@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.cost;
 
@@ -37,6 +50,12 @@ public class CostEstimate {
                 left.networkCost + right.networkCost);
     }
 
+    public CostEstimate multiplyBy(double factor) {
+        return new CostEstimate(cpuCost * factor,
+                memoryCost * factor,
+                networkCost * factor);
+    }
+
     public static boolean isZero(CostEstimate costEstimate) {
         return costEstimate.cpuCost == 0 && costEstimate.memoryCost == 0 && costEstimate.networkCost == 0;
     }
@@ -59,5 +78,10 @@ public class CostEstimate {
 
     public static CostEstimate of(double cpuCost, double memoryCost, double networkCost) {
         return new CostEstimate(cpuCost, memoryCost, networkCost);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[cpuCost: %f. memoryCost: %f. networkCost: %f.]", cpuCost, memoryCost, networkCost);
     }
 }

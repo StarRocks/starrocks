@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/binary_plain_page_test.cpp
 
@@ -71,74 +84,41 @@ public:
 
         //test1
 
-        if (!vectorize) {
-            MemPool pool;
-            size_t size = 3;
-            std::unique_ptr<ColumnVectorBatch> cvb;
-            ColumnVectorBatch::create(size, true, get_type_info(OLAP_FIELD_TYPE_VARCHAR), nullptr, &cvb);
-            ColumnBlock block(cvb.get(), &pool);
-            ColumnBlockView column_block_view(&block);
+        auto column = vectorized::BinaryColumn::create();
+        column->reserve(1024);
+        size_t size = 1024;
+        status = page_decoder.next_batch(&size, column.get());
+        ASSERT_TRUE(status.ok());
+        ASSERT_EQ(3U, size);
+        ASSERT_EQ("Hello", column->get_data()[0]);
+        ASSERT_EQ(",", column->get_data()[1]);
+        ASSERT_EQ("StarRocks", column->get_data()[2]);
 
-            status = page_decoder.next_batch(&size, &column_block_view);
-            Slice* values = reinterpret_cast<Slice*>(block.data());
-            ASSERT_TRUE(status.ok());
+        size = 1024;
+        auto column1 = vectorized::BinaryColumn::create();
+        page_decoder.seek_to_position_in_page(2);
+        status = page_decoder.next_batch(&size, column1.get());
+        ASSERT_TRUE(status.ok());
+        ASSERT_EQ(1, size);
+        ASSERT_EQ("StarRocks", column1->get_data()[0]);
 
-            Slice* value = reinterpret_cast<Slice*>(values);
-            ASSERT_EQ(3U, size);
-            ASSERT_EQ("Hello", value[0].to_string());
-            ASSERT_EQ(",", value[1].to_string());
-            ASSERT_EQ("StarRocks", value[2].to_string());
-
-            std::unique_ptr<ColumnVectorBatch> cvb2;
-            ColumnVectorBatch::create(1, true, get_type_info(OLAP_FIELD_TYPE_VARCHAR), nullptr, &cvb2);
-            ColumnBlock block2(cvb2.get(), &pool);
-            ColumnBlockView column_block_view2(&block2);
-
-            size_t fetch_num = 1;
-            page_decoder.seek_to_position_in_page(2);
-            status = page_decoder.next_batch(&fetch_num, &column_block_view2);
-            Slice* values2 = reinterpret_cast<Slice*>(block2.data());
-            ASSERT_TRUE(status.ok());
-            Slice* value2 = reinterpret_cast<Slice*>(values2);
-            ASSERT_EQ(1, fetch_num);
-            ASSERT_EQ("StarRocks", value2[0].to_string());
-        } else {
-            auto column = vectorized::BinaryColumn::create();
-            column->reserve(1024);
-            size_t size = 1024;
-            status = page_decoder.next_batch(&size, column.get());
-            ASSERT_TRUE(status.ok());
-            ASSERT_EQ(3U, size);
-            ASSERT_EQ("Hello", column->get_data()[0]);
-            ASSERT_EQ(",", column->get_data()[1]);
-            ASSERT_EQ("StarRocks", column->get_data()[2]);
-
-            size = 1024;
-            auto column1 = vectorized::BinaryColumn::create();
-            page_decoder.seek_to_position_in_page(2);
-            status = page_decoder.next_batch(&size, column1.get());
-            ASSERT_TRUE(status.ok());
-            ASSERT_EQ(1, size);
-            ASSERT_EQ("StarRocks", column1->get_data()[0]);
-
-            auto column2 = vectorized::BinaryColumn::create();
-            page_decoder.seek_to_position_in_page(0);
-            vectorized::SparseRange read_range;
-            read_range.add(vectorized::Range(0, 1));
-            read_range.add(vectorized::Range(2, 3));
-            status = page_decoder.next_batch(read_range, column2.get());
-            ASSERT_TRUE(status.ok());
-            ASSERT_EQ(2, column2->size());
-            ASSERT_EQ("Hello", column2->get_data()[0]);
-            ASSERT_EQ("StarRocks", column2->get_data()[1]);
-        }
+        auto column2 = vectorized::BinaryColumn::create();
+        page_decoder.seek_to_position_in_page(0);
+        vectorized::SparseRange read_range;
+        read_range.add(vectorized::Range(0, 1));
+        read_range.add(vectorized::Range(2, 3));
+        status = page_decoder.next_batch(read_range, column2.get());
+        ASSERT_TRUE(status.ok());
+        ASSERT_EQ(2, column2->size());
+        ASSERT_EQ("Hello", column2->get_data()[0]);
+        ASSERT_EQ("StarRocks", column2->get_data()[1]);
     }
 };
 
 // NOLINTNEXTLINE
 TEST_F(BinaryPlainPageTest, test_seek_by_value) {
-    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>, false>();
-    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>, true>();
+    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<TYPE_VARCHAR>, false>();
+    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<TYPE_VARCHAR>, true>();
 }
 
 // NOLINTNEXTLINE
@@ -170,10 +150,10 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     Slice data_without_head = data_with_head.slice();
     data_without_head.remove_prefix(4);
 
-    BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR> decoder(data_without_head);
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(data_without_head);
     ASSERT_TRUE(decoder.init().ok());
     ASSERT_EQ(5, decoder.count());
-    for (int i = 0; i < 5; i++) {
+    for (uint32_t i = 0; i < 5; i++) {
         EXPECT_EQ(slices[i], decoder.string_at_index(i));
     }
 }

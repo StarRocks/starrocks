@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/Table.java
 
@@ -77,7 +90,9 @@ public class Table extends MetaObject implements Writable {
         HUDI,
         JDBC,
         MATERIALIZED_VIEW,
-        LAKE
+        LAKE,
+        DELTALAKE,
+        FILE
     }
 
     @SerializedName(value = "id")
@@ -89,7 +104,7 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "createTime")
     protected long createTime;
     /*
-     *  fullSchema and nameToColumn should contains all columns, both visible and shadow.
+     *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
      *  eg. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
      *      to query but visible to load process.
      *  If you want to get all visible columns, you should call getBaseSchema() method, which is override in
@@ -124,7 +139,7 @@ public class Table extends MetaObject implements Writable {
 
     // not serialized field
     // record all materialized views based on this Table
-    private Set<Long> relatedMaterializedViews;
+    private Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -164,6 +179,10 @@ public class Table extends MetaObject implements Writable {
 
     public long getId() {
         return id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
     }
 
     public String getName() {
@@ -212,6 +231,10 @@ public class Table extends MetaObject implements Writable {
 
     public boolean isIcebergTable() {
         return type == TableType.ICEBERG;
+    }
+
+    public boolean isDeltalakeTable() {
+        return type == TableType.DELTALAKE;
     }
 
     // for create table
@@ -267,6 +290,8 @@ public class Table extends MetaObject implements Writable {
             table = new EsTable();
         } else if (type == TableType.HIVE) {
             table = new HiveTable();
+        } else if (type == TableType.FILE) {
+            table = new FileTable();
         } else if (type == TableType.HUDI) {
             table = new HudiTable();
         } else if (type == TableType.OLAP_EXTERNAL) {
@@ -350,6 +375,11 @@ public class Table extends MetaObject implements Writable {
     }
 
     @Override
+    public int hashCode() {
+        return Long.hashCode(id);
+    }
+
+    @Override
     public boolean equals(Object other) {
         if (!(other instanceof Table)) {
             return false;
@@ -397,7 +427,7 @@ public class Table extends MetaObject implements Writable {
             return "VIEW";
         }
         if (this instanceof MaterializedView) {
-            return "MATERIALIZED VIEW";
+            return "VIEW";
         }
         return "BASE TABLE";
     }
@@ -506,17 +536,24 @@ public class Table extends MetaObject implements Writable {
     }
 
     // should call this when create materialized view
-    public void addRelatedMaterializedView(long mvId) {
+    public void addRelatedMaterializedView(MvId mvId) {
         relatedMaterializedViews.add(mvId);
     }
 
     // should call this when drop materialized view
-    public void removeRelatedMaterializedView(long mvId) {
+    public void removeRelatedMaterializedView(MvId mvId) {
         relatedMaterializedViews.remove(mvId);
     }
 
-    public Set<Long> getRelatedMaterializedViews() {
+    public Set<MvId> getRelatedMaterializedViews() {
         return relatedMaterializedViews;
     }
 
+    public boolean isUnPartitioned() {
+        return true;
+    }
+
+    public List<String> getPartitionColumnNames() {
+        return Lists.newArrayList();
+    }
 }

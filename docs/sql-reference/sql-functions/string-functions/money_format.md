@@ -1,14 +1,16 @@
 # money_format
 
-## description
-
-### Syntax
-
-VARCHAR money_format(Number)
+## Description
 
 This function returns a string formatted as a currency string. The integer part is separated by comma every three bits and the decimal part is reserved for two bits.
 
-## example
+## Syntax
+
+```Haskell
+VARCHAR money_format(Number)
+```
+
+## Examples
 
 ```Plain Text
 MySQL > select money_format(17014116);

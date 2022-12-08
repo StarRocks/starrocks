@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/service/FrontendServiceImpl.java
 
@@ -56,6 +69,7 @@ import com.starrocks.http.UnauthorizedException;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -70,19 +84,21 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
+import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAuthenticateParams;
@@ -128,6 +144,8 @@ import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TLoadTxnRollbackRequest;
 import com.starrocks.thrift.TLoadTxnRollbackResult;
+import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
@@ -137,6 +155,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -152,8 +171,12 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
+import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
+import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -176,8 +199,8 @@ import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
-    private LeaderImpl leaderImpl;
-    private ExecuteEnv exeEnv;
+    private final LeaderImpl leaderImpl;
+    private final ExecuteEnv exeEnv;
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
@@ -252,7 +275,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         if (db != null) {
-            for (String tableName : db.getTableNamesWithLock()) {
+            for (String tableName : db.getTableNamesViewWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                         tableName, PrivPredicate.SHOW)) {
@@ -509,6 +532,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
+            info.setProgress(status.getProgress() + "%");
             tasksResult.add(info);
         }
         return result;
@@ -707,7 +731,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
-                for (String tableName : db.getTableNamesWithLock()) {
+                for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
                             tableName, PrivPredicate.SHOW)) {
@@ -787,10 +811,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (ctx == null) {
             return result;
         }
-        List<List<String>> rows = VariableMgr.dump(SetType.fromThrift(params.getVarType()), ctx.getSessionVariable(),
+        SetType setType = SetType.fromThrift(params.getVarType());
+        List<List<String>> rows = VariableMgr.dump(setType, ctx.getSessionVariable(),
                 null);
-        for (List<String> row : rows) {
-            map.put(row.get(0), row.get(1));
+        if (setType != SetType.VERBOSE) {
+            for (List<String> row : rows) {
+                map.put(row.get(0), row.get(1));
+            }
+        } else {
+            for (List<String> row : rows) {
+                TVerboseVariableRecord record = new TVerboseVariableRecord();
+                record.setVariable_name(row.get(0));
+                record.setValue(row.get(1));
+                record.setDefault_value(row.get(2));
+                record.setIs_changed(row.get(3).equals("1"));
+                result.addToVerbose_variables(record);
+            }
         }
         return result;
     }
@@ -965,11 +1001,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
-            if (!loadTxnCommitImpl(request)) {
-                // committed success but not visible
-                status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
-                status.addToError_msgs("Publish timeout. The data will be visible after a while");
-            }
+            loadTxnCommitImpl(request, status);
         } catch (UserException e) {
             LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
@@ -984,7 +1016,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
-    private boolean loadTxnCommitImpl(TLoadTxnCommitRequest request) throws UserException {
+    private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1013,19 +1045,29 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 timeoutMs, attachment);
         if (!ret) {
-            return ret;
+            // committed success but not visible
+            status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
+            String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
+            LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
+            }
+            status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
+            return;
         }
         // if commit and publish is success, load can be regarded as success
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         if (null == attachment) {
-            return ret;
+            return;
         }
         // collect table-level metrics
         Table tbl = db.getTable(request.getTbl());
         if (null == tbl) {
-            return ret;
+            return;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
@@ -1053,7 +1095,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 break;
         }
-        return ret;
     }
 
     @Override
@@ -1113,6 +1154,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(
                 db.getId(), request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 attachment);
     }
 
@@ -1233,9 +1275,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 "and the data of materialized view must be consistent with the base table.",
                         table.getName(), table.getName()));
             }
-            StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadTask);
-            TExecPlanFragmentParams plan = planner.plan(streamLoadTask.getId());
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
+            TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());
@@ -1404,5 +1446,27 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
 
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
+    }
+
+    @Override
+    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
+        TResourceUsage usage = request.getResource_usage();
+        QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
+                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
+                usage.getCpu_used_permille());
+
+        TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
+        TStatus status = new TStatus(TStatusCode.OK);
+        res.setStatus(status);
+        return res;
+    }
+
+    @Override
+    public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
+        if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
+            throw new TException("Only support report_epoch task");
+        }
+        MVManager.getInstance().onReportEpoch(request);
+        return new TMVReportEpochResponse();
     }
 }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/column_reader.h
 
@@ -44,8 +57,6 @@ public:
 
     Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
 
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override;
-
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
@@ -90,22 +101,22 @@ private:
     Status _load_next_page(bool* eos);
     Status _read_data_page(const OrdinalPageIndexIterator& iter);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     int _do_dict_lookup(const Slice& word);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_next_dict_codes(size_t* n, vectorized::Column* dst);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_init_dict_decoder();
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
     template <typename ParseFunc>

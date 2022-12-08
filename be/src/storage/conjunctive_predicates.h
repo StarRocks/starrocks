@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -53,17 +65,18 @@ public:
     template <typename Container>
     void predicates_of_column(ColumnId cid, Container* container) const;
 
-    Status convert_to(ConjunctivePredicates* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const {
-        int num_vec_preds = _vec_preds.size();
+    Status convert_to(ConjunctivePredicates* dst, const std::vector<LogicalType>& new_types,
+                      ObjectPool* obj_pool) const {
+        size_t num_vec_preds = _vec_preds.size();
         dst->_vec_preds.resize(num_vec_preds);
-        for (int i = 0; i < num_vec_preds; ++i) {
+        for (size_t i = 0; i < num_vec_preds; ++i) {
             ColumnId cid = _vec_preds[i]->column_id();
             RETURN_IF_ERROR(_vec_preds[i]->convert_to(&dst->_vec_preds[i], get_type_info(new_types[cid]), obj_pool));
         }
 
-        int num_non_vec_preds = _non_vec_preds.size();
+        size_t num_non_vec_preds = _non_vec_preds.size();
         dst->_non_vec_preds.resize(num_non_vec_preds);
-        for (int i = 0; i < num_non_vec_preds; ++i) {
+        for (size_t i = 0; i < num_non_vec_preds; ++i) {
             ColumnId cid = _non_vec_preds[i]->column_id();
             RETURN_IF_ERROR(
                     _non_vec_preds[i]->convert_to(&dst->_non_vec_preds[i], get_type_info(new_types[cid]), obj_pool));

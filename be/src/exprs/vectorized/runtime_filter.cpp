@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/runtime_filter.h"
 
@@ -70,8 +82,8 @@ void SimdBlockFilter::merge(const SimdBlockFilter& bf) {
     DCHECK(_log_num_buckets == bf._log_num_buckets);
     for (int i = 0; i < (1 << _log_num_buckets); i++) {
 #ifdef __AVX2__
-        __m256i* const dst = reinterpret_cast<__m256i*>(_directory[i]);
-        __m256i* const src = reinterpret_cast<__m256i*>(bf._directory[i]);
+        auto* const dst = reinterpret_cast<__m256i*>(_directory[i]);
+        auto* const src = reinterpret_cast<__m256i*>(bf._directory[i]);
         const __m256i a = _mm256_load_si256(src);
         const __m256i b = _mm256_load_si256(dst);
         const __m256i c = _mm256_or_si256(a, b);

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "udf/java/java_udf.h"
 
@@ -396,11 +408,11 @@ Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
     size_t length = this->string_length(jstr);
     buffer->resize(length);
     _env->GetStringUTFRegion(jstr, 0, length, buffer->data());
-    return Slice(buffer->data(), buffer->length());
+    return {buffer->data(), buffer->length()};
 }
 
 Slice JVMFunctionHelper::sliceVal(jstring jstr) {
-    return Slice(_env->GetStringUTFChars(jstr, NULL));
+    return {_env->GetStringUTFChars(jstr, nullptr)};
 }
 
 std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {
@@ -705,7 +717,7 @@ Status ClassAnalyzer::get_method_desc(const std::string& sign, std::vector<Metho
     RETURN_IF_ERROR(get_udaf_method_desc(sign, desc));
     // return type may be a void type
     for (int i = 1; i < desc->size(); ++i) {
-        if (desc->at(i).type == INVALID_TYPE) {
+        if (desc->at(i).type == TYPE_UNKNOWN) {
             return Status::InternalError(fmt::format("unknown type sign:{}", sign));
         }
     }
@@ -732,7 +744,7 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 i++;
             }
             // return Status::NotSupported("Not support Array Type");
-            desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, true});
+            desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
         }
         if (sign[i] == 'L') {
             int st = i + 1;
@@ -753,7 +765,7 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
             } else if (type == "java/lang/String") {
                 desc->emplace_back(MethodTypeDescriptor{TYPE_VARCHAR, true});
             } else {
-                desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, true});
+                desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
             }
             continue;
         }
@@ -768,9 +780,9 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
         ADD_PRIM_METHOD_TYPE_DESC('D', TYPE_DOUBLE)
             // clang-format on
         } else if (sign[i] == 'V') {
-            desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, false});
+            desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, false});
         } else {
-            desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, false});
+            desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, false});
         }
     }
 

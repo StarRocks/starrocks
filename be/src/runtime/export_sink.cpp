@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/export_sink.cpp
 
@@ -40,20 +53,18 @@ namespace starrocks {
 ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _state(nullptr),
           _pool(pool),
-          _row_desc(row_desc),
           _t_output_expr(t_exprs),
           _profile(nullptr),
           _bytes_written_counter(nullptr),
           _rows_written_counter(nullptr),
-          _write_timer(nullptr),
-          _closed(false) {}
+          _write_timer(nullptr) {}
 
-Status ExportSink::init(const TDataSink& t_sink) {
-    RETURN_IF_ERROR(DataSink::init(t_sink));
+Status ExportSink::init(const TDataSink& t_sink, RuntimeState* state) {
+    RETURN_IF_ERROR(DataSink::init(t_sink, state));
     _t_export_sink = t_sink.export_sink;
 
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -123,6 +134,10 @@ Status ExportSink::open_file_writer(int timeout_ms) {
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
             break;
         } else {
+            if (_t_export_sink.broker_addresses.empty()) {
+                LOG(WARNING) << "ExportSink broker_addresses empty";
+                return Status::InternalError("ExportSink broker_addresses empty");
+            }
             const TNetworkAddress& broker_addr = _t_export_sink.broker_addresses[0];
             BrokerFileSystem fs_broker(broker_addr, _t_export_sink.properties, timeout_ms);
             ASSIGN_OR_RETURN(output_file, fs_broker.new_writable_file(options, file_path));

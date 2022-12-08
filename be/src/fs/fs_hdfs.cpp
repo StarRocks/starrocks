@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "fs/fs_hdfs.h"
 
@@ -6,6 +18,7 @@
 #include <hdfs/hdfs.h>
 
 #include <atomic>
+#include <utility>
 
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
@@ -24,8 +37,8 @@ namespace starrocks {
 // Now this is not thread-safe.
 class HdfsInputStream : public io::SeekableInputStream {
 public:
-    HdfsInputStream(hdfsFS fs, hdfsFile file, const std::string& file_name)
-            : _fs(fs), _file(file), _file_name(file_name), _offset(0), _file_size(0) {}
+    HdfsInputStream(hdfsFS fs, hdfsFile file, std::string file_name)
+            : _fs(fs), _file(file), _file_name(std::move(file_name)) {}
 
     ~HdfsInputStream() override;
 
@@ -40,8 +53,8 @@ private:
     hdfsFS _fs;
     hdfsFile _file;
     std::string _file_name;
-    int64_t _offset;
-    int64_t _file_size;
+    int64_t _offset{0};
+    int64_t _file_size{0};
 };
 
 HdfsInputStream::~HdfsInputStream() {
@@ -118,8 +131,8 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
 class HDFSWritableFile : public WritableFile {
 public:
-    HDFSWritableFile(hdfsFS fs, hdfsFile file, const std::string& path, size_t offset)
-            : _fs(fs), _file(file), _path(path), _offset(offset), _closed(false) {}
+    HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string path, size_t offset)
+            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {}
 
     ~HDFSWritableFile() override { (void)HDFSWritableFile::close(); }
 
@@ -152,7 +165,7 @@ private:
     hdfsFile _file;
     std::string _path;
     size_t _offset;
-    bool _closed;
+    bool _closed{false};
 };
 
 Status HDFSWritableFile::append(const Slice& data) {
@@ -209,12 +222,14 @@ public:
 
     Type type() const override { return HDFS; }
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
+    using FileSystem::new_sequential_file;
+    using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& path) override;
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override;
 
@@ -326,7 +341,7 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
         std::string_view name(fileinfo[i].mName + dir_size);
         bool is_dir = fileinfo[i].mKind == tObjectKind::kObjectKindDirectory;
         int64_t file_size = fileinfo[i].mSize;
-        result->emplace_back(std::move(name), is_dir, file_size);
+        result->emplace_back(name, is_dir, file_size);
     }
     if (fileinfo) {
         hdfsFreeFileInfo(fileinfo, numEntries);
@@ -392,7 +407,9 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     return std::make_unique<HDFSWritableFile>(handle.hdfs_fs, file, path, 0);
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                              const std::string& path) {
+    (void)opts;
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
@@ -414,10 +431,6 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     }
     auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
     return std::make_unique<SequentialFile>(std::move(stream), path);
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const std::string& path) {
-    return HdfsFileSystem::new_random_access_file(RandomAccessFileOptions(), path);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -52,6 +65,8 @@ public class AnalyzeBackupRestoreTest {
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP SNAPSHOT snapshot_label2 TO `repo` " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP SNAPSHOT snapshot_pk_label TO `repo` ON ( tprimary ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t0 ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t1 ) " +
@@ -87,6 +102,10 @@ public class AnalyzeBackupRestoreTest {
                 "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
                 "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
         analyzeSuccess("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"true\"," +
+                "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
+                "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
+        analyzeSuccess("RESTORE SNAPSHOT test.`snapshot_pk_label` FROM `repo` ON ( `tprimary` )" +
                 "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"true\"," +
                 "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
                 "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");

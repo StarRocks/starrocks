@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.ast;
 
@@ -72,24 +85,24 @@ public class PartitionKeyDesc implements ParseNode {
     public void analyze(int partColNum) throws AnalysisException {
         if (!isMax()) {
             if (upperValues.isEmpty() || upperValues.size() > partColNum) {
-                throw new AnalysisException("Partiton values number is more than partition column number: " + this);
+                throw new AnalysisException("Partition values number is more than partition column number: " + this);
             }
         }
 
-        // currently, we do not support MAXVALUE in partition range values. eg: ("100", "200", MAXVALUE);
+        // currently, we do not support MAXVALUE in multi partition range values. eg: ("100", "200", MAXVALUE);
         // maybe support later.
-        if (lowerValues != null) {
+        if (lowerValues != null && lowerValues.size() > 1) {
             for (PartitionValue lowerVal : lowerValues) {
                 if (lowerVal.isMax()) {
-                    throw new AnalysisException("Not support MAXVALUE in partition range values.");
+                    throw new AnalysisException("Not support MAXVALUE in multi partition range values.");
                 }
             }
         }
 
-        if (upperValues != null) {
+        if (upperValues != null && upperValues.size() > 1) {
             for (PartitionValue upperVal : upperValues) {
                 if (upperVal.isMax()) {
-                    throw new AnalysisException("Not support MAXVALUE in partition range values.");
+                    throw new AnalysisException("Not support MAXVALUE in multi partition range values.");
                 }
             }
         }

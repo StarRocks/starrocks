@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "aggregate_distinct_blocking_sink_operator.h"
 
@@ -27,13 +39,8 @@ Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state)
         _aggregator->set_ht_eos();
     }
 
-    if (false) {
-    }
-#define HASH_SET_METHOD(NAME)                                                                   \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) \
-            _aggregator->it_hash() = _aggregator->hash_set_variant().NAME->hash_set.begin();
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+    _aggregator->hash_set_variant().visit(
+            [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
@@ -52,16 +59,7 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
     {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         bool limit_with_no_agg = _aggregator->limit() != -1;
-
-        if (false) {
-        }
-#define HASH_SET_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) {                      \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
-    }
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
 
         _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());

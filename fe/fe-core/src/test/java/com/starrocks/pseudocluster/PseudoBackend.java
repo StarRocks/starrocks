@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.pseudocluster;
 
 import com.google.common.base.Preconditions;
@@ -13,9 +26,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -34,6 +49,7 @@ import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
@@ -91,6 +107,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletStatResult;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTransmitDataParams;
 import com.starrocks.thrift.TTransmitDataResult;
@@ -146,6 +163,7 @@ public class PseudoBackend {
     private final TBackend tBackend;
     private AtomicLong reportVersion = new AtomicLong(0);
     private final BeTabletManager tabletManager = new BeTabletManager(this);
+    private final BeLakeTabletManager lakeTabletManager = new BeLakeTabletManager(this);
     private final BeTxnManager txnManager = new BeTxnManager(this);
     private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
     private final Map<TTaskType, Set<Long>> taskSignatures = new EnumMap(TTaskType.class);
@@ -506,7 +524,11 @@ public class PseudoBackend {
 
     void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
         // Ignore the initial disk usage of tablet
-        Tablet t = tabletManager.createTablet(request.create_tablet_req);
+        if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
+            lakeTabletManager.createTablet(request.create_tablet_req);
+        } else {
+            tabletManager.createTablet(request.create_tablet_req);
+        }
     }
 
     void handleDropTablet(TAgentTaskRequest request, TFinishTaskRequest finish) {
@@ -897,6 +919,12 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<PCollectQueryStatisticsResult> collectQueryStatistics(
+                com.starrocks.rpc.PCollectQueryStatisticsRequest request) {
+            return null;
+        }
+
+        @Override
         public Future<PFetchDataResult> fetchDataAsync(com.starrocks.rpc.PFetchDataRequest request) {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
@@ -920,7 +948,6 @@ public class PseudoBackend {
             return progress.getFetchDataResult();
         }
 
-
         @Override
         public Future<PProxyResult> getInfo(PProxyRequest request) {
             return null;
@@ -929,6 +956,11 @@ public class PseudoBackend {
         @Override
         public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
+            throw new org.apache.commons.lang.NotImplementedException("TODO");
         }
     }
 

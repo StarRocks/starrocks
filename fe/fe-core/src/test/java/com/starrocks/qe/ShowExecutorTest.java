@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/qe/ShowExecutorTest.java
 
@@ -31,6 +44,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
@@ -53,6 +67,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
@@ -88,11 +103,13 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static com.starrocks.thrift.TStorageMedium.SSD;
 
 public class ShowExecutorTest {
@@ -487,6 +504,8 @@ public class ShowExecutorTest {
         ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.SESSION, "var%");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals(2, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(2, resultSet.getResultRows().get(0).size());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("var1", resultSet.getString(0));
@@ -503,6 +522,28 @@ public class ShowExecutorTest {
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("var2", resultSet.getString(0));
         Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowVariable2() throws AnalysisException, DdlException {
+        ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.VERBOSE, null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals("Variable_name", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("Value", resultSet.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("Default_value", resultSet.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("Is_changed", resultSet.getMetaData().getColumn(3).getName());
+
+        Assert.assertTrue(resultSet.getResultRows().size() > 0);
+        Assert.assertEquals(4, resultSet.getResultRows().get(0).size());
+
+        ShowVariablesStmt stmt2 = new ShowVariablesStmt(SetType.VERBOSE, "query_%");
+        ShowExecutor executor2 = new ShowExecutor(ctx, stmt2);
+        ShowResultSet resultSet2 = executor2.execute();
+        Assert.assertEquals(4, resultSet2.getMetaData().getColumnCount());
+        Assert.assertTrue(resultSet2.getResultRows().size() > 0);
+        Assert.assertEquals(4, resultSet2.getResultRows().get(0).size());
     }
 
     @Test
@@ -682,15 +723,18 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(25, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(28, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(23).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(24).getName());
+        Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
+        Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
+        Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(26).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(27).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
-        Assert.assertEquals("5", resultSet.getString(24));
+        Assert.assertEquals("5", resultSet.getString(27));
 
         Config.integrate_starmgr = false;
     }
@@ -858,5 +902,59 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         // AnalysisException("There is no job named...") is expected.
         Assert.assertThrows(AnalysisException.class, () -> executor.execute());
+    }
+
+    @Test
+    public void testShowCreateExternalCatalogTable() throws DdlException, AnalysisException {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                List<Column> fullSchema = new ArrayList<>();
+                Column columnId = new Column("id", Type.INT);
+                Column columnName = new Column("name", Type.VARCHAR);
+                Column columnYear = new Column("year", Type.INT);
+                Column columnDt = new Column("dt", Type.INT);
+                fullSchema.add(columnId);
+                fullSchema.add(columnName);
+                fullSchema.add(columnYear);
+                fullSchema.add(columnDt);
+                List<String> partitions = Lists.newArrayList();
+                partitions.add("year");
+                partitions.add("dt");
+                HiveTable.Builder tableBuilder = HiveTable.builder()
+                        .setId(1)
+                        .setTableName("test_table")
+                        .setCatalogName("hive_catalog")
+                        .setResourceName(toResourceName("hive_catalog", "hive"))
+                        .setHiveDbName("hive_db")
+                        .setHiveTableName("test_table")
+                        .setPartitionColumnNames(partitions)
+                        .setFullSchema(fullSchema)
+                        .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                        .setCreateTime(10000);
+                return tableBuilder.build();
+            }
+        };
+
+
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE TABLE hive_catalog.hive_db.test_table (\n" +
+                "`id` INT,\n" +
+                "`name` VARCHAR,\n" +
+                "`year` INT,\n" +
+                "`dt` INT\n" +
+                ")\n" +
+                "WITH (\n" +
+                " partitioned_by = ARRAY [ year, dt ]\n" +
+                ")\n" +
+                "LOCATION 'hdfs://hadoop/hive/warehouse/test.db/test'", resultSet.getResultRows().get(0).get(1));
     }
 }

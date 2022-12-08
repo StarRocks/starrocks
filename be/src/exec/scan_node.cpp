@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exec/scan_node.cpp
 
@@ -45,7 +58,12 @@ Status ScanNode::prepare(RuntimeState* state) {
     _rows_read_counter = ADD_COUNTER(runtime_profile(), _s_rows_read_counter, TUnit::UNIT);
     _read_timer = ADD_TIMER(runtime_profile(), _s_total_read_timer);
 #ifndef BE_TEST
-    _total_throughput_counter = runtime_profile()->add_rate_counter(_s_total_throughput_counter, _bytes_read_counter);
+    _total_throughput_counter = runtime_profile()->add_derived_counter(
+            _s_total_throughput_counter, TUnit::BYTES_PER_SECOND,
+            [bytes_read_counter = _bytes_read_counter, total_time_countger = runtime_profile()->total_time_counter()] {
+                return RuntimeProfile::units_per_second(bytes_read_counter, total_time_countger);
+            },
+            "");
 #endif
     _materialize_tuple_timer =
             ADD_CHILD_TIMER(runtime_profile(), _s_materialize_tuple_timer, _s_scanner_thread_total_wallclock_time);
@@ -86,11 +104,11 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         int io_parallelism = scan_dop * io_tasks_per_scan_operator();
 
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
-        if (scan_dop > 1 && dynamic_cast<pipeline::FixedMorselQueue*>(morsel_queue.get()) &&
+        if (!always_shared_scan() && scan_dop > 1 && dynamic_cast<pipeline::FixedMorselQueue*>(morsel_queue.get()) &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
             auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
-                                                                            /*need_local_shuffle*/ true);
+                                                                            /*could_local_shuffle*/ true);
         } else {
             return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
         }
@@ -109,7 +127,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         }
 
         return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
-                                                                        /*need_local_shuffle*/ false);
+                                                                        /*could_local_shuffle*/ false);
     }
 }
 

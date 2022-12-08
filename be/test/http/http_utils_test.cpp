@@ -27,8 +27,8 @@ namespace starrocks {
 
 class HttpUtilsTest : public testing::Test {
 public:
-    HttpUtilsTest() {}
-    virtual ~HttpUtilsTest() {}
+    HttpUtilsTest() = default;
+    ~HttpUtilsTest() override = default;
     void SetUp() override { _evhttp_req = evhttp_request_new(nullptr, nullptr); }
     void TearDown() override {
         if (_evhttp_req != nullptr) {

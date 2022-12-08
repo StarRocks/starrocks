@@ -1,6 +1,6 @@
 # ALTER VIEW
 
-## description
+## Description
 
 This statement is used to modify the definition of a view。
 
@@ -18,7 +18,7 @@ Note:
 1. View is logical, where the data isn't stored in the physical medium. The view will be used as a subquery in the statement when queried. Therefore, modifying the definition of views is equivalent to modifying query_stmt.
 2. query_stmt is arbitrarily supported SQL.
 
-## example
+## Examples
 
 1. Alter example_view on example_db.
 

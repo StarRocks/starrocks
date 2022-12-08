@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/chunk_aggregator.h"
 
@@ -9,7 +21,7 @@
 
 namespace starrocks::vectorized {
 
-ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t reserve_rows,
+ChunkAggregator::ChunkAggregator(const starrocks::vectorized::VectorizedSchema* schema, uint32_t reserve_rows,
                                  uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
         : _schema(schema),
           _reserve_rows(reserve_rows),
@@ -51,14 +63,14 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
     aggregate_reset();
 }
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor)
+ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
+ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
                                  double factor)
         : ChunkAggregator(schema, reserve_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor,
+ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor,
                                  bool is_vertical_merge, bool is_key)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key) {}
 

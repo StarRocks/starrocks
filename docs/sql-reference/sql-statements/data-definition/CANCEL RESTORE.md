@@ -1,23 +1,29 @@
 # CANCEL RESTORE
 
-## description
+## Description
 
-The statement is used to cancel an ongoing RESTORE task.
+Cancels an on-going RESTORE task in a specified database.
 
-Syntax:
+> **CAUTION**
+>
+> If a RESTORE task is canceled during the COMMIT phase, the restored data will be corrupted and inaccessible. In this case, you can only perform the RESTORE  operation again and wait for the job to complete.
 
-```sql
-CANCEL RESTORE FROM db_name;
+## Syntax
+
+```SQL
+CANCEL RESTORE FROM <db_name>
 ```
 
-Note:
+## Parameters
 
-When the restore is abolished around the COMMIT or later stage, the restored tables may be inaccessible. At this point, only by performing the recovery operation again can you restore the data.
+| **Parameter** | **Description**                                        |
+| ------------- | ------------------------------------------------------ |
+| db_name       | Name of the database that the RESTORE task belongs to. |
 
-## example
+## Examples
 
-1. Cancel the RESTORE task from example_db.
+Example 1: Cancels the RESTORE task under the database `example_db`.
 
-    ```sql
-    CANCEL RESTORE FROM example_db;
-    ```
+```SQL
+CANCEL RESTORE FROM example_db;
+```

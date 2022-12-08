@@ -1,10 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.BetweenPredicate;
@@ -14,6 +26,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -35,11 +48,12 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -48,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -60,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -131,14 +147,19 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
+        public Expr visitSubfield(SubfieldOperator node, FormatterContext context) {
+            return new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(), node.getFieldName());
+        }
+
+        @Override
         public Expr visitArray(ArrayOperator node, FormatterContext context) {
             return new ArrayExpr(node.getType(),
                     node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
         }
 
         @Override
-        public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
-            return new ArrayElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
+        public Expr visitCollectionElement(CollectionElementOperator node, FormatterContext context) {
+            return new CollectionElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
                     buildExpr.build(node.getChild(1), context));
         }
 
@@ -182,17 +203,19 @@ public class ScalarOperatorToExpr {
                     LocalDateTime ldt = literal.getDate();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth());
                 } else if (type.isDatetime()) {
-                    LocalDateTime ldt = literal.getDate();
+                    LocalDateTime ldt = literal.getDatetime();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), ldt.getHour(),
                             ldt.getMinute(), ldt.getSecond());
                 } else if (type.isTime()) {
-                    return new FloatLiteral((double) literal.getTime(), Type.TIME);
+                    return new FloatLiteral(literal.getTime(), Type.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {
                     DecimalLiteral d = new DecimalLiteral(literal.getDecimal());
                     d.uncheckedCastTo(type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
                     return new StringLiteral(literal.getVarchar());
+                } else if (type.isBinaryType()) {
+                    return new VarBinaryLiteral(literal.getBinary());
                 } else {
                     throw new UnsupportedOperationException("nonsupport constant type: " + type.toSql());
                 }
@@ -414,6 +437,24 @@ public class ScalarOperatorToExpr {
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.BITNOT,
                             buildExpr.build(call.getChildren().get(0), context), null);
+                    break;
+                case "bit_shift_left":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_LEFT,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
+                    break;
+                case "bit_shift_right":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_RIGHT,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
+                    break;
+                case "bit_shift_right_logical":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 // FixMe(kks): InformationFunction shouldn't be CallOperator
                 case "database":

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/mysql/MysqlProto.java
 
@@ -112,21 +125,33 @@ public class MysqlProto {
 
         // Server send handshake packet to client.
         serializer.reset();
-        MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId());
+        MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId(),
+                context.supportSSL());
         handshakePacket.writeTo(serializer);
         channel.sendAndFlush(serializer.toByteBuffer());
 
-        // Server receive authenticate packet from client.
-        ByteBuffer handshakeResponse = channel.fetchOnePacket();
-        if (handshakeResponse == null) {
-            // receive response failed.
+        MysqlAuthPacket authPacket = readAuthPacket(context);
+        if (authPacket == null) {
             return false;
         }
-        MysqlAuthPacket authPacket = new MysqlAuthPacket();
-        if (!authPacket.readFrom(handshakeResponse)) {
-            ErrorReport.report(ErrorCode.ERR_NOT_SUPPORTED_AUTH_MODE);
-            sendResponsePacket(context);
-            return false;
+
+        if (authPacket.isSSLConnRequest()) {
+            // change to ssl session
+            LOG.info("start to enable ssl connection");
+            if (!context.enableSSL()) {
+                LOG.warn("enable ssl connection failed");
+                ErrorReport.report(ErrorCode.ERR_CHANGE_TO_SSL_CONNECTION_FAILED);
+                sendResponsePacket(context);
+                return false;
+            } else {
+                LOG.info("enable ssl connection successfully");
+            }
+
+            // read the authenticate package again from client
+            authPacket = readAuthPacket(context);
+            if (authPacket == null) {
+                return false;
+            }
         }
 
         // check capability
@@ -204,6 +229,22 @@ public class MysqlProto {
             }
         }
         return true;
+    }
+
+    private static MysqlAuthPacket readAuthPacket(ConnectContext context) throws IOException {
+        // Server receive authenticate packet from client.
+        ByteBuffer handshakeResponse = context.getMysqlChannel().fetchOnePacket();
+        if (handshakeResponse == null) {
+            // receive response failed.
+            return null;
+        }
+        MysqlAuthPacket authPacket = new MysqlAuthPacket();
+        if (!authPacket.readFrom(handshakeResponse)) {
+            ErrorReport.report(ErrorCode.ERR_NOT_SUPPORTED_AUTH_MODE);
+            sendResponsePacket(context);
+            return null;
+        }
+        return authPacket;
     }
 
     /**

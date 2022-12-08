@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -8,8 +20,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/vectorized/hash_joiner.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 using HashJoiner = starrocks::vectorized::HashJoiner;
 
@@ -35,8 +46,8 @@ public:
         return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _join_prober.get());
     }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk);
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
+    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     const HashJoinerPtr _join_prober;
@@ -62,5 +73,4 @@ private:
     HashJoinerFactoryPtr _hash_joiner_factory;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

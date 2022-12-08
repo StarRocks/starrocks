@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -32,10 +44,10 @@ enum AggDistinctType { COUNT = 0, SUM = 1 };
 
 static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
 
-template <PrimitiveType PT, PrimitiveType SumPT, typename = guard::Guard>
+template <LogicalType PT, LogicalType SumPT, typename = guard::Guard>
 struct DistinctAggregateState {};
 
-template <PrimitiveType PT, PrimitiveType SumPT>
+template <LogicalType PT, LogicalType SumPT>
 struct DistinctAggregateState<PT, SumPT, FixedLengthPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     using SumType = RunTimeCppType<SumPT>;
@@ -96,8 +108,8 @@ struct DistinctAggregateState<PT, SumPT, FixedLengthPTGuard<PT>> {
     HashSet<T> set;
 };
 
-template <PrimitiveType PT, PrimitiveType SumPT>
-struct DistinctAggregateState<PT, SumPT, BinaryPTGuard<PT>> {
+template <LogicalType PT, LogicalType SumPT>
+struct DistinctAggregateState<PT, SumPT, StringPTGuard<PT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
@@ -141,7 +153,7 @@ struct DistinctAggregateState<PT, SumPT, BinaryPTGuard<PT>> {
     // then we could only one memcpy.
     void serialize(uint8_t* dst) const {
         for (auto& key : set) {
-            uint32_t size = (uint32_t)key.size;
+            auto size = (uint32_t)key.size;
             memcpy(dst, &size, sizeof(uint32_t));
             dst += sizeof(uint32_t);
             memcpy(dst, key.data, key.size);
@@ -176,10 +188,10 @@ struct DistinctAggregateState<PT, SumPT, BinaryPTGuard<PT>> {
 };
 
 // use a different way to do serialization to gain performance.
-template <PrimitiveType PT, PrimitiveType SumPT, typename = guard::Guard>
+template <LogicalType PT, LogicalType SumPT, typename = guard::Guard>
 struct DistinctAggregateStateV2 {};
 
-template <PrimitiveType PT, PrimitiveType SumPT>
+template <LogicalType PT, LogicalType SumPT>
 struct DistinctAggregateStateV2<PT, SumPT, FixedLengthPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     using SumType = RunTimeCppType<SumPT>;
@@ -257,12 +269,12 @@ struct DistinctAggregateStateV2<PT, SumPT, FixedLengthPTGuard<PT>> {
     MyHashSet set;
 };
 
-template <PrimitiveType PT, PrimitiveType SumPT>
-struct DistinctAggregateStateV2<PT, SumPT, BinaryPTGuard<PT>> : public DistinctAggregateState<PT, SumPT> {};
+template <LogicalType PT, LogicalType SumPT>
+struct DistinctAggregateStateV2<PT, SumPT, StringPTGuard<PT>> : public DistinctAggregateState<PT, SumPT> {};
 
 // Dear god this template class as template parameter kills me!
-template <PrimitiveType PT, PrimitiveType SumPT,
-          template <PrimitiveType X, PrimitiveType Y, typename = guard::Guard> class TDistinctAggState,
+template <LogicalType PT, LogicalType SumPT,
+          template <LogicalType X, LogicalType Y, typename = guard::Guard> class TDistinctAggState,
           AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class TDistinctAggregateFunction : public AggregateFunctionBatchHelper<
                                            TDistinctAggState<PT, SumPT>,
@@ -402,7 +414,7 @@ public:
                 size_t new_size = old_size + key.size + sizeof(uint32_t);
                 bytes.resize(new_size);
 
-                uint32_t size = (uint32_t)key.size;
+                auto size = (uint32_t)key.size;
                 memcpy(bytes.data() + old_size, &size, sizeof(uint32_t));
                 old_size += sizeof(uint32_t);
                 memcpy(bytes.data() + old_size, key.data, key.size);
@@ -439,15 +451,15 @@ public:
     }
 };
 
-template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class DistinctAggregateFunction
         : public TDistinctAggregateFunction<PT, SumResultPT<PT>, DistinctAggregateState, DistinctType, T> {};
 
-template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class DistinctAggregateFunctionV2
         : public TDistinctAggregateFunction<PT, SumResultPT<PT>, DistinctAggregateStateV2, DistinctType, T> {};
 
-template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class DecimalDistinctAggregateFunction
         : public TDistinctAggregateFunction<PT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T> {};
 
@@ -479,7 +491,7 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        size_t mem_usage = 0;
+        [[maybe_unused]] size_t mem_usage = 0;
         auto& agg_state = this->data(state);
         const auto* column = down_cast<const ArrayColumn*>(columns[0]);
         MemPool* mem_pool = ctx->impl()->mem_pool();

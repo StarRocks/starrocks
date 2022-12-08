@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_meta_manager.h
 
@@ -21,14 +34,11 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
-DIAGNOSTIC_POP
 
 #include <string>
 
+#include "common/compiler_util.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/data_dir.h"
 #include "storage/kv_store.h"
@@ -39,7 +49,7 @@ namespace starrocks {
 
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
-class EditVersion;
+struct EditVersion;
 class EditVersionMetaPB;
 class RowsetMetaPB;
 class TabletMetaPB;
@@ -150,7 +160,8 @@ public:
     // update meta after state of a rowset commit is applied
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
                                       std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
-                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index);
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                      const starrocks::RowsetMetaPB* rowset_meta);
 
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
@@ -202,6 +213,12 @@ public:
     static Status clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 
     static Status remove_tablet_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, TSchemaHash schema_hash);
+
+    static Status remove_primary_key_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
+
+    static Status remove_table_meta(DataDir* store, TTableId table_id);
+
+    static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
 };
 
 } // namespace starrocks

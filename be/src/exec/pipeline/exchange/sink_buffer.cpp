@@ -1,13 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
-#include <chrono>
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
-DIAGNOSTIC_POP
+
+#include <chrono>
 
 #include "fmt/core.h"
 #include "util/time.h"
@@ -62,10 +71,10 @@ SinkBuffer::~SinkBuffer() {
     _buffers.clear();
 }
 
-void SinkBuffer::add_request(TransmitChunkInfo& request) {
+Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     DCHECK(_num_remaining_eos > 0);
     if (_is_finishing) {
-        return;
+        return Status::OK();
     }
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
@@ -73,8 +82,10 @@ void SinkBuffer::add_request(TransmitChunkInfo& request) {
     }
     {
         auto& instance_id = request.fragment_instance_id;
-        _try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); });
+        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
     }
+
+    return Status::OK();
 }
 
 bool SinkBuffer::is_full() const {
@@ -122,9 +133,15 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
         return;
     }
 
+    auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
+    auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
     auto* wait_timer = ADD_TIMER(profile, "WaitTime");
     auto* overall_timer = ADD_TIMER(profile, "OverallTime");
+
+    COUNTER_SET(rpc_count, _rpc_count);
+    COUNTER_SET(rpc_avg_timer, _rpc_cumulative_time / std::max(_rpc_count.load(), static_cast<int64_t>(1)));
+
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
@@ -174,9 +191,15 @@ int64_t SinkBuffer::_network_time() {
     return max;
 }
 
-void SinkBuffer::cancel_one_sinker() {
+void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
+    }
+    if (state != nullptr) {
+        LOG(INFO) << fmt::format(
+                "fragment_instance_id {} -> {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}",
+                print_id(_fragment_ctx->fragment_instance_id()), print_id(state->fragment_instance_id()),
+                _num_uncancelled_sinkers, _is_finishing, _num_remaining_eos);
     }
 }
 
@@ -184,7 +207,10 @@ void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_
                                       const int64_t receive_timestamp) {
     _last_receive_time = MonotonicNanos();
     int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
-    _network_times[instance_id.lo].update(receive_timestamp - send_timestamp, concurrency);
+    int64_t time_usage = receive_timestamp - send_timestamp;
+    _network_times[instance_id.lo].update(time_usage, concurrency);
+    _rpc_cumulative_time += time_usage;
+    _rpc_count++;
 }
 
 void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_t sequence) {
@@ -203,7 +229,7 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works) {
+Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
 
@@ -212,7 +238,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
 
     for (;;) {
         if (_is_finishing) {
-            return;
+            return Status::OK();
         }
 
         auto& buffer = _buffers[instance_id.lo];
@@ -229,7 +255,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
             too_much_brpc_process = _num_in_flight_rpcs[instance_id.lo] >= config::pipeline_sink_brpc_dop;
         }
         if (buffer.empty() || too_much_brpc_process) {
-            return;
+            return Status::OK();
         }
 
         TransmitChunkInfo& request = buffer.front();
@@ -251,7 +277,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         // But we must guarantee that first packet must be received first
         if (_num_finished_rpcs[instance_id.lo] == 0 && _num_in_flight_rpcs[instance_id.lo] > 0) {
             need_wait = true;
-            return;
+            return Status::OK();
         }
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id, &need_wait]() {
@@ -278,7 +304,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
                 // But we must guarantee that eos packent must be the last packet
                 if (_num_in_flight_rpcs[instance_id.lo] > 0) {
                     need_wait = true;
-                    return;
+                    return Status::OK();
                 }
             }
         }
@@ -343,15 +369,19 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         closure->cntl.request_attachment().append(request.attachment);
 
         if (bthread_self()) {
-            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+            TRY_CATCH_BAD_ALLOC(
+                    request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure));
         } else {
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+            TRY_CATCH_BAD_ALLOC(
+                    request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure));
         }
 
-        return;
+        return Status::OK();
     }
+
+    return Status::OK();
 }
 } // namespace starrocks::pipeline

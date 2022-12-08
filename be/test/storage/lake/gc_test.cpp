@@ -1,8 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/lake/gc.h"
 
 #include <gtest/gtest.h>
+
+#include <ctime>
+#include <set>
 
 #include "common/config.h"
 #include "fs/fs.h"
@@ -18,172 +33,240 @@
 
 namespace starrocks::lake {
 
+class TestLocationProvider : public LocationProvider {
+public:
+    explicit TestLocationProvider(std::string dir) : _dir(dir) {}
+
+    std::set<int64_t> owned_tablets() const override { return _owned_shards; }
+
+    std::string root_location(int64_t tablet_id) const override { return _dir; }
+
+    Status list_root_locations(std::set<std::string>* roots) const override {
+        roots->insert(_dir);
+        return Status::OK();
+    }
+
+    std::set<int64_t> _owned_shards;
+    std::string _dir;
+};
+
 class GCTest : public ::testing::Test {
 public:
-    static void SetUpTestCase() {
+    void SetUp() override {
         CHECK_OK(fs::create_directories(join_path(kTestDir, kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(join_path(kTestDir, kTxnLogDirectoryName)));
         CHECK_OK(fs::create_directories(join_path(kTestDir, kSegmentDirectoryName)));
-
-        s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
-        s_tablet_manager = std::make_unique<lake::TabletManager>(s_location_provider.get(), 16384);
     }
 
-    static void TearDownTestCase() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+    void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
     constexpr static const char* const kTestDir = "./lake_gc_test";
-    inline static std::unique_ptr<lake::LocationProvider> s_location_provider;
-    inline static std::unique_ptr<TabletManager> s_tablet_manager;
 };
 
 // NOLINTNEXTLINE
 TEST_F(GCTest, test_metadata_gc) {
     auto fs = FileSystem::Default();
-    auto tablet_id = next_id();
+    auto tablet_id_1 = next_id();
+    auto tablet_id_2 = next_id();
+
+    // LocationProvider and TabletManager of worker A
+    auto location_provider_1 = std::make_unique<TestLocationProvider>(kTestDir);
+    auto tablet_manager_1 = std::make_unique<lake::TabletManager>(location_provider_1.get(), 16384);
+    // tablet_id_1 owned by worker A
+    location_provider_1->_owned_shards.insert(tablet_id_1);
+
+    // LocationProvider and TabletManager of worker B
+    auto location_provider_2 = std::make_unique<TestLocationProvider>(kTestDir);
+    auto tablet_manager_2 = std::make_unique<lake::TabletManager>(location_provider_2.get(), 16384);
+    // tablet_id_2 owned by worker B
+    location_provider_2->_owned_shards.insert(tablet_id_2);
+
+    // Save metadata on woker A
     auto version_count = config::lake_gc_metadata_max_versions + 4;
-    int64_t txn_id = 1;
-    auto expire_time =
-            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
-                    .count() +
-            100000;
     for (int i = 0; i < version_count; i++) {
         auto metadata = std::make_shared<TabletMetadata>();
-        // leave scheme and rowset unsetted.
-        metadata->set_id(tablet_id);
+        metadata->set_id(tablet_id_1);
         metadata->set_version(i + 1);
         metadata->set_next_rowset_id(i + 1);
-
-        if (i == 0 || i == 1) {
-            ASSERT_OK(s_tablet_manager->put_tablet_metadata_lock(tablet_id, i + 1, expire_time));
-            ++txn_id;
-        }
-
-        ASSERT_OK(s_tablet_manager->put_tablet_metadata(metadata));
-        ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get(), 0));
+        ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
+    }
+    for (int i = 0; i < 5; i++) {
+        auto txn_log = std::make_shared<lake::TxnLog>();
+        txn_log->set_tablet_id(tablet_id_1);
+        txn_log->set_txn_id(i);
+        ASSERT_OK(tablet_manager_1->put_txn_log(txn_log));
     }
 
-    // Ensure all metadata are still exist.
+    // Save metadata on woker B
     for (int i = 0; i < version_count; i++) {
-        // Version 1 and 2 will be kept because their metadata are locked.
-        if (i == 2 || i == 3) {
-            auto location = s_tablet_manager->tablet_metadata_location(tablet_id, i + 1);
-            auto st = fs->path_exists(location);
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id_2);
+        metadata->set_version(i + 1);
+        metadata->set_next_rowset_id(i + 1);
+        ASSERT_OK(tablet_manager_2->put_tablet_metadata(metadata));
+    }
+    for (int i = 0; i < 5; i++) {
+        auto txn_log = std::make_shared<lake::TxnLog>();
+        txn_log->set_tablet_id(tablet_id_2);
+        txn_log->set_txn_id(i);
+        ASSERT_OK(tablet_manager_2->put_txn_log(txn_log));
+    }
+
+    // Doing GC on worker A
+    ASSERT_OK(metadata_gc(kTestDir, tablet_manager_1.get(), 1000));
+
+    // Woker B should only delete expired metadata of tablet_id_1
+    for (int i = 0; i < version_count - config::lake_gc_metadata_max_versions; i++) {
+        auto location = tablet_manager_1->tablet_metadata_location(tablet_id_1, i + 1);
+        auto st = fs->path_exists(location);
+        if (i < version_count - config::lake_gc_metadata_max_versions) {
             ASSERT_TRUE(st.is_not_found()) << st;
         } else {
-            auto location = s_tablet_manager->tablet_metadata_location(tablet_id, i + 1);
-            ASSERT_OK(fs->path_exists(location));
+            ASSERT_TRUE(st.ok()) << st;
         }
+
+        location = tablet_manager_2->tablet_metadata_location(tablet_id_2, i + 1);
+        st = fs->path_exists(location);
+        ASSERT_TRUE(st.ok()) << st;
+    }
+    for (int i = 0; i < 5; i++) {
+        auto txn = tablet_manager_1->txn_log_location(tablet_id_1, i);
+        auto st = fs->path_exists(txn);
+        ASSERT_TRUE(st.is_not_found()) << st;
+
+        txn = tablet_manager_2->txn_log_location(tablet_id_2, i);
+        st = fs->path_exists(txn);
+        ASSERT_TRUE(st.ok()) << st;
     }
 
-    // txn log
-    int64_t min_active_txn_log_id = 100;
-    {
-        for (int i = 0; i < 5; i++) {
-            auto txn_log = std::make_shared<lake::TxnLog>();
-            txn_log->set_tablet_id(tablet_id);
-            txn_log->set_txn_id(i);
-            ASSERT_OK(s_tablet_manager->put_txn_log(txn_log));
-        }
-        ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get(), min_active_txn_log_id));
-
-        for (int i = 0; i < 5; i++) {
-            auto txn = s_tablet_manager->txn_log_location(tablet_id, i);
-            auto st = fs->path_exists(txn);
+    // Doing GC on worker B
+    ASSERT_OK(metadata_gc(kTestDir, tablet_manager_2.get(), 1000));
+    for (int i = 0; i < version_count - config::lake_gc_metadata_max_versions; i++) {
+        auto location = tablet_manager_2->tablet_metadata_location(tablet_id_2, i + 1);
+        auto st = fs->path_exists(location);
+        if (i < version_count - config::lake_gc_metadata_max_versions) {
             ASSERT_TRUE(st.is_not_found()) << st;
+        } else {
+            ASSERT_TRUE(st.ok()) << st;
         }
     }
-
-    {
-        for (int i = 100; i < 105; i++) {
-            auto txn_log = std::make_shared<lake::TxnLog>();
-            txn_log->set_tablet_id(tablet_id);
-            txn_log->set_txn_id(i);
-            ASSERT_OK(s_tablet_manager->put_txn_log(txn_log));
-        }
-        ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get(), min_active_txn_log_id));
-
-        for (int i = 100; i < 105; i++) {
-            auto location = s_tablet_manager->txn_log_location(tablet_id, i);
-            ASSERT_OK(fs->path_exists(location));
-        }
+    for (int i = 0; i < 5; i++) {
+        auto txn = tablet_manager_2->txn_log_location(tablet_id_2, i);
+        auto st = fs->path_exists(txn);
+        ASSERT_TRUE(st.is_not_found()) << st;
     }
 }
 
 // NOLINTNEXTLINE
-TEST_F(GCTest, segment_metadata_gc) {
+TEST_F(GCTest, test_segment_gc) {
     auto fs = FileSystem::Default();
-    auto tablet_id = next_id();
+    auto tablet_id_1 = next_id();
+    auto tablet_id_2 = next_id();
+    // LocationProvider and TabletManager of worker A
+    auto location_provider_1 = std::make_unique<TestLocationProvider>(kTestDir);
+    auto tablet_manager_1 = std::make_unique<lake::TabletManager>(location_provider_1.get(), 16384);
+    // tablet_id_1 owned by worker A
+    location_provider_1->_owned_shards.insert(tablet_id_1);
+
+    // LocationProvider and TabletManager of worker B
+    auto location_provider_2 = std::make_unique<TestLocationProvider>(kTestDir);
+    auto tablet_manager_2 = std::make_unique<lake::TabletManager>(location_provider_2.get(), 16384);
+    // tablet_id_2 owned by worker B
+    location_provider_2->_owned_shards.insert(tablet_id_2);
+
     auto segments = std::vector<std::string>();
     for (int i = 0; i < 10; i++) {
-        segments.emplace_back(fmt::format("{}.dat", generate_uuid_string()));
-        auto location = s_tablet_manager->segment_location(tablet_id, segments.back());
+        segments.emplace_back(random_segment_filename());
+        auto location = tablet_manager_1->segment_location(tablet_id_1, segments.back());
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
         ASSERT_OK(wf->close());
     }
     auto valid_segment_cnt = 0;
 
+    // segment referenced by tablet_id_1
     {
         auto metadata = std::make_shared<TabletMetadata>();
-        metadata->set_id(tablet_id);
+        metadata->set_id(tablet_id_1);
         metadata->set_version(1);
         metadata->set_next_rowset_id(1);
         auto rowset = metadata->add_rowsets();
         rowset->add_segments(segments[valid_segment_cnt++]);
-        rowset->add_segments(segments[valid_segment_cnt++]);
-        ASSERT_OK(s_tablet_manager->put_tablet_metadata(metadata));
+        ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
     }
+    // segment referenced by tablet_id_2
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id_2);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(1);
+        auto rowset = metadata->add_rowsets();
+        rowset->add_segments(segments[valid_segment_cnt++]);
+        ASSERT_OK(tablet_manager_2->put_tablet_metadata(metadata));
+    }
+    // segment referenced by txn log of tablet_id_1
     {
         auto log_write = std::make_shared<TxnLog>();
-        log_write->set_tablet_id(tablet_id);
+        log_write->set_tablet_id(tablet_id_1);
         log_write->set_txn_id(next_id());
 
         auto rowset = log_write->mutable_op_write()->mutable_rowset();
         rowset->add_segments(segments[valid_segment_cnt++]);
-        rowset->add_segments(segments[valid_segment_cnt++]);
-        ASSERT_OK(s_tablet_manager->put_txn_log(log_write));
+        ASSERT_OK(tablet_manager_1->put_txn_log(log_write));
     }
+    // segment referenced by txn log of tablet_id_1
     {
         auto log_compaction = std::make_shared<TxnLog>();
-        log_compaction->set_tablet_id(tablet_id);
+        log_compaction->set_tablet_id(tablet_id_1);
         log_compaction->set_txn_id(next_id());
 
         auto rowset = log_compaction->mutable_op_compaction()->mutable_output_rowset();
         rowset->add_segments(segments[valid_segment_cnt++]);
-        rowset->add_segments(segments[valid_segment_cnt++]);
-        ASSERT_OK(s_tablet_manager->put_txn_log(log_compaction));
+        ASSERT_OK(tablet_manager_1->put_txn_log(log_compaction));
     }
+    // segment referenced by txn log of tablet_id_1
     {
         auto log_schema_change = std::make_shared<TxnLog>();
-        log_schema_change->set_tablet_id(tablet_id);
+        log_schema_change->set_tablet_id(tablet_id_1);
         log_schema_change->set_txn_id(next_id());
 
         auto rowset = log_schema_change->mutable_op_schema_change()->add_rowsets();
         rowset->add_segments(segments[valid_segment_cnt++]);
-        rowset->add_segments(segments[valid_segment_cnt++]);
-        ASSERT_OK(s_tablet_manager->put_txn_log(log_schema_change));
+        ASSERT_OK(tablet_manager_1->put_txn_log(log_schema_change));
     }
     ASSERT_LT(valid_segment_cnt, segments.size());
 
+    // Orphan segments have not timed out yet
     config::lake_gc_segment_expire_seconds = 600;
-    ASSERT_OK(segment_gc(kTestDir, s_tablet_manager.get()));
-
+    ASSERT_OK(segment_gc(kTestDir, tablet_manager_1.get()));
     for (const auto& seg : segments) {
-        auto location = s_tablet_manager->segment_location(tablet_id, seg);
+        auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), seg);
         ASSERT_OK(fs->path_exists(location));
     }
 
+    // Segment GC on tablet_manager_2 should not delete any file
     config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(segment_gc(kTestDir, s_tablet_manager.get()));
+    ASSERT_OK(segment_gc(kTestDir, tablet_manager_2.get()));
+    for (const auto& seg : segments) {
+        auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), seg);
+        ASSERT_OK(fs->path_exists(location));
+    }
 
+    // Segment GC on tablet_manager_1
+    ASSERT_OK(segment_gc(kTestDir, tablet_manager_1.get()));
     for (int i = 0, sz = segments.size(); i < sz; i++) {
-        auto location = s_tablet_manager->segment_location(tablet_id, segments[i]);
+        auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), segments[i]);
         if (i < valid_segment_cnt) {
             ASSERT_OK(fs->path_exists(location));
         } else {
             auto st = fs->path_exists(location);
             ASSERT_TRUE(st.is_not_found()) << st;
         }
+    }
+    {
+        auto orphan_list = join_path(kTestDir, kGCFileName);
+        auto st = fs->path_exists(orphan_list);
+        ASSERT_OK(st);
     }
 }
 

@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/operator.h"
@@ -29,17 +43,14 @@ using namespace vectorized;
 class PartitionSortSinkOperator final : public Operator {
 public:
     PartitionSortSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                              std::shared_ptr<vectorized::ChunksSorter> chunks_sorter, SortExecExprs sort_exec_exprs,
+                              std::shared_ptr<vectorized::ChunksSorter> chunks_sorter, SortExecExprs& sort_exec_exprs,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-                              const RowDescriptor& parent_node_row_desc,
-                              const RowDescriptor& parent_node_child_row_desc, SortContext* sort_context)
+                              SortContext* sort_context)
             : Operator(factory, id, "local_sort_sink", plan_node_id, driver_sequence),
               _chunks_sorter(std::move(chunks_sorter)),
-              _sort_exec_exprs(std::move(sort_exec_exprs)),
+              _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
-              _parent_node_row_desc(parent_node_row_desc),
-              _parent_node_child_row_desc(parent_node_child_row_desc),
               _sort_context(sort_context) {
         _sort_context->ref();
     }
@@ -69,15 +80,12 @@ private:
 
     // from topn
     // _sort_exec_exprs contains the ordering expressions
-    SortExecExprs _sort_exec_exprs;
+    SortExecExprs& _sort_exec_exprs;
     const std::vector<OrderByType>& _order_by_types;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;
 
-    // Used to get needed data from TopNNode.
-    const RowDescriptor& _parent_node_row_desc;
-    const RowDescriptor& _parent_node_child_row_desc;
     SortContext* _sort_context;
 };
 
@@ -86,16 +94,16 @@ public:
     PartitionSortSinkOperatorFactory(
             int32_t id, int32_t plan_node_id, std::shared_ptr<SortContextFactory> sort_context_factory,
             SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-            const std::string& sort_keys, int64_t offset, int64_t limit, const TTopNType::type topn_type,
+            std::string sort_keys, int64_t offset, int64_t limit, const TTopNType::type topn_type,
             const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
             const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc,
-            const std::vector<ExprContext*>& analytic_partition_exprs)
+            std::vector<ExprContext*> analytic_partition_exprs)
             : OperatorFactory(id, "local_sort_sink", plan_node_id),
-              _sort_context_factory(sort_context_factory),
+              _sort_context_factory(std::move(std::move(sort_context_factory))),
               _sort_exec_exprs(sort_exec_exprs),
-              _is_asc_order(is_asc_order),
-              _is_null_first(is_null_first),
-              _sort_keys(sort_keys),
+              _is_asc_order(std::move(std::move(is_asc_order))),
+              _is_null_first(std::move(std::move(is_null_first))),
+              _sort_keys(std::move(sort_keys)),
               _offset(offset),
               _limit(limit),
               _topn_type(topn_type),
@@ -103,7 +111,7 @@ public:
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
-              _analytic_partition_exprs(analytic_partition_exprs) {}
+              _analytic_partition_exprs(std::move(analytic_partition_exprs)) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
 

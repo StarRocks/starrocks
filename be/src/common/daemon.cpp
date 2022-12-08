@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/common/daemon.cpp
 
@@ -33,7 +46,7 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/options.h"
@@ -81,9 +94,9 @@ void gc_memory(void* arg_this) {
     const static float kFreeRatio = 0.5;
     GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
 
-    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
-        sleep(config::memory_maintenance_sleep_time_s);
+        sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
@@ -308,8 +321,8 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
 
 void Daemon::stop() {
     _stopped.store(true, std::memory_order_release);
-    int thread_size = _daemon_threads.size();
-    for (int i = 0; i < thread_size; ++i) {
+    size_t thread_size = _daemon_threads.size();
+    for (size_t i = 0; i < thread_size; ++i) {
         if (_daemon_threads[i].joinable()) {
             _daemon_threads[i].join();
         }

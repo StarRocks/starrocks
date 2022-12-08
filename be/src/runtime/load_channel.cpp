@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/load_channel.cpp
 
@@ -83,7 +96,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {
-            _row_desc.reset(new RowDescriptor(_schema->tuple_desc(), false));
+            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc(), false);
         }
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
@@ -144,7 +157,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
                  << ", sender_id=" << request.sender_id() << " request_index=" << i << " eos=" << request.eos();
 
         if (i == 0 && request.has_chunk()) {
-            chunk.reset(new vectorized::Chunk());
+            chunk = std::make_unique<vectorized::Chunk>();
             auto& pchunk = request.chunk();
             RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
             RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, *chunk, &uncompressed_buffer), response);
@@ -256,7 +269,8 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk&
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta);
-                StatusOr<vectorized::Chunk> res = des.deserialize(buff);
+                StatusOr<vectorized::Chunk> res = Status::OK();
+                TRY_CATCH_BAD_ALLOC(res = des.deserialize(buff));
                 if (!res.ok()) return res.status();
                 chunk = std::move(res).value();
             });

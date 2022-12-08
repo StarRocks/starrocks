@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/util/utf8_check_test.cpp
 
@@ -32,14 +45,14 @@ struct test {
 
 class Utf8CheckTest : public testing::Test {
 public:
-    Utf8CheckTest() {}
-    virtual ~Utf8CheckTest() {}
+    Utf8CheckTest() = default;
+    ~Utf8CheckTest() override = default;
 
 private:
     /* positive tests */
     std::vector<test> pos = {{"", 0},
                              {"\x00", 1},
-                             {"\x66", 1},
+                             {R"(f)", 1},
                              {"\x7F", 1},
                              {"\x00\x7F", 2},
                              {"\x7F\x00", 2},

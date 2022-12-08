@@ -21,6 +21,8 @@ import com.starrocks.common.SparkDppException;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.Partitioner;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
@@ -43,13 +45,15 @@ import java.util.Map;
 
 public abstract class SparkRDDAggregator<T> implements Serializable {
 
+    protected static final Logger LOG = LogManager.getLogger(SparkRDDAggregator.class);
+
     T init(Object value) {
         return (T) value;
     }
 
     abstract T update(T v1, T v2);
 
-    Object finalize(Object value) {
+    Object finish(Object value) {
         return value;
     }
 
@@ -278,14 +282,14 @@ class BitmapUnionAggregator extends SparkRDDAggregator<BitmapValue> {
     }
 
     @Override
-    byte[] finalize(Object value) {
+    byte[] finish(Object value) {
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             DataOutputStream outputStream = new DataOutputStream(bos);
             ((BitmapValue) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOG.warn(ioException);
             throw new RuntimeException(ioException);
         }
     }
@@ -322,14 +326,14 @@ class HllUnionAggregator extends SparkRDDAggregator<Hll> {
     }
 
     @Override
-    byte[] finalize(Object value) {
+    byte[] finish(Object value) {
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             DataOutputStream outputStream = new DataOutputStream(bos);
             ((Hll) value).serialize(outputStream);
             return bos.toByteArray();
         } catch (IOException ioException) {
-            ioException.printStackTrace();
+            LOG.warn(ioException);
             throw new RuntimeException(ioException);
         }
     }
@@ -357,7 +361,7 @@ class LargeIntMaxAggregator extends SparkRDDAggregator<BigInteger> {
     }
 
     @Override
-    String finalize(Object value) {
+    String finish(Object value) {
         if (value == null) {
             return null;
         }

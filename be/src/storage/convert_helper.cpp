@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "convert_helper.h"
 
@@ -8,14 +20,15 @@
 #include "column/datum_convert.h"
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
+#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_vector.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
+#include "storage/type_traits.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
 #include "types/timestamp_value.h"
@@ -31,7 +44,6 @@ using strings::Substitute;
 
 template <typename SrcType, typename DstType>
 struct ConvFunction {};
-static inline constexpr int128_t TEN_POWER_9 = get_scale_factor<int128_t>(9);
 template <>
 struct ConvFunction<decimal12_t, int128_t> {
     static inline void apply(const decimal12_t* src, int128_t* dst) {
@@ -101,7 +113,7 @@ Status TypeConverter::convert_column(TypeInfo* src_type, const Column& src, Type
 class DatetimeToDateTypeConverter : public TypeConverter {
 public:
     DatetimeToDateTypeConverter() = default;
-    ~DatetimeToDateTypeConverter() = default;
+    virtual ~DatetimeToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -127,7 +139,7 @@ public:
 class TimestampToDateTypeConverter : public TypeConverter {
 public:
     TimestampToDateTypeConverter() = default;
-    ~TimestampToDateTypeConverter() = default;
+    virtual ~TimestampToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -150,7 +162,7 @@ public:
 class IntToDateTypeConverter : public TypeConverter {
 public:
     IntToDateTypeConverter() = default;
-    ~IntToDateTypeConverter() = default;
+    virtual ~IntToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -178,7 +190,7 @@ public:
 class DateV2ToDateTypeConverter : public TypeConverter {
 public:
     DateV2ToDateTypeConverter() = default;
-    ~DateV2ToDateTypeConverter() = default;
+    virtual ~DateV2ToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -199,7 +211,7 @@ public:
 class TimestampToDateV2TypeConverter : public TypeConverter {
 public:
     TimestampToDateV2TypeConverter() = default;
-    ~TimestampToDateV2TypeConverter() = default;
+    virtual ~TimestampToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         unaligned_store<DateValue>(dst, unaligned_load<TimestampValue>(src));
@@ -225,7 +237,7 @@ public:
 class DatetimeToDateV2TypeConverter : public TypeConverter {
 public:
     DatetimeToDateV2TypeConverter() = default;
-    ~DatetimeToDateV2TypeConverter() = default;
+    virtual ~DatetimeToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         TimestampValue timestamp{0};
@@ -242,9 +254,9 @@ public:
         }
         auto src_value = src.get_int64();
         int64_t part1 = (src_value / 1000000L);
-        int32_t year = static_cast<int32_t>((part1 / 10000L) % 10000);
-        int32_t mon = static_cast<int32_t>((part1 / 100) % 100);
-        int32_t day = static_cast<int32_t>(part1 % 100);
+        auto year = static_cast<int32_t>((part1 / 10000L) % 10000);
+        auto mon = static_cast<int32_t>((part1 / 100) % 100);
+        auto day = static_cast<int32_t>(part1 % 100);
         DateValue date_v2;
         date_v2.from_date(year, mon, day);
         dst->set_date(date_v2);
@@ -255,7 +267,7 @@ public:
 class DateToDateV2TypeConverter : public TypeConverter {
 public:
     DateToDateV2TypeConverter() = default;
-    ~DateToDateV2TypeConverter() = default;
+    virtual ~DateToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -277,7 +289,7 @@ public:
 class DateToDatetimeFieldConveter : public TypeConverter {
 public:
     DateToDatetimeFieldConveter() = default;
-    ~DateToDatetimeFieldConveter() = default;
+    virtual ~DateToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -301,7 +313,7 @@ public:
 class DateV2ToDatetimeFieldConveter : public TypeConverter {
 public:
     DateV2ToDatetimeFieldConveter() = default;
-    ~DateV2ToDatetimeFieldConveter() = default;
+    virtual ~DateV2ToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -324,7 +336,7 @@ public:
 class TimestampToDatetimeTypeConverter : public TypeConverter {
 public:
     TimestampToDatetimeTypeConverter() = default;
-    ~TimestampToDatetimeTypeConverter() = default;
+    virtual ~TimestampToDatetimeTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -344,7 +356,7 @@ public:
 class DateToTimestampTypeConverter : public TypeConverter {
 public:
     DateToTimestampTypeConverter() = default;
-    ~DateToTimestampTypeConverter() = default;
+    virtual ~DateToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         uint32_t src_value = unaligned_load<uint24_t>(src);
@@ -373,7 +385,7 @@ public:
 class DateV2ToTimestampTypeConverter : public TypeConverter {
 public:
     DateV2ToTimestampTypeConverter() = default;
-    ~DateV2ToTimestampTypeConverter() = default;
+    virtual ~DateV2ToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         auto src_value = unaligned_load<DateValue>(src);
@@ -404,7 +416,7 @@ public:
 class DatetimeToTimestampTypeConverter : public TypeConverter {
 public:
     DatetimeToTimestampTypeConverter() = default;
-    ~DatetimeToTimestampTypeConverter() = default;
+    virtual ~DatetimeToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -426,7 +438,7 @@ public:
 class FloatToDoubleTypeConverter : public TypeConverter {
 public:
     FloatToDoubleTypeConverter() = default;
-    ~FloatToDoubleTypeConverter() = default;
+    virtual ~FloatToDoubleTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -449,7 +461,7 @@ public:
 class DecimalToDecimal12TypeConverter : public TypeConverter {
 public:
     DecimalToDecimal12TypeConverter() = default;
-    ~DecimalToDecimal12TypeConverter() = default;
+    virtual ~DecimalToDecimal12TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -470,7 +482,7 @@ public:
 class Decimal12ToDecimalTypeConverter : public TypeConverter {
 public:
     Decimal12ToDecimalTypeConverter() = default;
-    ~Decimal12ToDecimalTypeConverter() = default;
+    virtual ~Decimal12ToDecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -489,13 +501,13 @@ public:
     }
 };
 
-template <FieldType int_type>
+template <LogicalType int_type>
 class IntegerToDateV2TypeConverter : public TypeConverter {
 public:
     using CppType = typename CppTypeTraits<int_type>::CppType;
 
     IntegerToDateV2TypeConverter() = default;
-    ~IntegerToDateV2TypeConverter() = default;
+    virtual ~IntegerToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         auto src_value = unaligned_load<CppType>(src);
@@ -524,14 +536,14 @@ public:
     }
 };
 
-template <FieldType SrcType, FieldType DstType>
+template <LogicalType SrcType, LogicalType DstType>
 class DecimalTypeConverter : public TypeConverter {
 public:
     using SrcCppType = typename CppTypeTraits<SrcType>::CppType;
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalTypeConverter() = default;
-    ~DecimalTypeConverter() = default;
+    virtual ~DecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -551,14 +563,14 @@ public:
     }
 };
 
-template <FieldType SrcType, FieldType DstType>
+template <LogicalType SrcType, LogicalType DstType>
 class DecimalV3TypeConverter : public TypeConverter {
 public:
     using SrcCppType = typename CppTypeTraits<SrcType>::CppType;
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalV3TypeConverter() = default;
-    ~DecimalV3TypeConverter() = default;
+    virtual ~DecimalV3TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -580,13 +592,13 @@ public:
     }
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class StringToOtherTypeConverter : public TypeConverter {
 public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     StringToOtherTypeConverter() = default;
-    ~StringToOtherTypeConverter() = default;
+    virtual ~StringToOtherTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -610,12 +622,12 @@ public:
 // Convert string to json
 // JSON needs dynamic memory allocation, which could not fit in TypeInfo::from_string
 template <>
-class StringToOtherTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+class StringToOtherTypeConverter<TYPE_JSON> : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+    using CppType = typename CppTypeTraits<TYPE_JSON>::CppType;
 
     StringToOtherTypeConverter() = default;
-    ~StringToOtherTypeConverter() = default;
+    virtual ~StringToOtherTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("not supported");
@@ -645,13 +657,13 @@ public:
     }
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class OtherToStringTypeConverter : public TypeConverter {
 public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     OtherToStringTypeConverter() = default;
-    ~OtherToStringTypeConverter() = default;
+    virtual ~OtherToStringTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -684,12 +696,12 @@ public:
 };
 
 template <>
-class OtherToStringTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+class OtherToStringTypeConverter<TYPE_JSON> : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+    using CppType = typename CppTypeTraits<TYPE_JSON>::CppType;
 
     OtherToStringTypeConverter() = default;
-    ~OtherToStringTypeConverter() = default;
+    virtual ~OtherToStringTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("not supported");
@@ -720,21 +732,21 @@ public:
     }
 };
 
-const TypeConverter* get_date_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_date_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case TYPE_DATETIME_V1: {
         static DatetimeToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case TYPE_DATETIME: {
         static TimestampToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_INT: {
+    case TYPE_INT: {
         static IntToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case TYPE_DATE: {
         static DateV2ToDateTypeConverter s_converter;
         return &s_converter;
     }
@@ -744,21 +756,21 @@ const TypeConverter* get_date_converter(FieldType from_type, FieldType to_type) 
     return nullptr;
 }
 
-const TypeConverter* get_datev2_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_datev2_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case TYPE_DATETIME: {
         static TimestampToDateV2TypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case TYPE_DATETIME_V1: {
         static DatetimeToDateV2TypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_INT: {
-        static IntegerToDateV2TypeConverter<OLAP_FIELD_TYPE_INT> s_converter;
+    case TYPE_INT: {
+        static IntegerToDateV2TypeConverter<TYPE_INT> s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE: {
+    case TYPE_DATE_V1: {
         static DateToDateV2TypeConverter s_converter;
         return &s_converter;
     }
@@ -767,17 +779,17 @@ const TypeConverter* get_datev2_converter(FieldType from_type, FieldType to_type
     }
 }
 
-const TypeConverter* get_datetime_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_datetime_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DATE: {
+    case TYPE_DATE_V1: {
         static DateToDatetimeFieldConveter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case TYPE_DATE: {
         static DateV2ToDatetimeFieldConveter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case TYPE_DATETIME: {
         static TimestampToDatetimeTypeConverter s_converter;
         return &s_converter;
     }
@@ -786,17 +798,17 @@ const TypeConverter* get_datetime_converter(FieldType from_type, FieldType to_ty
     }
 }
 
-const TypeConverter* get_timestamp_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_timestamp_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DATE: {
+    case TYPE_DATE_V1: {
         static DateToTimestampTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case TYPE_DATE: {
         static DateV2ToTimestampTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case TYPE_DATETIME_V1: {
         static DatetimeToTimestampTypeConverter s_converter;
         return &s_converter;
     }
@@ -805,14 +817,14 @@ const TypeConverter* get_timestamp_converter(FieldType from_type, FieldType to_t
     }
 }
 
-const TypeConverter* get_decimal_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
+    case TYPE_DECIMALV2: {
         static DecimalToDecimal12TypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL> s_converter;
+    case TYPE_DECIMAL128: {
+        static DecimalTypeConverter<TYPE_DECIMAL128, TYPE_DECIMAL> s_converter;
         return &s_converter;
     }
     default:
@@ -820,14 +832,14 @@ const TypeConverter* get_decimal_converter(FieldType from_type, FieldType to_typ
     }
 }
 
-const TypeConverter* get_decimalv2_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimalv2_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL: {
+    case TYPE_DECIMAL: {
         static Decimal12ToDecimalTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL_V2> s_converter;
+    case TYPE_DECIMAL128: {
+        static DecimalTypeConverter<TYPE_DECIMAL128, TYPE_DECIMALV2> s_converter;
         return &s_converter;
     }
     default:
@@ -841,49 +853,49 @@ const TypeConverter* get_decimalv2_converter(FieldType from_type, FieldType to_t
         return &s_converter;                                         \
     }
 
-const TypeConverter* get_decimal128_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal128_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
+    case TYPE_DECIMAL: {
+        static DecimalTypeConverter<TYPE_DECIMAL, TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
+    case TYPE_DECIMALV2: {
+        static DecimalTypeConverter<TYPE_DECIMALV2, TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL128);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL128);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL32, TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL64, TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL128, TYPE_DECIMAL128);
     default:
         return nullptr;
     }
 }
 
-const TypeConverter* get_decimal64_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal64_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL64);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL32, TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL64, TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL128, TYPE_DECIMAL64);
     default:
         return nullptr;
     }
     return nullptr;
 }
 
-const TypeConverter* get_decimal32_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal32_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL32);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL32);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL32, TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL64, TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(TYPE_DECIMAL128, TYPE_DECIMAL32);
     default:
         return nullptr;
     }
 }
 #undef DECIMALV3_TYPE_CONVERTER
 
-const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_double_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_FLOAT: {
+    case TYPE_FLOAT: {
         static FloatToDoubleTypeConverter s_converter;
         return &s_converter;
     }
@@ -892,7 +904,7 @@ const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type
     }
 }
 
-const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_from_varchar_converter(LogicalType from_type, LogicalType to_type) {
     switch (to_type) {
 #define M(ftype)                                              \
     case ftype: {                                             \
@@ -906,15 +918,15 @@ const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType t
     }
 }
 
-const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_to_varchar_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_BOOL: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
+    case TYPE_BOOLEAN: {
+        static OtherToStringTypeConverter<TYPE_TINYINT> s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_VARCHAR> s_converter;
+    case TYPE_CHAR:
+    case TYPE_VARCHAR: {
+        static OtherToStringTypeConverter<TYPE_VARCHAR> s_converter;
         return &s_converter;
     }
 #define M(ftype)                                              \
@@ -933,43 +945,43 @@ const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_
 // Datetime, Date and decimal should not be used
 // Use Timestamp, Date V2 and decimal v2 to replace
 // Should be deleted after storage_format_vesion = 1 is forbid
-const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type) {
-    if (from_type == OLAP_FIELD_TYPE_VARCHAR) {
+const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_type) {
+    if (from_type == TYPE_VARCHAR) {
         return get_from_varchar_converter(from_type, to_type);
     }
 
     switch (to_type) {
-    case OLAP_FIELD_TYPE_DATE: {
+    case TYPE_DATE_V1: {
         return get_date_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case TYPE_DATE: {
         return get_datev2_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case TYPE_DATETIME_V1: {
         return get_datetime_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case TYPE_DATETIME: {
         return get_timestamp_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL: {
+    case TYPE_DECIMAL: {
         return get_decimal_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
+    case TYPE_DECIMALV2: {
         return get_decimalv2_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
+    case TYPE_DECIMAL128: {
         return get_decimal128_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
+    case TYPE_DECIMAL64: {
         return get_decimal64_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
+    case TYPE_DECIMAL32: {
         return get_decimal32_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DOUBLE: {
+    case TYPE_DOUBLE: {
         return get_double_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_VARCHAR: {
+    case TYPE_VARCHAR: {
         return get_to_varchar_converter(from_type, to_type);
     }
     default:
@@ -982,7 +994,7 @@ template <typename SrcType>
 class BitMapTypeConverter : public MaterializeTypeConverter {
 public:
     BitMapTypeConverter() = default;
-    ~BitMapTypeConverter() = default;
+    virtual ~BitMapTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1013,7 +1025,7 @@ template <typename SrcType>
 class HLLTypeConverter : public MaterializeTypeConverter {
 public:
     HLLTypeConverter() = default;
-    ~HLLTypeConverter() = default;
+    virtual ~HLLTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1026,7 +1038,8 @@ public:
             }
             auto value = src_datum.template get<SrcType>();
             std::string src = src_type->to_string(&value);
-            uint64_t hash_value = HashUtil::murmur_hash64A(src.data(), src.size(), HashUtil::MURMUR_SEED);
+            uint64_t hash_value =
+                    HashUtil::murmur_hash64A(src.data(), static_cast<int32_t>(src.size()), HashUtil::MURMUR_SEED);
             HyperLogLog hll;
             hll.update(hash_value);
             dst_datum.set_hyperloglog(&hll);
@@ -1040,7 +1053,7 @@ template <typename SrcType>
 class PercentileTypeConverter : public MaterializeTypeConverter {
 public:
     PercentileTypeConverter() = default;
-    ~PercentileTypeConverter() = default;
+    virtual ~PercentileTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1061,12 +1074,12 @@ public:
     }
 };
 
-template <FieldType SrcType>
+template <LogicalType SrcType>
 class DecimalToPercentileTypeConverter : public MaterializeTypeConverter {
 public:
     using CppType = typename CppTypeTraits<SrcType>::CppType;
     DecimalToPercentileTypeConverter() = default;
-    ~DecimalToPercentileTypeConverter() = default;
+    virtual ~DecimalToPercentileTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1082,7 +1095,7 @@ public:
             auto scale_factor = get_scale_factor<CppType>(src_type->scale());
             DecimalV3Cast::to_float<CppType, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
-            percentile.add(origin_value);
+            percentile.add(static_cast<float>(origin_value));
             dst_datum.set_percentile(&percentile);
             dst_col->append_datum(dst_datum);
         }
@@ -1093,7 +1106,7 @@ public:
 class CountTypeConverter : public MaterializeTypeConverter {
 public:
     CountTypeConverter() = default;
-    ~CountTypeConverter() = default;
+    virtual ~CountTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1131,38 +1144,38 @@ public:
         return &s_converter;                               \
     }
 
-const MaterializeTypeConverter* get_perentile_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_perentile_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TINYINT:
+    case TYPE_TINYINT:
         GET_PERENTILE_CONVERTER(int8_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_TINYINT:
         GET_PERENTILE_CONVERTER(uint8_t);
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case TYPE_SMALLINT:
         GET_PERENTILE_CONVERTER(int16_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_SMALLINT:
         GET_PERENTILE_CONVERTER(uint16_t);
-    case OLAP_FIELD_TYPE_INT:
+    case TYPE_INT:
         GET_PERENTILE_CONVERTER(int32_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_INT:
         GET_PERENTILE_CONVERTER(uint32_t);
-    case OLAP_FIELD_TYPE_BIGINT:
+    case TYPE_BIGINT:
         GET_PERENTILE_CONVERTER(int64_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case TYPE_UNSIGNED_BIGINT:
         GET_PERENTILE_CONVERTER(uint64_t);
-    case OLAP_FIELD_TYPE_LARGEINT:
+    case TYPE_LARGEINT:
         GET_PERENTILE_CONVERTER(int128_t);
-    case OLAP_FIELD_TYPE_FLOAT:
+    case TYPE_FLOAT:
         GET_PERENTILE_CONVERTER(float);
-    case OLAP_FIELD_TYPE_DOUBLE:
+    case TYPE_DOUBLE:
         GET_PERENTILE_CONVERTER(double);
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
+    case TYPE_DECIMALV2:
         GET_PERENTILE_CONVERTER(DecimalV2Value);
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32);
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64);
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128);
+    case TYPE_DECIMAL32:
+        GET_DECIMAL_PERENTILE_CONVERTER(TYPE_DECIMAL32);
+    case TYPE_DECIMAL64:
+        GET_DECIMAL_PERENTILE_CONVERTER(TYPE_DECIMAL64);
+    case TYPE_DECIMAL128:
+        GET_DECIMAL_PERENTILE_CONVERTER(TYPE_DECIMAL128);
     default:
         LOG(WARNING) << "the column type which was altered from was unsupported."
                      << " from_type=" << from_type;
@@ -1170,38 +1183,38 @@ const MaterializeTypeConverter* get_perentile_converter(FieldType from_type, Mat
     }
 }
 
-const MaterializeTypeConverter* get_hll_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_hll_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
         GET_HLL_CONVERTER(Slice);
-    case OLAP_FIELD_TYPE_BOOL:
-    case OLAP_FIELD_TYPE_TINYINT:
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
         GET_HLL_CONVERTER(int8_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_TINYINT:
         GET_HLL_CONVERTER(uint8_t);
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case TYPE_SMALLINT:
         GET_HLL_CONVERTER(int16_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_SMALLINT:
         GET_HLL_CONVERTER(uint16_t);
-    case OLAP_FIELD_TYPE_DATE_V2:
-    case OLAP_FIELD_TYPE_INT:
+    case TYPE_DATE:
+    case TYPE_INT:
         GET_HLL_CONVERTER(int32_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_INT:
         GET_HLL_CONVERTER(uint32_t);
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-    case OLAP_FIELD_TYPE_DATETIME:
-    case OLAP_FIELD_TYPE_BIGINT:
+    case TYPE_DATETIME:
+    case TYPE_DATETIME_V1:
+    case TYPE_BIGINT:
         GET_HLL_CONVERTER(int64_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case TYPE_UNSIGNED_BIGINT:
         GET_HLL_CONVERTER(uint64_t);
-    case OLAP_FIELD_TYPE_LARGEINT:
+    case TYPE_LARGEINT:
         GET_HLL_CONVERTER(int128_t);
-    case OLAP_FIELD_TYPE_FLOAT:
+    case TYPE_FLOAT:
         GET_HLL_CONVERTER(float);
-    case OLAP_FIELD_TYPE_DOUBLE:
+    case TYPE_DOUBLE:
         GET_HLL_CONVERTER(double);
-    case OLAP_FIELD_TYPE_DATE:
+    case TYPE_DATE_V1:
         GET_HLL_CONVERTER(uint24_t);
     default:
         LOG(WARNING) << "fail to hll hash type : " << from_type;
@@ -1209,23 +1222,23 @@ const MaterializeTypeConverter* get_hll_converter(FieldType from_type, Materiali
     }
 }
 
-const MaterializeTypeConverter* get_bitmap_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_bitmap_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TINYINT:
+    case TYPE_TINYINT:
         GET_BTIMAP_CONVERTER(int8_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_TINYINT:
         GET_BTIMAP_CONVERTER(uint8_t);
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case TYPE_SMALLINT:
         GET_BTIMAP_CONVERTER(int16_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_SMALLINT:
         GET_BTIMAP_CONVERTER(uint16_t);
-    case OLAP_FIELD_TYPE_INT:
+    case TYPE_INT:
         GET_BTIMAP_CONVERTER(int32_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_INT:
         GET_BTIMAP_CONVERTER(uint32_t);
-    case OLAP_FIELD_TYPE_BIGINT:
+    case TYPE_BIGINT:
         GET_BTIMAP_CONVERTER(int64_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case TYPE_UNSIGNED_BIGINT:
         GET_BTIMAP_CONVERTER(uint64_t);
     default:
         LOG(WARNING) << "the column type which was altered from was unsupported."
@@ -1239,7 +1252,7 @@ const MaterializeTypeConverter* get_bitmap_converter(FieldType from_type, Materi
 #undef GET_HLL_CONVERTER
 #undef GET_BITMAP_CONVERTER
 
-const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_materialized_converter(LogicalType from_type, MaterializeType to_type) {
     switch (to_type) {
     case OLAP_MATERIALIZE_TYPE_PERCENTILE: {
         return get_perentile_converter(from_type, to_type);
@@ -1279,11 +1292,6 @@ public:
         return ret;
     }
 
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        src->swap(dst);
-    }
-
 private:
     TypeInfoPtr _type_info;
 };
@@ -1310,8 +1318,8 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, nullable);
-        uint16_t num_items = src.size();
+        auto dst = ChunkHelper::column_from_field_type(TYPE_DATE, nullable);
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1320,32 +1328,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(uint24_t);
-        static const size_t DST_FIELD_SIZE = sizeof(int32_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1370,8 +1352,8 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE, nullable);
-        uint16_t num_items = src.size();
+        auto dst = ChunkHelper::column_from_field_type(TYPE_DATE_V1, nullable);
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1380,32 +1362,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(int32_t);
-        static const size_t DST_FIELD_SIZE = sizeof(uint24_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1434,8 +1390,8 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, nullable);
-        uint16_t num_items = src.size();
+        auto dst = ChunkHelper::column_from_field_type(TYPE_DATETIME, nullable);
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1444,31 +1400,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(int64_t);
-        static const size_t DST_FIELD_SIZE = sizeof(int64_t);
-        uint8_t* dst_data = dst->data();
-        const uint8_t* src_data = src->data();
-        if (src->is_nullable()) {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1494,8 +1425,8 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATETIME, nullable);
-        uint16_t num_items = src.size();
+        auto dst = ChunkHelper::column_from_field_type(TYPE_DATETIME_V1, nullable);
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1504,32 +1435,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(int64_t);
-        static const size_t DST_FIELD_SIZE = sizeof(int64_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1559,8 +1464,8 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL_V2, nullable);
-        uint16_t num_items = src.size();
+        auto dst = ChunkHelper::column_from_field_type(TYPE_DECIMALV2, nullable);
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1569,33 +1474,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    // NOTE: This function should not be used.
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(decimal12_t);
-        static const size_t DST_FIELD_SIZE = sizeof(DecimalV2Value);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1625,8 +1503,8 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, nullable);
-        uint16_t num_items = src.size();
+        auto dst = ChunkHelper::column_from_field_type(TYPE_DECIMAL, nullable);
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1635,32 +1513,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(DecimalV2Value);
-        static const size_t DST_FIELD_SIZE = sizeof(decimal12_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1746,7 +1598,7 @@ public:
                 return dst;
             }
         }
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
             Datum src_datum = src.get(i);
@@ -1756,36 +1608,10 @@ public:
         return dst;
     }
 
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(SrcType);
-        static const size_t DST_FIELD_SIZE = sizeof(DstType);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
-    }
-
 private:
 };
 
-const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type) {
+const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_type) {
 #define TYPE_CASE_CLAUSE(type)                                      \
     case type: {                                                    \
         static SameFieldConverter s_converter(get_type_info(type)); \
@@ -1794,40 +1620,45 @@ const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type
 
     if (from_type == to_type) {
         switch (from_type) {
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_BOOL)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_TINYINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_SMALLINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_INT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_BIGINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_LARGEINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_FLOAT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DOUBLE)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DECIMAL)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DECIMAL_V2)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_CHAR)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_VARCHAR)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DATE)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DATE_V2)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DATETIME)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_TIMESTAMP)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_HLL)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_OBJECT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_PERCENTILE)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_JSON)
-        case OLAP_FIELD_TYPE_DECIMAL32:
-        case OLAP_FIELD_TYPE_DECIMAL64:
-        case OLAP_FIELD_TYPE_DECIMAL128:
-        case OLAP_FIELD_TYPE_ARRAY:
-        case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-        case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-        case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-        case OLAP_FIELD_TYPE_UNKNOWN:
-        case OLAP_FIELD_TYPE_MAP:
-        case OLAP_FIELD_TYPE_STRUCT:
-        case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-        case OLAP_FIELD_TYPE_NONE:
-        case OLAP_FIELD_TYPE_MAX_VALUE:
+            TYPE_CASE_CLAUSE(TYPE_BOOLEAN)
+            TYPE_CASE_CLAUSE(TYPE_TINYINT)
+            TYPE_CASE_CLAUSE(TYPE_SMALLINT)
+            TYPE_CASE_CLAUSE(TYPE_INT)
+            TYPE_CASE_CLAUSE(TYPE_BIGINT)
+            TYPE_CASE_CLAUSE(TYPE_LARGEINT)
+            TYPE_CASE_CLAUSE(TYPE_FLOAT)
+            TYPE_CASE_CLAUSE(TYPE_DOUBLE)
+            TYPE_CASE_CLAUSE(TYPE_DECIMAL)
+            TYPE_CASE_CLAUSE(TYPE_DECIMALV2)
+            TYPE_CASE_CLAUSE(TYPE_CHAR)
+            TYPE_CASE_CLAUSE(TYPE_VARCHAR)
+            TYPE_CASE_CLAUSE(TYPE_DATE_V1)
+            TYPE_CASE_CLAUSE(TYPE_DATE)
+            TYPE_CASE_CLAUSE(TYPE_DATETIME_V1)
+            TYPE_CASE_CLAUSE(TYPE_DATETIME)
+            TYPE_CASE_CLAUSE(TYPE_HLL)
+            TYPE_CASE_CLAUSE(TYPE_OBJECT)
+            TYPE_CASE_CLAUSE(TYPE_PERCENTILE)
+            TYPE_CASE_CLAUSE(TYPE_JSON)
+            TYPE_CASE_CLAUSE(TYPE_VARBINARY)
+        case TYPE_DECIMAL32:
+        case TYPE_DECIMAL64:
+        case TYPE_DECIMAL128:
+        case TYPE_ARRAY:
+        case TYPE_UNSIGNED_TINYINT:
+        case TYPE_UNSIGNED_SMALLINT:
+        case TYPE_UNSIGNED_INT:
+        case TYPE_UNSIGNED_BIGINT:
+        case TYPE_UNKNOWN:
+        case TYPE_MAP:
+        case TYPE_STRUCT:
+        case TYPE_DISCRETE_DOUBLE:
+        case TYPE_NONE:
+        case TYPE_NULL:
+        case TYPE_FUNCTION:
+        case TYPE_TIME:
+        case TYPE_BINARY:
+        case TYPE_MAX_VALUE:
             return nullptr;
         }
         DCHECK(false) << "unreachable path";
@@ -1835,34 +1666,34 @@ const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type
     }
 #undef TYPE_CASE_CLAUSE
 
-    if (to_type == OLAP_FIELD_TYPE_DATE_V2 && from_type == OLAP_FIELD_TYPE_DATE) {
+    if (to_type == TYPE_DATE && from_type == TYPE_DATE_V1) {
         static DateToDateV2FieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DATE && from_type == OLAP_FIELD_TYPE_DATE_V2) {
+    } else if (to_type == TYPE_DATE_V1 && from_type == TYPE_DATE) {
         static DateV2ToDateFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_TIMESTAMP && from_type == OLAP_FIELD_TYPE_DATETIME) {
+    } else if (to_type == TYPE_DATETIME && from_type == TYPE_DATETIME_V1) {
         static DatetimeToTimestampFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DATETIME && from_type == OLAP_FIELD_TYPE_TIMESTAMP) {
+    } else if (to_type == TYPE_DATETIME_V1 && from_type == TYPE_DATETIME) {
         static TimestampToDatetimeFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL_V2 && from_type == OLAP_FIELD_TYPE_DECIMAL) {
+    } else if (to_type == TYPE_DECIMALV2 && from_type == TYPE_DECIMAL) {
         static Decimal12ToDecimalFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL && from_type == OLAP_FIELD_TYPE_DECIMAL_V2) {
+    } else if (to_type == TYPE_DECIMAL && from_type == TYPE_DECIMALV2) {
         static DecimalToDecimal12FieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL128 && from_type == OLAP_FIELD_TYPE_DECIMAL) {
+    } else if (to_type == TYPE_DECIMAL128 && from_type == TYPE_DECIMAL) {
         static DecimalFieldConverter<decimal12_t, int128_t> s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL && from_type == OLAP_FIELD_TYPE_DECIMAL128) {
+    } else if (to_type == TYPE_DECIMAL && from_type == TYPE_DECIMAL128) {
         static DecimalFieldConverter<int128_t, decimal12_t> s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL128 && from_type == OLAP_FIELD_TYPE_DECIMAL_V2) {
+    } else if (to_type == TYPE_DECIMAL128 && from_type == TYPE_DECIMALV2) {
         static DecimalFieldConverter<DecimalV2Value, int128_t> s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL_V2 && from_type == OLAP_FIELD_TYPE_DECIMAL128) {
+    } else if (to_type == TYPE_DECIMALV2 && from_type == TYPE_DECIMAL128) {
         static DecimalFieldConverter<int128_t, DecimalV2Value> s_converter;
         return &s_converter;
     }
@@ -1883,7 +1714,7 @@ Status RowConverter::init(const TabletSchema& in_schema, const TabletSchema& out
     return Status::OK();
 }
 
-Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
+Status RowConverter::init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema) {
     auto num_columns = in_schema.num_fields();
     _converters.resize(num_columns);
     for (int i = 0; i < num_columns; ++i) {
@@ -1896,14 +1727,14 @@ Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
 }
 
 void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const {
-    int num_datums = src.size();
+    size_t num_datums = src.size();
     dst->resize(num_datums);
-    for (int i = 0; i < num_datums; ++i) {
+    for (size_t i = 0; i < num_datums; ++i) {
         _converters[i]->convert(&(*dst)[i], src[i]);
     }
 }
 
-Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
+Status ChunkConverter::init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema) {
     DCHECK_EQ(in_schema.num_fields(), out_schema.num_fields());
     DCHECK_EQ(in_schema.num_key_fields(), out_schema.num_key_fields());
     auto num_columns = in_schema.num_fields();
@@ -1917,12 +1748,12 @@ Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
             return Status::NotSupported("Cannot get field converter");
         }
     }
-    _out_schema = std::make_shared<Schema>(out_schema);
+    _out_schema = std::make_shared<VectorizedSchema>(out_schema);
     return Status::OK();
 }
 
 std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
+    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<VectorizedSchema>());
     auto num_columns = _converters.size();
     DCHECK_EQ(num_columns, from.num_columns());
     for (int i = 0; i < num_columns; ++i) {
@@ -1934,7 +1765,7 @@ std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
 }
 
 std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
+    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<VectorizedSchema>());
     auto num_columns = _converters.size();
     DCHECK_EQ(num_columns, from->num_columns());
     for (int i = 0; i < num_columns; ++i) {

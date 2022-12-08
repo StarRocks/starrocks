@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "runtime/runtime_filter_cache.h"
 
@@ -78,8 +90,8 @@ public:
     std::list<std::string> get_events() {
         _extend_lifetime();
         std::list<std::string> event_strings;
-        for (auto it = _events.begin(); it != _events.end(); ++it) {
-            event_strings.push_back((*it)->to_string());
+        for (auto& _event : _events) {
+            event_strings.push_back(_event->to_string());
         }
         return event_strings;
     }
@@ -203,8 +215,8 @@ std::unordered_map<std::string, std::list<std::string>> RuntimeFilterCache::get_
         auto& mutex = _event_mutexes[i];
         auto& map = _event_maps[i];
         std::shared_lock read_lock(mutex);
-        for (auto it = map.begin(); it != map.end(); ++it) {
-            events[print_id(it->first)] = it->second->get_events();
+        for (auto& it : map) {
+            events[print_id(it.first)] = it.second->get_events();
         }
     }
     return events;

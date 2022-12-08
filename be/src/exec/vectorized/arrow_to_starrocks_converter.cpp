@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/arrow_to_starrocks_converter.h"
 
@@ -31,7 +43,7 @@ Status illegal_converting_error(const std::string& arrow_type_name, const std::s
                                                      arrow_type_name, type_name));
 }
 
-DEF_PRED_GUARD(DirectlyCopybleGuard, is_directly_copyable, ArrowTypeId, AT, PrimitiveType, PT)
+DEF_PRED_GUARD(DirectlyCopybleGuard, is_directly_copyable, ArrowTypeId, AT, LogicalType, PT)
 #define IS_DIRECTLY_COPYABLE_CTOR(AT, PT) DEF_PRED_CASE_CTOR(is_directly_copyable, AT, PT)
 #define IS_DIRECTLY_COPYABLE_R(PT, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_NONE_R(IS_DIRECTLY_COPYABLE_CTOR, PT, ##__VA_ARGS__)
@@ -43,7 +55,7 @@ IS_DIRECTLY_COPYABLE_R(TYPE_BIGINT, ArrowTypeId::INT64, ArrowTypeId::UINT64)
 IS_DIRECTLY_COPYABLE_R(TYPE_FLOAT, ArrowTypeId::FLOAT)
 IS_DIRECTLY_COPYABLE_R(TYPE_DOUBLE, ArrowTypeId::DOUBLE)
 
-DEF_PRED_GUARD(AssignableGuard, is_assignable, ArrowTypeId, AT, PrimitiveType, PT)
+DEF_PRED_GUARD(AssignableGuard, is_assignable, ArrowTypeId, AT, LogicalType, PT)
 #define IS_ASSIGNABLE_CTOR(AT, PT) DEF_PRED_CASE_CTOR(is_assignable, AT, PT)
 #define IS_ASSIGNABLE(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON(IS_ASSIGNABLE_CTOR, AT, ##__VA_ARGS__)
 
@@ -98,7 +110,7 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
 // If is_strict is true, invalid rows are saved in filter_data, and discarded finally after an
 // entire chunk is generated; otherwise, invalid rows are regarded as null values.
 
-template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict, typename = guard::Guard,
+template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict, typename = guard::Guard,
           typename = guard::Guard>
 struct ArrowConverter {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
@@ -178,12 +190,12 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
     }
 }
 
-template <PrimitiveType PT, typename = BinaryPTGuard<PT>>
+template <LogicalType PT, typename = StringPTGuard<PT>>
 static inline constexpr uint32_t binary_max_length = (PT == TYPE_VARCHAR) ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                                           : TypeDescriptor::MAX_CHAR_LENGTH;
 
-template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, BinaryPTGuard<PT>> {
+template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, StringPTGuard<PT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<PT>;
@@ -368,10 +380,10 @@ struct RectifyDecimalType<DecimalV2Value> {
 
 template <typename T>
 using rectify_decimal_type = typename RectifyDecimalType<T>::type;
-VALUE_GUARD(PrimitiveType, DecimalOfAnyVersionPTGuard, pt_is_decimal_of_any_version, TYPE_DECIMAL, TYPE_DECIMALV2,
+VALUE_GUARD(LogicalType, DecimalOfAnyVersionPTGuard, pt_is_decimal_of_any_version, TYPE_DECIMAL, TYPE_DECIMALV2,
             TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 
-template <PrimitiveType PT, bool is_nullable, bool is_strict>
+template <LogicalType PT, bool is_nullable, bool is_strict>
 struct ArrowConverter<ArrowTypeId::DECIMAL, PT, is_nullable, is_strict, guard::Guard, DecimalOfAnyVersionPTGuard<PT>> {
     static constexpr ArrowTypeId AT = ArrowTypeId::DECIMAL;
     using ArrowType = ArrowTypeIdToType<AT>;
@@ -511,7 +523,7 @@ VALUE_GUARD(ArrowTypeId, DateATGuard, at_is_date, ArrowTypeId::DATE32, ArrowType
 VALUE_GUARD(ArrowTypeId, DateOrDateTimeATGuard, at_is_date_or_datetime, ArrowTypeId::DATE32, ArrowTypeId::DATE64,
             ArrowTypeId::TIMESTAMP)
 
-template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict>
+template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>, DateOrDateTimePTGuard<PT>> {
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
@@ -657,7 +669,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
 // Convert nested arrow type(Map,List,Struct...) to Json
 Status convert_arrow_to_json(const arrow::Array* array, JsonColumn* output);
 
-template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict>
+template <ArrowTypeId AT, LogicalType PT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, PT, is_nullable, is_strict, JsonGuard<PT>> {
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                         size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
@@ -669,7 +681,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, JsonGuard<PT>> {
     }
 };
 
-constexpr int32_t convert_idx(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
+constexpr int32_t convert_idx(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict) {
     return (at << 17) | (pt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
 }
 
@@ -687,7 +699,7 @@ constexpr int32_t convert_idx(ArrowTypeId at, PrimitiveType pt, bool is_nullable
 #define STRICT_ARROW_CONV_ENTRY_R(a, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA_R(STRICT_ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 
-static const std::unordered_map<ArrowTypeId, PrimitiveType> global_strict_arrow_conv_table{
+static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_conv_table{
         STRICT_ARROW_CONV_ENTRY_R(TYPE_BOOLEAN, ArrowTypeId::BOOL),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_TINYINT, ArrowTypeId::INT8, ArrowTypeId::UINT8),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_SMALLINT, ArrowTypeId::INT16, ArrowTypeId::UINT16),
@@ -739,7 +751,7 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
 };
 
-ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
+ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict) {
     auto optimized_idx = convert_idx(at, pt, is_nullable, is_strict);
     auto it = global_optimized_arrow_conv_table.find(optimized_idx);
     if (it != global_optimized_arrow_conv_table.end()) {
@@ -748,12 +760,12 @@ ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullab
     return nullptr;
 }
 
-PrimitiveType get_strict_type(ArrowTypeId at) {
+LogicalType get_strict_type(ArrowTypeId at) {
     auto pt_it = global_strict_arrow_conv_table.find(at);
     if (pt_it != global_strict_arrow_conv_table.end()) {
         return pt_it->second;
     }
-    return INVALID_TYPE;
+    return TYPE_UNKNOWN;
 }
 
 struct ArrowListConverter {

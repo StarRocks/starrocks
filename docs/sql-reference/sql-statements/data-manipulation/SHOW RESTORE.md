@@ -1,50 +1,50 @@
 # SHOW RESTORE
 
-## description
+## Description
 
-This statement is used to view RESTORE task
+Views the last RESTORE task in a specified database.
 
-Syntax:
+> **NOTE**
+>
+> Only the information of the last RESTORE task is saved in StarRocks.
 
-```sql
+## Syntax
+
+```SQL
 SHOW RESTORE [FROM db_name]
 ```
 
-Note：
+## Parameters
 
-```plain text
-1. Only the latest RESTORE task is saved in StarRocks.
-2. The meanings of each column are as follows:
-JobId：                  unique job id
-Label：                  name of the backup to restore
-Timestamp：              the time version of the backup to restore
-DbName：                 Owning Database
-State：                  current stage
-PENDING：                the initial status after submitting the job
-SNAPSHOTING：            executing snapshot
-DOWNLOAD：               the snapshot is completed and ready to download the snapshot in the repository.
-DOWNLOADING：            snapshot downloading
-COMMIT：                 the snapshot download is complete and ready to take effect
-COMMITING：              in effect
-FINISHED：               job succeeded
-CANCELLED：              job failed
-AllowLoad：              whether to allow import during recovery (currently not supported)
-ReplicationNum：         Specifies the number of replicas to restore
-RestoreJobs：            tables and partitions to restore
-CreateTime：             ask submission time
-MetaPreparedTime：       metadata preparation completion time
-SnapshotFinishedTime：   snapshot completion time
-DownloadFinishedTime：   snapshot download completion time
-FinishedTime：           job end time
-UnfinishedTasks：        unfinished subtask id is displayed in the SNAPSHOTING、DOWNLOADING and COMMITING  phases
-Status：                 if the job fails, the failure information is displayed
-Timeout：                job timeout, in seconds
-```
+| **Parameter** | **Description**                                        |
+| ------------- | ------------------------------------------------------ |
+| db_name       | Name of the database that the RESTORE task belongs to. |
 
-## example
+## Return
 
-1. View example_ db the next RESTORE task.
+| **Return**           | **Description**                                              |
+| -------------------- | ------------------------------------------------------------ |
+| JobId                | Unique job ID.                                               |
+| Label                | Name of the data snapshot.                                   |
+| Timestamp            | Backup timestamp.                                            |
+| DbName               | Name of the database that the RESTORE task belongs to.       |
+| State                | Current state of the RESTORE task:<ul><li>PENDING: Initial state after submitting a job.</li><li>SNAPSHOTING: Executing the local snapshot.</li><li>DOWNLOAD: Submitting snapshot download task.</li><li>DOWNLOADING: Downloading the snapshot.</li><li>COMMIT：To commit the downloaded snapshot.</li><li>COMMITTING: Committing the downloaded snapshot.</li><li>FINISHED: RESTORE task finished.</li><li>CANCELLED: RESTORE task failed or cancelled.</li></ul> |
+| AllowLoad            | If loading data is allowed during the RESTORE task.          |
+| ReplicationNum       | Number of replicas to be restored.                           |
+| CreateTime           | Task submission time.                                        |
+| MetaPreparedTime     | Local metadata completion time.                              |
+| SnapshotFinishedTime | Snapshot completion time.                                    |
+| DownloadFinishedTime | Snapshot download completion time.                           |
+| FinishedTime         | Task completion Time.                                        |
+| UnfinishedTasks      | Unfinished subtask IDs in the SNAPSHOTTING, DOWNLOADING, and COMMITTING phases. |
+| TaskErrMsg           | Error messages.                                              |
+| Status               | Status information.                                          |
+| Timeout              | Task timeout. Unit: second.                                  |
 
-```sql
+## Examples
+
+Example 1: Views the last RESTORE task in the database `example_db`.
+
+```SQL
 SHOW RESTORE FROM example_db;
 ```

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -77,6 +89,13 @@ public:
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
     static int compute_priority(int32_t num_submitted_tasks);
 
+    int io_tasks_per_scan_operator() const override {
+        if (_sorted_by_keys_per_tablet) {
+            return 1;
+        }
+        return starrocks::ScanNode::io_tasks_per_scan_operator();
+    }
+
 private:
     friend class TabletScanner;
 
@@ -146,8 +165,7 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
     OlapScanConjunctsManager _conjuncts_manager;
     DictOptimizeParser _dict_optimize_parser;
-    const Schema* _chunk_schema = nullptr;
-    ObjectPool _obj_pool;
+    const VectorizedSchema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
@@ -177,6 +195,9 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+
+    bool _sorted_by_keys_per_tablet = false;
+
     // profile
     RuntimeProfile* _scan_profile = nullptr;
 
@@ -194,6 +215,8 @@ private:
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
+    RuntimeProfile::Counter* _get_rowsets_timer = nullptr;
+    RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;

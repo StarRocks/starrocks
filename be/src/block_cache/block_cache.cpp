@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "block_cache/block_cache.h"
 
@@ -14,12 +26,6 @@ namespace starrocks {
 
 BlockCache::BlockCache() {
     _kv_cache = std::make_unique<FbCacheLib>();
-}
-
-BlockCache::~BlockCache() {
-    if (_kv_cache) {
-        _kv_cache->destroy();
-    }
 }
 
 BlockCache* BlockCache::instance() {
@@ -61,50 +67,15 @@ Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t s
 }
 
 StatusOr<size_t> BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* buffer) {
-    if (offset % _block_size != 0) {
-        LOG(WARNING) << "read block key: " << cache_key << " with invalid offset: " << offset << ", size: " << size;
-        return Status::InvalidArgument(
-                strings::Substitute("offset and size must be aligned by block size $0", _block_size));
-    }
     if (!buffer) {
         return Status::InvalidArgument("invalid data buffer");
     }
     if (size == 0) {
         return 0;
     }
-
-    size_t start_block_index = offset / _block_size;
-    size_t end_block_index = (offset + size - 1) / _block_size + 1;
-    off_t off_in_buf = 0;
-    size_t read_size = 0;
-    for (size_t index = start_block_index; index < end_block_index; ++index) {
-        std::string block_key = fmt::format("{}/{}", cache_key, index);
-        char* block_buf = buffer + off_in_buf;
-        auto res = _kv_cache->read_cache(block_key, block_buf);
-        RETURN_IF_ERROR(res);
-        read_size += res.value();
-        off_in_buf += _block_size;
-    }
-
-    return read_size;
-}
-
-Status BlockCache::read_cache_zero_copy(const CacheKey& cache_key, off_t offset, size_t size, const char** buf) {
-    if (offset % _block_size != 0) {
-        LOG(WARNING) << "read block key: " << cache_key << " with invalid offset: " << offset << ", size: " << size;
-        return Status::InvalidArgument(
-                strings::Substitute("offset and size must be aligned by block size $0", _block_size));
-    }
-    if (!buf) {
-        return Status::InvalidArgument("invalid data buffer");
-    }
-    if (size == 0) {
-        return Status::OK();
-    }
-
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->read_cache_zero_copy(block_key, buf);
+    return _kv_cache->read_cache(block_key, buffer, offset - index * _block_size, size);
 }
 
 Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t size) {
@@ -125,6 +96,10 @@ Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t 
         RETURN_IF_ERROR(_kv_cache->remove_cache(block_key));
     }
     return Status::OK();
+}
+
+Status BlockCache::shutdown() {
+    return _kv_cache->shutdown();
 }
 
 } // namespace starrocks

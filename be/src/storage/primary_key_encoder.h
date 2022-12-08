@@ -1,8 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
-#include "column/field.h"
+#include "column/vectorized_field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 
@@ -23,29 +35,33 @@ namespace starrocks {
 //           add a tailing 0x00 0x00, then append
 class PrimaryKeyEncoder {
 public:
-    static bool is_supported(const vectorized::Field& f);
+    static bool is_supported(const vectorized::VectorizedField& f);
 
-    static bool is_supported(const vectorized::Schema& schema);
+    static bool is_supported(const vectorized::VectorizedSchema& schema, const std::vector<ColumnId>& key_idxes);
 
-    // Return |OLAP_FIELD_TYPE_NONE| if no primary key contained in |schema|.
-    static FieldType encoded_primary_key_type(const vectorized::Schema& schema);
+    // Return |TYPE_NONE| if no primary key contained in |schema|.
+    static LogicalType encoded_primary_key_type(const vectorized::VectorizedSchema& schema,
+                                                const std::vector<ColumnId>& key_idxes);
 
     // Return -1 if encoded key is not fixed size
-    static size_t get_encoded_fixed_size(const vectorized::Schema& schema);
+    static size_t get_encoded_fixed_size(const vectorized::VectorizedSchema& schema);
 
-    static Status create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn);
+    static Status create_column(const vectorized::VectorizedSchema& schema,
+                                std::unique_ptr<vectorized::Column>* pcolumn);
+    static Status create_column(const vectorized::VectorizedSchema& schema,
+                                std::unique_ptr<vectorized::Column>* pcolumn, const std::vector<ColumnId>& key_idxes);
 
-    static void encode(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset, size_t len,
-                       vectorized::Column* dest);
+    static void encode(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk, size_t offset,
+                       size_t len, vectorized::Column* dest);
 
-    static void encode_selective(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
+    static void encode_selective(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
                                  const uint32_t* indexes, size_t len, vectorized::Column* dest);
 
-    static bool encode_exceed_limit(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset,
-                                    size_t len, size_t limit_size);
+    static bool encode_exceed_limit(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
+                                    size_t offset, size_t len, size_t limit_size);
 
-    static Status decode(const vectorized::Schema& schema, const vectorized::Column& keys, size_t offset, size_t len,
-                         vectorized::Chunk* dest);
+    static Status decode(const vectorized::VectorizedSchema& schema, const vectorized::Column& keys, size_t offset,
+                         size_t len, vectorized::Chunk* dest);
 };
 
 } // namespace starrocks

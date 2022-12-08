@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -6,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -52,7 +64,7 @@ public class PruneHDFSScanColumnRuleTest {
                                               @Mocked OptimizerContext context,
                                               @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
-                new LogicalIcebergScanOperator(table, Table.TableType.ICEBERG,
+                new LogicalIcebergScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
                         new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
@@ -72,7 +84,7 @@ public class PruneHDFSScanColumnRuleTest {
                                                  @Mocked OptimizerContext context,
                                                  @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
-                new LogicalIcebergScanOperator(table, Table.TableType.ICEBERG,
+                new LogicalIcebergScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1, null));
 
         List<TaskContext> taskContextList = new ArrayList<>();
@@ -111,7 +123,7 @@ public class PruneHDFSScanColumnRuleTest {
                                            @Mocked OptimizerContext context,
                                            @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
-                new LogicalHudiScanOperator(table, Table.TableType.HUDI,
+                new LogicalHudiScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
                         new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
@@ -131,7 +143,7 @@ public class PruneHDFSScanColumnRuleTest {
                                               @Mocked OptimizerContext context,
                                               @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
-                new LogicalHudiScanOperator(table, Table.TableType.HUDI,
+                new LogicalHudiScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1, null));
 
         List<TaskContext> taskContextList = new ArrayList<>();
@@ -147,7 +159,7 @@ public class PruneHDFSScanColumnRuleTest {
                                               @Mocked OptimizerContext context,
                                               @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
-                new LogicalHudiScanOperator(table, Table.TableType.HUDI,
+                new LogicalHudiScanOperator(table,
                         scanColumnMapWithUnknown, Maps.newHashMap(), -1, null));
 
         List<TaskContext> taskContextList = new ArrayList<>();

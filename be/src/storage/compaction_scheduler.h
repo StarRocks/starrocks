@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -22,13 +34,15 @@ class CompactionCandidate;
 class CompactionScheduler {
 public:
     CompactionScheduler();
-    ~CompactionScheduler() = default;
+    ~CompactionScheduler();
 
     void schedule();
 
     void notify();
 
 private:
+    void _schedule();
+
     // wait until current running tasks are below max_concurrent_num
     void _wait_to_run();
 
@@ -36,17 +50,14 @@ private:
 
     std::shared_ptr<CompactionTask> _try_get_next_compaction_task() const;
 
-    static bool _can_do_compaction(const CompactionCandidate& candidate,
-                                   std::shared_ptr<CompactionTask>* compaction_task);
-
     // if check fails, should not reschedule the tablet
     static bool _check_precondition(const CompactionCandidate& candidate);
 
-    static bool _can_do_compaction_task(Tablet* tablet, CompactionTask* compaction_task);
-
 private:
-    std::unique_ptr<ThreadPool> _compaction_pool;
+    std::unique_ptr<ThreadPool> _compaction_pool = nullptr;
+    std::thread _scheduler_thread;
 
+    std::atomic<bool> _bg_worker_stopped{false};
     std::mutex _mutex;
     std::condition_variable _cv;
     uint64_t _round = 0;

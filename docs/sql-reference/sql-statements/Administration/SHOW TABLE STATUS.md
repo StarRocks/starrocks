@@ -1,6 +1,6 @@
 # SHOW TABLE STATUS
 
-## description
+## Description
 
 This statement is used to view some of the information in Table.
 
@@ -17,7 +17,7 @@ Note:
 1. 1. This statement is mainly compatible with MySQL grammar. At present, it only shows a few information, such as Comment. 
 ```
 
-## example
+## Examples
 
 1. View all the information of tables under the current database.
 

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/geo_functions.h"
 
@@ -11,20 +23,21 @@
 namespace starrocks::vectorized {
 
 struct StConstructState {
-    StConstructState() {}
+    StConstructState() = default;
     ~StConstructState() = default;
 
     bool is_null{false};
     std::string encoded_buf;
 };
 
-ColumnPtr GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& columns, GeoShapeType shape_type) {
+StatusOr<ColumnPtr> GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& columns,
+                                                     GeoShapeType shape_type) {
     ColumnViewer<TYPE_VARCHAR> wkt_viewer(columns[0]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
 
-    StConstructState* state = (StConstructState*)ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+    auto* state = (StConstructState*)ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state == nullptr) {
         for (int row = 0; row < size; ++row) {
             if (wkt_viewer.is_null(row)) {
@@ -55,21 +68,21 @@ ColumnPtr GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& 
     }
 }
 
-ColumnPtr GeoFunctions::st_from_wkt(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_from_wkt(FunctionContext* context, const Columns& columns) {
     return st_from_wkt_common(context, columns, GEO_SHAPE_ANY);
 }
 
-ColumnPtr GeoFunctions::st_line(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_line(FunctionContext* context, const Columns& columns) {
     return st_from_wkt_common(context, columns, GEO_SHAPE_LINE_STRING);
 }
 
-ColumnPtr GeoFunctions::st_polygon(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_polygon(FunctionContext* context, const Columns& columns) {
     return st_from_wkt_common(context, columns, GEO_SHAPE_POLYGON);
 }
 
 Status GeoFunctions::st_from_wkt_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        StConstructState* state = reinterpret_cast<StConstructState*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<StConstructState*>(context->get_function_state(scope));
         delete state;
     }
 
@@ -109,14 +122,14 @@ Status GeoFunctions::st_circle_prepare(FunctionContext* ctx, FunctionContext::Fu
     return Status::OK();
 }
 
-ColumnPtr GeoFunctions::st_circle(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_circle(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> lng_viewer(columns[0]);
     ColumnViewer<TYPE_DOUBLE> lat_viewer(columns[1]);
     ColumnViewer<TYPE_DOUBLE> radius_viewer(columns[2]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
-    StConstructState* state = (StConstructState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+    auto* state = (StConstructState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state == nullptr) {
         for (int row = 0; row < size; ++row) {
             if (lng_viewer.is_null(row) || lat_viewer.is_null(row) || radius_viewer.is_null(row)) {
@@ -151,7 +164,7 @@ ColumnPtr GeoFunctions::st_circle(FunctionContext* context, const Columns& colum
     }
 }
 
-ColumnPtr GeoFunctions::st_point(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_point(FunctionContext* context, const Columns& columns) {
     auto x_column = ColumnViewer<TYPE_DOUBLE>(columns[0]);
     auto y_column = ColumnViewer<TYPE_DOUBLE>(columns[1]);
 
@@ -180,7 +193,7 @@ ColumnPtr GeoFunctions::st_point(FunctionContext* context, const Columns& column
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
 
     auto size = columns[0]->size();
@@ -205,7 +218,7 @@ ColumnPtr GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_y(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_y(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
 
     auto size = columns[0]->size();
@@ -230,7 +243,7 @@ ColumnPtr GeoFunctions::st_y(FunctionContext* context, const Columns& columns) {
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_distance_sphere(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_distance_sphere(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> x_lng(columns[0]);
     ColumnViewer<TYPE_DOUBLE> x_lat(columns[1]);
     ColumnViewer<TYPE_DOUBLE> y_lng(columns[2]);
@@ -261,7 +274,7 @@ ColumnPtr GeoFunctions::st_distance_sphere(FunctionContext* context, const Colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_as_wkt(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_as_wkt(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> shape_viewer(columns[0]);
 
     auto size = columns[0]->size();
@@ -298,7 +311,7 @@ struct StContainsState {
 
 Status GeoFunctions::st_contains_close(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        StContainsState* contains_ctx = reinterpret_cast<StContainsState*>(ctx->get_function_state(scope));
+        auto* contains_ctx = reinterpret_cast<StContainsState*>(ctx->get_function_state(scope));
         delete contains_ctx;
     }
 
@@ -334,7 +347,7 @@ Status GeoFunctions::st_contains_prepare(FunctionContext* ctx, FunctionContext::
     return Status::OK();
 }
 
-ColumnPtr GeoFunctions::st_contains(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_contains(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> lhs_viewer(columns[0]);
     ColumnViewer<TYPE_VARCHAR> rhs_viewer(columns[1]);
 

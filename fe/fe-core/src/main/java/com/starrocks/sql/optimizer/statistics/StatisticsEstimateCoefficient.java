@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -29,9 +42,10 @@ public class StatisticsEstimateCoefficient {
     public static final int DEFAULT_ES_OUTPUT_ROWS = 5000;
     // default JDBC external table output rows, JDBC maybe is a distribute system
     public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
-    // if after aggregate row count < (input row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT),
+    // if after aggregate row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT < input row count,
     // the aggregate has good effect.
-    public static final double DEFAULT_AGGREGATE_EFFECT_COEFFICIENT = 0.001;
+    public static final double LOW_AGGREGATE_EFFECT_COEFFICIENT = 1000;
+    public static final double MEDIUM_AGGREGATE_EFFECT_COEFFICIENT = 100;
     // default selectivity for anti join
     public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
     // default shuffle column row count limit

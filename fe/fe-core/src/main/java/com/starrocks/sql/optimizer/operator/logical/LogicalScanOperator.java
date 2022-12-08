@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableMap;
@@ -139,7 +152,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
     }
 
-    abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
+    public abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
             extends Operator.Builder<O, B> {
         protected Table table;
         protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
@@ -154,6 +167,16 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
             this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             this.columnFilters = scanOperator.columnFilters;
+            return (B) this;
+        }
+
+        public B setColRefToColumnMetaMap(ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+            this.colRefToColumnMetaMap = colRefToColumnMetaMap;
+            return (B) this;
+        }
+
+        public B setColumnMetaToColRefMap(ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap) {
+            this.columnMetaToColRefMap = columnMetaToColRefMap;
             return (B) this;
         }
 

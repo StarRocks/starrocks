@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/common/util/UnitTestUtil.java
 
@@ -60,7 +73,7 @@ public class UnitTestUtil {
     public static final int SCHEMA_HASH = 0;
 
     public static Database createDb(long dbId, long tableId, long partitionId, long indexId,
-                                    long tabletId, long backendId, long version) {
+                                    long tabletId, long backendId, long version, KeysType type) {
         // GlobalStateMgr.getCurrentInvertedIndex().clear();
 
         // replica
@@ -110,11 +123,11 @@ public class UnitTestUtil {
         partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         OlapTable table = new OlapTable(tableId, TABLE_NAME, columns,
-                KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+                type, partitionInfo, distributionInfo);
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, TABLE_NAME, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
-                KeysType.AGG_KEYS);
+                type);
 
         // db
         Database db = new Database(dbId, DB_NAME);

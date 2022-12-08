@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/rowset/segment_iterator.h"
 
@@ -113,9 +125,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    vectorized::Schema vec_schema;
-    vec_schema.append(std::make_shared<vectorized::Field>(0, "c1", OLAP_FIELD_TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<vectorized::Field>(1, "c2", OLAP_FIELD_TYPE_VARCHAR, -1, -1, false));
+    vectorized::VectorizedSchema vec_schema;
+    vec_schema.append(std::make_shared<vectorized::VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
+    vec_schema.append(std::make_shared<vectorized::VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
 
     ObjectPool pool;
     vectorized::SegmentReadOptions seg_opts;
@@ -123,7 +135,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_opts.stats = &stats;
 
     auto* con = pool.add(new vectorized::ConjunctivePredicates());
-    auto type_varchar = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    auto type_varchar = get_type_info(TYPE_VARCHAR);
     con->add(pool.add(vectorized::new_column_ge_predicate(type_varchar, 1, Slice(values[8]))));
     seg_opts.delete_predicates.add(*con);
 
@@ -246,9 +258,9 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
-    vectorized::Schema vec_schema;
-    vec_schema.append(std::make_shared<vectorized::Field>(0, "c1", OLAP_FIELD_TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<vectorized::Field>(1, "c2", OLAP_FIELD_TYPE_VARCHAR, -1, -1, false));
+    vectorized::VectorizedSchema vec_schema;
+    vec_schema.append(std::make_shared<vectorized::VectorizedField>(0, "c1", TYPE_INT, -1, -1, false));
+    vec_schema.append(std::make_shared<vectorized::VectorizedField>(1, "c2", TYPE_VARCHAR, -1, -1, false));
 
     ObjectPool pool;
     vectorized::SegmentReadOptions seg_opts;

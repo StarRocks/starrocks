@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/http/default_path_handlers.cpp
 
@@ -75,7 +88,7 @@ void logs_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* ou
 void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h2>Configurations</h2>";
     (*output) << "<pre>";
-    std::lock_guard<std::mutex>(*config::get_mstring_conf_lock());
+    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     for (const auto& it : *(config::full_conf_map)) {
         (*output) << it.first << "=" << it.second << std::endl;
     }
@@ -200,7 +213,7 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
 #ifdef USE_JEMALLOC
 void malloc_stats_write_cb(void* opaque, const char* data) {
-    std::string* buf = static_cast<std::string*>(opaque);
+    auto* buf = static_cast<std::string*>(opaque);
     buf->append(data);
 }
 #endif

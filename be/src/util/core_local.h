@@ -117,7 +117,7 @@ public:
         }
     }
 
-    ~CoreLocalValue() {
+    ~CoreLocalValue() noexcept {
         for (int i = 0; i < _size; ++i) {
             _values[i]->~T();
         }

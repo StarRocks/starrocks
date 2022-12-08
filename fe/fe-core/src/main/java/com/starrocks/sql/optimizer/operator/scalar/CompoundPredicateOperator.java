@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -73,7 +87,20 @@ public class CompoundPredicateOperator extends PredicateOperator {
     }
 
     private List<ScalarOperator> normalizeChildren() {
-        return getChildren().stream().sorted(Comparator.comparingInt(ScalarOperator::hashCode)).collect(Collectors.toList());
+        List<ScalarOperator> sortedChildren;
+        switch (type) {
+            case AND:
+                sortedChildren = Utils.extractConjuncts(this).stream()
+                        .sorted(Comparator.comparingInt(ScalarOperator::hashCode)).collect(Collectors.toList());
+                break;
+            case OR:
+                sortedChildren = Utils.extractDisjunctive(this).stream()
+                        .sorted(Comparator.comparingInt(ScalarOperator::hashCode)).collect(Collectors.toList());
+                break;
+            default:
+                sortedChildren = Lists.newArrayList(this.getChildren());
+        }
+        return sortedChildren;
     }
 
     @Override
@@ -119,5 +146,9 @@ public class CompoundPredicateOperator extends PredicateOperator {
 
     public static ScalarOperator and(ScalarOperator... nodes) {
         return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, Arrays.asList(nodes));
+    }
+
+    public static ScalarOperator not(ScalarOperator node) {
+        return new CompoundPredicateOperator(CompoundType.NOT, node);
     }
 }

@@ -19,8 +19,9 @@
 #include "orc/OrcFile.hh"
 
 #include <fcntl.h>
-#include <string.h>
 #include <sys/stat.h>
+
+#include <cstring>
 
 #include "Utils.hh"
 #include "orc/Exceptions.hh"
@@ -33,6 +34,8 @@
 #define fstat _fstat64
 #else
 #include <unistd.h>
+
+#include <utility>
 #define O_BINARY 0
 #endif
 
@@ -46,7 +49,8 @@ private:
     ReaderMetrics* metrics;
 
 public:
-    FileInputStream(std::string _filename, ReaderMetrics* _metrics) : filename(_filename), metrics(_metrics) {
+    FileInputStream(std::string _filename, ReaderMetrics* _metrics)
+            : filename(std::move(_filename)), metrics(_metrics) {
         file = open(filename.c_str(), O_BINARY | O_RDONLY);
         if (file == -1) {
             throw ParseError("Can't open " + filename);
@@ -116,7 +120,7 @@ private:
 public:
     FileOutputStream(std::string _filename) {
         bytesWritten = 0;
-        filename = _filename;
+        filename = std::move(_filename);
         closed = false;
         file = open(filename.c_str(), O_BINARY | O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
         if (file == -1) {

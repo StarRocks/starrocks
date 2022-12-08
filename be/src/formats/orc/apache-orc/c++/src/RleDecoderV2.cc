@@ -442,7 +442,7 @@ void RleDecoderV2::next(int64_t* const data, const uint64_t numValues, const cha
 
         uint64_t offset = nRead, length = numValues - nRead;
 
-        EncodingType enc = static_cast<EncodingType>((firstByte >> 6) & 0x03);
+        auto enc = static_cast<EncodingType>((firstByte >> 6) & 0x03);
         switch (static_cast<int64_t>(enc)) {
         case SHORT_REPEAT:
             nRead += nextShortRepeats(data, offset, length, notNull);

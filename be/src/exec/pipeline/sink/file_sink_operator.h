@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <utility>
 
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
@@ -13,15 +27,14 @@ class ExprContext;
 
 namespace pipeline {
 
-class FileSinkBuffer;
+class FileSinkIOBuffer;
 
 class FileSinkOperator final : public Operator {
 public:
     FileSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                     std::shared_ptr<FileSinkBuffer> file_sink_buffer, FragmentContext* const fragment_ctx)
+                     std::shared_ptr<FileSinkIOBuffer> file_sink_buffer)
             : Operator(factory, id, "file_sink", plan_node_id, driver_sequence),
-              _file_sink_buffer(file_sink_buffer),
-              _fragment_ctx(fragment_ctx) {}
+              _file_sink_buffer(std::move(std::move(file_sink_buffer))) {}
 
     ~FileSinkOperator() override = default;
 
@@ -45,8 +58,7 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    std::shared_ptr<FileSinkBuffer> _file_sink_buffer;
-    FragmentContext* const _fragment_ctx;
+    std::shared_ptr<FileSinkIOBuffer> _file_sink_buffer;
 };
 
 class FileSinkOperatorFactory final : public OperatorFactory {
@@ -57,8 +69,7 @@ public:
     ~FileSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<FileSinkOperator>(this, _id, _plan_node_id, driver_sequence, _file_sink_buffer,
-                                                  _fragment_ctx);
+        return std::make_shared<FileSinkOperator>(this, _id, _plan_node_id, driver_sequence, _file_sink_buffer);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -71,8 +82,7 @@ private:
     std::shared_ptr<ResultFileOptions> _file_opts;
     int32_t _num_sinkers;
 
-    std::shared_ptr<FileSinkBuffer> _file_sink_buffer;
-    RuntimeProfile* _profile = nullptr;
+    std::shared_ptr<FileSinkIOBuffer> _file_sink_buffer;
     FragmentContext* const _fragment_ctx;
 };
 } // namespace pipeline

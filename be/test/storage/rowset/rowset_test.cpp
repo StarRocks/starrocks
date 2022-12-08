@@ -1,6 +1,19 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/beta_rowset_test.cpp
+//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/rowset_test.cpp
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -202,7 +215,7 @@ protected:
     }
 
     void create_partial_rowset_writer_context(int64_t tablet_id, const std::vector<int32_t>& column_indexes,
-                                              std::shared_ptr<TabletSchema> partial_schema,
+                                              const std::shared_ptr<TabletSchema>& partial_schema,
                                               RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -219,12 +232,14 @@ protected:
         rowset_writer_context->version.second = 0;
     }
 
+    void test_final_merge(bool has_merge_condition);
+
 private:
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
+                                                           vectorized::VectorizedSchema& schema) {
     vectorized::TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -241,7 +256,7 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
     return vectorized::new_union_iterator(seg_iters);
 }
 
-TEST_F(RowsetTest, FinalMergeTest) {
+void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     auto tablet = create_tablet(12421, 53242);
 
     RowsetSharedPtr rowset;
@@ -249,6 +264,9 @@ TEST_F(RowsetTest, FinalMergeTest) {
     RowsetWriterContext writer_context;
     create_rowset_writer_context(12421, &tablet->tablet_schema(), &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;
+    if (has_merge_condition) {
+        writer_context.merge_condition = "v1";
+    }
 
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
@@ -390,6 +408,14 @@ TEST_F(RowsetTest, FinalMergeTest) {
         }
         EXPECT_EQ(count, rows_per_segment * 2);
     }
+}
+
+TEST_F(RowsetTest, FinalMergeTest) {
+    test_final_merge(false);
+}
+
+TEST_F(RowsetTest, ConditionUpdateWithMultipleSegmentsTest) {
+    test_final_merge(true);
 }
 
 TEST_F(RowsetTest, FinalMergeVerticalTest) {
@@ -584,9 +610,10 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_
     return count;
 }
 
-static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, std::shared_ptr<TabletSchema> partial_schema,
-                                       int64_t version, int64_t nkeys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
+static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet,
+                                       const std::shared_ptr<TabletSchema>& partial_schema, int64_t version,
+                                       int64_t nkeys) {
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -820,7 +847,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
 
         butil::IOBuf data;
         auto buf = new uint8[seg_info->data_size()];
-        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
+        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
 
         ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
         auto st = segment_rowset_writer->flush_segment(*seg_info, data);

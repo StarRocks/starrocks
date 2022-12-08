@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/es/es_scroll_parser.h"
 
@@ -53,7 +65,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":1},\"fields\":{\"array\":[1]}}");
+        document.Parse(R"({"_source":{"array":1},"fields":{"array":[1]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -81,7 +93,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":[1,2,3]},\"fields\":{\"array\":[1,2,3]}}");
+        document.Parse(R"({"_source":{"array":[1,2,3]},"fields":{"array":[1,2,3]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -109,7 +121,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":[1,[2,3]]},\"fields\":{\"array\":[1,2,3]}}");
+        document.Parse(R"({"_source":{"array":[1,[2,3]]},"fields":{"array":[1,2,3]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -136,7 +148,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":[1,null,2]},\"fields\":{\"array\":[1,2]}}");
+        document.Parse(R"({"_source":{"array":[1,null,2]},"fields":{"array":[1,2]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -161,7 +173,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":null},\"fields\":{\"array\":[]}}");
+        document.Parse(R"({"_source":{"array":null},"fields":{"array":[]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);

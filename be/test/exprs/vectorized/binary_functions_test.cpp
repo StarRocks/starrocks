@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -7,10 +19,9 @@
 #include "exprs/vectorized/math_functions.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 ColumnPtr create_nullable_column() {
     return NullableColumn::create(RunTimeColumnType<TYPE>::create(), RunTimeColumnType<TYPE_NULL>::create());
 }
@@ -32,7 +43,7 @@ TEST_F(VectorizedBinaryNullableTest, arg1Null) {
     arg1->append_nulls(1);
     arg2->append_datum((double)1);
 
-    auto result = MathFunctions::pow(function_context, columns);
+    auto result = MathFunctions::pow(function_context, columns).value();
     ASSERT_TRUE(result->is_null(0));
 }
 
@@ -48,7 +59,7 @@ TEST_F(VectorizedBinaryNullableTest, arg2Null) {
     arg1->append_datum((double)1);
     arg2->append_nulls(1);
 
-    auto result = MathFunctions::pow(function_context, columns);
+    auto result = MathFunctions::pow(function_context, columns).value();
     ASSERT_TRUE(result->is_null(0));
 }
 
@@ -64,8 +75,7 @@ TEST_F(VectorizedBinaryNullableTest, allArgsNull) {
     arg1->append_nulls(1);
     arg2->append_nulls(1);
 
-    auto result = MathFunctions::pow(function_context, columns);
+    auto result = MathFunctions::pow(function_context, columns).value();
     ASSERT_TRUE(result->is_null(0));
 }
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

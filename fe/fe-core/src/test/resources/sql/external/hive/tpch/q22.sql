@@ -129,7 +129,7 @@ OutPut Exchange Id: 12
 |  * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 |
 10:NESTLOOP JOIN
-|  join op: CROSS JOIN
+|  join op: INNER JOIN
 |  other join predicates: cast([6: c_acctbal, DECIMAL64(15,2), true] as DECIMAL128(38,8)) > [17: avg, DECIMAL128(38,8), true]
 |  cardinality: 3750000
 |  column statistics:
@@ -166,7 +166,7 @@ OutPut Exchange Id: 09
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
 7:AGGREGATE (merge finalize)
-|  aggregate: avg[([17: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true]
+|  aggregate: avg[([17: avg, VARBINARY, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
@@ -181,7 +181,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 06
 
 5:AGGREGATE (update serialize)
-|  aggregate: avg[([14: c_acctbal, DECIMAL64(15,2), true]); args: DECIMAL64; result: VARCHAR; args nullable: true; result nullable: true]
+|  aggregate: avg[([14: c_acctbal, DECIMAL64(15,2), true]); args: DECIMAL64; result: VARBINARY; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE

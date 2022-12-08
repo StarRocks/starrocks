@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "fs/fs_s3.h"
 
@@ -17,8 +29,8 @@
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <fmt/core.h>
-#include <time.h>
 
+#include <ctime>
 #include <limits>
 
 #include "common/config.h"
@@ -90,14 +102,14 @@ private:
     constexpr static int kMaxItems = 8;
 
     std::mutex _lock;
-    int _items;
+    int _items{0};
     // _configs[i] is the client configuration of |_clients[i].
     ClientConfiguration _configs[kMaxItems];
     S3ClientPtr _clients[kMaxItems];
     Random _rand;
 };
 
-S3ClientFactory::S3ClientFactory() : _items(0), _rand((int)::time(NULL)) {}
+S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);
@@ -198,12 +210,14 @@ public:
 
     Type type() const override { return S3; }
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
+    using FileSystem::new_sequential_file;
+    using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& path) override;
 
     // FIXME: `new_writable_file()` will not truncate an already-exist file/object, which does not satisfy
     // the API requirement.
@@ -262,10 +276,6 @@ private:
     FSOptions _options;
 };
 
-StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const std::string& path) {
-    return S3FileSystem::new_random_access_file(RandomAccessFileOptions(), path);
-}
-
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                  const std::string& path) {
     S3URI uri;
@@ -277,7 +287,9 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                            const std::string& path) {
+    (void)opts;
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
@@ -443,7 +455,7 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
             bool is_dir = true;
             int64_t file_size = 0;
-            file_status->emplace_back(std::move(name), is_dir, file_size);
+            file_status->emplace_back(name, is_dir, file_size);
         }
         for (auto&& obj : result.GetContents()) {
             if (obj.GetKey() == uri.key()) {
@@ -464,7 +476,7 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
 
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
 
-            file_status->emplace_back(std::move(name), is_dir, file_size);
+            file_status->emplace_back(name, is_dir, file_size);
         }
     } while (result.GetIsTruncated());
     return directory_exist ? Status::OK() : Status::NotFound(dir);

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/transaction/GlobalTransactionMgr.java
 
@@ -322,7 +335,19 @@ public class GlobalTransactionMgr implements Writable {
 
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
             throws UserException {
-        return commitTransaction(dbId, transactionId, tabletCommitInfos, null);
+        return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), null);
+    }
+
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
+            TxnCommitAttachment txnCommitAttachment)
+            throws UserException {
+        return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), txnCommitAttachment);
+    }
+
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
+            List<TabletFailInfo> tabletFailInfos)
+            throws UserException {
+        return commitTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, null);
     }
 
     /**
@@ -336,7 +361,8 @@ public class GlobalTransactionMgr implements Writable {
      */
     @NotNull
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+            List<TabletFailInfo> tabletFailInfos,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -344,11 +370,12 @@ public class GlobalTransactionMgr implements Writable {
 
         LOG.debug("try to commit transaction: {}", transactionId);
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        return dbTransactionMgr.commitTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
+        return dbTransactionMgr.commitTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment);
     }
 
     public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                   TxnCommitAttachment txnCommitAttachment)
+            List<TabletFailInfo> tabletFailInfos,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -356,7 +383,18 @@ public class GlobalTransactionMgr implements Writable {
 
         LOG.debug("try to pre commit transaction: {}", transactionId);
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
+        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment);
+    }
+
+    public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
+            throws UserException  {
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("Database {} does not exist", dbId);
+            throw new UserException("Database[" + dbId + "] does not exist");
+        }
+        commitPreparedTransaction(db, transactionId, timeoutMillis);
     }
 
     public void commitPreparedTransaction(Database db, long transactionId, long timeoutMillis)
@@ -387,18 +425,20 @@ public class GlobalTransactionMgr implements Writable {
             // so we just return false to indicate publish timeout
             throw new UserException("publish timeout: " + timeoutMillis);
         }
-        waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
+        if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
+            throw new UserException("publish timeout: " + timeoutMillis);
+        }
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
-                                               List<TabletCommitInfo> tabletCommitInfos, long timeoutMillis)
+            List<TabletCommitInfo> tabletCommitInfos, List<TabletFailInfo> tabletFailInfos, long timeoutMillis)
             throws UserException {
-        return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, timeoutMillis, null);
+        return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
-                                               List<TabletCommitInfo> tabletCommitInfos, long timeoutMillis,
-                                               TxnCommitAttachment txnCommitAttachment)
+            List<TabletCommitInfo> tabletCommitInfos, List<TabletFailInfo> tabletFailInfos, long timeoutMillis,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
@@ -408,7 +448,8 @@ public class GlobalTransactionMgr implements Writable {
         }
         VisibleStateWaiter waiter;
         try {
-            waiter = commitTransaction(db.getId(), transactionId, tabletCommitInfos, txnCommitAttachment);
+            waiter = commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos,
+                    txnCommitAttachment);
         } finally {
             db.writeUnlock();
         }
@@ -426,10 +467,21 @@ public class GlobalTransactionMgr implements Writable {
         abortTransaction(dbId, transactionId, reason, null);
     }
 
-    public void abortTransaction(Long dbId, Long txnId, String reason, TxnCommitAttachment txnCommitAttachment)
+    public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
+            throws UserException {
+        abortTransaction(dbId, transactionId, reason, failedTablets, null);
+    }
+
+    public void abortTransaction(Long dbId, Long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
+            throws UserException {
+        abortTransaction(dbId, transactionId, reason, Lists.newArrayList(), txnCommitAttachment);
+    }
+
+    public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.abortTransaction(txnId, reason, txnCommitAttachment);
+        dbTransactionMgr.abortTransaction(transactionId, reason, txnCommitAttachment, failedTablets);
     }
 
     // for http cancel stream load api
@@ -551,7 +603,7 @@ public class GlobalTransactionMgr implements Writable {
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
             result = min(result, dbTransactionMgr.getMinActiveTxnId());
         }
-        return result == Long.MAX_VALUE ? null : result;
+        return result == Long.MAX_VALUE ? idGenerator.peekNextTransactionId() : result;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
@@ -721,7 +773,8 @@ public class GlobalTransactionMgr implements Writable {
         for (Pair<Long, Long> txnInfo : transactionIdByCoordinateBe) {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnInfo.first);
-                dbTransactionMgr.abortTransaction(txnInfo.second, false, "coordinate BE is down", null);
+                dbTransactionMgr.abortTransaction(txnInfo.second, false, "coordinate BE is down", null,
+                        Lists.newArrayList());
             } catch (UserException e) {
                 LOG.warn("Abort txn on coordinate BE {} failed, msg={}", coordinateHost, e.getMessage());
             }
@@ -739,5 +792,13 @@ public class GlobalTransactionMgr implements Writable {
         dos.writeInt(size);
         write(dos);
         return checksum;
+    }
+
+    public String getTxnPublishTimeoutDebugInfo(long dbId, long txnId) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (dbTransactionMgr == null) {
+            return "";
+        }
+        return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
     }
 }

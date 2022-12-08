@@ -1,12 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 #include <memory>
 
 #include "exec/pipeline/operator.h"
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 class ConjugateOperator;
 using ConjugateOperatorRawPtr = ConjugateOperator*;
 using ConjugateOperatorPtr = std::shared_ptr<ConjugateOperator>;
@@ -28,9 +39,9 @@ using ConjugateOperatorFactoryPtr = std::shared_ptr<ConjugateOperatorFactory>;
 //  AggregateBlockSinkOperator.
 class ConjugateOperator : public pipeline::Operator {
 public:
-    ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, const pipeline::OperatorPtr& sink_op,
-                      const pipeline::OperatorPtr& source_op);
-    ~ConjugateOperator() = default;
+    ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, pipeline::OperatorPtr sink_op,
+                      pipeline::OperatorPtr source_op);
+    ~ConjugateOperator() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool has_output() const override;
@@ -51,8 +62,8 @@ private:
 
 class ConjugateOperatorFactory : public pipeline::OperatorFactory {
 public:
-    ConjugateOperatorFactory(pipeline::OpFactoryPtr sink_op_factory, pipeline::OpFactoryPtr source_op_factory);
-    ~ConjugateOperatorFactory() = default;
+    ConjugateOperatorFactory(pipeline::OpFactoryPtr sink_op_factory, const pipeline::OpFactoryPtr& source_op_factory);
+    ~ConjugateOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
@@ -61,5 +72,4 @@ private:
     pipeline::OpFactoryPtr _sink_op_factory;
     pipeline::OpFactoryPtr _source_op_factory;
 };
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

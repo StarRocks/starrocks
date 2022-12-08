@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -64,12 +76,18 @@ public:
     MorselQueueFactory* morsel_queue_factory_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(const SourceOperatorFactory* source_op);
     // Whether the building pipeline `ops` need local shuffle for the next operator.
-    bool need_local_shuffle(OpFactories ops) const;
+    bool could_local_shuffle(OpFactories ops) const;
 
     bool should_interpolate_cache_operator(OpFactoryPtr& source_op, int32_t plan_node_id);
     OpFactories interpolate_cache_operator(
             OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
-            std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator);
+            const std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)>& merge_operators_generator);
+
+    // help to change some actions after aggregations, for example,
+    // disable to ignore local data after aggregations with profile exchange speed.
+    bool has_aggregation = false;
+
+    static int localExchangeBufferChunks() { return kLocalExchangeBufferChunks; }
 
 private:
     static constexpr int kLocalExchangeBufferChunks = 8;

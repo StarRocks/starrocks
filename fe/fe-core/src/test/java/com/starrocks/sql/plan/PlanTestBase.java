@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -15,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1036,6 +1050,19 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary1` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk1`)\n" +
+                "DISTRIBUTED BY HASH(`pk1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
                 "  `v_int`  bigint NULL COMMENT \"\",\n" +
                 "  `v_json` json NULL COMMENT \"\" \n" +
@@ -1067,7 +1094,7 @@ public class PlanTestBase {
         Assert.assertFalse(text, text.contains(pattern));
     }
 
-    protected static void setTableStatistics(OlapTable table, long rowCount) {
+    public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             partition.getBaseIndex().setRowCount(rowCount);
         }
@@ -1086,9 +1113,13 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
-        return s;
+    }
+
+    public String getLogicalFragmentPlan(String sql) throws Exception {
+        return LogicalPlanPrinter.print(UtFrameUtils.getPlanAndFragment(
+                connectContext, sql).second.getPhysicalPlan());
     }
 
     public String getVerboseExplain(String sql) throws Exception {
@@ -1138,6 +1169,7 @@ public class PlanTestBase {
         boolean hasFragmentStatistics = false;
         boolean isDump = false;
         boolean isEnumerate = false;
+        int planCount = -1;
 
         File debugFile = new File(file.getPath() + ".debug");
         BufferedWriter writer = null;
@@ -1189,6 +1221,9 @@ public class PlanTestBase {
                             writer = new BufferedWriter(new FileWriter(debugFile, true));
                             System.out.println("DEBUG MODE!");
                         }
+                        continue;
+                    case "[planCount]":
+                        mode = "planCount";
                         continue;
                     case "[sql]":
                         sql = new StringBuilder();
@@ -1251,6 +1286,7 @@ public class PlanTestBase {
                                         sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString());
                             }
                             if (isEnumerate) {
+                                Assert.assertEquals("plan count mismatch", planCount, pair.second.getPlanCount());
                                 checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
                                 connectContext.getSessionVariable().setUseNthExecPlan(0);
                             }
@@ -1269,6 +1305,9 @@ public class PlanTestBase {
                 switch (mode) {
                     case "sql":
                         sql.append(tempStr).append("\n");
+                        break;
+                    case "planCount":
+                        planCount = Integer.parseInt(tempStr);
                         break;
                     case "result":
                         result.append(tempStr).append("\n");
@@ -1365,6 +1404,15 @@ public class PlanTestBase {
 
     protected void assertPlanContains(String sql, String... explain) throws Exception {
         String explainString = getFragmentPlan(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertLogicalPlanContains(String sql, String... explain) throws Exception {
+        String explainString = getLogicalFragmentPlan(sql);
 
         for (String expected : explain) {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,

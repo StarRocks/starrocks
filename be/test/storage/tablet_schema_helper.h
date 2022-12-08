@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/tablet_schema_helper.h
 
@@ -57,7 +70,7 @@ inline TabletColumn create_int_key(int32_t id, bool is_nullable = true, bool is_
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_INT);
+    column.set_type(TYPE_INT);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(4);
@@ -93,7 +106,7 @@ inline TabletColumn create_int_value(int32_t id, FieldAggregationMethod agg_meth
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_INT);
+    column.set_type(TYPE_INT);
     column.set_is_key(false);
     column.set_aggregation(agg_method);
     column.set_is_nullable(is_nullable);
@@ -111,7 +124,7 @@ inline TabletColumn create_char_key(int32_t id, bool is_nullable = true, int len
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_CHAR);
+    column.set_type(TYPE_CHAR);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(length);
@@ -123,7 +136,7 @@ inline TabletColumn create_varchar_key(int32_t id, bool is_nullable = true, int 
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_VARCHAR);
+    column.set_type(TYPE_VARCHAR);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(length);
@@ -135,7 +148,7 @@ inline TabletColumn create_array(int32_t id, bool is_nullable = true, int length
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_ARRAY);
+    column.set_type(TYPE_ARRAY);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(length);
@@ -153,7 +166,7 @@ inline ColumnPB create_with_default_value_pb(const std::string& col_type, std::s
     return column;
 }
 
-template <FieldType type>
+template <LogicalType type>
 inline TabletColumn create_with_default_value(std::string default_value) {
     TabletColumn column;
     column.set_type(type);

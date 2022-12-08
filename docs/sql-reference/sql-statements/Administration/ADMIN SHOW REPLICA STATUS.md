@@ -1,6 +1,6 @@
 # ADMIN SHOW REPLICA STATUS
 
-## description
+## Description
 
 This statement is used to show the status of replicas for a table or a partition.
 
@@ -25,7 +25,7 @@ SCHEMA_ERROR:  The schema hash of replica is incorrect
 MISSING:       The replica does not exist
 ```
 
-## example
+## Examples
 
 1. View the status of all replicas of the table.
 

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/file_utils_test.cpp
 
@@ -125,27 +138,27 @@ TEST_F(FileUtilsTest, TestRemove) {
     save_string_file("./file_test/s2", "123");
 
     std::vector<std::string> ps;
-    ps.push_back("./file_test/123/456/789");
-    ps.push_back("./file_test/123/456");
-    ps.push_back("./file_test/123");
+    ps.emplace_back("./file_test/123/456/789");
+    ps.emplace_back("./file_test/123/456");
+    ps.emplace_back("./file_test/123");
 
     ASSERT_TRUE(fs::path_exist("./file_test/123"));
     ASSERT_TRUE(fs::remove(ps).ok());
     ASSERT_FALSE(fs::path_exist("./file_test/123"));
 
     ps.clear();
-    ps.push_back("./file_test/s1");
-    ps.push_back("./file_test/abc/def");
+    ps.emplace_back("./file_test/s1");
+    ps.emplace_back("./file_test/abc/def");
 
     ASSERT_FALSE(fs::remove(ps).ok());
     ASSERT_FALSE(fs::path_exist("./file_test/s1"));
     ASSERT_TRUE(fs::path_exist("./file_test/abc/def/"));
 
     ps.clear();
-    ps.push_back("./file_test/abc/def/zxc");
-    ps.push_back("./file_test/s2");
-    ps.push_back("./file_test/abc/def");
-    ps.push_back("./file_test/abc");
+    ps.emplace_back("./file_test/abc/def/zxc");
+    ps.emplace_back("./file_test/s2");
+    ps.emplace_back("./file_test/abc/def");
+    ps.emplace_back("./file_test/abc");
 
     ASSERT_TRUE(fs::remove(ps).ok());
     ASSERT_FALSE(fs::path_exist("./file_test/s2"));

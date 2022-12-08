@@ -29,8 +29,8 @@ namespace starrocks {
 
 class MetricsTest : public testing::Test {
 public:
-    MetricsTest() {}
-    virtual ~MetricsTest() {}
+    MetricsTest() = default;
+    ~MetricsTest() override = default;
 };
 
 TEST_F(MetricsTest, Counter) {
@@ -220,8 +220,8 @@ TEST_F(MetricsTest, MetricLabels) {
 
 class TestMetricsVisitor : public MetricsVisitor {
 public:
-    virtual ~TestMetricsVisitor() {}
-    void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) {
+    ~TestMetricsVisitor() override = default;
+    void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) override {
         for (auto& it : collector->metrics()) {
             Metric* metric = it.second;
             auto& labels = it.first;

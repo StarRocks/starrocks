@@ -1,43 +1,47 @@
 # SHOW BACKUP
 
-## description
+## Description
 
-This statement is used to view BACKUP tasks
+Views the last BACKUP task in a specified database.
 
-Syntax：
+> **NOTE**
+>
+> Only the information of the last BACKUP task is saved in StarRocks.
+
+## Syntax
+
+```SQL
 SHOW BACKUP [FROM db_name]
-
-Note：
-
-```plain text
-1.Only the last BACKUP task is saved in StarRocks.
-2.Each column has the following meaning:
-JobId：                  Unique job ID
-SnapshotName：           Name of the backup
-DbName：                 Owning database
-State：                  Current Stage
-PENDING：                Initial state after submitting a job
-SNAPSHOTING：            in execution snapshot
-UPLOAD_SNAPSHOT：        Snapshot complete, ready for upload
-UPLOADING：              Snapshot uploading
-SAVE_META：              Save job meta-information as a local file
-UPLOAD_INFO：            Upload job meta information
-FINISHED：               Job success
-CANCELLED：              Job failure
-BackupObjs：             Backed up tables and partitions
-CreateTime：             Task Submission Time
-SnapshotFinishedTime：   Snapshot Completion Time
-UploadFinishedTime：     Snapshot upload completion time
-FinishedTime：           Job end time
-UnfinishedTasks：        In the SNAPSHOTING and UPLOADING phases, the unfinished subtask IDs are displayed
-Status：                 Display failure information if job fails
-Timeout：                Job timeout in seconds
 ```
 
-## example
+## Parameters
 
-1. View example_ db Last BACKUP task.
+| **Parameter** | **Description**                                       |
+| ------------- | ----------------------------------------------------- |
+| db_name       | Name of the database that the BACKUP task belongs to. |
 
-```sql
+## Return
+
+| **Return**           | **Description**                                              |
+| -------------------- | ------------------------------------------------------------ |
+| JobId                | Unique job ID.                                               |
+| SnapshotName         | Name of the data snapshot.                                   |
+| DbName               | Name of the database that the BACKUP task belongs to.        |
+| State                | Current state of the BACKUP task:<ul><li>PENDING: Initial state after submitting a job.</li><li>SNAPSHOTING: Creating snapshot.</li><li>UPLOAD_SNAPSHOT: Snapshot complete, ready for upload.</li><li>UPLOADING: Uploading snapshot.</li><li>SAVE_META: Creating local metadata files.</li><li>UPLOAD_INFO: Uploading metadata files and information of the BACKUP task.</li><li>FINISHED: BACKUP task finished.</li><li>CANCELLED: BACKUP task failed or cancelled.</li></ul> |
+| BackupObjs           | Backed up objects.                                           |
+| CreateTime           | Task submission time.                                        |
+| SnapshotFinishedTime | Snapshot completion time.                                    |
+| UploadFinishedTime   | Snapshot upload completion time.                             |
+| FinishedTime         | Task completion Time.                                        |
+| UnfinishedTasks      | Unfinished subtask IDs in the SNAPSHOTING and UPLOADING phases. |
+| TaskErrMsg           | Error messages.                                              |
+| Status               | Status information.                                          |
+| Timeout              | Task timeout. Unit: second.                                  |
+
+## Examples
+
+Example 1: Views the last BACKUP task in the database `example_db`.
+
+```SQL
 SHOW BACKUP FROM example_db;
 ```

@@ -1,19 +1,32 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -78,12 +91,26 @@ public class CTASAnalyzer {
             }
         }
 
+        boolean isPKTable = false;
+        KeysDesc keysDesc = createTableStmt.getKeysDesc();
+        if (keysDesc != null) {
+            KeysType keysType = keysDesc.getKeysType();
+            if (keysType == KeysType.PRIMARY_KEYS) {
+                isPKTable = true;
+            } else if (keysType != KeysType.DUP_KEYS) {
+                throw new SemanticException("CTAS does not support %s table", keysDesc.getKeysType().toString());
+            }
+        }
+
         for (int i = 0; i < allFields.size(); i++) {
-            Type type = transformType(allFields.get(i).getType());
-            ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                    null, true, ColumnDef.DefaultValueDef.NOT_SET, "");
-            createTableStmt.addColumnDef(columnDef);
+            Type type = AnalyzerUtils.transformType(allFields.get(i).getType());
             Expr originExpression = allFields.get(i).getOriginExpression();
+            ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
+                        null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+            if (isPKTable) {
+                columnDef.setAllowNull(false);
+            }
+            createTableStmt.addColumnDef(columnDef);
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
                 // lateral json_each(parse_json(c1)) will return null
@@ -128,55 +155,18 @@ public class CTASAnalyzer {
                 }
             }
 
-            int defaultBucket = 10;
+            int defaultBucket = Config.default_bucket_num;
             DistributionDesc distributionDesc =
                     new HashDistributionDesc(defaultBucket, Lists.newArrayList(defaultColumnName));
             createTableStmt.setDistributionDesc(distributionDesc);
+
+
         }
 
         Analyzer.analyze(createTableStmt, session);
 
         InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
         insertStmt.setQueryStatement(queryStatement);
-    }
-
-    // For char and varchar types, use the inferred length if the length can be inferred,
-    // otherwise (include null type) use the longest varchar value.
-    // For double and float types, since they may be selected as key columns,
-    // the key column must be an exact value, so we unified into a default decimal type.
-    private static Type transformType(Type srcType) {
-        Type newType;
-        if (srcType.isScalarType()) {
-            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
-                    PrimitiveType.CHAR == srcType.getPrimitiveType() ||
-                    PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                int len = ScalarType.MAX_VARCHAR_LENGTH;
-                if (srcType instanceof ScalarType) {
-                    ScalarType scalarType = (ScalarType) srcType;
-                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
-                        len = scalarType.getLength();
-                    }
-                }
-                ScalarType stringType = ScalarType.createVarcharType(len);
-                stringType.setAssignedStrLenInColDefinition();
-                newType = stringType;
-            } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
-                    PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
-                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
-            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
-                    PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
-                    PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
-                newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
-                        srcType.getPrecision(), srcType.getDecimalDigits());
-            } else {
-                newType = ScalarType.createType(srcType.getPrimitiveType());
-            }
-        } else if (srcType.isArrayType()) {
-            newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
-        } else {
-            throw new SemanticException("Unsupported CTAS transform type: %s", srcType.getPrimitiveType());
-        }
-        return newType;
     }
 
 }

@@ -22,8 +22,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -34,15 +32,10 @@ public class VariableExprTest {
     public void testNormal() throws Exception {
         VariableExpr desc = new VariableExpr("version_comment");
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
-        Assert.assertEquals("@@SESSION.version_comment", desc.toSql());
+        Assert.assertEquals(SetType.SESSION, desc.getSetType());
         Assert.assertEquals("version_comment", desc.getName());
         Assert.assertEquals(ScalarType.createType(PrimitiveType.VARCHAR), desc.getType());
         Assert.assertEquals(SetType.SESSION, desc.getSetType());
-
-        TExprNode tNode = new TExprNode();
-        desc.toThrift(tNode);
-        Assert.assertEquals(tNode.node_type, TExprNodeType.STRING_LITERAL);
-        Assert.assertNotNull(tNode.string_literal);
     }
 
     @Test(expected = SemanticException.class)

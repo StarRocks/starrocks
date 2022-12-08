@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.iceberg;
 
@@ -10,8 +23,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
-import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_LEGACY;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
@@ -28,11 +41,11 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
-            if (null == properties.get(ICEBERG_CATALOG) || properties.get(ICEBERG_CATALOG).length() == 0) {
-                properties.put(ICEBERG_CATALOG, properties.get(ICEBERG_CATALOG_LEGACY));
+            if (null == properties.get(ICEBERG_CATALOG_TYPE) || properties.get(ICEBERG_CATALOG_TYPE).length() == 0) {
+                properties.put(ICEBERG_CATALOG_TYPE, properties.get(ICEBERG_CATALOG_LEGACY));
             }
             try {
-                metadata = new IcebergMetadata(properties);
+                metadata = new IcebergMetadata(catalogName, properties);
             } catch (Exception e) {
                 LOG.error("Failed to create iceberg metadata on [catalog : {}]", catalogName, e);
                 throw e;

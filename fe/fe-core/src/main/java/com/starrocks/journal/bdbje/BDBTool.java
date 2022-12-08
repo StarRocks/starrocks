@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/journal/bdbje/BDBTool.java
 
@@ -35,6 +48,8 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.meta.MetaContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -45,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 
 public class BDBTool {
+    private static final Logger LOG = LogManager.getLogger(BDBTool.class);
 
     private String metaPath;
     private BDBToolOptions options;
@@ -64,7 +80,7 @@ public class BDBTool {
         try {
             env = new Environment(new File(metaPath), envConfig);
         } catch (DatabaseException e) {
-            e.printStackTrace();
+            LOG.warn(e);
             System.err.println("Failed to open BDBJE env: " + metaPath + ". exit");
             return false;
         }
@@ -133,7 +149,7 @@ public class BDBTool {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            LOG.warn(e);
             System.err.println("Failed to run bdb tools");
             return false;
         }
@@ -155,7 +171,7 @@ public class BDBTool {
             try {
                 entity.readFields(in);
             } catch (Exception e) {
-                e.printStackTrace();
+                LOG.warn(e);
                 System.err.println("Fail to read journal entity for key: " + key + ". reason: " + e.getMessage());
                 System.exit(-1);
             }

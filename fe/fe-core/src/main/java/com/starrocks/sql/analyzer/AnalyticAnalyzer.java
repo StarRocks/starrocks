@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -51,11 +64,15 @@ public class AnalyticAnalyzer {
 
         for (Expr e : analyticExpr.getFnCall().getChildren()) {
             if (e.getType().isBitmapType() &&
-                    !analyticFunction.getFn().functionName().equalsIgnoreCase(FunctionSet.BITMAP_UNION_COUNT)) {
-                throw new SemanticException("bitmap type could only used for bitmap_union_count window function");
+                    !analyticFunction.getFn().functionName().equals(FunctionSet.BITMAP_UNION_COUNT) &&
+                    !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
+                    !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
+                throw new SemanticException("bitmap type could only used for bitmap_union_count/lead/lag window function");
             } else if (e.getType().isHllType() &&
-                    !analyticFunction.getFn().functionName().equalsIgnoreCase(AnalyticExpr.HLL_UNION_AGG)) {
-                throw new SemanticException("hll type could only used for hll_union_agg window function");
+                    !analyticFunction.getFn().functionName().equals(AnalyticExpr.HLL_UNION_AGG) &&
+                    !analyticFunction.getFn().functionName().equals(FunctionSet.LEAD) &&
+                    !analyticFunction.getFn().functionName().equals(FunctionSet.LAG)) {
+                throw new SemanticException("hll type could only used for hll_union_agg/lead/lag window function");
             } else if (e.getType().isPercentile()) {
                 throw new SemanticException("window functions don't support percentile type");
             }

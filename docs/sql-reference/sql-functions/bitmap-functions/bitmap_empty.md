@@ -1,12 +1,6 @@
 # bitmap_empty
 
-## description
-
-### Syntax
-
-```Haskell
-BITMAP BITMAP_EMPTY()
-```
+## Description
 
 Returns an empty bitmap. It is mainly used to fill in the default value during insert or stream load. For example:
 
@@ -16,7 +10,13 @@ cat data | curl --location-trusted -u user:passwd -T - \
     http://host:8410/api/test/testDb/_stream_load
 ```
 
-## example
+## Syntax
+
+```Haskell
+BITMAP BITMAP_EMPTY()
+```
+
+## Examples
 
 ```Plain Text
 MySQL > select bitmap_count(bitmap_empty());

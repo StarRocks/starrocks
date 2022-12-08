@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/row_source_mask.h"
+
+#include <utility>
 
 #include "common/config.h"
 #include "common/logging.h"
@@ -10,10 +24,10 @@
 
 namespace starrocks::vectorized {
 
-RowSourceMaskBuffer::RowSourceMaskBuffer(int64_t tablet_id, const std::string& storage_root_path)
-        : _mask_column(std::move(UInt16Column::create_mutable())),
+RowSourceMaskBuffer::RowSourceMaskBuffer(int64_t tablet_id, std::string storage_root_path)
+        : _mask_column(UInt16Column::create_mutable()),
           _tablet_id(tablet_id),
-          _storage_root_path(storage_root_path) {}
+          _storage_root_path(std::move(storage_root_path)) {}
 
 RowSourceMaskBuffer::~RowSourceMaskBuffer() {
     _reset_mask_column();

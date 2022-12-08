@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <mutex>
@@ -35,48 +48,33 @@ static const char* compaction_state_to_string(CompactionTaskState state) {
 }
 
 struct CompactionTaskInfo {
-    CompactionTaskInfo(CompactionAlgorithm algo)
-            : algorithm(algo),
-              state(COMPACTION_INIT),
-              task_id(0),
-              elapsed_time(0),
-              start_time(0),
-              end_time(0),
-              output_segments_num(0),
-              output_rowset_size(0),
-              merged_rows(0),
-              filtered_rows(0),
-              output_num_rows(0),
-              column_group_size(0),
-              total_output_num_rows(0),
-              total_merged_rows(0),
-              total_del_filtered_rows(0) {}
+    CompactionTaskInfo(CompactionAlgorithm algo) : algorithm(algo) {}
     CompactionAlgorithm algorithm;
-    CompactionTaskState state;
-    uint64_t task_id;
+    CompactionTaskState state{COMPACTION_INIT};
+    uint64_t task_id{0};
     Version output_version;
-    uint64_t elapsed_time;
+    uint64_t elapsed_time{0};
     int64_t tablet_id;
     double compaction_score;
-    int64_t start_time;
-    int64_t end_time;
+    int64_t start_time{0};
+    int64_t end_time{0};
     size_t input_rows_num;
     uint32_t input_rowsets_num;
     size_t input_rowsets_size;
     size_t input_segments_num;
     uint32_t segment_iterator_num;
-    uint32_t output_segments_num;
-    uint32_t output_rowset_size;
-    size_t merged_rows;
-    size_t filtered_rows;
-    size_t output_num_rows;
+    uint32_t output_segments_num{0};
+    uint32_t output_rowset_size{0};
+    size_t merged_rows{0};
+    size_t filtered_rows{0};
+    size_t output_num_rows{0};
     CompactionType compaction_type;
 
     // for vertical compaction
-    size_t column_group_size;
-    size_t total_output_num_rows;
-    size_t total_merged_rows;
-    size_t total_del_filtered_rows;
+    size_t column_group_size{0};
+    size_t total_output_num_rows{0};
+    size_t total_merged_rows{0};
+    size_t total_del_filtered_rows{0};
 
     // return [0-100] to indicate progress
     int get_progress() const {
@@ -102,7 +100,7 @@ struct CompactionTaskInfo {
         ss << ", compaction score:" << compaction_score;
         ss << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(algorithm);
         ss << ", state:" << compaction_state_to_string(state);
-        ss << ", compaction_type:" << compaction_type;
+        ss << ", compaction_type:" << starrocks::to_string(compaction_type);
         ss << ", output_version:" << output_version;
         ss << ", start_time:" << ToStringFromUnixMillis(start_time);
         ss << ", end_time:" << ToStringFromUnixMillis(end_time);
@@ -127,11 +125,10 @@ struct CompactionTaskInfo {
 
 class CompactionTask : public BackgroundTask {
 public:
-    CompactionTask(CompactionAlgorithm algorithm)
-            : _task_info(algorithm), _runtime_profile("compaction"), _mem_tracker(nullptr) {
+    CompactionTask(CompactionAlgorithm algorithm) : _task_info(algorithm), _runtime_profile("compaction") {
         _watch.start();
     }
-    virtual ~CompactionTask();
+    ~CompactionTask() override;
 
     void run() override;
 
@@ -143,6 +140,8 @@ public:
     }
 
     void set_compaction_task_state(CompactionTaskState state) { _task_info.state = state; }
+
+    CompactionTaskState compaction_task_state() { return _task_info.state; }
 
     bool is_compaction_finished() const {
         return _task_info.state == COMPACTION_FAILED || _task_info.state == COMPACTION_SUCCESS;
@@ -226,9 +225,9 @@ protected:
     Status _validate_compaction(const Statistics& stats) {
         // check row number
         DCHECK(_output_rowset) << "_output_rowset is null";
-        LOG(INFO) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
-                  << ", output rowset rows:" << _output_rowset->num_rows() << ", merged_rows:" << stats.merged_rows
-                  << ", filtered_rows:" << stats.filtered_rows;
+        VLOG(1) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
+                << ", output rowset rows:" << _output_rowset->num_rows() << ", merged_rows:" << stats.merged_rows
+                << ", filtered_rows:" << stats.filtered_rows;
         if (_task_info.input_rows_num != _output_rowset->num_rows() + stats.merged_rows + stats.filtered_rows) {
             LOG(WARNING) << "row_num does not match between cumulative input and output! "
                          << "input_row_num=" << _task_info.input_rows_num << ", merged_row_num=" << stats.merged_rows
@@ -252,14 +251,14 @@ protected:
         _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
         _tablet->save_meta();
         Rowset::close_rowsets(_input_rowsets);
-        LOG(INFO) << "commit compaction. output version:" << _task_info.output_version
-                  << ", output rowset version:" << _output_rowset->version()
-                  << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();
+        VLOG(1) << "commit compaction. output version:" << _task_info.output_version
+                << ", output rowset version:" << _output_rowset->version()
+                << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();
     }
 
     void _success_callback();
 
-    void _failure_callback();
+    void _failure_callback(const Status& st);
 
 protected:
     CompactionTaskInfo _task_info;
@@ -269,8 +268,8 @@ protected:
     RowsetSharedPtr _output_rowset;
     std::unique_lock<std::mutex> _compaction_lock;
     MonotonicStopWatch _watch;
-    MemTracker* _mem_tracker;
-    CompactionScheduler* _scheduler;
+    MemTracker* _mem_tracker{nullptr};
+    CompactionScheduler* _scheduler = nullptr;
 };
 
 } // namespace starrocks

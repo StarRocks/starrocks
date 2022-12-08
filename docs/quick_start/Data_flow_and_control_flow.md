@@ -52,8 +52,8 @@ The updating process of metadata is as follows:
 * FE checks the validity of the request and then initiates a synchronization command to the BE. In other words, the FE first determines whether the column type of the table is valid, calculates the placement position of the tablet copy, and then requests the BE to create a copy.
 * If the BE executes successfully, the memory catalog will be modified. That is, the information of the table, partition, index, and tablet copy will be saved in the catalog.
 * FE appends and materializes this operation to `EditLog`.
-* FE synchronizes the new operation of `EditLog` to the FE follower node through the replication protocol.
-* After receiving the newly added operation item, the FE follower node will play it in sequence on its own catalog to ensure it catches up with the leader FE node.
+* FE synchronizes the new operation of `EditLog` to follower FEs through the replication protocol.
+* After receiving the newly added operation item, follower FEs will play back it in sequence on its own catalog to ensure it catches up with the leader FE node.
 
 If any part of the execution fails, this metadata modification will fail.
 ![meta_change](../assets/2.4.3-1.png)

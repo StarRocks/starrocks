@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -213,11 +226,12 @@ public class SetTest extends PlanTestBase {
     public void testSetOpCast() throws Exception {
         String sql = "select * from t0 union all (select * from t1 union all select k1,k7,k8 from  baseall)";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains(
-                "  0:UNION\n" +
-                        "  |  child exprs:\n" +
-                        "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
-                        "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]"));
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [26, BIGINT, true] | [27, VARCHAR(20), true] | [28, DOUBLE, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
+                "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]");
         Assert.assertTrue(plan.contains(
                 "  |  19 <-> [19: k7, VARCHAR, true]\n" +
                         "  |  20 <-> [20: k8, DOUBLE, true]\n" +
@@ -226,7 +240,9 @@ public class SetTest extends PlanTestBase {
         sql = "select * from t0 union all (select cast(v4 as int), v5,v6 " +
                 "from t1 except select cast(v7 as int), v8, v9 from t2)";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [16, BIGINT, true] | [17, BIGINT, true] | [18, BIGINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                 "  |      [15, BIGINT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
@@ -253,42 +269,52 @@ public class SetTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:EXCEPT\n" +
+                "  |  output exprs:\n" +
+                "  |      [12, INT, true] | [13, BIGINT, true] | [14, BIGINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [7, INT, true] | [5, BIGINT, true] | [6, BIGINT, true]\n" +
-                "  |      [11, INT, true] | [9, BIGINT, true] | [10, BIGINT, true]"));
+                "  |      [11, INT, true] | [9, BIGINT, true] | [10, BIGINT, true]");
     }
 
     @Test
     public void testUnionNullConstant() throws Exception {
         String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [5, NULL_TYPE, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [2, NULL_TYPE, true]\n" +
-                "  |      [4, NULL_TYPE, true]"));
+                "  |      [4, NULL_TYPE, true]");
 
         sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [6, TINYINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [2, TINYINT, false]\n" +
-                "  |      [5, TINYINT, true]"));
+                "  |      [5, TINYINT, true]");
 
         sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("0:UNION\n" +
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [3, DECIMAL64(12,2), true]\n" +
-                "  |      [6, DECIMAL64(12,2), true]"));
+                "  |      [6, DECIMAL64(12,2), true]\n");
 
         sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("0:UNION\n" +
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [3, DECIMAL64(12,2), true]\n" +
-                "  |      [6, DECIMAL64(12,2), true]"));
+                "  |      [6, DECIMAL64(12,2), true]");
     }
 
     @Test
@@ -482,6 +508,8 @@ public class SetTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [9, TINYINT, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [4, TINYINT, true]\n" +
                 "  |      [8, TINYINT, true]\n" +

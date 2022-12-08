@@ -1,9 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "column/nullable_column.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
+
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
@@ -306,7 +320,7 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
     c0->append_datum({});
     c0->append_datum(8);
     c0->append_datum({});
-    auto correct = [&](Datum rhs_value, int sort_order, int null_first) {
+    auto correct = [&](const Datum& rhs_value, int sort_order, int null_first) {
         CompareVector res;
         auto rhs_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
         rhs_column->append_datum(rhs_value);
@@ -322,12 +336,12 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
     };
     auto execute = [&](Datum rhs_value, int sort_order, int null_first) {
         CompareVector cmp_result(c0->size(), 0);
-        compare_column(c0, cmp_result, rhs_value, SortDesc(sort_order, null_first));
+        compare_column(c0, cmp_result, std::move(rhs_value), SortDesc(sort_order, null_first));
         return cmp_result;
     };
 
     std::vector<Datum> rhs_values = {{0}, {1}, {3}, {4}, {7}, {10}, {}};
-    for (Datum datum : rhs_values) {
+    for (const Datum& datum : rhs_values) {
         std::string datum_str = datum.is_null() ? "NULL" : std::to_string(datum.get_int32());
         for (int sort_order : std::vector<int>{1, -1}) {
             for (int null_first : std::vector<int>{1, -1}) {

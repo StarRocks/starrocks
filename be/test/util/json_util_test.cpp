@@ -25,8 +25,8 @@ namespace starrocks {
 
 class JsonUtilTest : public testing::Test {
 public:
-    JsonUtilTest() {}
-    virtual ~JsonUtilTest() {}
+    JsonUtilTest() = default;
+    ~JsonUtilTest() override = default;
 };
 
 TEST_F(JsonUtilTest, success) {

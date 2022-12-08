@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.ast.LoadStmt;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -74,6 +75,13 @@ public class BrokerDesc implements Writable {
         return properties;
     }
 
+    public String getMergeConditionStr() {
+        if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
+            return properties.get(LoadStmt.MERGE_CONDITION);
+        }
+        return "";
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, name);
@@ -101,7 +109,7 @@ public class BrokerDesc implements Writable {
         return desc;
     }
 
-    public String toSql() {
+    public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("WITH BROKER ").append(name);
         if (properties != null && !properties.isEmpty()) {

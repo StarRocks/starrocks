@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/jsonpath.h"
 
@@ -6,6 +18,7 @@
 
 #include <algorithm>
 #include <boost/tokenizer.hpp>
+#include <memory>
 
 #include "column/column_viewer.h"
 #include "common/status.h"
@@ -67,7 +80,7 @@ void ArraySelectorSlice::iterate(vpack::Slice array_slice, std::function<void(vp
 // 3. arr[1:3] select slice of elements
 Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelector>* output) {
     if (index.empty()) {
-        output->reset(new ArraySelectorNone());
+        *output = std::make_unique<ArraySelectorNone>();
         return Status::OK();
     } else if (ArraySelectorSingle::match(index)) {
         StringParser::ParseResult result;
@@ -75,10 +88,10 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
         if (result != StringParser::PARSE_SUCCESS) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
         }
-        output->reset(new ArraySelectorSingle(index_int));
+        *output = std::make_unique<ArraySelectorSingle>(index_int);
         return Status::OK();
     } else if (ArraySelectorWildcard::match(index)) {
-        output->reset(new ArraySelectorWildcard());
+        *output = std::make_unique<ArraySelectorWildcard>();
         return Status::OK();
     } else if (ArraySelectorSlice::match(index)) {
         std::vector<std::string> slices = strings::Split(index, ":");
@@ -96,7 +109,7 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
         }
 
-        output->reset(new ArraySelectorSlice(left, right));
+        *output = std::make_unique<ArraySelectorSlice>(left, right);
         return Status::OK();
     }
 

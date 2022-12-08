@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/catalog/CreateTableTest.java
 
@@ -80,6 +93,12 @@ public class CreateTableTest {
                 () -> createTable("create table test.lp_tbl1\n" + "(k1 bigint, k2 varchar(16), dt varchar(10))\n" +
                         "duplicate key(k1)\n"
                         + "partition by list(k2,dt)\n" + "(partition p1 values in ((\"2022-04-01\", \"shanghai\")) )\n"
+                        + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable("create table test.lp_tbl2\n" + "(k1 bigint, k2 varchar(16), dt varchar(10))\n" +
+                        "duplicate key(k1)\n"
+                        + "partition by range(k1)\n" + "(partition p1 values [(\"1\"), (MAXVALUE)) )\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
         ExceptionChecker.expectThrowsNoException(
@@ -496,27 +515,127 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testNameWithUnderscore() throws Exception {
-        // table name with one underscore is fine
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
-        String sql = "CREATE TABLE test._txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
-                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
-        starRocksAssert.withTable(sql);
-        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
-                .getTable("_txx");
-        Assert.assertEquals(1, table.getColumns().size());
-        Assert.assertNotNull(
-                table.getColumn("_k1"));
+    public void testCreateBinaryTable() {
+        // duplicate table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl\n" +
+                        "(k1 int, j varbinary(10))\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl1\n" +
+                        "(k1 int, j varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl2\n" +
+                        "(k1 int, j varbinary(1), j1 varbinary(10), j2 varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        // default table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl3\n"
+                        + "(k1 int, k2 varbinary)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
 
-        // table name with two underscore is not allowed
-        sql = "CREATE TABLE test.__txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
-                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
-        try {
-            starRocksAssert.withTable(sql);
-            Assert.fail();
-        } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Incorrect table name"));
-        }
+        // unique key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl4 \n" +
+                "(k1 int(40), j varbinary, j1 varbinary(1), j2 varbinary(10))\n" +
+                "unique key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // primary key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl5 \n" +
+                "(k1 int(40), j varbinary, j1 varbinary, j2 varbinary(10))\n" +
+                "primary key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // failed
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Invalid data type of key column 'k2': 'VARBINARY'",
+                () -> createTable("create table test.binary_tbl0\n"
+                        + "(k1 int, k2 varbinary)\n"
+                        + "duplicate key(k1, k2)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "VARBINARY(10) column can not be distribution column",
+                () -> createTable("create table test.binary_tbl0 \n"
+                        + "(k1 int, k2 varbinary(10) )\n"
+                        + "duplicate key(k1)\n"
+                        + "distributed by hash(k2) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Column[j] type[VARBINARY] cannot be a range partition key",
+                () -> createTable("create table test.binary_tbl0 \n" +
+                        "(k1 int(40), j varbinary, j1 varbinary(20), j2 varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1, j)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    /**
+     * Disable varbinary on unique/primary/aggregate key
+     */
+    @Test
+    public void testAlterBinaryTable() {
+        // use json as bloomfilter
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_binary_bf(\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20),\n" +
+                        "k3 VARBINARY\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid bloom filter column 'k3': unsupported type VARBINARY",
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_bf set (\"bloom_filter_columns\"= \"k3\");"));
+
+        // Modify column in unique key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_binary_unique_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "UNIQUE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        // Add column in unique key
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_unique_key ADD COLUMN k3 VARBINARY(12)"));
+
+        // Add column in primary key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_binary_primary_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 INT\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_primary_key ADD COLUMN k3 VARBINARY(21)"));
     }
 }

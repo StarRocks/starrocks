@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
@@ -12,6 +25,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -25,13 +39,12 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TWriteQuorumType;
 
 import java.util.List;
 
 public class DeletePlanner {
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
-        if (!deleteStatement.supportNewPlanner()) {
+        if (deleteStatement.shouldHandledByDeleteHandler()) {
             // executor will use DeleteHandler to handle delete statement
             // so just return empty plan here
             return null;
@@ -43,9 +56,7 @@ public class DeletePlanner {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline =
-                isEnablePipeline && DataSink.canTableSinkUsePipeline(deleteStatement.getTable()) &&
-                        logicalPlan.canUsePipeline();
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(deleteStatement.getTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         try {
             if (forceDisablePipeline) {
@@ -88,14 +99,22 @@ public class DeletePlanner {
             for (Partition partition : table.getPartitions()) {
                 partitionIds.add(partition.getId());
             }
-            TWriteQuorumType writeQuorum = table.writeQuorum();
-            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, writeQuorum);
+            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
+                    table.enableReplicatedStorage());
             execPlan.getFragments().get(0).setSink(dataSink);
-            // At present, we only support dop=1 for olap table sink.
-            // because tablet writing needs to know the number of senders in advance
-            // and guaranteed order of data writing
-            // It can be parallel only in some scenes, for easy use 1 dop now.
-            execPlan.getFragments().get(0).setPipelineDop(1);
+            if (canUsePipeline) {
+                PlanFragment sinkFragment = execPlan.getFragments().get(0);
+                if (ConnectContext.get().getSessionVariable().getPipelineSinkDop() <= 0) {
+                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                } else {
+                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getPipelineSinkDop());
+                }
+                sinkFragment.setHasOlapTableSink();
+                sinkFragment.setForceSetTableSinkDop();
+                sinkFragment.setForceAssignScanRangesPerDriverSeq();
+            } else {
+                execPlan.getFragments().get(0).setPipelineDop(1);
+            }
             return execPlan;
         } finally {
             if (forceDisablePipeline) {

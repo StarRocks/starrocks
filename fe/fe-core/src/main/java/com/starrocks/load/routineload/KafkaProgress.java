@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/load/routineload/KafkaProgress.java
 
@@ -124,17 +137,18 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     // modify the partition offset of this progress.
-    // throw exception is the specified partition does not exist in progress.
+    // all partitions are validated by the caller
     public void modifyOffset(List<Pair<Integer, Long>> kafkaPartitionOffsets) throws DdlException {
-        // kafka progress will not initialized & update if current role is follower
-        boolean notInitialized = partitionIdToOffset.isEmpty();
-        for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
-            if (!notInitialized && !partitionIdToOffset.containsKey(pair.first)) {
-                throw new DdlException("The specified partition " + pair.first + " is not in the consumed partitions");
-            }
-        }
         for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
             partitionIdToOffset.put(pair.first, pair.second);
+        }
+        // update kafkaPartitionOffsets as well, so that the current partitonIdToOffset can be completely persisted
+        for (Integer partitionId : partitionIdToOffset.keySet()) {
+            Pair<Integer, Long> pair = new Pair<>(partitionId, partitionIdToOffset.get(partitionId));
+            if (!kafkaPartitionOffsets.contains(pair)) {
+                LOG.info("add {} to kafkaPartitionOffsets {}", pair, kafkaPartitionOffsets);
+                kafkaPartitionOffsets.add(pair);
+            }
         }
     }
 

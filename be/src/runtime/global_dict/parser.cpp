@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "runtime/global_dict/parser.h"
 
@@ -49,7 +61,7 @@ public:
         }
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         size_t num_rows = ptr->num_rows();
         if (_always_null) {
             return ColumnHelper::create_const_null_column(num_rows);
@@ -207,8 +219,7 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
         // no-null value
         std::sort(values.begin(), values.end(), Slice::Comparator());
         int sorted_id = 1;
-        for (int i = 0; i < values.size(); ++i) {
-            auto slice = values[i];
+        for (auto slice : values) {
             result_map[slice] = sorted_id;
             rresult_map[sorted_id++] = slice;
         }
@@ -240,12 +251,11 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
 Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id) {
     // call rewrite for each DictMappingExpr
     if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
-        f->rewrite([&]() -> StatusOr<Expr*> {
+        return f->rewrite([&]() -> StatusOr<Expr*> {
             auto* dict_ctx_handle = _runtime_state->obj_pool()->add(new DictOptimizeContext());
             RETURN_IF_ERROR(_eval_and_rewrite(ctx, f, dict_ctx_handle, slot_id));
             return _runtime_state->obj_pool()->add(new DictFuncExpr(*f, dict_ctx_handle));
         });
-        return Status::OK();
     }
 
     for (auto child : expr->children()) {
@@ -288,11 +298,11 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
     const auto& global_dict = runtime_state->get_query_global_dict_map();
     if (global_dict.empty()) return;
 
-    for (size_t i = 0; i < slot_descs->size(); ++i) {
-        if (global_dict.count((*slot_descs)[i]->id()) && (*slot_descs)[i]->type().type == LowCardDictType) {
-            SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*(*slot_descs)[i]));
+    for (auto& slot_desc : *slot_descs) {
+        if (global_dict.count(slot_desc->id()) && slot_desc->type().type == LowCardDictType) {
+            SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*slot_desc));
             newSlot->type().type = TYPE_VARCHAR;
-            (*slot_descs)[i] = newSlot;
+            slot_desc = newSlot;
         }
     }
 }

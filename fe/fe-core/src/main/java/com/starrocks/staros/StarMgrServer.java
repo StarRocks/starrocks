@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.staros;
 
@@ -9,8 +22,10 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.persist.Storage;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -117,9 +132,17 @@ public class StarMgrServer {
         com.staros.util.Config.S3_AK = Config.starmgr_s3_ak;
         com.staros.util.Config.S3_SK = Config.starmgr_s3_sk;
 
+        com.staros.util.Config.HDFS_URL = Config.hdfs_url;
+
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
         starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);
+
+        StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        if (starOsAgent != null && !starOsAgent.init(starMgrServer)) {
+            LOG.error("init star os agent failed.");
+            System.exit(-1);
+        }
 
         // load meta
         loadImage(imageDir);

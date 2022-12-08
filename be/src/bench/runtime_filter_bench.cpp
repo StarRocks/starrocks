@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <benchmark/benchmark.h>
 #include <glog/logging.h>
@@ -13,8 +25,7 @@
 #include "simd/simd.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 //   --------------------------------------------------------------------------------------------------------
 //   Benchmark                                              Time             CPU   Iterations UserCounters...
@@ -49,6 +60,7 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
     running_ctx.compatibility = true;
 
     std::vector<Column*> column_ptrs;
+    column_ptrs.reserve(columns.size());
     for (auto& column : columns) {
         column_ptrs.push_back(column.get());
     }
@@ -106,7 +118,11 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
         ASSERT_EQ(true_count, num_rows);
         total_evalute_time += MonotonicMillis() - t0;
     }
-    state.counters["evalute_time(ms)"] = total_evalute_time / iterate_times / num_column;
+    if (!num_column) {
+        state.counters["evalute_time(ms)"] = 0;
+    } else {
+        state.counters["evalute_time(ms)"] = total_evalute_time / iterate_times / num_column;
+    }
     state.PauseTiming();
 }
 
@@ -148,7 +164,6 @@ static void Benchmark_RuntimeFilter_Eval(benchmark::State& state) {
 
 BENCHMARK(Benchmark_RuntimeFilter_Eval)->Apply(RuntimeFilterArg1);
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 BENCHMARK_MAIN();

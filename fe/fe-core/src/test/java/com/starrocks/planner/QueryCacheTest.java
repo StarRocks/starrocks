@@ -1,10 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -12,13 +27,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -30,10 +44,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
+
 public class QueryCacheTest {
     private static ConnectContext ctx;
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -96,7 +110,7 @@ public class QueryCacheTest {
                 "DUPLICATE KEY(`c1`, `c2`)\n" +
                 "COMMENT \"OLAP\"\n" +
                 "PARTITION BY RANGE(c1) (\n" +
-                "  START (\"1\") END (\"100\") EVERY (1))\n" +
+                "  START (\"1\") END (\"100\") EVERY (10))\n" +
                 "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -368,6 +382,9 @@ public class QueryCacheTest {
         ctx.getSessionVariable().setEnableQueryCache(true);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .useDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
         starRocksAssert.withDatabase("qc_db").useDatabase("qc_db");
         starRocksAssert.withTable(createTbl0StmtStr);
         starRocksAssert.withTable(createTbl1StmtStr);
@@ -390,7 +407,7 @@ public class QueryCacheTest {
             Assert.fail();
         }
         Optional<PlanFragment> optFragment = plan.getFragments().stream()
-                .filter(f -> f.getCachePlanNodeId() != null && f.getCachePlanNodeId().isValid()).findFirst();
+                .filter(f -> f.getCacheParam() != null).findFirst();
         if (!optFragment.isPresent()) {
             System.out.println("wrong query:" + sql);
             try {
@@ -405,9 +422,11 @@ public class QueryCacheTest {
     private void testHelper(List<String> queryList) {
         List<PlanFragment> frags = queryList.stream()
                 .map(q -> getCachedFragment(q).get()).collect(Collectors.toList());
-        List<ByteBuffer> digests = frags.stream().map(PlanFragment::getDigest).collect(Collectors.toList());
+        List<ByteBuffer> digests =
+                frags.stream().map(f -> ByteBuffer.wrap(f.getCacheParam().getDigest())).collect(Collectors.toList());
         List<Set<Integer>> slotRemappings =
-                frags.stream().map(f -> new HashSet<>(f.getSlotRemapping().values())).collect(Collectors.toList());
+                frags.stream().map(f -> new HashSet<>(f.getCacheParam().getSlot_remapping().values()))
+                        .collect(Collectors.toList());
         ByteBuffer digest = digests.get(0);
         Set<Integer> slotRemapping = slotRemappings.get(0);
         Assert.assertTrue(digest != null && digest.array().length > 0);
@@ -521,7 +540,7 @@ public class QueryCacheTest {
             ctx.getSessionVariable().setNewPlanerAggStage(3);
             testNoGroupBy(agg, whereClauses);
         } finally {
-            ctx.getSessionVariable().setCboCteReuse(false);
+            ctx.getSessionVariable().setCboCteReuse(oldCboCteReuse);
         }
     }
 
@@ -793,28 +812,32 @@ public class QueryCacheTest {
     @Test
     public void testPartitionByMultiColumns() {
         List<String> queryList = Lists.newArrayList("select sum(v1) from t3");
-        Assert.assertTrue(queryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
+        Assert.assertTrue(queryList.stream().allMatch(q -> getCachedFragment(q).isPresent()));
     }
 
     @Test
     public void testDifferentDataModels() {
-        List<String> unCacheableQueryList = Lists.newArrayList(
+        List<String> NonMultiVersionCacheableQueryList = Lists.newArrayList(
                 "select sum(v1) from t4",
                 "select sum(v1) from t5",
                 "select sum(v1) from t6");
-        Assert.assertTrue(unCacheableQueryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
+        Assert.assertTrue(NonMultiVersionCacheableQueryList.stream().map(this::getCachedFragment)
+                .allMatch(f -> f.isPresent() && !f.get().getCacheParam().isCan_use_multiversion()));
+
         List<String> cachableQueryList = Lists.newArrayList(
-                "select sum(v1), count(distinct v2) from t7"
+                "select sum(v1), count(distinct v2) from t7",
+                "select sum(v1), count(distinct v2) from t1"
         );
-        Assert.assertTrue(cachableQueryList.stream().allMatch(q -> getCachedFragment(q).isPresent()));
+        Assert.assertTrue(cachableQueryList.stream().map(this::getCachedFragment)
+                .allMatch(f -> f.isPresent() && f.get().getCacheParam().isCan_use_multiversion()));
     }
 
     @Test
     public void testPredicateDecompositionFailure() {
         List<String> unCacheableQueryList = Lists.newArrayList(
-                "select sum(v1) from t1 where date_trunc('day', ts)='2022-01-02'",
-                "select sum(v1) from t1 where ts not in ('2022-01-03 00:00:00')",
-                "select sum(v1) from t1 where ts < '2022-01-03 00:00:00' or ts > '2022-01-10 00:00:00'"
+                "select sum(v1) from t1 where date_trunc('day', ts)='2022-01-02' and rand() > 0.5",
+                "select sum(v1) from t1 where ts not in ('2022-01-03 00:00:00') and sleep(4)>10",
+                "select sum(v1) from t1 where ts < '2022-01-03 00:00:00' or ts > '2022-01-10 00:00:00' and uuid()>10"
         );
         Assert.assertTrue(unCacheableQueryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
     }
@@ -824,7 +847,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts between '2022-01-02 12:55:00' and '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -856,7 +879,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts >= '2022-01-02 12:55:00' and ts < '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -884,11 +907,42 @@ public class QueryCacheTest {
     }
 
     @Test
+    public void testClosedOpenIntegerBinaryPredicateDecomposition() throws AnalysisException {
+        String q1 = "select sum(v1) from t2 where c1 >= 13 and c1 <= 69";
+        Optional<PlanFragment> optFrag = getCachedFragment(q1);
+        Assert.assertTrue(optFrag.isPresent());
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
+        Assert.assertTrue(!rangeMap.isEmpty());
+        List<String> expectRanges = Lists.newArrayList();
+        PartitionKey startKey;
+        PartitionKey endKey;
+        List<List<String>> rangeValues = Lists.newArrayList(
+                Lists.newArrayList("13", "21"),
+                Lists.newArrayList("21", "31"),
+                Lists.newArrayList("31", "41"),
+                Lists.newArrayList("41", "51"),
+                Lists.newArrayList("51", "61"),
+                Lists.newArrayList("61", "70")
+        );
+        for (List<String> rangeValue : rangeValues) {
+            startKey = new PartitionKey();
+            endKey = new PartitionKey();
+            startKey.pushColumn(new IntLiteral(rangeValue.get(0), Type.INT), PrimitiveType.INT);
+            endKey.pushColumn(new IntLiteral(rangeValue.get(1), Type.INT), PrimitiveType.INT);
+            expectRanges.add(Range.closedOpen(startKey, endKey).toString());
+        }
+        Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
+        for (String expectRange : expectRanges) {
+            Assert.assertTrue(rangeSet.contains(expectRange));
+        }
+    }
+
+    @Test
     public void testClosedClosedBetweenPredicateDecomposition() throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts >= '2022-01-02 12:55:00' and ts <= '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -920,7 +974,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts > '2022-01-02 12:55:00' and  ts <= '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -952,7 +1006,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts > '2022-01-02 12:55:00' and ts < '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -987,7 +1041,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts in ('2022-01-03 00:00:00')";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         PartitionKey startKey = new PartitionKey();
         startKey.pushColumn(new DateLiteral("2022-01-03 00:00:00", Type.DATETIME), PrimitiveType.DATETIME);
@@ -1001,9 +1055,8 @@ public class QueryCacheTest {
     public void testUnpartitionedTable() {
         String q1 = "select  distinct(tax) from t8 where dt between '2021-01-01' and '2021-01-31' and id=23 ;";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
-        Assert.assertFalse(optFrag.isPresent());
+        Assert.assertTrue(optFrag.isPresent());
     }
-
 
     private static String toHexString(byte[] bytes) {
         StringBuffer s = new StringBuffer(bytes.length * 2);
@@ -1034,16 +1087,110 @@ public class QueryCacheTest {
                 "/*Q14*/ SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC",
         };
 
-        Map<String,String> digests = new HashMap<String,String>();
-        for (String q: queries) {
+        Map<String, String> digests = new HashMap<String, String>();
+        for (String q : queries) {
             Optional<PlanFragment> optFrag = getCachedFragment(q);
             Assert.assertTrue(optFrag.isPresent());
-            String s = toHexString(optFrag.get().getDigest().array());
+            String s = toHexString(optFrag.get().getCacheParam().getDigest());
             if (digests.containsKey(s)) {
                 System.out.println(String.format("Conflicting digest:'%s',\nq1=%s\nq2=%s", s, q, digests.get(s)));
                 Assert.fail();
             }
-            digests.put(s,q);
+            digests.put(s, q);
+        }
+    }
+
+    @Test
+    public void testHotPartitions() {
+        ctx.getSessionVariable().setQueryCacheHotPartitionNum(3);
+        String queriesWithHotPartitions[] = {
+                "/*PRIMARY_KEYS*/ SELECT COUNT(*) FROM t4 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+                "/*UNIQUE_KEYS*/ SELECT COUNT(*) FROM t5 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+                "/*AGGREGATE_KEYS with replace*/ SELECT COUNT(*) FROM t6 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+        };
+
+        String queriesWithoutHotPartitions[] = {
+                "/*DUP_KEYS*/ SELECT COUNT(*) FROM t1 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+                "/*AGGREGATE_KEYS*/ SELECT COUNT(*) FROM t7 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+        };
+        Set<String> expectRanges = Sets.newHashSet(
+                "[types: [DATETIME]; keys: [2022-02-26 00:00:00]; ..types: [DATETIME]; keys: [2022-02-27 00:00:00]; )",
+                "[types: [DATETIME]; keys: [2022-02-27 00:00:00]; ..types: [DATETIME]; keys: [2022-02-28 00:00:00]; )",
+                "[types: [DATETIME]; keys: [2022-02-28 00:00:00]; ..types: [DATETIME]; keys: [2022-03-01 00:00:00]; )"
+        );
+
+        for (String q : queriesWithHotPartitions) {
+            Optional<PlanFragment> optFrag = getCachedFragment(q);
+            Assert.assertTrue(optFrag.isPresent());
+            Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
+            Assert.assertFalse(rangeMap.values().stream().anyMatch(expectRanges::contains));
+        }
+        for (String q : queriesWithoutHotPartitions) {
+            Optional<PlanFragment> optFrag = getCachedFragment(q);
+            Assert.assertTrue(optFrag.isPresent());
+            Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
+            List<String> matchedRanges =
+                    rangeMap.values().stream().filter(expectRanges::contains).collect(Collectors.toList());
+            Assert.assertEquals(matchedRanges.size(), expectRanges.size());
+        }
+    }
+
+    @Test
+    public void testQueryOnAggTableWithGroupByOrHavingClauseDependsOnAggColumn() {
+        String[] queries = new String[] {
+                "select v1, count(v2) from t7 group by v1",
+                "select count(v2) from t7 where concat('abc', cast(v1 + 10 as varchar)) like '%bc10'",
+                "select ts, count(v2) from t7 where v1 > 3 group by ts",
+                "select ts, count(v2) from t7 " +
+                        "where (case v1 % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL " +
+                        "group by ts",
+                "select count(v2) from t7 " +
+                        "where (case v1 % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL",
+                "select ts, count(v2) from t7 where v1 > 3 group by ts",
+                "select /*+ SET_VAR(new_planner_agg_stage='1')*/ " +
+                        "date_trunc('day', ts) as day, sum(v1) as sum_v1 " +
+                        "from t7 " +
+                        "where  " +
+                        "   ts >= '2022-01-01 00:00:00' and ts <= '2022-01-01 23:59:59' " +
+                        "   and c1 = 'abc' " +
+                        "group by day having sum_v1 > 10",
+        };
+        for (String query : queries) {
+            System.out.println(query);
+            Optional<PlanFragment> optFrag = getCachedFragment(query);
+            Assert.assertTrue(optFrag.isPresent());
+            Assert.assertFalse(optFrag.get().getCacheParam().isCan_use_multiversion());
+        }
+
+        String[] negativeQueries = new String[] {
+                "select ts, count(v2) from t7 group by ts",
+                "select count(v2) from t7 where date_trunc('day', ts) = '2022-01-13'",
+                "select ts, count(v2) from t7 where c1 like 'abc%' group by ts",
+                "select ts, count(v2) from t7 " +
+                        "where (case length(c1) % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL " +
+                        "group by ts",
+                "select count(v2) from t7 " +
+                        "where (case length(c1) % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL",
+                "select ts, count(v2) from t7 where length(c1) > 3 group by ts",
+                "select /*+ SET_VAR(new_planner_agg_stage='2')*/ " +
+                        "date_trunc('day', ts) as day, sum(v1) as sum_v1 " +
+                        "from t7 " +
+                        "where  " +
+                        "   ts >= '2022-01-01 00:00:00' and ts <= '2022-01-01 23:59:59' " +
+                        "   and c1 = 'abc' " +
+                        "group by day having sum_v1 > 10",
+                "select /*+ SET_VAR(new_planner_agg_stage='1')*/ " +
+                        "sqrt(cast(sum(v1) as double)) > 3.1415926 " +
+                        "from t7 " +
+                        "where  " +
+                        "   ts >= '2022-01-01 00:00:00' and ts <= '2022-01-01 23:59:59' " +
+                        "   and c1 = 'abc' ",
+        };
+        for (String query : negativeQueries) {
+            System.out.println(query);
+            Optional<PlanFragment> optFrag = getCachedFragment(query);
+            Assert.assertTrue(optFrag.isPresent());
+            Assert.assertTrue(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
     }
 }

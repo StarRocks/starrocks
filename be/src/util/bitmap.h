@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/bitmap.h
 
@@ -127,7 +140,7 @@ std::string BitmapToString(const uint8_t* bitmap, size_t num_bits);
 //   }
 class BitmapIterator {
 public:
-    BitmapIterator(const uint8_t* map, size_t num_bits) : offset_(0), num_bits_(num_bits), map_(map) {}
+    BitmapIterator(const uint8_t* map, size_t num_bits) : num_bits_(num_bits), map_(map) {}
 
     void Reset(const uint8_t* map, size_t num_bits) {
         offset_ = 0;
@@ -171,7 +184,7 @@ private:
     }
 
 private:
-    size_t offset_;
+    size_t offset_{0};
     size_t num_bits_;
     const uint8_t* map_;
 };

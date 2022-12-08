@@ -1,7 +1,20 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 # The format is:
 #   <function id> <name>, <return_type>, [<args>], <backend fn>,
@@ -36,10 +49,13 @@ vectorized_functions = [
 
     [10050, "sin", "DOUBLE", ["DOUBLE"], "MathFunctions::sin"],
     [10060, "asin", "DOUBLE", ["DOUBLE"], "MathFunctions::asin"],
+    [10061, "sinh", "DOUBLE", ["DOUBLE"], "MathFunctions::sinh"],
     [10070, "cos", "DOUBLE", ["DOUBLE"], "MathFunctions::cos"],
     [10080, "acos", "DOUBLE", ["DOUBLE"], "MathFunctions::acos"],
+    [10081, "cosh", "DOUBLE", ["DOUBLE"], "MathFunctions::cosh"],
     [10090, "tan", "DOUBLE", ["DOUBLE"], "MathFunctions::tan"],
     [10100, "atan", "DOUBLE", ["DOUBLE"], "MathFunctions::atan"],
+    [10101, "tanh", "DOUBLE", ["DOUBLE"], "MathFunctions::tanh"],
 
     [10110, "ceil", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10111, "ceiling", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
@@ -157,6 +173,7 @@ vectorized_functions = [
 
     [10312, "hex", "VARCHAR", ['BIGINT'], "StringFunctions::hex_int"],
     [10313, "hex", "VARCHAR", ['VARCHAR'], "StringFunctions::hex_string"],
+    [10313, "hex", "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
 
@@ -189,6 +206,24 @@ vectorized_functions = [
     [20042, 'bitnot', 'INT', ['INT'], "BitFunctions::bitNot<TYPE_INT>"],
     [20043, 'bitnot', 'BIGINT', ['BIGINT'], "BitFunctions::bitNot<TYPE_BIGINT>"],
     [20044, 'bitnot', 'LARGEINT', ['LARGEINT'], "BitFunctions::bitNot<TYPE_LARGEINT>"],
+
+    [20050, 'bit_shift_left', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_TINYINT>"],
+    [20051, 'bit_shift_left', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_SMALLINT>"],
+    [20052, 'bit_shift_left', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_INT>"],
+    [20053, 'bit_shift_left', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_BIGINT>"],
+    [20054, 'bit_shift_left', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_LARGEINT>"],
+
+    [20060, 'bit_shift_right', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_TINYINT>"],
+    [20061, 'bit_shift_right', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_SMALLINT>"],
+    [20062, 'bit_shift_right', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_INT>"],
+    [20063, 'bit_shift_right', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_BIGINT>"],
+    [20064, 'bit_shift_right', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_LARGEINT>"],
+
+    [20070, 'bit_shift_right_logical', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_TINYINT>"],
+    [20071, 'bit_shift_right_logical', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_SMALLINT>"],
+    [20072, 'bit_shift_right_logical', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_INT>"],
+    [20073, 'bit_shift_right_logical', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_BIGINT>"],
+    [20074, 'bit_shift_right_logical', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_LARGEINT>"],
 
     # 30xxx: string functions
     [30010, 'substr', 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
@@ -259,6 +294,7 @@ vectorized_functions = [
 
     [30410, 'parse_url', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::parse_url',
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
+    [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
 
     # 50xxx: timestamp functions
     [50008, 'year', 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
@@ -355,8 +391,8 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
-    [50370, 'time_slice', 'DATE', ['DATE', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
-    [50371, 'time_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50370, 'date_slice', 'DATE', ['DATE', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50371, 'date_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
 
@@ -457,10 +493,10 @@ vectorized_functions = [
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
     # hyperloglog function
-    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunction::hll_cardinality'],
-    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunction::hll_cardinality_from_string'],
-    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_hash'],
-    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunction::hll_empty'],
+    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunctions::hll_cardinality'],
+    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunctions::hll_cardinality_from_string'],
+    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_hash'],
+    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunctions::hll_empty'],
 
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
@@ -480,7 +516,9 @@ vectorized_functions = [
     [90600, 'bitmap_max', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
     [90700, 'bitmap_min', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
     [90800, 'base64_to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap', False],
+    [90801, 'bitmap_to_base64', 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64', False],
     [90900, 'array_to_bitmap', 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap', False],
+    [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
@@ -526,10 +564,10 @@ vectorized_functions = [
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
     [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
-    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
+    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
-    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
+    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
@@ -539,7 +577,7 @@ vectorized_functions = [
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64", False],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5", False],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum", False],
-    [120151, "md5sum_numeric", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum_numeric", False],
+    [120151, "md5sum_numeric", "LARGEINT", ["VARCHAR", "..."], "EncryptionFunctions::md5sum_numeric", False],
     [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close", False],
 
       # geo function
@@ -663,6 +701,7 @@ vectorized_functions = [
     [150119, 'array_sort', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_sort_decimalv2'],
     [150120, 'array_sort', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_sort_datetime'],
     [150121, 'array_sort', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_sort_date'],
+    [150122, 'array_sort', 'ARRAY_JSON',      ['ARRAY_JSON'],      'ArrayFunctions::array_sort_json'],
 
     [150130, 'reverse', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_reverse_boolean'],
     [150131, 'reverse', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_reverse_tinyint'],
@@ -676,6 +715,7 @@ vectorized_functions = [
     [150139, 'reverse', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_reverse_decimalv2'],
     [150140, 'reverse', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_reverse_datetime'],
     [150141, 'reverse', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_reverse_date'],
+    [150142, 'reverse', 'ARRAY_JSON',      ['ARRAY_JSON'],      'ArrayFunctions::array_reverse_json'],
 
     [150150, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
     [150151, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
@@ -702,6 +742,7 @@ vectorized_functions = [
     [150179, 'array_slice', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', 'BIGINT', 'BIGINT'],    'ArrayFunctions::array_slice_double'],
     [150180, 'array_slice', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', 'BIGINT', 'BIGINT'], 'ArrayFunctions::array_slice_decimalv2'],
     [150181, 'array_slice', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'BIGINT', 'BIGINT'],   'ArrayFunctions::array_slice_varchar'],
+    [150182, 'array_slice', 'ARRAY_JSON',      ['ARRAY_JSON', 'BIGINT', 'BIGINT'],      'ArrayFunctions::array_slice_json'],
 
     [150190, 'array_concat', 'ARRAY_DATE', ['ARRAY_DATE', "..."], 'ArrayFunctions::array_concat_date'],
     [150191, 'array_concat', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],  'ArrayFunctions::array_concat_datetime'],
@@ -715,6 +756,7 @@ vectorized_functions = [
     [150199, 'array_concat', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', "..."],    'ArrayFunctions::array_concat_double'],
     [150200, 'array_concat', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', "..."], 'ArrayFunctions::array_concat_decimalv2'],
     [150201, 'array_concat', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', "..."],   'ArrayFunctions::array_concat_varchar'],
+    [150202, 'array_concat', 'ARRAY_JSON',      ['ARRAY_JSON', "..."],      'ArrayFunctions::array_concat_json'],
 
     [150210, 'arrays_overlap', 'BOOLEAN',      ['ARRAY_DATE', 'ARRAY_DATE'],        'ArrayFunctions::array_overlap_date'],
     [150211, 'arrays_overlap', 'BOOLEAN',  ['ARRAY_DATETIME', 'ARRAY_DATETIME'],    'ArrayFunctions::array_overlap_datetime'],
@@ -754,6 +796,7 @@ vectorized_functions = [
     [150259, 'array_slice', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', 'BIGINT'],    'ArrayFunctions::array_slice_double'],
     [150260, 'array_slice', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', 'BIGINT'], 'ArrayFunctions::array_slice_decimalv2'],
     [150261, 'array_slice', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'BIGINT'],   'ArrayFunctions::array_slice_varchar'],
+    [150262, 'array_slice', 'ARRAY_JSON',      ['ARRAY_JSON', 'BIGINT'],      'ArrayFunctions::array_slice_json'],
 
     [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
     [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
@@ -763,6 +806,25 @@ vectorized_functions = [
 
     [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
 
+    [150311, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_sortby_boolean'],
+    [150312, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_TINYINT'],   'ArrayFunctions::array_sortby_tinyint'],
+    [150313, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_SMALLINT'],  'ArrayFunctions::array_sortby_smallint'],
+    [150314, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_INT'],       'ArrayFunctions::array_sortby_int'],
+    [150315, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BIGINT'],    'ArrayFunctions::array_sortby_bigint'],
+    [150316, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_LARGEINT'],  'ArrayFunctions::array_sortby_largeint'],
+    [150317, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_FLOAT'],     'ArrayFunctions::array_sortby_float'],
+    [150318, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DOUBLE'],    'ArrayFunctions::array_sortby_double'],
+    [150319, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_VARCHAR'],   'ArrayFunctions::array_sortby_varchar'],
+    [150320, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DECIMALV2'], 'ArrayFunctions::array_sortby_decimalv2'],
+    [150321, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATETIME'],  'ArrayFunctions::array_sortby_datetime'],
+    [150322, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATE'],      'ArrayFunctions::array_sortby_date'],
+    [150323, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_JSON'],      'ArrayFunctions::array_sortby_json'],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
+
+    # map functions
+    [170000, 'map_size', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
+    [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
+    [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
 ]

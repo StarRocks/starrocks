@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/tablet_meta_test.cpp
 
@@ -129,7 +142,7 @@ TEST(TabletMetaTest, test_create) {
     // check c0.
     ASSERT_EQ(col_ordinal_to_unique_id[0], c0.unique_id());
     ASSERT_EQ("c0", c0.name());
-    ASSERT_EQ(OLAP_FIELD_TYPE_INT, c0.type());
+    ASSERT_EQ(TYPE_INT, c0.type());
     ASSERT_TRUE(c0.is_key());
     ASSERT_FALSE(c0.is_bf_column());
     ASSERT_TRUE(c0.is_nullable());
@@ -143,7 +156,7 @@ TEST(TabletMetaTest, test_create) {
     // check c1.
     ASSERT_EQ(col_ordinal_to_unique_id[1], c1.unique_id());
     ASSERT_EQ("c1", c1.name());
-    ASSERT_EQ(OLAP_FIELD_TYPE_ARRAY, c1.type());
+    ASSERT_EQ(TYPE_ARRAY, c1.type());
     ASSERT_FALSE(c1.is_key());
     ASSERT_FALSE(c1.is_bf_column());
     ASSERT_TRUE(c1.is_nullable());
@@ -156,7 +169,7 @@ TEST(TabletMetaTest, test_create) {
 
     ASSERT_EQ("_c1_1", c1.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c1.subcolumn(0).unique_id());
-    ASSERT_EQ(OLAP_FIELD_TYPE_DECIMAL_V2, c1.subcolumn(0).type());
+    ASSERT_EQ(TYPE_DECIMALV2, c1.subcolumn(0).type());
     ASSERT_FALSE(c1.subcolumn(0).is_key());
     ASSERT_FALSE(c1.subcolumn(0).is_bf_column());
     ASSERT_TRUE(c1.subcolumn(0).is_nullable());
@@ -168,7 +181,7 @@ TEST(TabletMetaTest, test_create) {
     // check c2.
     ASSERT_EQ(col_ordinal_to_unique_id[2], c2.unique_id());
     ASSERT_EQ("c2", c2.name());
-    ASSERT_EQ(OLAP_FIELD_TYPE_ARRAY, c2.type());
+    ASSERT_EQ(TYPE_ARRAY, c2.type());
     ASSERT_FALSE(c2.is_key());
     ASSERT_FALSE(c2.is_bf_column());
     ASSERT_FALSE(c2.is_nullable());
@@ -181,7 +194,7 @@ TEST(TabletMetaTest, test_create) {
 
     ASSERT_EQ("_c2_1", c2.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c2.subcolumn(0).unique_id());
-    ASSERT_EQ(OLAP_FIELD_TYPE_ARRAY, c2.subcolumn(0).type());
+    ASSERT_EQ(TYPE_ARRAY, c2.subcolumn(0).type());
     ASSERT_FALSE(c2.subcolumn(0).is_key());
     ASSERT_FALSE(c2.subcolumn(0).is_bf_column());
     ASSERT_TRUE(c2.subcolumn(0).is_nullable());
@@ -194,7 +207,7 @@ TEST(TabletMetaTest, test_create) {
     const TabletColumn& c2_1 = c2.subcolumn(0);
     ASSERT_EQ("_c2_2", c2_1.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c2_1.subcolumn(0).unique_id());
-    ASSERT_EQ(OLAP_FIELD_TYPE_VARCHAR, c2_1.subcolumn(0).type());
+    ASSERT_EQ(TYPE_VARCHAR, c2_1.subcolumn(0).type());
     ASSERT_FALSE(c2_1.subcolumn(0).is_key());
     ASSERT_FALSE(c2_1.subcolumn(0).is_bf_column());
     ASSERT_TRUE(c2_1.subcolumn(0).is_nullable());

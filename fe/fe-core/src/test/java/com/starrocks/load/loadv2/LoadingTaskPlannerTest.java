@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/load/loadv2/LoadingTaskPlannerTest.java
 
@@ -183,7 +196,7 @@ public class LoadingTaskPlannerTest {
         Config.load_parallel_instance_num = 1;
         long startTime = System.currentTimeMillis();
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 2);
         Assert.assertEquals(1, planner.getScanNodes().size());
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
@@ -193,7 +206,7 @@ public class LoadingTaskPlannerTest {
         // load_parallel_instance_num: 2
         Config.load_parallel_instance_num = 2;
         planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 2);
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
@@ -203,7 +216,7 @@ public class LoadingTaskPlannerTest {
         Config.load_parallel_instance_num = 2;
         Config.max_broker_concurrency = 3;
         planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, startTime, false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 2);
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
         locationsList = scanNode.getScanRangeLocations(0);
@@ -285,7 +298,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // 1. check fragment
@@ -423,7 +436,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // 1. check fragment
@@ -506,7 +519,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -593,7 +606,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -699,7 +712,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -795,7 +808,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // 2. check scan node column expr
@@ -899,7 +912,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // check fragment
@@ -1000,7 +1013,7 @@ public class LoadingTaskPlannerTest {
 
         // plan
         LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap());
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "");
         planner.plan(loadId, fileStatusesList, 1);
 
         // check fragment

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 grammar StarRocks;
 import StarRocksLex;
@@ -23,11 +36,11 @@ statement
     | useDatabaseStatement
     | useCatalogStatement
     | showDatabasesStatement
-    | alterDbQuotaStmtatement
+    | alterDbQuotaStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
-    | alterDatabaseRename
+    | alterDatabaseRenameStatement
     | recoverDbStmt
     | showDataStmt
 
@@ -91,6 +104,9 @@ statement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
+
+    //StreamLoad Statement
+    | showStreamLoadStatement
 
     // Admin Statement
     | adminSetConfigStatement
@@ -221,6 +237,7 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+    | setRoleStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -241,7 +258,7 @@ showDatabasesStatement
     | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-alterDbQuotaStmtatement
+alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -258,7 +275,7 @@ showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
 
-alterDatabaseRename
+alterDatabaseRenameStatement
     : ALTER DATABASE identifier RENAME identifier
     ;
 
@@ -282,6 +299,7 @@ createTableStatement
           comment?
           partitionDesc?
           distributionDesc?
+          orderByDesc?
           rollupDesc?
           properties?
           extProperties?
@@ -317,6 +335,10 @@ keyDesc
     : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
     ;
 
+orderByDesc
+    : ORDER BY identifierList
+    ;
+
 aggDesc
     : SUM
     | MAX
@@ -346,7 +368,9 @@ fromRollup
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')? comment?
+        ('(' identifier (',' identifier)* ')')?
+        keyDesc?
+        comment?
         partitionDesc?
         distributionDesc?
         properties?
@@ -470,11 +494,15 @@ submitTaskStatement
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     comment?
-    (PARTITION BY primaryExpression)?
-    distributionDesc?
-    refreshSchemeDesc?
-    properties?
+    materializedViewDesc*
     AS queryStatement
+    ;
+
+materializedViewDesc
+    : (PARTITION BY primaryExpression)
+    | distributionDesc
+    | refreshSchemeDesc
+    | properties
     ;
 
 showMaterializedViewStatement
@@ -486,11 +514,11 @@ dropMaterializedViewStatement
     ;
 
 alterMaterializedViewStatement
-    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -740,11 +768,11 @@ insertStatement
     ;
 
 updateStatement
-    : explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -823,6 +851,12 @@ showRoutineLoadTaskStatement
     : SHOW ROUTINE LOAD TASK
         (FROM db=qualifiedName)?
         WHERE expression
+    ;
+
+showStreamLoadStatement
+    : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
@@ -913,7 +947,7 @@ showResourceStatement
     ;
 
 classifier
-    : '(' expression (',' expression)* ')'
+    : '(' expressionList ')'
     ;
 
 // ------------------------------------------- Function ----------------------------------------------------
@@ -1159,6 +1193,9 @@ privilegeActionReserved
     | SELECT
     | INSERT
     | DELETE
+    | USAGE
+    | CREATE_DATABASE
+    | UPDATE
     | ALL
     ;
 
@@ -1203,11 +1240,13 @@ revokePrivilegeStatement
     ;
 
 grantRoleStatement
-    : GRANT identifierOrString TO user
+    : GRANT identifierOrString TO user                          #grantRoleToUser
+    | GRANT identifierOrString TO ROLE identifierOrString       #grantRoleToRole
     ;
 
 revokeRoleStatement
-    : REVOKE identifierOrString FROM user
+    : REVOKE identifierOrString FROM user                       #revokeRoleFromUser
+    | REVOKE identifierOrString FROM ROLE identifierOrString    #revokeRoleFromRole
     ;
 
 executeAsStatement
@@ -1336,7 +1375,7 @@ installPluginStatement
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN FROM identifierOrString
+    : UNINSTALL PLUGIN identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------
@@ -1405,6 +1444,15 @@ setUserPropertyStatement
     : SET PROPERTY (FOR string)? userPropertyList
     ;
 
+roleList
+    : string (',' string)*
+    ;
+
+setRoleStatement
+    : SET ROLE roleList                #setRole
+    | SET ROLE ALL (EXCEPT roleList)?  #setRoleAll
+    ;
+
 unsupportedStatement
     : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
     | BEGIN WORK?
@@ -1415,7 +1463,7 @@ unsupportedStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : explainDesc? queryRelation outfile?;
+    : (explainDesc | optimizerTrace) ? queryRelation outfile?;
 
 queryRelation
     : withClause? queryNoWith
@@ -1427,6 +1475,14 @@ withClause
 
 queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
+temporalClause
+    : AS OF expression
+    | FOR SYSTEM_TIME AS OF TIMESTAMP string
+    | FOR SYSTEM_TIME BETWEEN expression AND expression
+    | FOR SYSTEM_TIME FROM expression TO expression
+    | FOR SYSTEM_TIME ALL
     ;
 
 queryPrimary
@@ -1442,7 +1498,7 @@ subquery
     ;
 
 rowConstructor
-     :'(' expression (',' expression)* ')'
+     :'(' expressionList ')'
      ;
 
 sortItem
@@ -1457,9 +1513,8 @@ limitElement
 querySpecification
     : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
-      (WHERE where=expression)?
-      (GROUP BY groupingElement)?
-      (HAVING having=expression)?
+      ((QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?
+      | (WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?)
     ;
 
 fromClause
@@ -1468,10 +1523,10 @@ fromClause
     ;
 
 groupingElement
-    : ROLLUP '(' (expression (',' expression)*)? ')'                                    #rollup
-    | CUBE '(' (expression (',' expression)*)? ')'                                      #cube
+    : ROLLUP '(' (expressionList)? ')'                                                  #rollup
+    | CUBE '(' (expressionList)? ')'                                                    #cube
     | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'                              #multipleGroupingSets
-    | expression (',' expression)*                                                      #singleGroupingSet
+    | expressionList                                                                    #singleGroupingSet
     ;
 
 groupingSet
@@ -1503,12 +1558,12 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? (
+    : qualifiedName temporalClause? partitionNames? tabletList? (
         AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
-    | qualifiedName '(' expression (',' expression)* ')'
+    | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
@@ -1603,6 +1658,10 @@ expression
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
+expressionList
+    : expression (',' expression)*
+    ;
+
 booleanExpression
     : predicate                                                                           #booleanExpressionDefault
     | booleanExpression IS NOT? NULL                                                      #isNull
@@ -1615,7 +1674,7 @@ predicate
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' expression (',' expression)* ')'                                        #inList
+    : NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
@@ -1635,16 +1694,20 @@ valueExpression
         right = valueExpression                                                           #arithmeticBinary
     | left = valueExpression operator = BITAND right = valueExpression                    #arithmeticBinary
     | left = valueExpression operator = BITOR right = valueExpression                     #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_LEFT right = valueExpression              #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_RIGHT right = valueExpression             #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_RIGHT_LOGICAL right = valueExpression     #arithmeticBinary
     ;
 
 primaryExpression
     : userVariable                                                                        #userVariableExpression
     | systemVariable                                                                      #systemVariableExpression
-    | columnReference                                                                     #columnRef
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
+    | columnReference                                                                     #columnRef
+    | base = primaryExpression '.' fieldName = identifier                                 #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1655,8 +1718,8 @@ primaryExpression
     | CONVERT '(' expression ',' type ')'                                                 #convert
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
-    | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
+    | arrayType? '[' (expressionList)? ']'                                                #arrayConstructor
+    | value=primaryExpression '[' index=valueExpression ']'                               #collectionSubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
@@ -1670,6 +1733,7 @@ literalExpression
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
+    | binary                                                                              #binaryLiteral
     ;
 
 functionCall
@@ -1702,7 +1766,6 @@ systemVariable
 
 columnReference
     : identifier
-    | qualifiedName
     ;
 
 informationFunctionExpression
@@ -1790,9 +1853,21 @@ explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
 
+optimizerTrace
+    : TRACE OPTIMIZER
+    ;
+
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    | PARTITION BY partitionExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+    ;
+
+partitionExpression
+    : YEAR '(' expression ')'
+    | MONTH '(' expression ')'
+    | DAY '(' expression ')'
+    | HOUR '(' expression ')'
     ;
 
 listPartitionDesc
@@ -1826,6 +1901,10 @@ multiRangePartition
     | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
     ;
 
+partitionRangeDesc
+    : START '(' string ')' END '(' string ')'
+    ;
+
 partitionKeyDesc
     : LESS THAN (MAXVALUE | partitionValueList)
     | '[' partitionValueList ',' partitionValueList ')'
@@ -1852,6 +1931,7 @@ distributionDesc
 refreshSchemeDesc
     : REFRESH (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
+    | INCREMENTAL
     | MANUAL)
     ;
 
@@ -1879,6 +1959,7 @@ varType
     : GLOBAL
     | LOCAL
     | SESSION
+    | VERBOSE
     ;
 
 comment
@@ -1900,6 +1981,11 @@ fileFormat
 string
     : SINGLE_QUOTED_TEXT
     | DOUBLE_QUOTED_TEXT
+    ;
+
+binary
+    : BINARY_SINGLE_QUOTED_TEXT
+    | BINARY_DOUBLE_QUOTED_TEXT
     ;
 
 comparisonOperator
@@ -1926,10 +2012,23 @@ type
     : baseType
     | decimalType
     | arrayType
+    | structType
     ;
 
 arrayType
     : ARRAY '<' type '>'
+    ;
+
+columnNameColonType
+    : identifier ':' type comment?
+    ;
+
+columnNameColonTypeList
+    : columnNameColonType (',' columnNameColonType)*
+    ;
+
+structType
+    : STRUCT '<' columnNameColonTypeList '>'
     ;
 
 typeParameter
@@ -1960,6 +2059,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | VARBINARY typeParameter?
     ;
 
 decimalType
@@ -2026,14 +2126,14 @@ nonReserved
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
+    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
-    | STORAGE| STRING | STATS | SUBMIT | SYNC
+    | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

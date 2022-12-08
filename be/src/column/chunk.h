@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -9,7 +21,7 @@
 #include "butil/containers/flat_map.h"
 #include "column/column.h"
 #include "column/column_hash.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "common/global_types.h"
 #include "exec/query_cache/owner_info.h"
 #include "util/phmap/phmap.h"
@@ -28,9 +40,9 @@ public:
     using TupleHashMap = phmap::flat_hash_map<TupleId, size_t, StdHash<TupleId>>;
 
     Chunk();
-    Chunk(Columns columns, SchemaPtr schema);
-    Chunk(Columns columns, const SlotHashMap& slot_map);
-    Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map);
+    Chunk(Columns columns, VectorizedSchemaPtr schema);
+    Chunk(Columns columns, SlotHashMap slot_map);
+    Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
@@ -65,8 +77,8 @@ public:
 
     void swap_chunk(Chunk& other);
 
-    const SchemaPtr& schema() const { return _schema; }
-    SchemaPtr& schema() { return _schema; }
+    const VectorizedSchemaPtr& schema() const { return _schema; }
+    VectorizedSchemaPtr& schema() { return _schema; }
 
     const Columns& columns() const { return _columns; }
     Columns& columns() { return _columns; }
@@ -75,10 +87,10 @@ public:
     std::string_view get_column_name(size_t idx) const;
 
     // schema must exist and will be updated.
-    void append_column(ColumnPtr column, const FieldPtr& field);
+    void append_column(ColumnPtr column, const VectorizedFieldPtr& field);
 
     void append_column(ColumnPtr column, SlotId slot_id);
-    void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
+    void insert_column(size_t idx, ColumnPtr column, const VectorizedFieldPtr& field);
 
     void update_column(ColumnPtr column, SlotId slot_id);
 
@@ -90,7 +102,7 @@ public:
     // For simplicity and better performance, we are assuming |indexes| all all valid
     // and is sorted in ascending order, if it's not, unexpected columns may be removed (silently).
     // |indexes| can be empty and no column will be removed in this case.
-    void remove_columns_by_index(const std::vector<size_t>& indexes);
+    [[maybe_unused]] void remove_columns_by_index(const std::vector<size_t>& indexes);
 
     // schema must exists.
     const ColumnPtr& get_column_by_name(const std::string& column_name) const;
@@ -248,7 +260,7 @@ private:
     void rebuild_cid_index();
 
     Columns _columns;
-    std::shared_ptr<Schema> _schema;
+    std::shared_ptr<VectorizedSchema> _schema;
     ColumnIdHashMap _cid_to_index;
     // For compatibility
     SlotHashMap _slot_id_to_index;

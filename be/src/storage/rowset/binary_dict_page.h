@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/binary_dict_page.h
 
@@ -28,8 +41,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
-#include "storage/column_block.h"
-#include "storage/column_vector.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/binary_plain_page.h"
@@ -56,13 +67,13 @@ public:
 
     bool is_page_full() override;
 
-    size_t add(const uint8_t* vals, size_t count) override;
+    uint32_t add(const uint8_t* vals, uint32_t count) override;
 
     faststring* finish() override;
 
     void reset() override;
 
-    size_t count() const override;
+    uint32_t count() const override;
 
     uint64_t size() const override;
 
@@ -111,24 +122,22 @@ private:
     faststring _first_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryDictPageDecoder final : public PageDecoder {
 public:
     BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options);
 
     Status init() override;
 
-    Status seek_to_position_in_page(size_t pos) override;
-
-    Status next_batch(size_t* n, ColumnBlockView* dst) override;
+    Status seek_to_position_in_page(uint32_t pos) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
-    size_t count() const override { return _data_page_decoder->count(); }
+    uint32_t count() const override { return _data_page_decoder->count(); }
 
-    size_t current_index() const override { return _data_page_decoder->current_index(); }
+    uint32_t current_index() const override { return _data_page_decoder->current_index(); }
 
     EncodingTypePB encoding_type() const override { return _encoding_type; }
 
@@ -145,7 +154,6 @@ private:
     const BinaryPlainPageDecoder<Type>* _dict_decoder = nullptr;
     bool _parsed;
     EncodingTypePB _encoding_type;
-    std::unique_ptr<ColumnVectorBatch> _batch;
     std::shared_ptr<vectorized::Column> _vec_code_buf;
 
     uint32_t _max_value_legth = 0;

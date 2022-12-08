@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.persist;
 
@@ -11,6 +24,8 @@ import com.starrocks.privilege.RolePrivilegeCollection;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RolePrivilegeCollectionInfo implements Writable {
 
@@ -18,28 +33,26 @@ public class RolePrivilegeCollectionInfo implements Writable {
     private short pluginId;
     @SerializedName(value = "v")
     private short pluginVersion;
-    @SerializedName(value = "ri")
-    private long roleId;
-    @SerializedName(value = "p")
-    private RolePrivilegeCollection privilegeCollection;
+    @SerializedName(value = "r")
+    private Map<Long, RolePrivilegeCollection> rolePrivilegeCollectionMap;
 
     public RolePrivilegeCollectionInfo(
             long roleId,
-            RolePrivilegeCollection rolePrivilegeCollectionInfo,
+            RolePrivilegeCollection collection,
             short pluginId,
             short pluginVersion) {
-        this.roleId = roleId;
-        this.privilegeCollection = rolePrivilegeCollectionInfo;
+        this.rolePrivilegeCollectionMap = new HashMap<>();
+        this.rolePrivilegeCollectionMap.put(roleId, collection);
         this.pluginId = pluginId;
         this.pluginVersion = pluginVersion;
     }
 
-    public long getRoleId() {
-        return roleId;
+    public void add(long roleId, RolePrivilegeCollection collection) {
+        this.rolePrivilegeCollectionMap.put(roleId, collection);
     }
 
-    public RolePrivilegeCollection getPrivilegeCollection() {
-        return privilegeCollection;
+    public Map<Long, RolePrivilegeCollection> getRolePrivilegeCollectionMap() {
+        return rolePrivilegeCollectionMap;
     }
 
     public short getPluginId() {

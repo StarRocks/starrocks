@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/MaterializedIndexMeta.java
 
@@ -46,6 +59,8 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private long indexId;
     @SerializedName(value = "schema")
     private List<Column> schema = Lists.newArrayList();
+    @SerializedName(value = "sortKeyIdxes")
+    public List<Integer> sortKeyIdxes = Lists.newArrayList();
     @SerializedName(value = "schemaVersion")
     private int schemaVersion;
     @SerializedName(value = "schemaHash")
@@ -61,7 +76,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-                                 OriginStatement defineStmt) {
+                                 OriginStatement defineStmt, List<Integer> sortKeyIdxes) {
         this.indexId = indexId;
         Preconditions.checkState(schema != null);
         Preconditions.checkState(schema.size() != 0);
@@ -74,6 +89,13 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         Preconditions.checkState(keysType != null);
         this.keysType = keysType;
         this.defineStmt = defineStmt;
+        this.sortKeyIdxes = sortKeyIdxes;
+    }
+
+    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+                                 short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                                 OriginStatement defineStmt) {
+        this(indexId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType, defineStmt, null);
     }
 
     public long getIndexId() {
@@ -94,6 +116,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public List<Column> getSchema() {
         return schema;
+    }
+
+    public List<Integer> getSortKeyIdxes() {
+        return sortKeyIdxes;
     }
 
     public int getSchemaHash() {
@@ -136,6 +162,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(indexId);
     }
 
     @Override

@@ -153,10 +153,10 @@ RAPIDJSON_SOURCE=rapidjson-1.1.0
 RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 
 # simdjson
-SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v1.0.2.tar.gz"
-SIMDJSON_NAME=simdjson-v1.0.2.tar.gz
-SIMDJSON_SOURCE=simdjson-1.0.2
-SIMDJSON_MD5SUM="5bb34cca7087a99c450dbdfe406bdc7d"
+SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v2.2.0.tar.gz"
+SIMDJSON_NAME=simdjson-v2.2.0.tar.gz
+SIMDJSON_SOURCE=simdjson-2.2.0
+SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
 
 # curl
 CURL_DOWNLOAD="https://curl.se/download/curl-7.79.0.tar.gz"
@@ -171,10 +171,10 @@ RE2_SOURCE=re2-2017-05-01
 RE2_MD5SUM="4aa65a0b22edacb7ddcd7e4aec038dcf"
 
 # boost
-BOOST_DOWNLOAD="http://sourceforge.net/projects/boost/files/boost/1.75.0/boost_1_75_0.tar.gz"
-BOOST_NAME=boost_1_75_0.tar.gz
-BOOST_SOURCE=boost_1_75_0
-BOOST_MD5SUM="38813f6feb40387dfe90160debd71251"
+BOOST_DOWNLOAD="https://boostorg.jfrog.io/artifactory/main/release/1.80.0/source/boost_1_80_0.tar.gz"
+BOOST_NAME=boost_1_80_0.tar.gz
+BOOST_SOURCE=boost_1_80_0
+BOOST_MD5SUM="077f074743ea7b0cb49c6ed43953ae95"
 
 # leveldb
 LEVELDB_DOWNLOAD="https://github.com/google/leveldb/archive/v1.20.tar.gz"
@@ -183,10 +183,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/incubator-brpc/archive/0.9.7.tar.gz"
-BRPC_NAME=incubator-brpc-0.9.7.tar.gz
-BRPC_SOURCE=incubator-brpc-0.9.7
-BRPC_MD5SUM="a5b79339d139d1c55d39689c0a69bcef"
+BRPC_DOWNLOAD="https://github.com/apache/incubator-brpc/archive/refs/tags/1.3.0.tar.gz"
+BRPC_NAME=incubator-brpc-1.3.0.tar.gz
+BRPC_SOURCE=incubator-brpc-1.3.0
+BRPC_MD5SUM="ee5d00e203e9ef7b8dd25d0c882914c6"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"
@@ -273,10 +273,10 @@ RYU_SOURCE="ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc"
 RYU_MD5SUM="cb82b6da904d919470fe3f5a01ca30ff"
 
 # breakpad
-BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/d6a6f52.zip"
-BREAK_PAD_NAME="breakpad-d6a6f52606529111b9f0ade9a0e0d9040fa97c1f.zip"
-BREAK_PAD_SOURCE="breakpad-d6a6f52606529111b9f0ade9a0e0d9040fa97c1f"
-BREAK_PAD_MD5SUM="53e8e9ee2d5e4f842a0cb4d651e74af6"
+BREAK_PAD_DOWNLOAD="https://github.com/google/breakpad/archive/refs/tags/v2022.07.12.tar.gz"
+BREAK_PAD_NAME="breakpad-2022.07.12.tar.gz"
+BREAK_PAD_SOURCE="breakpad-2022.07.12"
+BREAK_PAD_MD5SUM="d5bcfd3f7b361ef5bda96123c3abdd0a"
 
 # RAGEL
 # ragel-6.9+ is used by hyperscan, so we build it first
@@ -327,13 +327,19 @@ FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
 # cachelib
-CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20220925.tar.gz"
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20221027.tar.gz"
 CACHELIB_NAME="cachelib.tar.gz"
 CACHELIB_SOURCE="cachelib"
-CACHELIB_MD5SUM="ec03040667144771955277fcc18f0da8"
+CACHELIB_MD5SUM="b7c8f26cbe9e5c9d448e9782529fc1cb"
+
+# streamvbyte
+STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
+STREAMVBYTE_NAME="streamvbyte-0.5.1.tar.gz"
+STREAMVBYTE_SOURCE="streamvbyte-0.5.1"
+STREAMVBYTE_MD5SUM="251d9200d27dda9120653b4928a23a86"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB ALIYUN_OSS_JARS AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB"
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE"

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <memory>
@@ -9,6 +22,7 @@
 #include "exec/query_cache/cache_param.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "storage/rowset/rowset.h"
 namespace starrocks {
 namespace pipeline {
 class PipelineDriver;
@@ -30,13 +44,14 @@ public:
     CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                   const CacheParam& cache_param);
 
-    ~CacheOperator() = default;
+    ~CacheOperator() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool probe_cache(int64_t tablet_id, int64_t version);
     Status reset_lane(RuntimeState* state, LaneOwnerType lane_owner);
     void populate_cache(int64_t tablet_id);
     int64_t cached_version(int64_t tablet_id);
+    std::tuple<int64_t, std::vector<RowsetSharedPtr>> delta_version_and_rowsets(int64_t tablet_id);
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     bool has_output() const override;
@@ -53,6 +68,10 @@ private:
     void _update_probe_metrics(int64_t, const std::vector<vectorized::ChunkPtr>& chunks);
     void _handle_stale_cache_value(int64_t tablet_id, CacheValue& cache_value, PerLaneBufferPtr& buffer,
                                    int64_t version);
+    void _handle_stale_cache_value_for_non_pk(int64_t tablet_id, CacheValue& cache_value, PerLaneBufferPtr& buffer,
+                                              int64_t version);
+    void _handle_stale_cache_value_for_pk(int64_t tablet_id, CacheValue& cache_value, PerLaneBufferPtr& buffer,
+                                          int64_t version);
     bool _should_passthrough(size_t num_rows, size_t num_bytes);
     vectorized::ChunkPtr _pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer);
     CacheManagerRawPtr _cache_mgr;
@@ -94,7 +113,7 @@ using CacheOperatorFactoryPtr = std::shared_ptr<CacheOperatorFactory>;
 class CacheOperatorFactory : public pipeline::OperatorFactory {
 public:
     CacheOperatorFactory(int32_t id, int32_t plan_node_id, CacheManagerRawPtr cache_mgr, const CacheParam& cache_param);
-    ~CacheOperatorFactory() = default;
+    ~CacheOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;

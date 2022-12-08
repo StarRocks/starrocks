@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -17,6 +29,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "fmt/printf.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -31,6 +44,7 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
+using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
 
 enum DriverState : uint32_t {
     NOT_READY = 0,
@@ -80,7 +94,7 @@ static inline std::string ds_to_string(DriverState ds) {
 // for schedule.
 class DriverAcct {
 public:
-    DriverAcct() {}
+    DriverAcct() = default;
     //TODO:
     // get_level return a non-negative value that is a hint used by DriverQueue to choose
     // the target internal queue for put_back.
@@ -147,25 +161,27 @@ public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    int32_t driver_id)
             : _operators(operators),
-              _first_unfinished(0),
+
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _source_node_id(operators[0]->get_plan_node_id()),
-              _driver_id(driver_id),
-              _state(DriverState::NOT_READY) {
+              _driver_id(driver_id) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
         }
+        _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
     }
 
     PipelineDriver(const PipelineDriver& driver)
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
 
-    ~PipelineDriver();
+    ~PipelineDriver() noexcept;
 
     QueryContext* query_ctx() { return _query_ctx; }
+    const QueryContext* query_ctx() const { return _query_ctx; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
+    const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
@@ -394,17 +410,18 @@ private:
     bool _all_global_rf_ready_or_timeout = false;
     int64_t _global_rf_wait_timeout_ns = -1;
 
-    size_t _first_unfinished;
+    size_t _first_unfinished{0};
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
+    std::string _driver_name;
     DriverAcct _driver_acct;
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;
     // _state must be set by set_driver_state() to record state timer.
-    DriverState _state;
+    DriverState _state{DriverState::NOT_READY};
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
@@ -423,6 +440,7 @@ private:
     // Schedule counters
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
+    RuntimeProfile::Counter* _yield_by_preempt_counter = nullptr;
     RuntimeProfile::Counter* _block_by_precondition_counter = nullptr;
     RuntimeProfile::Counter* _block_by_output_full_counter = nullptr;
     RuntimeProfile::Counter* _block_by_input_empty_counter = nullptr;

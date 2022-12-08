@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/join_hash_map.h"
 
@@ -448,17 +460,17 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
 
     if (_need_create_tuple_columns) {
         const auto& tuple_id_map = chunk->get_tuple_id_to_index_map();
-        for (auto iter = tuple_id_map.begin(); iter != tuple_id_map.end(); iter++) {
-            if (_table_items->row_desc->get_tuple_idx(iter->first) != RowDescriptor::INVALID_IDX) {
-                if (_table_items->build_chunk->is_tuple_exist(iter->first)) {
-                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
-                    ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter->first);
+        for (auto iter : tuple_id_map) {
+            if (_table_items->row_desc->get_tuple_idx(iter.first) != RowDescriptor::INVALID_IDX) {
+                if (_table_items->build_chunk->is_tuple_exist(iter.first)) {
+                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter.first);
+                    ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter.first);
                     dest_column->append(*src_column, 0, src_column->size());
                 } else {
-                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
+                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter.first);
                     ColumnPtr dest_column = BooleanColumn::create(_table_items->row_count + 1, 1);
                     dest_column->append(*src_column, 0, src_column->size());
-                    _table_items->build_chunk->append_tuple_column(dest_column, iter->first);
+                    _table_items->build_chunk->append_tuple_column(dest_column, iter.first);
                 }
             }
         }
@@ -545,38 +557,38 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
 
     if (size == 1 && !_table_items->join_keys[0].is_null_safe_equal) {
         switch (_table_items->join_keys[0].type->type) {
-        case PrimitiveType::TYPE_BOOLEAN:
+        case LogicalType::TYPE_BOOLEAN:
             return JoinHashMapType::keyboolean;
-        case PrimitiveType::TYPE_TINYINT:
+        case LogicalType::TYPE_TINYINT:
             return JoinHashMapType::key8;
-        case PrimitiveType::TYPE_SMALLINT:
+        case LogicalType::TYPE_SMALLINT:
             return JoinHashMapType::key16;
-        case PrimitiveType::TYPE_INT:
+        case LogicalType::TYPE_INT:
             return JoinHashMapType::key32;
-        case PrimitiveType::TYPE_BIGINT:
+        case LogicalType::TYPE_BIGINT:
             return JoinHashMapType::key64;
-        case PrimitiveType::TYPE_LARGEINT:
+        case LogicalType::TYPE_LARGEINT:
             return JoinHashMapType::key128;
-        case PrimitiveType::TYPE_FLOAT:
+        case LogicalType::TYPE_FLOAT:
             // float will be convert to double, so current can't reach here
             return JoinHashMapType::keyfloat;
-        case PrimitiveType::TYPE_DOUBLE:
+        case LogicalType::TYPE_DOUBLE:
             return JoinHashMapType::keydouble;
-        case PrimitiveType::TYPE_VARCHAR:
-        case PrimitiveType::TYPE_CHAR:
+        case LogicalType::TYPE_VARCHAR:
+        case LogicalType::TYPE_CHAR:
             return JoinHashMapType::keystring;
-        case PrimitiveType::TYPE_DATE:
+        case LogicalType::TYPE_DATE:
             // date will be convert to datetime, so current can't reach here
             return JoinHashMapType::keydate;
-        case PrimitiveType::TYPE_DATETIME:
+        case LogicalType::TYPE_DATETIME:
             return JoinHashMapType::keydatetime;
-        case PrimitiveType::TYPE_DECIMALV2:
+        case LogicalType::TYPE_DECIMALV2:
             return JoinHashMapType::keydecimal;
-        case PrimitiveType::TYPE_DECIMAL32:
+        case LogicalType::TYPE_DECIMAL32:
             return JoinHashMapType::keydecimal32;
-        case PrimitiveType::TYPE_DECIMAL64:
+        case LogicalType::TYPE_DECIMAL64:
             return JoinHashMapType::keydecimal64;
-        case PrimitiveType::TYPE_DECIMAL128:
+        case LogicalType::TYPE_DECIMAL128:
             return JoinHashMapType::keydecimal128;
         default:
             return JoinHashMapType::slice;
@@ -610,28 +622,28 @@ JoinHashMapType JoinHashTable::_choose_join_hash_map() {
     return JoinHashMapType::slice;
 }
 
-size_t JoinHashTable::_get_size_of_fixed_and_contiguous_type(PrimitiveType data_type) {
+size_t JoinHashTable::_get_size_of_fixed_and_contiguous_type(LogicalType data_type) {
     switch (data_type) {
-    case PrimitiveType::TYPE_BOOLEAN:
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_BOOLEAN>::CppType);
-    case PrimitiveType::TYPE_TINYINT:
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_TINYINT>::CppType);
-    case PrimitiveType::TYPE_SMALLINT:
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_SMALLINT>::CppType);
-    case PrimitiveType::TYPE_INT:
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_INT>::CppType);
-    case PrimitiveType::TYPE_BIGINT:
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_BIGINT>::CppType);
-    case PrimitiveType::TYPE_FLOAT:
+    case LogicalType::TYPE_BOOLEAN:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BOOLEAN>::CppType);
+    case LogicalType::TYPE_TINYINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_TINYINT>::CppType);
+    case LogicalType::TYPE_SMALLINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_SMALLINT>::CppType);
+    case LogicalType::TYPE_INT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_INT>::CppType);
+    case LogicalType::TYPE_BIGINT:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_BIGINT>::CppType);
+    case LogicalType::TYPE_FLOAT:
         // float will be convert to double, so current can't reach here
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_FLOAT>::CppType);
-    case PrimitiveType::TYPE_DOUBLE:
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_DOUBLE>::CppType);
-    case PrimitiveType::TYPE_DATE:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_FLOAT>::CppType);
+    case LogicalType::TYPE_DOUBLE:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DOUBLE>::CppType);
+    case LogicalType::TYPE_DATE:
         // date will be convert to datetime, so current can't reach here
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_DATE>::CppType);
-    case PrimitiveType::TYPE_DATETIME:
-        return sizeof(RunTimeTypeTraits<PrimitiveType::TYPE_DATETIME>::CppType);
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATE>::CppType);
+    case LogicalType::TYPE_DATETIME:
+        return sizeof(RunTimeTypeTraits<LogicalType::TYPE_DATETIME>::CppType);
     default:
         return 0;
     }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/bitmap_index_reader.cpp
 
@@ -25,6 +38,9 @@
 
 #include <memory>
 
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
+#include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/types.h"
 
@@ -61,7 +77,7 @@ void BitmapIndexReader::_reset() {
 
 Status BitmapIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
                                    bool use_page_cache, bool kept_in_memory) {
-    _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    _typeinfo = get_type_info(TYPE_VARCHAR);
     const IndexedColumnMetaPB& dict_meta = meta.dict_column();
     const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();
     _has_null = meta.has_null();
@@ -90,19 +106,17 @@ Status BitmapIndexIterator::seek_dictionary(const void* value, bool* exact_match
 Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     DCHECK(0 <= ordinal && ordinal < _reader->bitmap_nums());
 
-    size_t num_to_read = 1;
-    std::unique_ptr<ColumnVectorBatch> cvb;
-    RETURN_IF_ERROR(ColumnVectorBatch::create(num_to_read, false, _reader->type_info(), nullptr, &cvb));
-    ColumnBlock block(cvb.get(), _pool.get());
-    ColumnBlockView column_block_view(&block);
-
+    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal));
+    size_t num_to_read = 1;
     size_t num_read = num_to_read;
-    RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, &column_block_view));
+    RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, column.get()));
     DCHECK(num_to_read == num_read);
 
-    *result = Roaring::read(reinterpret_cast<const Slice*>(block.data())->data, false);
-    _pool->clear();
+    vectorized::ColumnViewer<TYPE_VARCHAR> viewer(column);
+    auto value = viewer.value(0);
+
+    *result = Roaring::read(value.data, false);
     return Status::OK();
 }
 
@@ -118,7 +132,7 @@ Status BitmapIndexIterator::read_union_bitmap(rowid_t from, rowid_t to, Roaring*
 }
 
 Status BitmapIndexIterator::read_union_bitmap(const vectorized::SparseRange& range, Roaring* result) {
-    for (size_t i = 0; i < range.size(); i++) {
+    for (size_t i = 0; i < range.size(); i++) { // NOLINT
         const vectorized::Range& r = range[i];
         RETURN_IF_ERROR(read_union_bitmap(r.begin(), r.end(), result));
     }

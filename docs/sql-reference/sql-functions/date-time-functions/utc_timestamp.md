@@ -21,6 +21,8 @@ MySQL > select utc_timestamp(),utc_timestamp() + 1;
 +---------------------+---------------------+
 ```
 
+`utc_timestamp() + N` means adding `N` seconds to the current time.
+
 ## keyword
 
 UTC_TIMESTAMP,UTC,TIMESTAMP

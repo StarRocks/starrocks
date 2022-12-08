@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/data_stream_sender.h
 
@@ -31,6 +44,7 @@
 #include "exec/data_sink.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
@@ -67,10 +81,11 @@ public:
     // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
     DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
                      const std::vector<TPlanFragmentDestination>& destinations, int per_channel_buffer_size,
-                     bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through);
+                     bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
+                     bool enable_exchange_perf);
     ~DataStreamSender() override;
 
-    Status init(const TDataSink& thrift_sink) override;
+    Status init(const TDataSink& thrift_sink, RuntimeState* state) override;
 
     // Must be called before other API calls, and before the codegen'd IR module is
     // compiled (i.e. in an ExecNode's Prepare() function).
@@ -112,6 +127,7 @@ public:
     int sender_id() const { return _sender_id; }
 
     const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
+    const bool get_enable_exchange_perf() const { return _enable_exchange_perf; };
 
     const std::vector<int32_t>& output_columns() const { return _output_columns; }
 
@@ -124,15 +140,10 @@ private:
 
     RuntimeState* _state{};
     ObjectPool* _pool;
-    const RowDescriptor& _row_desc;
 
     int _current_channel_idx; // index of current channel to send to if _random == true
 
-    // If true, this sender has been closed. Not valid to call Send() anymore.
-    bool _closed{};
-
     TPartitionType::type _part_type;
-    bool _ignore_not_found;
 
     // Only used when broadcast
     PTransmitChunkParams _chunk_request;
@@ -159,10 +170,6 @@ private:
     // so we pick a random order for the index
     std::vector<int> _channel_indices;
     std::vector<std::shared_ptr<Channel>> _channel_shared_ptrs;
-
-    // map from range value to partition_id
-    // sorted in ascending order by range for binary search
-    std::vector<PartitionInfo*> _partition_infos;
 
     // This array record the channel start point in _row_indexes
     // And the last item is the number of rows of the current shuffle chunk.
@@ -206,6 +213,7 @@ private:
     std::vector<TPlanFragmentDestination> _destinations;
 
     bool _enable_exchange_pass_through = false;
+    bool _enable_exchange_perf = false;
 
     // Specify the columns which need to send
     std::vector<int32_t> _output_columns;

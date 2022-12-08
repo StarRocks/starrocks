@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/VariableMgr.java
 
@@ -270,6 +283,11 @@ public class VariableMgr {
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
         }
+
+        if (setVar.getType() == SetType.VERBOSE) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, setVar.getVariable());
+        }
+
         // Check variable attribute and setVar
         checkUpdate(setVar, ctx.getFlag());
 
@@ -392,39 +410,39 @@ public class VariableMgr {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
                     desc.setType(Type.BOOLEAN);
-                    desc.setBoolValue(field.getBoolean(obj));
+                    desc.setValue(field.getBoolean(obj));
                     break;
                 case "byte":
                     desc.setType(Type.TINYINT);
-                    desc.setIntValue(field.getByte(obj));
+                    desc.setValue(field.getByte(obj));
                     break;
                 case "short":
                     desc.setType(Type.SMALLINT);
-                    desc.setIntValue(field.getShort(obj));
+                    desc.setValue(field.getShort(obj));
                     break;
                 case "int":
                     desc.setType(Type.INT);
-                    desc.setIntValue(field.getInt(obj));
+                    desc.setValue(field.getInt(obj));
                     break;
                 case "long":
                     desc.setType(Type.BIGINT);
-                    desc.setIntValue(field.getLong(obj));
+                    desc.setValue(field.getLong(obj));
                     break;
                 case "float":
                     desc.setType(Type.FLOAT);
-                    desc.setFloatValue(field.getFloat(obj));
+                    desc.setValue(field.getFloat(obj));
                     break;
                 case "double":
                     desc.setType(Type.DOUBLE);
-                    desc.setFloatValue(field.getDouble(obj));
+                    desc.setValue(field.getDouble(obj));
                     break;
                 case "String":
                     desc.setType(Type.VARCHAR);
-                    desc.setStringValue((String) field.get(obj));
+                    desc.setValue((String) field.get(obj));
                     break;
                 default:
                     desc.setType(Type.VARCHAR);
-                    desc.setStringValue("");
+                    desc.setValue("");
                     break;
             }
         } catch (IllegalAccessException e) {
@@ -507,14 +525,24 @@ public class VariableMgr {
                     // In this condition, we may retrieve session variables for caller.
                     if (sessionVar != null) {
                         row.add(name);
-                        row.add(getValue(sessionVar, ctx.getField()));
+                        String currentValue = getValue(sessionVar, ctx.getField());
+                        row.add(currentValue);
+                        if (type == SetType.VERBOSE) {
+                            row.add(ctx.defaultValue);
+                            row.add(ctx.defaultValue.equals(currentValue) ? "0" : "1");
+                        }
                     } else {
                         LOG.error("sessionVar is null during dumping session variables.");
                         continue;
                     }
                 } else {
                     row.add(name);
-                    row.add(getValue(ctx.getObj(), ctx.getField()));
+                    String currentValue = getValue(ctx.getObj(), ctx.getField());
+                    row.add(currentValue);
+                    if (type == SetType.VERBOSE) {
+                        row.add(ctx.defaultValue);
+                        row.add(ctx.defaultValue.equals(currentValue) ? "0" : "1");
+                    }
                 }
 
                 if (row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {

@@ -6,7 +6,7 @@ Checks whether `arr1` contains all the elements of `arr2`, that is, whether `arr
 
 ## Syntax
 
-~~~sql
+~~~Haskell
 BOOLEAN array_contains_all(arr1, arr2)
 ~~~
 

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
@@ -18,6 +31,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
@@ -66,7 +80,7 @@ public class TaskBuilder {
         return task;
     }
 
-    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc)
+    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
         MaterializedView.RefreshType refreshType = refreshSchemeDesc.getType();
         if (refreshType == MaterializedView.RefreshType.MANUAL) {
@@ -78,10 +92,20 @@ public class TaskBuilder {
                 if (intervalLiteral == null) {
                     task.setType(Constants.TaskType.EVENT_TRIGGERED);
                 } else {
-                    final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
-                    long startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime, step.getLongValue(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(intervalLiteral.getUnitIdentifier().getDescription()));
+                    long period = ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getLongValue();
+                    TimeUnit timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
+                            intervalLiteral.getUnitIdentifier().getDescription());
+                    long startTime;
+                    if (asyncRefreshSchemeDesc.isDefineStartTime()) {
+                        startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
+                    } else {
+                        MaterializedView.AsyncRefreshContext asyncRefreshContext = materializedView.getRefreshScheme()
+                                .getAsyncRefreshContext();
+                        long currentTimeSecond = System.currentTimeMillis() / 1000;
+                        startTime = TimeUtils.getNextValidTimeSecond(asyncRefreshContext.getStartTime(),
+                                currentTimeSecond, period, timeUnit);
+                    }
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime, period, timeUnit);
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
                 }

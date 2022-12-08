@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/data_stream_mgr.cpp
 
@@ -26,7 +39,6 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "util/starrocks_metrics.h"
 
@@ -54,7 +66,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
     DCHECK(pass_through_chunk_buffer != nullptr);
     std::shared_ptr<DataStreamRecvr> recvr(
             new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
-                                buffer_size, profile, sub_plan_query_statistics_recvr, is_pipeline,
+                                buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline,
                                 degree_of_parallelism, keep_order, pass_through_chunk_buffer));
 
     uint32_t bucket = get_bucket(fragment_instance_id);
@@ -84,7 +96,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
             return sub_iter->second;
         }
     }
-    return std::shared_ptr<DataStreamRecvr>();
+    return {};
 }
 
 Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done) {
@@ -151,12 +163,15 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     }
 
     bool eos = request.eos();
+    DeferOp op([&eos, &recvr, &request]() {
+        if (eos) {
+            recvr->remove_sender(request.sender_id(), request.be_number());
+        }
+    });
     if (request.chunks_size() > 0 || request.use_pass_through()) {
         RETURN_IF_ERROR(recvr->add_chunks(request, eos ? nullptr : done));
     }
-    if (eos) {
-        recvr->remove_sender(request.sender_id(), request.be_number());
-    }
+
     return Status::OK();
 }
 
@@ -205,8 +220,8 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
         auto iter = receiver_map.find(fragment_instance_id);
         if (iter != receiver_map.end()) {
             // all of the value should collect
-            for (auto sub_iter = iter->second->begin(); sub_iter != iter->second->end(); sub_iter++) {
-                recvrs.push_back(sub_iter->second);
+            for (auto& sub_iter : *iter->second) {
+                recvrs.push_back(sub_iter.second);
             }
         }
     }

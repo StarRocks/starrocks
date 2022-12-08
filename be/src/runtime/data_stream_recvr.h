@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/data_stream_recvr.h
 
@@ -38,7 +51,8 @@ namespace starrocks {
 
 namespace vectorized {
 class SortedChunksMerger;
-}
+class CascadeChunkMerger;
+} // namespace vectorized
 
 class DataStreamMgr;
 class MemTracker;
@@ -101,7 +115,9 @@ public:
     const RowDescriptor& row_desc() const { return _row_desc; }
 
     void add_sub_plan_statistics(const PQueryStatistics& statistics, int sender_id) {
-        _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
+        if (_sub_plan_query_statistics_recvr) {
+            _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
+        }
     }
 
     void short_circuit_for_pipeline(const int32_t driver_sequence);
@@ -111,6 +127,8 @@ public:
     bool is_finished() const;
 
     bool is_data_ready();
+
+    bool get_encode_level() const { return _encode_level; }
 
 private:
     friend class DataStreamMgr;
@@ -168,6 +186,7 @@ private:
 
     // vectorized::SortedChunksMerger merges chunks from different senders.
     std::unique_ptr<vectorized::SortedChunksMerger> _chunks_merger;
+    std::unique_ptr<vectorized::CascadeChunkMerger> _cascade_merger;
 
     // Pool of sender queues.
     ObjectPool _sender_queue_pool;
@@ -215,6 +234,8 @@ private:
     // if _keep_order is set to true, then receiver will keep the order according sequence
     bool _keep_order;
     PassThroughContext _pass_through_context;
+
+    int _encode_level;
 };
 
 } // end namespace starrocks

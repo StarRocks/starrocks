@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -75,18 +88,17 @@ public class PrivilegeStmtAnalyzer {
         /**
          * check if role name valid and get full role name + check if role exists
          */
-        private String analyseRoleName(String roleName, ConnectContext session, boolean canBeAdmin, String errMsg) {
-            String qualifiedRole = validRoleName(roleName, canBeAdmin, errMsg);
-            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
-                throw new SemanticException("role " + qualifiedRole + " not exist!");
+        private void analyseRoleName(String roleName, ConnectContext session, boolean canBeAdmin, String errMsg) {
+            validRoleName(roleName, canBeAdmin, errMsg);
+            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(roleName)) {
+                throw new SemanticException("role " + roleName + " not exist!");
             }
-            return qualifiedRole;
         }
 
         /**
-         * check if role name valid and get full role name
+         * check if role name valid
          */
-        private String validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
+        private void validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
             try {
                 FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
             } catch (AnalysisException e) {
@@ -95,7 +107,6 @@ public class PrivilegeStmtAnalyzer {
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            return roleName;
         }
 
         /**
@@ -104,9 +115,11 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            if (stmt.getUserIdent() == null) {
+                throw new SemanticException("Unsupported syntax: grant/revoke to role is not supported");
+            }
             analyseUser(stmt.getUserIdent(), session, true);
-            stmt.setQualifiedRole(
-                    analyseRoleName(stmt.getRole(), session, true, "Can not granted/revoke role to user"));
+            analyseRoleName(stmt.getGranteeRole(), session, true, "Can not granted/revoke role to user");
             return null;
         }
 
@@ -119,7 +132,7 @@ public class PrivilegeStmtAnalyzer {
             if (stmt.getUserIdentity() != null) {
                 analyseUser(stmt.getUserIdentity(), session, true);
             } else {
-                stmt.setRole(analyseRoleName(stmt.getRole(), session, true, "invalide role"));
+                analyseRoleName(stmt.getRole(), session, true, "invalid role");
             }
 
             // parse privilege actions to PrivBitSet
@@ -300,8 +313,7 @@ public class PrivilegeStmtAnalyzer {
                     // for forward compatibility
                     stmt.setRole(Role.ADMIN_ROLE);
                 }
-                stmt.setRole(
-                        analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user"));
+                analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user");
             }
             return null;
         }
@@ -314,7 +326,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not create role"));
+            validRoleName(stmt.getQualifiedRole(), false, "Can not create role");
             return null;
         }
 
@@ -337,7 +349,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not drop role"));
+            validRoleName(stmt.getQualifiedRole(), false, "Can not drop role");
             return null;
         }
     }

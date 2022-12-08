@@ -30,7 +30,7 @@ namespace starrocks {
 StringValue FromStdString(const string& str) {
     char* ptr = const_cast<char*>(str.c_str());
     int len = str.size();
-    return StringValue(ptr, len);
+    return {ptr, static_cast<size_t>(len)};
 }
 
 TEST(StringValueTest, TestCompare) {

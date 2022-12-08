@@ -2,7 +2,7 @@
 
 This topic describes how to load data into StarRocks by using a DML statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT command. You can insert one or more rows with the VALUES syntax to test a function or a DEMO. You can also insert data defined by the results of a query on an internal or an [external table](../using_starrocks/External_table.md) to build mathematical models for small-scale datasets or back up your data in HDFS.
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT command. You can insert one or more rows with the VALUES syntax to test a function or a DEMO. You can also insert data defined by the results of a query on an internal or an [external table](../data_source/External_table.md) to build mathematical models for small-scale datasets or back up your data in HDFS.
 
 StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE statement. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
 
@@ -189,7 +189,7 @@ MySQL > SELECT * FROM insert_wiki_edit;
 2 rows in set (0.01 sec)
 ```
 
-The following example overwrites the source table `source_wiki_edit` with two new rows. 
+The following example overwrites the source table `source_wiki_edit` with two new rows.
 
 ```SQL
 INSERT OVERWRITE source_wiki_edit

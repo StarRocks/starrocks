@@ -1,10 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -23,8 +38,11 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationManager {
@@ -36,12 +54,33 @@ public class AuthenticationManager {
     // core data struction
     // user identity -> all the authentication infomation
     // will be manually serialized one by one
-    private Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new HashMap<>();
+    protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new TreeMap<>((o1, o2) -> {
+        // make sure that ip > domain > %
+        int compareHostScore = scoreUserIdentityHost(o1).compareTo(scoreUserIdentityHost(o2));
+        if (compareHostScore != 0) {
+            return compareHostScore;
+        }
+        // host type is the same, compare host
+        int compareByHost = o1.getHost().compareTo(o2.getHost());
+        if (compareByHost != 0) {
+            return compareByHost;
+        }
+        // compare user name
+        return o1.getQualifiedUser().compareTo(o2.getQualifiedUser());
+    });
+
     // For legacy reason, user property are set by username instead of full user identity.
     @SerializedName(value = "m")
     private Map<String, UserProperty> userNameToProperty = new HashMap<>();
 
+    // resolve hostname to ip
+    private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
+    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
+
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    // set by load() to distinguish brand-new environment with upgraded environment
+    private boolean isLoaded = false;
 
     private void readLock() {
         lock.readLock().lock();
@@ -65,8 +104,6 @@ public class AuthenticationManager {
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
 
         // default user
-        UserIdentity rootUser = new UserIdentity(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        rootUser.setIsAnalyzed();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         try {
             info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
@@ -75,8 +112,8 @@ public class AuthenticationManager {
         }
         info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
         info.setPassword(new byte[0]);
-        userToAuthenticationInfo.put(rootUser, info);
-        userNameToProperty.put(rootUser.getQualifiedUser(), new UserProperty());
+        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
+        userNameToProperty.put(UserIdentity.ROOT.getQualifiedUser(), new UserProperty());
     }
 
     public boolean doesUserExist(UserIdentity userIdentity) {
@@ -96,16 +133,57 @@ public class AuthenticationManager {
         return DEFAULT_PLUGIN;
     }
 
+    /**
+     * If someone login from 10.1.1.1 with name "test_user", the matching UserIdentity can be sorted in the below order
+     * 1. test_user@10.1.1.1
+     * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
+     * If multiple hostnames matche the login ip, just return one randomly.
+     * 3. test_user@%, as a fallback.
+     */
+    private Integer scoreUserIdentityHost(UserIdentity userIdentity) {
+        // ip(1) > hostname(2) > %(3)
+        if (userIdentity.isDomain()) {
+            return 2;
+        }
+        if (userIdentity.getHost().equals(UserAuthenticationInfo.ANY_HOST)) {
+            return 3;
+        }
+        return 1;
+    }
+
+    private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
+        // quickly filter unmatched entries by user name
+        if (!info.matchUser(remoteUser)) {
+            return false;
+        }
+        if (isDomain) {
+            // check for resolved ips
+            this.hostnameToIpLock.readLock().lock();
+            try {
+                Set<String> ipSet = hostnameToIpSet.get(info.getOrigHost());
+                if (ipSet == null) {
+                    return false;
+                }
+                return ipSet.contains(remoteHost);
+            } finally {
+                this.hostnameToIpLock.readLock().unlock();
+            }
+        } else {
+            return info.matchHost(remoteHost);
+        }
+    }
+
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
         Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> it = userToAuthenticationInfo.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<UserIdentity, UserAuthenticationInfo> entry = it.next();
+            UserIdentity userIdentity = entry.getKey();
             UserAuthenticationInfo info = entry.getValue();
-            if (info.match(remoteUser, remoteHost)) {
+            if (match(remoteUser, remoteHost, userIdentity.isDomain(), info)) {
                 try {
                     AuthenticationProvider provider = AuthenticationProviderFactory.create(info.getAuthPlugin());
                     provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString, info);
-                    return entry.getKey();
+                    return userIdentity;
                 } catch (AuthenticationException e) {
                     LOG.debug("failed to authentication, ", e);
                 }
@@ -132,11 +210,11 @@ public class AuthenticationManager {
             // init user privilege
             UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
             short pluginId = privilegeManager.getProviderPluginId();
-            short pluginVersion = privilegeManager.getProviderPluginVerson();
+            short pluginVersion = privilegeManager.getProviderPluginVersion();
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 
-        } catch (AuthenticationException e) {
+        } catch (AuthenticationException | PrivilegeException e) {
             throw new DdlException("failed to create user " + userIdentity, e);
         } finally {
             writeUnlock();
@@ -171,6 +249,8 @@ public class AuthenticationManager {
         writeLock();
         try {
             dropUserNoLock(userIdentity);
+            // drop user privilege as well
+            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
             GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
         } finally {
             writeUnlock();
@@ -181,6 +261,8 @@ public class AuthenticationManager {
         writeLock();
         try {
             dropUserNoLock(userIdentity);
+            // drop user privilege as well
+            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
         } finally {
             writeUnlock();
         }
@@ -248,6 +330,33 @@ public class AuthenticationManager {
             }
         }
         return false;
+    }
+
+    public Set<String> getAllHostnames() {
+        readLock();
+        try {
+            Set<String> ret = new HashSet<>();
+            for (UserIdentity userIdentity : userToAuthenticationInfo.keySet()) {
+                if (userIdentity.isDomain()) {
+                    ret.add(userIdentity.getHost());
+                }
+            }
+            return ret;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * called by DomainResolver to periodically update hostname -> ip set
+     */
+    public void setHostnameToIpSet(Map<String, Set<String>> hostnameToIpSet) {
+        this.hostnameToIpLock.writeLock().lock();
+        try {
+            this.hostnameToIpSet = hostnameToIpSet;
+        } finally {
+            this.hostnameToIpLock.writeLock().unlock();
+        }
     }
 
     /**
@@ -332,9 +441,39 @@ public class AuthenticationManager {
             }
             assert ret != null; // can't be NULL
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
+            // mark data is loaded
+            ret.isLoaded = true;
             return ret;
         } catch (SRMetaBlockException | AuthenticationException e) {
             throw new DdlException("failed to load AuthenticationManager!", e);
         }
+    }
+
+    public boolean isLoaded() {
+        return isLoaded;
+    }
+
+    public void setLoaded() {
+        isLoaded = true;
+    }
+
+    /**
+     * these public interfaces are for AuthUpgrader to upgrade from 2.x
+     */
+    public void upgradeUserUnlocked(UserIdentity userIdentity, Password password) throws AuthenticationException {
+        AuthPlugin plugin = password.getAuthPlugin();
+        if (plugin == null) {
+            plugin = AuthPlugin.MYSQL_NATIVE_PASSWORD;
+        }
+        AuthenticationProvider provider = AuthenticationProviderFactory.create(plugin.toString());
+        UserAuthenticationInfo info = provider.upgradedFromPassword(userIdentity, password);
+        userToAuthenticationInfo.put(userIdentity, info);
+        LOG.info("upgrade user {}", userIdentity);
+    }
+
+    public void upgradeUserProperty(String userName, long maxConn) {
+        UserProperty userProperty = new UserProperty();
+        userProperty.setMaxConn(maxConn);
+        userNameToProperty.put(userName, new UserProperty());
     }
 }

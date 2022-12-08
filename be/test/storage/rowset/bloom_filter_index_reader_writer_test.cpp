@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/bloom_filter_index_reader_writer_test.cpp
 
@@ -46,7 +59,7 @@ protected:
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    template <FieldType type>
+    template <LogicalType type>
     void write_bloom_filter_index_file(const std::string& file_name, const void* values, size_t value_count,
                                        size_t null_count, ColumnIndexMetaPB* index_meta) {
         TypeInfoPtr type_info = get_type_info(type);
@@ -87,7 +100,7 @@ protected:
         ASSERT_OK((*reader)->new_iterator(iter));
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_bloom_filter_index_reader_writer_template(const std::string file_name,
                                                         typename TypeTraits<Type>::CppType* val, size_t num,
                                                         size_t null_num,
@@ -159,13 +172,13 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_int) {
 
     std::string file_name = "bloom_filter_int";
     int not_exist_value = 18888;
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_INT>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<TYPE_INT>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_bigint) {
     size_t num = 1024 * 3 - 1;
-    int64_t* val = new int64_t[num];
+    auto* val = new int64_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 100000000 + i + 1;
@@ -173,13 +186,13 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_bigint) {
 
     std::string file_name = "bloom_filter_bigint";
     int64_t not_exist_value = 18888;
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<TYPE_BIGINT>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_largeint) {
     size_t num = 1024 * 3 - 1;
-    int128_t* val = new int128_t[num];
+    auto* val = new int128_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 100000000 + i + 1;
@@ -187,53 +200,51 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_largeint) {
 
     std::string file_name = "bloom_filter_largeint";
     int128_t not_exist_value = 18888;
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_LARGEINT>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<TYPE_LARGEINT>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_varchar_type) {
     size_t num = 1024 * 3 - 1;
-    std::string* val = new std::string[num];
+    auto* val = new std::string[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = "prefix_" + std::to_string(i);
     }
-    Slice* slices = new Slice[num];
+    auto* slices = new Slice[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         slices[i] = Slice(val[i].c_str(), val[i].size());
     }
     std::string file_name = "bloom_filter_varchar";
     Slice not_exist_value("value_not_exist");
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_VARCHAR>(file_name, slices, num, 1, &not_exist_value,
-                                                                            true);
+    test_bloom_filter_index_reader_writer_template<TYPE_VARCHAR>(file_name, slices, num, 1, &not_exist_value, true);
     delete[] val;
     delete[] slices;
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_char) {
     size_t num = 1024 * 3 - 1;
-    std::string* val = new std::string[num];
+    auto* val = new std::string[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = "prefix_" + std::to_string(10000 + i);
     }
-    Slice* slices = new Slice[num];
+    auto* slices = new Slice[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         slices[i] = Slice(val[i].c_str(), val[i].size());
     }
     std::string file_name = "bloom_filter_char";
     Slice not_exist_value("char_value_not_exist");
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_CHAR>(file_name, slices, num, 1, &not_exist_value,
-                                                                         true);
+    test_bloom_filter_index_reader_writer_template<TYPE_CHAR>(file_name, slices, num, 1, &not_exist_value, true);
     delete[] val;
     delete[] slices;
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_date) {
     size_t num = 1024 * 3 - 1;
-    uint24_t* val = new uint24_t[num];
+    auto* val = new uint24_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 10000 + i + 1;
@@ -241,13 +252,13 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_date) {
 
     std::string file_name = "bloom_filter_date";
     uint24_t not_exist_value = 18888;
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_DATE>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<TYPE_DATE_V1>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_datetime) {
     size_t num = 1024 * 3 - 1;
-    int64_t* val = new int64_t[num];
+    auto* val = new int64_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 10000 + i + 1;
@@ -255,13 +266,13 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_datetime) {
 
     std::string file_name = "bloom_filter_datetime";
     int64_t not_exist_value = 18888;
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_DATETIME>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<TYPE_DATETIME_V1>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_decimal) {
     size_t num = 1024 * 3 - 1;
-    decimal12_t* val = new decimal12_t[num];
+    auto* val = new decimal12_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = decimal12_t(i + 1, i + 1);
@@ -269,7 +280,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_decimal) {
 
     std::string file_name = "bloom_filter_decimal";
     decimal12_t not_exist_value = decimal12_t(666, 666);
-    test_bloom_filter_index_reader_writer_template<OLAP_FIELD_TYPE_DECIMAL>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<TYPE_DECIMAL>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 

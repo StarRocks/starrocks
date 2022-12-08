@@ -34,6 +34,7 @@ private:
     TypeKind kind;
     std::vector<std::unique_ptr<Type>> subTypes;
     std::vector<std::string> fieldNames;
+    mutable std::map<uint64_t, uint64_t> columnIdToPos;
     uint64_t subtypeCount;
     uint64_t maxLength;
     uint64_t precision;
@@ -66,7 +67,10 @@ public:
 
     const Type* getSubtype(uint64_t i) const override;
 
+    const Type* getSubtypeByColumnId(uint64_t columnId) const override;
+
     const std::string& getFieldName(uint64_t i) const override;
+
     uint64_t getFieldNamesCount() const override;
 
     uint64_t getMaximumLength() const override;
@@ -117,6 +121,11 @@ private:
      * Ensure that ids are assigned to all of the nodes.
      */
     void ensureIdAssigned() const;
+
+    /**
+     * Build column id mapping to position in children.
+     */
+    void buildColumnIdToPosMap() const;
 
     /**
      * Parse array type from string

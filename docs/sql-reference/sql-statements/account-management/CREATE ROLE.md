@@ -1,6 +1,6 @@
 # CREATE ROLE
 
-## description
+## Description
 
 This statement allows users to create a role.
 
@@ -12,7 +12,7 @@ CREATE ROLE role1;
 
 It creates a role with no permission which could be added to the role though "GRANT" command.  
 
-## example
+## Examples
 
  1. Create a role
 

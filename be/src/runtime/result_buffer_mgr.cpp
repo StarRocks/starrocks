@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/result_buffer_mgr.cpp
 
@@ -70,13 +83,13 @@ Status ResultBufferMgr::create_sender(const TUniqueId& query_id, int buffer_size
 std::shared_ptr<BufferControlBlock> ResultBufferMgr::find_control_block(const TUniqueId& query_id) {
     // TODO(zhaochun): this lock can be bottleneck?
     std::lock_guard<std::mutex> l(_lock);
-    BufferMap::iterator iter = _buffer_map.find(query_id);
+    auto iter = _buffer_map.find(query_id);
 
     if (_buffer_map.end() != iter) {
         return iter->second;
     }
 
-    return std::shared_ptr<BufferControlBlock>();
+    return {};
 }
 
 Status ResultBufferMgr::fetch_data(const TUniqueId& query_id, TFetchDataResult* result) {
@@ -105,7 +118,7 @@ void ResultBufferMgr::fetch_data(const PUniqueId& finst_id, GetResultBatchCtx* c
 
 Status ResultBufferMgr::cancel(const TUniqueId& query_id) {
     std::lock_guard<std::mutex> l(_lock);
-    BufferMap::iterator iter = _buffer_map.find(query_id);
+    auto iter = _buffer_map.find(query_id);
 
     if (_buffer_map.end() != iter) {
         iter->second->cancel();
@@ -117,7 +130,7 @@ Status ResultBufferMgr::cancel(const TUniqueId& query_id) {
 
 Status ResultBufferMgr::cancel_at_time(time_t cancel_time, const TUniqueId& query_id) {
     std::lock_guard<std::mutex> l(_timeout_lock);
-    TimeoutMap::iterator iter = _timeout_map.find(cancel_time);
+    auto iter = _timeout_map.find(cancel_time);
 
     if (_timeout_map.end() == iter) {
         _timeout_map.insert(std::pair<time_t, std::vector<TUniqueId> >(cancel_time, std::vector<TUniqueId>()));
@@ -137,9 +150,9 @@ void ResultBufferMgr::cancel_thread() {
         time_t now_time = time(nullptr);
         {
             std::lock_guard<std::mutex> l(_timeout_lock);
-            TimeoutMap::iterator end = _timeout_map.upper_bound(now_time + 1);
+            auto end = _timeout_map.upper_bound(now_time + 1);
 
-            for (TimeoutMap::iterator iter = _timeout_map.begin(); iter != end; ++iter) {
+            for (auto iter = _timeout_map.begin(); iter != end; ++iter) {
                 for (auto& i : iter->second) {
                     query_to_cancel.push_back(i);
                 }

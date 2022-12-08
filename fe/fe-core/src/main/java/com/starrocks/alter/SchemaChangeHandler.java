@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/alter/SchemaChangeHandler.java
 
@@ -42,6 +55,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -177,7 +191,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         /*
          * PRIMARY:
-         *      Can not drop any key column.
+         *      Can not drop any key/sort column.
          * UNIQUE:
          *      Can not drop any key column.
          * AGGREGATION:
@@ -189,6 +203,14 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
             if (isKey) {
                 throw new DdlException("Can not drop key column in primary data model table");
+            }
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(dropColName)) {
+                        throw new DdlException("Can not drop sort column in primary data model table");
+                    }
+                }
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             long baseIndexId = olapTable.getBaseIndexId();
@@ -252,6 +274,14 @@ public class SchemaChangeHandler extends AlterHandler {
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
+            }
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
+                        throw new DdlException("Can not modify sort column in primary data model table");
+                    }
+                }
             }
             if (modColumn.getAggregationType() != null) {
                 throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +
@@ -481,6 +511,25 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         // replace the old column list
         indexSchemaMap.put(targetIndexId, newSchema);
+    }
+
+    private void processReorderColumnOfPrimaryKey(ReorderColumnsClause alterClause, OlapTable olapTable,
+                            Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws DdlException {
+        LinkedList<Column> targetIndexSchema = indexSchemaMap.get(olapTable.getIndexIdByName(olapTable.getName()));
+        // check sort key column list
+        Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        
+        for (String colName : alterClause.getColumnsByPos()) {
+            Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
+            if (!oneCol.isPresent()) {
+                throw new DdlException("Column[" + colName + "] not exists");
+            }
+            if (!colNameSet.add(colName)) {
+                throw new DdlException("Duplicated column[" + colName + "]");
+            }
+            int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
+            sortKeyIdxes.add(sortKeyIdx);
+        }
     }
 
     /*
@@ -990,6 +1039,43 @@ public class SchemaChangeHandler extends AlterHandler {
         return jobBuilder.build();
     }
 
+    private AlterJobV2 createJobForProcessReorderColumnOfPrimaryKey(long dbId, OlapTable olapTable,
+                Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws UserException {
+        if (olapTable.getState() == OlapTableState.ROLLUP) {
+            throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
+        }
+
+        // for now table's state can only be NORMAL
+        Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+
+        // create job
+        AlterJobV2Builder jobBuilder = olapTable.alterTable();
+        jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
+                .withDbId(dbId)
+                .withTimeoutSeconds(Config.alter_table_timeout_second)
+                .withStartTime(ConnectContext.get().getStartTime())
+                .withSortKeyIdxes(sortKeyIdxes);
+
+        long tableId = olapTable.getId();
+        for (Long alterIndexId : indexSchemaMap.keySet()) {
+            List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
+
+            short newShortKeyCount = 0;
+            if (sortKeyIdxes != null) {
+                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null, sortKeyIdxes);
+            } else {
+                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null);
+            }
+
+            LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
+            jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, originSchema);
+
+            LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
+        } // end for indices
+
+        return jobBuilder.build();
+    }
+
     @Override
     protected void runAfterCatalogReady() {
         super.runAfterCatalogReady();
@@ -1103,6 +1189,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                     return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                    return null;
                 }
             }
 
@@ -1131,9 +1219,13 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support reorder column");
+                    List<Integer> sortKeyIdxes = new ArrayList<>();
+                    processReorderColumnOfPrimaryKey((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes);
+                    return createJobForProcessReorderColumnOfPrimaryKey(db.getId(), olapTable,
+                            indexSchemaMap, sortKeyIdxes);
+                } else {
+                    processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
                 }
-                processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties
                 // do nothing, properties are already in propertyMap
@@ -1221,6 +1313,11 @@ public class SchemaChangeHandler extends AlterHandler {
             TWriteQuorumType writeQuorum = WriteQuorum
                     .findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
             if (writeQuorum == olapTable.writeQuorum()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.REPLICATED_STORAGE) {
+            metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE));
+            if (metaValue == olapTable.enableReplicatedStorage()) {
                 return;
             }
         } else {
@@ -1390,8 +1487,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
             }
             OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE) {
-                throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE.");
+            if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
+                    && olapTable.getState() != OlapTableState.WAITING_STABLE) {
+                throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE/WAITING_STABLE.");
             }
 
             // find from new alter jobs first

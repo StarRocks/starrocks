@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/workgroup/work_group.h"
+
+#include <utility>
 
 #include "common/config.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -10,8 +24,7 @@
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace workgroup {
+namespace starrocks::workgroup {
 
 /// WorkGroupSchedEntity.
 template <typename Q>
@@ -24,13 +37,28 @@ bool WorkGroupSchedEntity<Q>::is_sq_wg() const {
     return _workgroup->is_sq_wg();
 }
 
+template <typename Q>
+void WorkGroupSchedEntity<Q>::incr_runtime_ns(int64_t runtime_ns) {
+    _vruntime_ns += runtime_ns / cpu_limit();
+    _unadjusted_runtime_ns += runtime_ns;
+}
+
+template <typename Q>
+void WorkGroupSchedEntity<Q>::adjust_runtime_ns(int64_t runtime_ns) {
+    _vruntime_ns += runtime_ns / cpu_limit();
+}
+
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
 template class WorkGroupSchedEntity<ScanTaskQueue>;
 
-///WorkGroup.
-WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
+/// WorkGroup.
+RunningQueryToken::~RunningQueryToken() {
+    wg->decr_num_queries();
+}
+
+WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
                      size_t concurrency, WorkGroupType type)
-        : _name(name),
+        : _name(std::move(name)),
           _id(id),
           _version(version),
           _type(type),
@@ -148,7 +176,7 @@ void WorkGroup::decr_num_running_drivers() {
     }
 }
 
-Status WorkGroup::try_incr_num_queries() {
+StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token() {
     int64_t old = _num_running_queries.fetch_add(1);
     if (_concurrency_limit != ABSENT_CONCURRENCY_LIMIT && old >= _concurrency_limit) {
         _num_running_queries.fetch_sub(1);
@@ -156,7 +184,7 @@ Status WorkGroup::try_incr_num_queries() {
         return Status::TooManyTasks(fmt::format("Exceed concurrency limit: {}", _concurrency_limit));
     }
     _num_total_queries++;
-    return Status::OK();
+    return std::make_unique<RunningQueryToken>(shared_from_this());
 }
 
 void WorkGroup::decr_num_queries() {
@@ -194,9 +222,9 @@ void WorkGroup::copy_metrics(const WorkGroup& rhs) {
 }
 
 /// WorkGroupManager.
-WorkGroupManager::WorkGroupManager() {}
+WorkGroupManager::WorkGroupManager() = default;
 
-WorkGroupManager::~WorkGroupManager() {}
+WorkGroupManager::~WorkGroupManager() = default;
 void WorkGroupManager::destroy() {
     std::unique_lock write_lock(_mutex);
 
@@ -296,15 +324,33 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
     _wg_metrics[wg->name()] = wg->unique_id();
 }
 
+double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
+    if (sum_value <= 0) {
+        return 0;
+    }
+    return double(curr_value) / sum_value;
+}
+
 void WorkGroupManager::update_metrics_unlocked() {
     int64_t sum_cpu_runtime_ns = 0;
     int64_t sum_scan_runtime_ns = 0;
     int64_t sum_connector_scan_runtime_ns = 0;
     for (const auto& [_, wg] : _workgroups) {
-        sum_cpu_runtime_ns += wg->driver_sched_entity()->runtime_ns();
-        sum_scan_runtime_ns += wg->scan_sched_entity()->runtime_ns();
-        sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->runtime_ns();
+        wg->driver_sched_entity()->mark_curr_runtime_ns();
+        wg->scan_sched_entity()->mark_curr_runtime_ns();
+        wg->connector_scan_sched_entity()->mark_curr_runtime_ns();
+
+        sum_cpu_runtime_ns += wg->driver_sched_entity()->growth_runtime_ns();
+        sum_scan_runtime_ns += wg->scan_sched_entity()->growth_runtime_ns();
+        sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->growth_runtime_ns();
     }
+    DeferOp mark_last_runtime_op([this] {
+        for (const auto& [_, wg] : _workgroups) {
+            wg->driver_sched_entity()->mark_last_runtime_ns();
+            wg->scan_sched_entity()->mark_last_runtime_ns();
+            wg->connector_scan_sched_entity()->mark_last_runtime_ns();
+        }
+    });
 
     for (const auto& [name, wg_id] : _wg_metrics) {
         auto wg_it = _workgroups.find(wg_id);
@@ -312,15 +358,11 @@ void WorkGroupManager::update_metrics_unlocked() {
             const auto& wg = wg_it->second;
             VLOG(2) << "workgroup update_metrics " << name;
 
-            double cpu_expected_use_ratio = _sum_cpu_limit == 0 ? 0 : double(wg->cpu_limit()) / _sum_cpu_limit;
-            double cpu_use_ratio =
-                    sum_cpu_runtime_ns <= 0 ? 0 : double(wg->driver_sched_entity()->runtime_ns()) / sum_cpu_runtime_ns;
-            double scan_use_ratio =
-                    sum_scan_runtime_ns <= 0 ? 0 : double(wg->scan_sched_entity()->runtime_ns()) / sum_scan_runtime_ns;
-            double connector_scan_use_ratio =
-                    sum_connector_scan_runtime_ns <= 0
-                            ? 0
-                            : double(wg->connector_scan_sched_entity()->runtime_ns()) / sum_connector_scan_runtime_ns;
+            double cpu_expected_use_ratio = _calculate_ratio(wg->cpu_limit(), _sum_cpu_limit);
+            double cpu_use_ratio = _calculate_ratio(wg->driver_sched_entity()->growth_runtime_ns(), sum_cpu_runtime_ns);
+            double scan_use_ratio = _calculate_ratio(wg->scan_sched_entity()->growth_runtime_ns(), sum_scan_runtime_ns);
+            double connector_scan_use_ratio = _calculate_ratio(wg->connector_scan_sched_entity()->growth_runtime_ns(),
+                                                               sum_connector_scan_runtime_ns);
 
             _wg_cpu_limit_metrics[name]->set_value(cpu_expected_use_ratio);
             _wg_cpu_metrics[name]->set_value(cpu_use_ratio);
@@ -471,8 +513,8 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     {
         std::shared_lock read_lock(_mutex);
         workgroups.reserve(_workgroups.size());
-        for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-            const auto& wg = it->second;
+        for (auto& _workgroup : _workgroups) {
+            const auto& wg = _workgroup.second;
             auto twg = wg->to_thrift_verbose();
             workgroups.push_back(twg);
         }
@@ -498,5 +540,4 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     WorkGroupManager::instance()->add_workgroup(default_wg);
 }
 
-} // namespace workgroup
-} // namespace starrocks
+} // namespace starrocks::workgroup

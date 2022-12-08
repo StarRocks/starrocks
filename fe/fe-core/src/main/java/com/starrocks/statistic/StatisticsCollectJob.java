@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.statistic;
 
 import com.starrocks.catalog.Column;
@@ -82,19 +95,32 @@ public abstract class StatisticsCollectJob {
     }
 
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
-        LOG.debug("statistics collect sql : " + sql);
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-        context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
-        context.setStartTime();
-        executor.execute();
+        int count = 0;
+        int maxRetryTimes = 10;
+        do {
+            LOG.debug("statistics collect sql : " + sql);
+            StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            context.setExecutor(executor);
+            context.setQueryId(UUIDUtil.genUUID());
+            context.setStartTime();
+            executor.execute();
 
-        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
-                    "SQL [" + sql + "]");
-            throw new DdlException(context.getState().getErrorMessage());
-        }
+            if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
+                        "SQL [" + sql + "]");
+                if (context.getState().getErrorMessage().contains("Too many versions")) {
+                    Thread.sleep(60000);
+                    count++;
+                } else {
+                    throw new DdlException(context.getState().getErrorMessage());
+                }
+            } else {
+                return;
+            }
+        } while (count < maxRetryTimes);
+
+        throw new DdlException(context.getState().getErrorMessage());
     }
 
     protected String getDataSize(Column column, boolean isSample) {

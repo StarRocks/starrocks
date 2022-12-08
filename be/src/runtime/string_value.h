@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/string_value.h
 
@@ -43,7 +56,7 @@ struct StringValue {
     size_t len{0};
 
     StringValue(char* ptr, size_t len) : ptr(ptr), len(len) {}
-    StringValue() {}
+    StringValue() = default;
 
     /// Construct a StringValue from 's'.  's' must be valid for as long as
     /// this object is valid.
@@ -100,7 +113,7 @@ struct StringValue {
     // Trims leading and trailing spaces.
     StringValue trim() const;
 
-    static StringValue from_slice(const starrocks::Slice& slice) { return StringValue(slice.data, slice.size); }
+    static StringValue from_slice(const starrocks::Slice& slice) { return {slice.data, slice.size}; }
 };
 
 // This function must be called 'hash_value' to be picked up by boost.

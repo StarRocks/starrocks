@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/encryption_functions.h"
 
@@ -15,7 +27,7 @@
 
 namespace starrocks::vectorized {
 
-ColumnPtr EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
@@ -45,7 +57,7 @@ ColumnPtr EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::aes_decrypt(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::aes_decrypt(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
@@ -81,7 +93,7 @@ ColumnPtr EncryptionFunctions::aes_decrypt(FunctionContext* ctx, const Columns& 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::from_base64(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::from_base64(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -113,7 +125,7 @@ ColumnPtr EncryptionFunctions::from_base64(FunctionContext* ctx, const Columns& 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::to_base64(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     const int size = columns[0]->size();
@@ -149,7 +161,7 @@ ColumnPtr EncryptionFunctions::to_base64(FunctionContext* ctx, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
@@ -175,14 +187,14 @@ ColumnPtr EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, const Columns& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
         list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
     }
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_LARGEINT> result(size);
     for (int row = 0; row < size; row++) {
         Md5Digest digest;
         for (auto& view : list) {
@@ -194,16 +206,15 @@ ColumnPtr EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, const Column
         }
         digest.digest();
         StringParser::ParseResult parse_res;
-        uint128_t int_val =
+        auto int_val =
                 StringParser::string_to_int<uint128_t>(digest.hex().c_str(), digest.hex().size(), 16, &parse_res);
         DCHECK_EQ(parse_res, StringParser::PARSE_SUCCESS);
-        std::string decimal_str = starrocks::integer_to_string<uint128_t>(int_val);
-        result.append(Slice(decimal_str.data(), decimal_str.size()));
+        result.append(int_val);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::md5(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::md5(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -256,12 +267,12 @@ Status EncryptionFunctions::sha2_prepare(FunctionContext* context, FunctionConte
     return Status::OK();
 }
 
-ColumnPtr EncryptionFunctions::invalid_sha(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::invalid_sha(FunctionContext* ctx, const Columns& columns) {
     auto size = columns[0]->size();
     return ColumnHelper::create_const_null_column(size);
 }
 
-ColumnPtr EncryptionFunctions::sha224(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::sha224(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -283,7 +294,7 @@ ColumnPtr EncryptionFunctions::sha224(FunctionContext* ctx, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::sha256(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::sha256(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -305,7 +316,7 @@ ColumnPtr EncryptionFunctions::sha256(FunctionContext* ctx, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::sha384(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::sha384(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -327,7 +338,7 @@ ColumnPtr EncryptionFunctions::sha384(FunctionContext* ctx, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::sha512(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::sha512(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -349,7 +360,7 @@ ColumnPtr EncryptionFunctions::sha512(FunctionContext* ctx, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr EncryptionFunctions::sha2(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> EncryptionFunctions::sha2(FunctionContext* ctx, const Columns& columns) {
     if (!ctx->is_notnull_constant_column(1)) {
         auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
         auto length_viewer = ColumnViewer<TYPE_INT>(columns[1]);

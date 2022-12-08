@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/proto/data.proto
 
@@ -64,6 +77,7 @@ message ChunkPB {
     // For some object column types like bitmap/hll/percentile.
     // we may estimate larger serialized_size but actually don't use that much space.
     optional int64 serialized_size  = 9; // how many bytes are really written into data.
+    repeated int32 encode_level = 10; // the encode level for data columns, during upgrade, this must be 0.
 };
 
 message SegmentPB {
@@ -74,4 +88,9 @@ message SegmentPB {
     optional int64 num_rows = 5;
     optional int64 row_size = 6;
     optional string path = 7;
+
+    optional int64 delete_id = 8;
+    optional int64 delete_data_size = 9;
+    optional int64 delete_num_rows = 10;
+    optional string delete_path = 11;
 };

@@ -1,7 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
+#include <utility>
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -16,6 +29,7 @@
 #include "column/type_traits.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
+#include "gutil/cpu.h"
 #include "runtime/primitive_type.h"
 #include "util/phmap/phmap.h"
 
@@ -59,7 +73,7 @@ public:
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
         static_assert(!pt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
@@ -74,7 +88,7 @@ public:
         return ConstColumn::create(ptr, chunk_size);
     }
 
-    template <PrimitiveType PT>
+    template <LogicalType PT>
     static inline ColumnPtr create_const_decimal_column(RunTimeCppType<PT> value, int precision, int scale,
                                                         size_t size) {
         static_assert(pt_is_decimal<PT>);
@@ -89,7 +103,7 @@ public:
     // If column is const column, duplicate the data column to chunk_size
     static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
         if (column->is_constant()) {
-            ConstColumn* const_column = down_cast<ConstColumn*>(column.get());
+            auto* const_column = down_cast<ConstColumn*>(column.get());
             const_column->data_column()->assign(chunk_size, 0);
             return const_column->data_column();
         }
@@ -103,7 +117,7 @@ public:
             DCHECK(ok);
             return col;
         } else if (column->is_constant()) {
-            ConstColumn* const_column = down_cast<ConstColumn*>(column.get());
+            auto* const_column = down_cast<ConstColumn*>(column.get());
             const_column->data_column()->assign(size, 0);
             return const_column->data_column();
         }
@@ -185,6 +199,12 @@ public:
     // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
+    // expression trees' return column should align return type when some return columns maybe diff from the required
+    // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
+    // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
+    static ColumnPtr align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                       const bool is_nullable);
+
     // Create a column with specified size, the column will be resized to size
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
 
@@ -192,7 +212,7 @@ public:
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
         down_cast<RunTimeColumnType<Type>*>(value.get());
         return std::static_pointer_cast<RunTimeColumnType<Type>>(value);
@@ -202,12 +222,12 @@ public:
      * Cast columnPtr to special type Column*
      * Plz sure actual column type by yourself
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeColumnType<Type>* cast_to_raw(const ColumnPtr& value) {
         return down_cast<RunTimeColumnType<Type>*>(value.get());
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
         return down_cast<RunTimeColumnType<Type>*>(value);
     }
@@ -234,12 +254,12 @@ public:
         return down_cast<Type*>(value.get());
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
         return cast_to_raw<Type>(value)->get_data().data();
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline const RunTimeCppType<Type>* unpack_cpp_data_one_value(const Column* input_column) {
         using ColumnType = RunTimeColumnType<Type>;
         DCHECK(input_column->size() == 1);
@@ -255,13 +275,13 @@ public:
         }
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
         return cast_to_raw<Type>(c)->get_data()[0];
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const ColumnPtr& col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
         return cast_to_raw<Type>(c)->get_data()[0];
@@ -305,8 +325,8 @@ public:
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
-    template <typename T>
-    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+    template <typename T, bool avx512f>
+    static size_t t_filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
         auto result_offset = from;
 
@@ -331,9 +351,47 @@ public:
                 result_offset += kBatchNums;
 
             } else {
-                phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
-                for (auto idx : bitmask) {
-                    *(data + result_offset++) = *(data + start_offset + idx);
+#define AVX512_COPY(SHIFT, MASK, WIDTH)                                         \
+    {                                                                           \
+        auto m = (mask >> SHIFT) & MASK;                                        \
+        if (m) {                                                                \
+            __m512i dst;                                                        \
+            __m512i src = _mm512_loadu_epi##WIDTH(data + start_offset + SHIFT); \
+            dst = _mm512_mask_compress_epi##WIDTH(dst, m, src);                 \
+            _mm512_storeu_epi##WIDTH(data + result_offset, dst);                \
+            result_offset += __builtin_popcount(m);                             \
+        }                                                                       \
+    }
+
+// In theory we should put k1 in clobbers.
+// But since we compile code with AVX2, k1 register is not used.
+#define AVX512_ASM_COPY(SHIFT, MASK, WIDTH, WIDTHX)               \
+    {                                                             \
+        auto m = (mask >> SHIFT) & MASK;                          \
+        if (m) {                                                  \
+            T* src = data + start_offset + SHIFT;                 \
+            T* dst = data + result_offset;                        \
+            __asm__ volatile("vmovdqu" #WIDTH                     \
+                             " (%[s]), %%zmm1\n"                  \
+                             "kmovw %[mask], %%k1\n"              \
+                             "vpcompress" #WIDTHX                 \
+                             " %%zmm1, %%zmm0%{%%k1%}%{z%}\n"     \
+                             "vmovdqu" #WIDTH " %%zmm0, (%[d])\n" \
+                             : [ s ] "+r"(src), [ d ] "+r"(dst)   \
+                             : [ mask ] "r"(m)                    \
+                             : "zmm0", "zmm1", "memory");         \
+            result_offset += __builtin_popcount(m);               \
+        }                                                         \
+    }
+
+                if constexpr (avx512f && sizeof(T) == 4) {
+                    AVX512_ASM_COPY(0, 0xffff, 32, d);
+                    AVX512_ASM_COPY(16, 0xffff, 32, d);
+                } else {
+                    phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
+                    for (auto idx : bitmask) {
+                        *(data + result_offset++) = *(data + start_offset + idx);
+                    }
                 }
             }
 
@@ -381,8 +439,33 @@ public:
     }
 
     template <typename T>
+    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+        if (base::CPU::instance()->has_avx512f()) {
+            return t_filter_range<T, true>(filter, data, from, to);
+        } else {
+            return t_filter_range<T, false>(filter, data, from, to);
+        }
+    }
+
+    template <typename T>
     static size_t filter(const Column::Filter& filter, T* data) {
         return filter_range(filter, data, 0, filter.size());
+    }
+
+    template <class FastPath, class SlowPath>
+    static auto call_nullable_func(const Column* column, FastPath&& fast_path, SlowPath&& slow_path) {
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& null_data = nullable_column->immutable_null_column_data();
+            const Column* data_column = nullable_column->data_column().get();
+            if (column->has_null()) {
+                return std::forward<SlowPath>(slow_path)(null_data, data_column);
+            } else {
+                return std::forward<FastPath>(fast_path)(data_column);
+            }
+        } else {
+            return std::forward<FastPath>(fast_path)(column);
+        }
     }
 
     static ColumnPtr create_const_null_column(size_t chunk_size);

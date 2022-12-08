@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/cast_expr.h"
 
@@ -18,6 +30,7 @@
 #include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
@@ -27,6 +40,7 @@
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/mysql_global.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
@@ -42,7 +56,7 @@ namespace starrocks::vectorized {
        << " to " << type_to_string(TOTYPE) << " failed";                  \
     throw std::runtime_error(ss.str())
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException = false>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException = false>
 struct CastFn {
     static ColumnPtr cast_fn(ColumnPtr& column);
 };
@@ -119,7 +133,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
     return timestamp::time_to_literal(value);
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_JSON> builder(viewer.size());
@@ -144,7 +158,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             value = JsonValue::from_double(viewer.value(row));
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
-        } else if constexpr (pt_is_binary<FromType>) {
+        } else if constexpr (pt_is_string<FromType>) {
             auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
             if (maybe.ok()) {
                 value = maybe.value();
@@ -175,7 +189,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_JSON> viewer(column);
     ColumnBuilder<ToType> builder(viewer.size());
@@ -219,7 +233,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 }
                 builder.append_null();
             }
-        } else if constexpr (pt_is_binary<ToType>) {
+        } else if constexpr (pt_is_string<ToType>) {
             // if the json already a string value, get the string directly
             // else cast it to string representation
             if (json->get_type() == JsonType::JSON_STRING) {
@@ -269,7 +283,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BOOLEAN, cast_from_json_fn);
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_BOOLEAN> builder(viewer.size());
@@ -279,7 +293,7 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
             auto value = viewer.value(row);
-            int32_t r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
@@ -301,7 +315,7 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
             }
 
             auto value = viewer.value(row);
-            int32_t r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
@@ -321,7 +335,7 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_BOOLEAN, cast_from_string_to_bool_fn);
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_HLL> builder(viewer.size());
@@ -348,7 +362,7 @@ static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_HLL, cast_from_string_to_hll_fn);
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_OBJECT> builder(viewer.size());
@@ -420,7 +434,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
     return value.to_timestamp_literal();
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     StringParser::ParseResult result;
     int sz = column.get()->size();
@@ -430,7 +444,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     if (column->is_constant()) {
         auto* input = ColumnHelper::get_binary_column(column.get());
         auto slice = input->get_slice(0);
-        RunTimeCppType<ToType> r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+        auto r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
         if (result != StringParser::PARSE_SUCCESS) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
@@ -443,9 +457,9 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     res_data_column->resize(sz);
     auto& res_data = res_data_column->get_data();
     if (column->is_nullable()) {
-        NullableColumn* input_column = down_cast<NullableColumn*>(column.get());
+        auto* input_column = down_cast<NullableColumn*>(column.get());
         NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
-        BinaryColumn* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
         auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
@@ -463,7 +477,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     } else {
         NullColumnPtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
-        BinaryColumn* data_column = down_cast<BinaryColumn*>(column.get());
+        auto* data_column = down_cast<BinaryColumn*>(column.get());
 
         bool has_null = false;
         for (int i = 0; i < sz; ++i) {
@@ -484,7 +498,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     }
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<ToType> builder(viewer.size());
@@ -498,8 +512,7 @@ ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
         }
 
         auto value = viewer.value(row);
-        RunTimeCppType<ToType> r =
-                StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
+        auto r = StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
 
         bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
         if constexpr (AllowThrowException) {
@@ -553,7 +566,14 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_INT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_INT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_INT, DateToNumber);
@@ -569,8 +589,15 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_BIGINT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_BIGINT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_BIGINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_BIGINT, TimestampToNumber);
@@ -585,8 +612,15 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_LARGEINT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_LARGEINT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_LARGEINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_LARGEINT, TimestampToNumber);
@@ -599,9 +633,16 @@ SELF_CAST(TYPE_FLOAT);
 UNARY_FN_CAST(TYPE_BOOLEAN, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_FLOAT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_FLOAT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_FLOAT, DateToNumber);
@@ -616,8 +657,15 @@ UNARY_FN_CAST(TYPE_BOOLEAN, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_DOUBLE, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_DOUBLE, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DOUBLE, DateToNumber);
@@ -667,7 +715,7 @@ UNARY_FN_CAST(TYPE_TIME, TYPE_DECIMALV2, TimeToDecimal);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DECIMALV2, DateToDecimal);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DECIMALV2, TimestampToDecimal);
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_decimalv2_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DECIMALV2> builder(viewer.size());
@@ -710,7 +758,7 @@ static ColumnPtr cast_from_string_to_decimalv2_fn(ColumnPtr& column) {
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DECIMALV2, cast_from_string_to_decimalv2_fn);
 
 // date
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 ColumnPtr cast_to_date_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_DATE> builder(viewer.size());
@@ -754,7 +802,7 @@ CUSTOMIZE_FN_CAST(TYPE_DECIMALV2, TYPE_DATE, cast_to_date_fn);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DATE, TimestampToDate);
 // Time to date need rewrite CastExpr
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DATE> builder(viewer.size());
@@ -796,7 +844,7 @@ static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATE, cast_from_string_to_date_fn);
 
 // datetime(timestamp)
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
@@ -840,7 +888,7 @@ CUSTOMIZE_FN_CAST(TYPE_DECIMALV2, TYPE_DATETIME, cast_to_timestamp_fn);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 // Time to datetime need rewrite CastExpr
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
@@ -915,7 +963,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 SELF_CAST(TYPE_JSON);
 
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
     auto size = column->size();
     ColumnBuilder<TYPE_TIME> builder(size);
@@ -940,7 +988,7 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                     builder.append_null();
                 } else {
                     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-                    uint64_t int_value = StringParser::string_to_unsigned_int<uint64_t>(
+                    auto int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_char), first_colon - first_char, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
                         if constexpr (AllowThrowException) {
@@ -1011,12 +1059,12 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
 // vectorized cast expr
-template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 class VectorizedCastExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
         }
@@ -1091,8 +1139,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return Status::OK();                                                                                \
         }                                                                                                       \
                                                                                                                 \
-        ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {                             \
-            ColumnPtr column = _children[0]->evaluate(context, ptr);                                            \
+        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {           \
+            ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                   \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
                 return ColumnHelper::create_const_null_column(column->size());                                  \
             }                                                                                                   \
@@ -1100,7 +1148,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(_now, column); \
         };                                                                                                      \
                                                                                                                 \
-        std::string debug_string() const {                                                                      \
+        std::string debug_string() const override {                                                             \
             std::stringstream out;                                                                              \
             auto expr_debug_string = Expr::debug_string();                                                      \
             out << "VectorizedCastExpr ("                                                                       \
@@ -1201,12 +1249,12 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_to_json_fn);
 /**
  * Resolve cast to string
  */
-template <PrimitiveType Type, bool AllowThrowException>
+template <LogicalType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
         }
@@ -1242,7 +1290,7 @@ public:
     };
 
 private:
-    template <PrimitiveType FloatType>
+    template <LogicalType FloatType>
     ColumnPtr _evaluate_float(ExprContext* context, const ColumnPtr& column) {
         if (type().len == -1) {
             if constexpr (FloatType == TYPE_FLOAT) {
@@ -1391,8 +1439,8 @@ private:
     }
 
 Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& node, bool allow_throw_exception) {
-    PrimitiveType to_type = TypeDescriptor::from_thrift(node.type).type;
-    PrimitiveType from_type = thrift_to_type(node.child_type);
+    LogicalType to_type = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType from_type = thrift_to_type(node.child_type);
 
     if (node.__isset.child_type_desc) {
         TypeDescriptor array_field_type_cast_to = TypeDescriptor::from_thrift(node.type);
@@ -1424,7 +1472,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
                                                     array_field_type_cast_to.debug_string());
                 return nullptr;
             }
-            ColumnRef* child = new ColumnRef(cast);
+            auto* child = new ColumnRef(cast);
             cast_element_expr->add_child(child);
             if (pool) {
                 pool->add(cast_element_expr);
@@ -1437,11 +1485,11 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         }
     }
 
-    if (to_type == TYPE_VARCHAR || to_type == TYPE_CHAR) {
+    if (to_type == TYPE_CHAR) {
         to_type = TYPE_VARCHAR;
     }
 
-    if (from_type == TYPE_VARCHAR || from_type == TYPE_CHAR) {
+    if (from_type == TYPE_CHAR) {
         from_type = TYPE_VARCHAR;
     }
 
@@ -1470,7 +1518,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         if (cast_element_expr == nullptr) {
             return nullptr;
         }
-        ColumnRef* child = new ColumnRef(cast);
+        auto* child = new ColumnRef(cast);
         cast_element_expr->add_child(child);
         if (pool) {
             pool->add(cast_element_expr);
@@ -1556,6 +1604,10 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
                 return nullptr;
             }
         }
+    } else if (is_binary_type(from_type) || is_binary_type(to_type)) {
+        LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                     << ", to type: " << type_to_string(to_type);
+        return nullptr;
     } else {
         switch (to_type) {
             CASE_TO_TYPE(TYPE_BOOLEAN, allow_throw_exception);
@@ -1615,7 +1667,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
             LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
             return nullptr;
         }
-        ColumnRef* child = new ColumnRef(node);
+        auto* child = new ColumnRef(node);
         cast_element_expr->add_child(child);
 
         pool->add(child);

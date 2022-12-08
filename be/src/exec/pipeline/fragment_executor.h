@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -47,10 +59,16 @@ public:
 
     // Access the common fields by this method.
     const TExecPlanFragmentParams& common() const { return _common_request; }
+    const TExecPlanFragmentParams& unique() const { return _unique_request; }
 
     // Access the unique fields by the following methods.
     int32_t backend_num() const { return _unique_request.backend_num; }
     int32_t pipeline_dop() const { return _unique_request.__isset.pipeline_dop ? _unique_request.pipeline_dop : 0; }
+    int32_t pipeline_sink_dop() const {
+        // NOTE: default dop is 1, compatible with old version(before 2.5)
+        return _unique_request.params.__isset.pipeline_sink_dop ? _unique_request.params.pipeline_sink_dop : 1;
+    }
+
     const TUniqueId& fragment_instance_id() const { return _unique_request.params.fragment_instance_id; }
     int32_t sender_id() const { return _unique_request.params.sender_id; }
 
@@ -96,10 +114,12 @@ private:
     Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
     Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                             const UnifiedExecPlanFragmentParams& request,
-                                            std::unique_ptr<starrocks::DataSink>& datasink);
+                                            std::unique_ptr<starrocks::DataSink>& datasink,
+                                            const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
 
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;

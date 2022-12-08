@@ -1,10 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <gtest/gtest.h>
 
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class StringFunctionRepeatTest : public ::testing::Test {};
 TEST_F(StringFunctionRepeatTest, repeatTest) {
@@ -20,7 +32,7 @@ TEST_F(StringFunctionRepeatTest, repeatTest) {
     columns.emplace_back(str);
     columns.emplace_back(times);
 
-    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnViewer<TYPE_VARCHAR>(result);
@@ -46,7 +58,7 @@ TEST_F(StringFunctionRepeatTest, repeatLargeTest) {
     columns.emplace_back(str);
     columns.emplace_back(times);
 
-    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
 }
 
@@ -67,7 +79,7 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     columns.emplace_back(str);
     columns.emplace_back(ConstColumn::create(times, 1));
 
-    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     const auto num_rows = str->size();
     ASSERT_EQ(num_rows, result->size());
 
@@ -85,5 +97,4 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

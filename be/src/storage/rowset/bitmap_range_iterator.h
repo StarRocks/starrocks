@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/bitmap_range_iterator.h
 
@@ -32,7 +45,7 @@ namespace starrocks {
 //   output ranges: [0,2), [4,8), [10,11), [15,18), [18,20) (when max_range_size=3)
 class BitmapRangeIterator {
 public:
-    explicit BitmapRangeIterator(const Roaring& bitmap) : _last_val(0), _buf_pos(0), _buf_size(0), _eof(false) {
+    explicit BitmapRangeIterator(const Roaring& bitmap) {
         roaring_init_iterator(&bitmap.roaring, &_iter);
         _read_next_batch();
     }
@@ -72,10 +85,10 @@ private:
     static const uint32_t kBatchSize = 256;
 
     roaring_uint32_iterator_t _iter{};
-    uint32_t _last_val;
-    uint32_t _buf_pos;
-    uint32_t _buf_size;
-    bool _eof;
+    uint32_t _last_val{0};
+    uint32_t _buf_pos{0};
+    uint32_t _buf_size{0};
+    bool _eof{false};
     uint32_t _buf[kBatchSize];
 };
 

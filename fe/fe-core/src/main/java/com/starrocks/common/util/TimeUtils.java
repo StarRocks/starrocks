@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/util/TimeUtils.java
 
@@ -289,5 +302,33 @@ public class TimeUtils {
             default:
                 return 0;
         }
+    }
+
+    /**
+     * Based on the start seconds, get the seconds closest and greater than the target second by interval,
+     * the interval use period and time unit to calculate.
+     *
+     * @param startTimeSecond  start time second
+     * @param targetTimeSecond target time second
+     * @param period           period
+     * @param timeUnit         time unit
+     * @return next valid time second
+     * @throws DdlException
+     */
+    public static long getNextValidTimeSecond(long startTimeSecond, long targetTimeSecond,
+                                              long period, TimeUnit timeUnit) throws DdlException {
+        if (startTimeSecond > targetTimeSecond) {
+            return startTimeSecond;
+        }
+        long intervalSecond = convertTimeUnitValueToSecond(period, timeUnit);
+        if (intervalSecond < 1) {
+            throw new DdlException("Can not get next valid time second," +
+                    "startTimeSecond:" + startTimeSecond +
+                    " period:" + period +
+                    " timeUnit:" + timeUnit);
+        }
+        long difference = targetTimeSecond - startTimeSecond;
+        long step = difference / intervalSecond + 1;
+        return startTimeSecond + step * intervalSecond;
     }
 }

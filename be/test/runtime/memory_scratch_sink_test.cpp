@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/runtime/memory_scratch_sink_test.cpp
 
@@ -33,9 +46,9 @@
 #include <arrow/visitor.h>
 #include <arrow/visitor_inline.h>
 #include <gtest/gtest.h>
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 
 #include "column/chunk.h"
@@ -51,7 +64,6 @@
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
-#include "runtime/thread_resource_mgr.h"
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
 #include "util/blocking_queue.hpp"
@@ -90,9 +102,9 @@ public:
         }
     }
 
-    ~MemoryScratchSinkTest() { delete _state; }
+    ~MemoryScratchSinkTest() override { delete _state; }
 
-    virtual void SetUp() {
+    void SetUp() override {
         config::periodic_counter_update_period_ms = 500;
         config::storage_root_path = "./data";
 
@@ -103,7 +115,7 @@ public:
         init();
     }
 
-    virtual void TearDown() {
+    void TearDown() override {
         _obj_pool.clear();
         system("rm -rf ./test_run");
     }
@@ -284,7 +296,7 @@ TEST_F(MemoryScratchSinkTest, work_flow_normal) {
     MemoryScratchSink sink(*_row_desc, _exprs, _tsink);
     TDataSink data_sink;
     data_sink.memory_scratch_sink = _tsink;
-    ASSERT_TRUE(sink.init(data_sink).ok());
+    ASSERT_TRUE(sink.init(data_sink, nullptr).ok());
     ASSERT_TRUE(sink.prepare(_state).ok());
 
     auto maybe_chunk = scanner->get_next();

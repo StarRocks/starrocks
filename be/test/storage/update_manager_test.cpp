@@ -1,8 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/update_manager.h"
 
 #include <gtest/gtest.h>
+
+#include <memory>
 
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
@@ -28,11 +42,11 @@ public:
         _root_path = "./ut_dir/olap_update_manager_test";
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
-        _meta.reset(new KVStore(_root_path));
+        _meta = std::make_unique<KVStore>(_root_path);
         ASSERT_TRUE(_meta->init().ok());
         ASSERT_TRUE(fs::is_directory(_root_path + "/meta").value());
-        _root_mem_tracker.reset(new MemTracker(-1, "update"));
-        _update_manager.reset(new UpdateManager(_root_mem_tracker.get()));
+        _root_mem_tracker = std::make_unique<MemTracker>(-1, "update");
+        _update_manager = std::make_unique<UpdateManager>(_root_mem_tracker.get());
     }
 
     RowsetSharedPtr create_rowset(const vector<int64_t>& keys, vectorized::Column* one_delete = nullptr) {
@@ -53,10 +67,10 @@ public:
         auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+        for (long key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -147,7 +161,7 @@ TEST_F(UpdateManagerTest, testDelVec) {
 }
 
 TEST_F(UpdateManagerTest, testExpireEntry) {
-    srand(time(NULL));
+    srand(time(nullptr));
     create_tablet(rand(), rand());
     // write
     const int N = 8000;

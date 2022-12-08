@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/runtime/fragment_mgr_test.cpp
 
@@ -23,6 +36,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "common/config.h"
 #include "exec/data_sink.h"
 #include "runtime/exec_env.h"
@@ -35,9 +50,9 @@ static Status s_prepare_status;
 static Status s_open_status;
 // Mock used for this unittest
 PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
-        : _exec_env(exec_env), _report_status_cb(report_status_cb) {}
+        : _exec_env(exec_env), _report_status_cb(std::move(report_status_cb)) {}
 
-PlanFragmentExecutor::~PlanFragmentExecutor() {}
+PlanFragmentExecutor::~PlanFragmentExecutor() = default;
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     return s_prepare_status;
@@ -56,10 +71,10 @@ void PlanFragmentExecutor::report_profile_once() {}
 
 class FragmentMgrTest : public testing::Test {
 public:
-    FragmentMgrTest() {}
+    FragmentMgrTest() = default;
 
 protected:
-    virtual void SetUp() {
+    void SetUp() override {
         s_prepare_status = Status::OK();
         s_open_status = Status::OK();
 
@@ -67,7 +82,7 @@ protected:
         config::fragment_pool_thread_num_max = 32;
         config::fragment_pool_queue_size = 1024;
     }
-    virtual void TearDown() {}
+    void TearDown() override {}
 };
 
 TEST_F(FragmentMgrTest, Normal) {

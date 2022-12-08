@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.scheduler.persist;
 
@@ -30,6 +43,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("state")
     private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
 
+    @SerializedName("progress")
+    private int progress;
+
     @SerializedName("dbName")
     private String dbName;
 
@@ -50,7 +66,7 @@ public class TaskRunStatus implements Writable {
 
     // the larger the value, the higher the priority, the default value is 0
     @SerializedName("priority")
-    private int priority = 0;
+    private int priority = Constants.TaskRunPriority.LOWEST.value();
 
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
@@ -93,6 +109,14 @@ public class TaskRunStatus implements Writable {
 
     public void setState(Constants.TaskRunState state) {
         this.state = state;
+    }
+
+    public int getProgress() {
+        return progress;
+    }
+
+    public void setProgress(int progress) {
+        this.progress = progress;
     }
 
     public String getDbName() {
@@ -179,6 +203,7 @@ public class TaskRunStatus implements Writable {
                 ", createTime=" + createTime +
                 ", finishTime=" + finishTime +
                 ", state=" + state +
+                ", progress=" + progress + "%" +
                 ", dbName='" + getDbName() + '\'' +
                 ", definition='" + definition + '\'' +
                 ", user='" + user + '\'' +

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/mysql/privilege/Auth.java
 
@@ -95,7 +108,7 @@ public class Auth implements Writable {
     private ResourcePrivTable resourcePrivTable = new ResourcePrivTable();
     private ImpersonateUserPrivTable impersonateUserPrivTable = new ImpersonateUserPrivTable();
 
-    private RoleManager roleManager = new RoleManager();
+    protected RoleManager roleManager = new RoleManager();
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -129,14 +142,25 @@ public class Auth implements Writable {
         return userPrivTable;
     }
 
-    public DbPrivTable getDbPrivTable() {
+    protected DbPrivTable getDbPrivTable() {
         return dbPrivTable;
     }
 
-    public TablePrivTable getTablePrivTable() {
+    protected TablePrivTable getTablePrivTable() {
         return tablePrivTable;
     }
 
+    protected ResourcePrivTable getResourcePrivTable() {
+        return resourcePrivTable;
+    }
+
+    protected ImpersonateUserPrivTable getImpersonateUserPrivTable() {
+        return impersonateUserPrivTable;
+    }
+
+    protected UserPropertyMgr getPropertyMgr() {
+        return propertyMgr;
+    }
     /**
      * check if role exist, this function can be used in analyze phrase to validate role
      */
@@ -715,7 +739,7 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), true, false);
+            grantRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), true, false);
         } finally {
             writeUnlock();
         }
@@ -771,7 +795,7 @@ public class Auth implements Writable {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            revokeRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), false);
+            revokeRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), false);
         } finally {
             writeUnlock();
         }
@@ -1438,7 +1462,7 @@ public class Auth implements Writable {
             throws DdlException {
         writeLock();
         try {
-            propertyMgr.updateUserProperty(user, properties);
+            propertyMgr.updateUserProperty(user, properties, isReplay);
             if (!isReplay) {
                 UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserProperty(propertyInfo);

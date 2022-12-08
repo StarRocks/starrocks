@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -29,8 +41,7 @@ class Operator {
     friend class PipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -145,7 +156,7 @@ public:
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                         vectorized::FilterPtr* filter = nullptr);
+                                         vectorized::FilterPtr* filter = nullptr, bool apply_filter = true);
 
     // Evaluate conjuncts without cache
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
@@ -158,6 +169,8 @@ public:
     // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
     // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
     // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_memory_scratch_sink;
+    static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
@@ -233,7 +246,7 @@ private:
 
 class OperatorFactory {
 public:
-    OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id);
+    OperatorFactory(int32_t id, std::string name, int32_t plan_node_id);
     virtual ~OperatorFactory() = default;
     // Create the operator for the specific sequence driver
     // For some operators, when share some status, need to know the degree_of_parallelism

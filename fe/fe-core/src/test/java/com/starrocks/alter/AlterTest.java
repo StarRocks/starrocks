@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/alter/AlterTest.java
 
@@ -23,8 +36,11 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.staros.proto.ObjectStorageInfo;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
@@ -62,7 +78,7 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -190,8 +206,8 @@ public class AlterTest {
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table test_partition_exception";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
+            DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
@@ -243,7 +259,7 @@ public class AlterTest {
         }
     }
 
-    private static void refreshMaterializedView(String sql, boolean expectedException) throws Exception {
+    private static void refreshMaterializedView(String sql) throws Exception {
         RefreshMaterializedViewStatement refreshMaterializedViewStatement =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
@@ -251,14 +267,9 @@ public class AlterTest {
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
                             refreshMaterializedViewStatement.getMvName().getTbl(),
                             Constants.TaskRunPriority.LOWEST.value());
-            if (expectedException) {
-                Assert.fail();
-            }
         } catch (Exception e) {
             e.printStackTrace();
-            if (!expectedException) {
-                Assert.fail();
-            }
+            Assert.fail();
         }
     }
 
@@ -418,7 +429,7 @@ public class AlterTest {
                 "as select k1, k2 from test.testTable3;";
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
-        refreshMaterializedView(alterStmt, false);
+        refreshMaterializedView(alterStmt);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -448,7 +459,7 @@ public class AlterTest {
                 "as select k1, k2 from test.testTable4;";
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
-        refreshMaterializedView(alterStmt, false);
+        refreshMaterializedView(alterStmt);
         cancelRefreshMaterializedView("cancel refresh materialized view test.mv1", false);
         dropMaterializedView("drop materialized view test.mv1");
     }
@@ -887,15 +898,29 @@ public class AlterTest {
     public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
         Config.use_staros = true;
 
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
+                agent.createShardGroup(anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
@@ -956,15 +981,30 @@ public class AlterTest {
     public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
         Config.use_staros = true;
 
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
+                agent.createShardGroup(anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L),
                         Lists.newArrayList(30007L, 30008L, 30009L),
@@ -1023,7 +1063,6 @@ public class AlterTest {
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
         Config.use_staros = false;
     }
 
@@ -1589,8 +1628,8 @@ public class AlterTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         String renameDb = "alter database test rename test0";
-        AlterDatabaseRename renameDbStmt =
-                (AlterDatabaseRename) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
+        AlterDatabaseRenameStatement renameDbStmt =
+                (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
     }
 
     @Test
@@ -1845,15 +1884,30 @@ public class AlterTest {
     public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
         Config.use_staros = true;
 
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
+                agent.createShardGroup(anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryBackendIdByShard(anyLong);

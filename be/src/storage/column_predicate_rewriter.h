@@ -1,10 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <cstdint>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "common/object_pool.h"
 #include "runtime/global_dict/types.h"
 #include "storage/conjunctive_predicates.h"
@@ -27,7 +39,7 @@ public:
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
     ColumnPredicateRewriter(ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
-                            const Schema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
+                            const VectorizedSchema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
                             SparseRange& scan_range)
             : _column_iterators(column_iterators),
               _predicates(pushdown_predicates),
@@ -39,7 +51,7 @@ public:
     Status rewrite_predicate(ObjectPool* pool);
 
 private:
-    StatusOr<bool> _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
+    StatusOr<bool> _rewrite_predicate(ObjectPool* pool, const VectorizedFieldPtr& field);
     StatusOr<bool> _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
                                            const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
     void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter);
@@ -48,7 +60,7 @@ private:
 
     ColumnIterators& _column_iterators;
     PushDownPredicates& _predicates;
-    const Schema& _schema;
+    const VectorizedSchema& _schema;
     std::vector<uint8_t>& _need_rewrite;
     const int _column_size;
     SparseRange& _scan_range;

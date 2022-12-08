@@ -1,16 +1,18 @@
 # AVG
 
-## description
+## Description
 
-### Syntax
-
-`AVG([DISTINCT] expr)`
-
-It is used to return the average value of selected fields.
+Returns the average value of selected fields.
 
 Optional field DISTINCT parameters can be used to return the weighted average.
 
-## example
+## Syntax
+
+```Haskell
+AVG([DISTINCT] expr)
+```
+
+## Examples
 
 ```plain text
 MySQL > SELECT datetime, AVG(cost_time)

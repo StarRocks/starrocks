@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -9,8 +21,7 @@
 #include "udf/udf.h"
 #include "util/timezone_hsscan.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // TODO:
 class TimeFunctions {
@@ -468,19 +479,20 @@ public:
     // try to transfer content to date format based on "%Y-%m-%d",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
-    static ColumnPtr str_to_date_from_date_format(FunctionContext* context,
-                                                  const starrocks::vectorized::Columns& columns,
-                                                  const char* str_format);
+    static StatusOr<ColumnPtr> str_to_date_from_date_format(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns,
+                                                            const char* str_format);
 
     // try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
-    static ColumnPtr str_to_date_from_datetime_format(FunctionContext* context,
-                                                      const starrocks::vectorized::Columns& columns,
-                                                      const char* str_format);
+    static StatusOr<ColumnPtr> str_to_date_from_datetime_format(FunctionContext* context,
+                                                                const starrocks::vectorized::Columns& columns,
+                                                                const char* str_format);
 
     // Try to process string content, based on uncommon string format
-    static ColumnPtr str_to_date_uncommon(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context,
+                                                    const starrocks::vectorized::Columns& columns);
     /**
      *
      * cast string to datetime
@@ -607,17 +619,20 @@ private:
 
     static std::string convert_format(const Slice& format);
 
-    static ColumnPtr from_unix_with_format_general(FunctionContext* context,
-                                                   const starrocks::vectorized::Columns& columns);
-    static ColumnPtr from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                 const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> from_unix_with_format_general(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns);
 
-    static ColumnPtr convert_tz_general(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 
-    static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns, const cctz::time_zone& from,
-                                      const cctz::time_zone& to);
+    static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
+                                                const cctz::time_zone& from, const cctz::time_zone& to);
 
 public:
+    static TimestampValue start_of_time_slice;
+    static std::string info_reported_by_time_slice;
+
     enum FormatType {
         yyyyMMdd,
         yyyy_MM_dd,
@@ -636,7 +651,7 @@ private:
     struct FromUnixState {
         bool const_format{false};
         std::string format_content;
-        FromUnixState() {}
+        FromUnixState() = default;
     };
 
     // The context used for convert tz
@@ -665,9 +680,8 @@ private:
         ScalarFunction function;
     };
 
-    template <PrimitiveType Type>
-    friend ColumnPtr do_format(const FormatCtx* ctx, const Columns& cols);
+    template <LogicalType Type>
+    friend StatusOr<ColumnPtr> do_format(const FormatCtx* ctx, const Columns& cols);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

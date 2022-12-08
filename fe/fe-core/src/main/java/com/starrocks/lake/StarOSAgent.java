@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.lake;
 
@@ -6,16 +19,20 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
-import com.staros.proto.AllocateStorageInfo;
+import com.staros.manager.StarManagerServer;
+import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
-import com.staros.proto.ObjectStorageType;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
+import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.ShardStorageInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
@@ -56,7 +73,7 @@ public class StarOSAgent {
         rwLock = new ReentrantReadWriteLock();
     }
 
-    public boolean init() {
+    public boolean init(StarManagerServer server) {
         if (Config.integrate_starmgr) {
             if (!Config.use_staros) {
                 LOG.error("integrate_starmgr is true but use_staros is false!");
@@ -70,7 +87,7 @@ public class StarOSAgent {
             }
         }
 
-        client = new StarClient();
+        client = new StarClient(server);
         client.connectServer(Config.starmgr_address);
         return true;
     }
@@ -94,16 +111,15 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
-    public ShardStorageInfo getServiceShardStorageInfo() throws DdlException {
-        // TODO: support other storage type
-        AllocateStorageInfo requestStorageInfo =
-                AllocateStorageInfo.newBuilder().setObjectStorageType(ObjectStorageType.S3).build();
+    public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
-            ShardStorageInfo responseStorageInfo = client.allocateStorage(serviceId, requestStorageInfo);
-            LOG.debug("Get service shard storage info from StarMgr. storage info: {}", responseStorageInfo);
-            return responseStorageInfo;
+            EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
+            FileStoreType fsType = FileStoreType.valueOf(enumDescriptor.findValueByName(Config.default_fs_type).getNumber());
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
+            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
         } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate storage from StarMgr", e);
+            throw new DdlException("Failed to allocate file path from StarMgr", e);
         }
     }
 
@@ -255,7 +271,22 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo) throws DdlException {
+    public void createShardGroup(long groupId) throws DdlException {
+        prepare();
+        List<ShardGroupInfo> shardGroupInfos = null;
+        try {
+            List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
+            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().setGroupId(groupId).build());
+            shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
+            LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
+            Preconditions.checkState(shardGroupInfos.size() == 1);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
+        }
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+        throws DdlException {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
@@ -264,14 +295,14 @@ public class StarOSAgent {
                 CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
                 builder.setReplicaCount(1);
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
-                if (shardStorageInfo != null) {
-                    builder.setShardStorageInfo(shardStorageInfo);
-                }
+                builder.setGroupId(groupId);
+                builder.setPathInfo(pathInfo);
+                builder.setCacheInfo(cacheInfo);
                 createShardInfos.add(builder.build());
             }
             shardInfos = client.createShard(serviceId, createShardInfos);
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
-        } catch (StarClientException e) {
+        } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
 

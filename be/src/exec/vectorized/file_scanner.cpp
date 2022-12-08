@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/file_scanner.h"
 
@@ -85,7 +97,7 @@ Status FileScanner::init_expr_ctx() {
         }
 
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx, _state));
         RETURN_IF_ERROR(ctx->prepare(_state));
         RETURN_IF_ERROR(ctx->open(_state));
 
@@ -139,6 +151,11 @@ void FileScanner::fill_columns_from_path(starrocks::vectorized::ChunkPtr& chunk,
 StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src,
                                             starrocks::vectorized::ChunkPtr& cast) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
+
+    if (cast->num_rows() == 0) {
+        return cast;
+    }
+
     // materialize
     ChunkPtr dest_chunk = std::make_shared<Chunk>();
 
@@ -160,16 +177,24 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPt
         int dest_index = ctx_index++;
         ExprContext* ctx = _dest_expr_ctx[dest_index];
         ASSIGN_OR_RETURN(auto col, ctx->evaluate(cast.get()));
-        uintptr_t col_pointer = reinterpret_cast<uintptr_t>(col.get());
+        auto col_pointer = reinterpret_cast<uintptr_t>(col.get());
         if (column_pointers.contains(col_pointer)) {
             col = col->clone();
         } else {
             column_pointers.emplace(col_pointer);
         }
+
         col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), col);
+
+        // The column builder in ctx->evaluate may build column as non-nullable.
+        // See be/src/column/column_builder.h#L79.
+        if (!col->is_nullable() && slot->is_nullable()) {
+            col = ColumnHelper::cast_to_nullable_column(col);
+        }
+
         dest_chunk->append_column(col, slot->id());
 
-        if (col->is_nullable() && col->has_null()) {
+        if (src != nullptr && col->is_nullable() && col->has_null()) {
             if (_strict_mode && _dest_slot_desc_mappings[dest_index] != nullptr) {
                 ColumnPtr& src_col = src->get_column_by_slot_id(_dest_slot_desc_mappings[dest_index]->id());
 

@@ -26,8 +26,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-namespace crc32c {
+namespace starrocks::crc32c {
 
 class CRC {};
 
@@ -71,5 +70,4 @@ TEST(CRC, Extend) {
     ASSERT_EQ(Value("hello world", 11), Value(slices));
 }
 
-} // namespace crc32c
-} // namespace starrocks
+} // namespace starrocks::crc32c

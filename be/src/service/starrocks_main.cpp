@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/service/doris_main.cpp
 
@@ -33,6 +46,7 @@
 #include <curl/curl.h>
 #include <thrift/TOutput.h>
 
+#include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "common/config.h"
@@ -98,7 +112,9 @@ int main(int argc, char** argv) {
     }
 
     if (getenv("TCMALLOC_HEAP_LIMIT_MB") == nullptr) {
-        fprintf(stderr, "you need replace bin dir of be with new version.\n");
+        fprintf(stderr,
+                "Environment variable TCMALLOC_HEAP_LIMIT_MB is not set,"
+                " maybe you forgot to replace bin directory\n");
         exit(-1);
     }
 
@@ -172,18 +188,23 @@ int main(int argc, char** argv) {
         starrocks::BlockCache* cache = starrocks::BlockCache::instance();
         starrocks::CacheOptions cache_options;
         cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
-        std::vector<starrocks::StorePath> paths;
-        auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
+        if (starrocks::config::block_cache_disk_size > 0) {
+            std::vector<starrocks::StorePath> paths;
+            auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
+            if (!parse_res.ok()) {
+                LOG(FATAL) << "parse config block cache disk path failed, path="
+                           << starrocks::config::block_cache_disk_path;
+                exit(-1);
+            }
+
+            for (auto& p : paths) {
+                cache_options.disk_spaces.push_back(
+                        {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+            }
         }
-        for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
-        }
+        cache_options.meta_path = starrocks::config::block_cache_meta_path;
         cache_options.block_size = starrocks::config::block_cache_block_size;
+        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache->init(cache_options);
     }
 #endif
@@ -300,6 +321,10 @@ int main(int argc, char** argv) {
         start_be();
     }
 
+#ifdef WITH_BLOCK_CACHE
+    starrocks::BlockCache::instance()->shutdown();
+#endif
+
     daemon->stop();
     daemon.reset();
 
@@ -312,6 +337,7 @@ int main(int argc, char** argv) {
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
 
+    exec_env->agent_server()->stop();
     engine->stop();
     delete engine;
     starrocks::ExecEnv::destroy(exec_env);

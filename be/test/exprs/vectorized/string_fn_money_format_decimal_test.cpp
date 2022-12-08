@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <gtest/gtest.h>
 
 #include <random>
@@ -13,7 +26,7 @@ class MoneyFormatDecimalTest : public ::testing::Test {};
 using TestCase = std::tuple<std::string, std::string>;
 using TestArray = std::vector<TestCase>;
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 void test_money_format_decimal(TestArray const& test_cases, int precision, int scale) {
     using ColumnType = RunTimeColumnType<Type>;
     using CppType = RunTimeCppType<Type>;
@@ -33,7 +46,7 @@ void test_money_format_decimal(TestArray const& test_cases, int precision, int s
     }
 
     columns.emplace_back(money_column);
-    ColumnPtr result = StringFunctions::money_format_decimal<Type>(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::money_format_decimal<Type>(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 
     for (int i = 0; i < rows_num; ++i) {

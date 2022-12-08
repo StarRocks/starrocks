@@ -1,25 +1,51 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.privilege;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 public interface AuthorizationProvider {
 
     /**
-     * return id & version
+     * return plugin id & version
      */
     short getPluginId();
     short getPluginVersion();
 
     /**
-     * validated type(string) -> validated action list(string)
+     * analyze type string -> id
      */
-    Map<String, List<String>> getValidPrivilegeTypeToActions();
+    Set<String> getAllTypes();
+    short getTypeIdByName(String typeStr) throws PrivilegeException;
+
+    /**
+     * analyze action type id -> action
+     */
+    Collection<Action> getAllActions(short typeId) throws PrivilegeException;
+    Action getAction(short typeId, String actionName) throws PrivilegeException;
+
+    /**
+     * analyze plural type name -> type name
+     */
+    String getTypeNameByPlural(String plural) throws PrivilegeException;
 
     /**
      * generate PEntryObject by tokenlist
@@ -61,7 +87,12 @@ public interface AuthorizationProvider {
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
-    boolean checkAnyAction(
+    /**
+     * Search if any object in collection matches the specified object
+     * The specified object can be fuzzy-matching object.
+     * For example, `use db1` statement will pass a (db1, ALL) as the object to check if any table exists
+     */
+    boolean searchObject(
             short type,
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);

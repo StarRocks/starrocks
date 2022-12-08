@@ -1,6 +1,6 @@
 # SET PROPERTY
 
-## description
+## Description
 
 ### Syntax
 
@@ -27,7 +27,7 @@ quota.high: Resource allocation at the high level
 quota.low: Resource allocation at the low level
 ```
 
-## example
+## Examples
 
 1. Modify the maximum number of connections to 1000 for the user jack
 

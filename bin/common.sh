@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # get jdk version, return version as an Integer.
 # 1.8 => 8, 13.0 => 13
@@ -138,7 +150,12 @@ export_shared_envvars() {
 
     # https://github.com/aws/aws-cli/issues/5623
     # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-    export AWS_EC2_METADATA_DISABLED=true
+    export AWS_EC2_METADATA_DISABLED=false
     # ===================================================================================
 }
 
+# Export cachelib libraries
+export_cachelib_lib_path() {
+    CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64
+}

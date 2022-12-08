@@ -1,19 +1,31 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.hudi;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.FeConstants;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.HiveMetastoreOperations;
-import com.starrocks.external.hive.HiveMetastoreTest;
-import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.external.hudi.HudiRemoteFileIO;
+import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.hive.CachingHiveMetastore;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.connector.hive.HiveMetastoreOperations;
+import com.starrocks.connector.hive.HiveMetastoreTest;
+import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.utframe.UtFrameUtils;

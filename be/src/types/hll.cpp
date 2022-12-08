@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/hll.cpp
 
@@ -42,16 +55,15 @@ using std::stringstream;
 namespace starrocks {
 
 std::string HyperLogLog::empty() {
-    static HyperLogLog hll;
     std::string buf;
     buf.resize(HLL_EMPTY_SIZE);
-    hll.serialize((uint8_t*)buf.c_str());
+    (*(uint8_t*)buf.c_str()) = HLL_DATA_EMPTY;
     return buf;
 }
 
 HyperLogLog::HyperLogLog(const HyperLogLog& other) : _type(other._type), _hash_set(other._hash_set) {
     if (other._registers.data != nullptr) {
-        ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+        MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
         memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
@@ -64,12 +76,12 @@ HyperLogLog& HyperLogLog::operator=(const HyperLogLog& other) {
         this->_hash_set = other._hash_set;
 
         if (_registers.data != nullptr) {
-            ChunkAllocator::instance()->free(_registers);
+            MemChunkAllocator::instance()->free(_registers);
             _registers.data = nullptr;
         }
 
         if (other._registers.data != nullptr) {
-            ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+            MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
             DCHECK_NE(_registers.data, nullptr);
             DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
             memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
@@ -91,7 +103,7 @@ HyperLogLog& HyperLogLog::operator=(HyperLogLog&& other) noexcept {
         this->_hash_set = std::move(other._hash_set);
 
         if (_registers.data != nullptr) {
-            ChunkAllocator::instance()->free(_registers);
+            MemChunkAllocator::instance()->free(_registers);
         }
         _registers = other._registers;
 
@@ -115,7 +127,7 @@ HyperLogLog::HyperLogLog(const Slice& src) {
 HyperLogLog::~HyperLogLog() {
     if (_registers.data != nullptr) {
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
-        ChunkAllocator::instance()->free(_registers);
+        MemChunkAllocator::instance()->free(_registers);
     }
 }
 
@@ -124,7 +136,7 @@ HyperLogLog::~HyperLogLog() {
 void HyperLogLog::_convert_explicit_to_register() {
     DCHECK(_type == HLL_DATA_EXPLICIT) << "_type(" << _type << ") should be explicit(" << HLL_DATA_EXPLICIT << ")";
     DCHECK_EQ(_registers.data, nullptr);
-    ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+    MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
     DCHECK_NE(_registers.data, nullptr);
     DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
     memset(_registers.data, 0, HLL_REGISTERS_COUNT);
@@ -176,7 +188,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             DCHECK_EQ(_registers.data, nullptr);
-            ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+            MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
             DCHECK_NE(_registers.data, nullptr);
             DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
             memcpy(_registers.data, other._registers.data, HLL_REGISTERS_COUNT);
@@ -373,7 +385,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     }
     case HLL_DATA_SPARSE: {
         DCHECK_EQ(_registers.data, nullptr);
-        ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+        MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
         memset(_registers.data, 0, HLL_REGISTERS_COUNT);
@@ -392,7 +404,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     }
     case HLL_DATA_FULL: {
         DCHECK_EQ(_registers.data, nullptr);
-        ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
+        MemChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
         DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
         // 2+ : hll register value

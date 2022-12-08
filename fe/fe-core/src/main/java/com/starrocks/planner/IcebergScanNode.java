@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.planner;
 
@@ -8,19 +21,33 @@ import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.external.PredicateUtils;
-import com.starrocks.external.iceberg.ExpressionConverter;
-import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.connector.PredicateUtils;
+import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
+import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -29,17 +56,21 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.exceptions.ValidationException;
-import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -50,8 +81,10 @@ public class IcebergScanNode extends ScanNode {
 
     private List<TScanRangeLocations> result = new ArrayList<>();
 
-    // Exprs in icebergConjuncts converted to Iceberg Expression.
-    private List<Expression> icebergPredicates = null;
+    // Scalar operators converted to Iceberg Expression.
+    private Expression icebergPredicate = null;
+
+    private Set<String> equalityDeleteColumns = new HashSet<>();
 
     private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
     private long totalBytes = 0;
@@ -67,7 +100,6 @@ public class IcebergScanNode extends ScanNode {
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
         getAliveBackends();
-        preProcessConjuncts();
     }
 
     private void getAliveBackends() throws UserException {
@@ -98,24 +130,46 @@ public class IcebergScanNode extends ScanNode {
      * predicates in the scan to keep consistency. More details about Iceberg scanning,
      * please refer: https://iceberg.apache.org/spec/#scan-planning
      */
-    private void preProcessConjuncts() {
-        List<Expression> expressions = new ArrayList<>(conjuncts.size());
-        ExpressionConverter convertor = new ExpressionConverter();
-        for (Expr expr : conjuncts) {
-            Expression filterExpr = convertor.convert(expr);
-            if (filterExpr != null) {
-                try {
-                    Binder.bind(srIcebergTable.getIcebergTable().schema().asStruct(), filterExpr, false);
-                    expressions.add(filterExpr);
-                } catch (ValidationException e) {
-                    LOG.debug("binding to the table schema failed, cannot be pushed down expression: {}",
-                            expr.toSql());
+    public void preProcessIcebergPredicate(List<ScalarOperator> operators) {
+        Types.StructType schema = srIcebergTable.getIcebergTable().schema().asStruct();
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+        icebergPredicate = new ScalarOperatorToIcebergExpr().convert(operators, icebergContext);
+    }
+
+    /**
+     * Append columns need to read for equality delete files
+     */
+    public void appendEqualityColumns(PhysicalIcebergScanOperator node,
+                                      ColumnRefFactory columnRefFactory,
+                                      ExecPlan context) {
+        Table referenceTable = node.getTable();
+        Set<String> scanNodeColumns = node.getColRefToColumnMetaMap().values().stream()
+                .map(column -> column.getName()).collect(Collectors.toSet());
+        Set<String> appendEqualityColumns = equalityDeleteColumns.stream()
+                .filter(name -> !scanNodeColumns.contains(name)).collect(Collectors.toSet());
+        Map<String, Column> nameToColumns = referenceTable.getFullSchema().stream()
+                .collect(Collectors.toMap(Column::getName, item -> item));
+        for (String eqName : appendEqualityColumns) {
+            if (nameToColumns.containsKey(eqName)) {
+                Column column = nameToColumns.get(eqName);
+                Field field;
+                TableName tableName = desc.getRef().getName();
+                if (referenceTable.getFullSchema().contains(column)) {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), true);
+                } else {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), false);
                 }
+                ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
+                        field.getType(), column.isAllowNull());
+                SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
             }
         }
-        LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
-                expressions.size(), conjuncts.size());
-        icebergPredicates = expressions;
     }
 
     @Override
@@ -151,10 +205,9 @@ public class IcebergScanNode extends ScanNode {
             LOG.info(String.format("Table %s has no snapshot!", srIcebergTable.getTable()));
             return;
         }
-        preProcessConjuncts();
+
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
-                srIcebergTable.getIcebergTable(), snapshot.get(),
-                icebergPredicates).planTasks()) {
+                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
             for (FileScanTask task : combinedScanTask.files()) {
                 DataFile file = task.file();
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
@@ -172,6 +225,22 @@ public class IcebergScanNode extends ScanNode {
                 hdfsScanRange.setPartition_id(-1);
                 hdfsScanRange.setFile_length(file.fileSizeInBytes());
                 hdfsScanRange.setFile_format(IcebergUtil.getHdfsFileFormat(file.format()).toThrift());
+
+                hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
+                    TIcebergDeleteFile target = new TIcebergDeleteFile();
+                    target.setFull_path(source.path().toString());
+                    target.setFile_content(
+                            source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES : TIcebergFileContent.POSITION_DELETES);
+                    target.setLength(source.fileSizeInBytes());
+
+                    if (source.content() == FileContent.EQUALITY_DELETES) {
+                        source.equalityFieldIds().forEach(fieldId -> {
+                            equalityDeleteColumns.add(srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
+                        });
+                    }
+
+                    return target;
+                }).collect(Collectors.toList()));
                 TScanRange scanRange = new TScanRange();
                 scanRange.setHdfs_scan_range(hdfsScanRange);
                 scanRangeLocations.setScan_range(scanRange);

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/compaction_utils.h"
 
@@ -70,16 +82,23 @@ TEST(CompactionUtilsTest, test_get_segment_max_rows) {
 
 TEST(CompactionUtilsTest, test_split_column_into_groups) {
     size_t num_columns = 17;
-    size_t num_key_columns = 1;
     int64_t max_columns_per_group = 5;
     std::vector<std::vector<uint32_t>> column_groups;
-    CompactionUtils::split_column_into_groups(num_columns, num_key_columns, max_columns_per_group, &column_groups);
-    ASSERT_EQ(5, column_groups.size());
-    ASSERT_EQ(1, column_groups[0].size());
+    CompactionUtils::split_column_into_groups(num_columns, {1, 2, 5}, max_columns_per_group, &column_groups);
+    ASSERT_EQ(4, column_groups.size());
+    ASSERT_EQ(3, column_groups[0].size());
     ASSERT_EQ(5, column_groups[1].size());
     ASSERT_EQ(5, column_groups[2].size());
-    ASSERT_EQ(5, column_groups[3].size());
-    ASSERT_EQ(1, column_groups[4].size());
+    ASSERT_EQ(4, column_groups[3].size());
+
+    std::vector<std::vector<uint32_t>> column_groups1;
+    CompactionUtils::split_column_into_groups(num_columns, {0}, max_columns_per_group, &column_groups1);
+    ASSERT_EQ(5, column_groups1.size());
+    ASSERT_EQ(1, column_groups1[0].size());
+    ASSERT_EQ(5, column_groups1[1].size());
+    ASSERT_EQ(5, column_groups1[2].size());
+    ASSERT_EQ(5, column_groups1[3].size());
+    ASSERT_EQ(1, column_groups1[4].size());
 }
 
 TEST(CompactionUtilsTest, test_choose_compaction_algorithm) {

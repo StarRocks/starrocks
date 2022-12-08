@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/decimalv2_value.h
 
@@ -30,7 +43,6 @@
 #include <string>
 
 #include "common/logging.h"
-#include "runtime/decimal_value.h"
 #include "storage/decimal12.h"
 #include "util/hash_util.hpp"
 
@@ -38,6 +50,20 @@ namespace starrocks {
 
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
+
+enum DecimalError {
+    E_DEC_OK = 0,
+    E_DEC_TRUNCATED = 1,
+    E_DEC_OVERFLOW = 2,
+    E_DEC_DIV_ZERO = 4,
+    E_DEC_BAD_NUM = 8,
+    E_DEC_OOM = 16,
+
+    E_DEC_ERROR = 31,
+    E_DEC_FATAL_ERROR = 30
+};
+
+enum DecimalRoundMode { HALF_UP = 1, HALF_EVEN = 2, CEILING = 3, FLOOR = 4, TRUNCATE = 5 };
 
 class DecimalV2Value {
 public:
@@ -58,7 +84,7 @@ public:
     static const int128_t MAX_DECIMAL_VALUE = static_cast<int128_t>(MAX_INT64) * ONE_BILLION + MAX_FRAC_VALUE;
     static const int128_t MIN_DECIMAL_VALUE = -MAX_DECIMAL_VALUE;
 
-    DecimalV2Value() {}
+    DecimalV2Value() = default;
     inline const int128_t& value() const { return _value; }
     inline int128_t& value() { return _value; }
 
@@ -189,9 +215,9 @@ public:
 
     std::string get_debug_info() const { return to_string(); }
 
-    static DecimalV2Value get_min_decimal() { return DecimalV2Value(-MAX_INT_VALUE, MAX_FRAC_VALUE); }
+    static DecimalV2Value get_min_decimal() { return {-MAX_INT_VALUE, MAX_FRAC_VALUE}; }
 
-    static DecimalV2Value get_max_decimal() { return DecimalV2Value(MAX_INT_VALUE, MAX_FRAC_VALUE); }
+    static DecimalV2Value get_max_decimal() { return {MAX_INT_VALUE, MAX_FRAC_VALUE}; }
 
     // set DecimalV2Value to zero
     void set_to_zero() { _value = 0; }

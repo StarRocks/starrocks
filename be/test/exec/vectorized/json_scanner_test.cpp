@@ -1,8 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/json_scanner.h"
 
 #include <gtest/gtest.h>
+
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -65,8 +79,8 @@ protected:
         return std::make_unique<JsonScanner>(_state, _profile, *broker_scan_range, _counter);
     }
 
-    ChunkPtr test_whole_row_json(int columns, std::string input_data, std::string jsonpath,
-                                 std::vector<std::string> jsonpaths) {
+    ChunkPtr test_whole_row_json(int columns, const std::string& input_data, std::string jsonpath,
+                                 const std::vector<std::string>& jsonpaths) {
         std::vector<TypeDescriptor> types;
         for (int i = 0; i < columns; i++) {
             types.emplace_back(TypeDescriptor::create_varchar_type(1024));
@@ -78,7 +92,7 @@ protected:
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
-        range.jsonpaths = jsonpath;
+        range.jsonpaths = std::move(jsonpath);
         range.__isset.json_root = false;
         range.__set_path(input_data);
         ranges.emplace_back(range);
@@ -91,8 +105,8 @@ protected:
         return chunk;
     }
 
-    ChunkPtr test_with_jsonpath(int columns, std::string input_data, std::string jsonpath,
-                                std::vector<std::string> jsonpaths) {
+    ChunkPtr test_with_jsonpath(int columns, const std::string& input_data, std::string jsonpath,
+                                const std::vector<std::string>& jsonpaths) {
         std::vector<TypeDescriptor> types;
         for (int i = 0; i < columns; i++) {
             types.emplace_back(TypeDescriptor::create_json_type());
@@ -104,7 +118,7 @@ protected:
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
-        range.jsonpaths = jsonpath;
+        range.jsonpaths = std::move(jsonpath);
         range.__isset.json_root = false;
         range.__set_path(input_data);
         ranges.emplace_back(range);
@@ -210,7 +224,7 @@ TEST_F(JsonScannerTest, test_json_with_path) {
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test2.json");
     ranges.emplace_back(range);
@@ -245,7 +259,7 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test3.json");
     ranges.emplace_back(range);
@@ -460,7 +474,7 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
     ranges.emplace_back(range);
@@ -620,7 +634,7 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
     ranges.emplace_back(range);
@@ -886,7 +900,7 @@ TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
     range.__isset.jsonpaths = true;
     range.__isset.json_root = true;
 
-    range.jsonpaths = "[\"$.ip\", \"$.value\"]";
+    range.jsonpaths = R"(["$.ip", "$.value"])";
     range.json_root = "$.keyname";
 
     range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
@@ -918,7 +932,7 @@ TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
     range.strip_outer_array = true;
-    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
 
     range.__isset.strip_outer_array = true;
@@ -954,7 +968,7 @@ TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonp
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
     range.strip_outer_array = true;
-    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
 
     range.__isset.strip_outer_array = true;
@@ -1020,7 +1034,7 @@ TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.f_float\", \"$.f_bool\", \"$.f_int\", \"$.f_float_in_string\", \"$.f_int_in_string\"]";
+    range.jsonpaths = R"(["$.f_float", "$.f_bool", "$.f_int", "$.f_float_in_string", "$.f_int_in_string"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/illegal.json");
     ranges.emplace_back(range);

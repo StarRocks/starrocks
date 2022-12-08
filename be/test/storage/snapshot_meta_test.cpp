@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/snapshot_meta.h"
 
@@ -29,14 +41,14 @@ public:
         _snapshot_meta.tablet_meta().mutable_updates()->set_next_rowset_id(4);
 
         EditVersionMetaPB* v = _snapshot_meta.tablet_meta().mutable_updates()->add_versions();
-        v->set_creation_time(time(NULL));
+        v->set_creation_time(time(nullptr));
         v->add_rowsets(1);
         v->add_rowsets(2);
         v->add_rowsets(5);
 
         _snapshot_meta.rowset_metas().resize(3);
 
-        _snapshot_meta.rowset_metas()[0].set_creation_time(time(NULL));
+        _snapshot_meta.rowset_metas()[0].set_creation_time(time(nullptr));
         _snapshot_meta.rowset_metas()[0].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
         _snapshot_meta.rowset_metas()[0].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[0].set_rowset_seg_id(1);
@@ -50,7 +62,7 @@ public:
         _snapshot_meta.rowset_metas()[0].set_partition_id(1);
         _snapshot_meta.rowset_metas()[0].set_rowset_state(VISIBLE);
 
-        _snapshot_meta.rowset_metas()[1].set_creation_time(time(NULL));
+        _snapshot_meta.rowset_metas()[1].set_creation_time(time(nullptr));
         _snapshot_meta.rowset_metas()[1].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
         _snapshot_meta.rowset_metas()[1].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[1].set_rowset_seg_id(2);
@@ -64,7 +76,7 @@ public:
         _snapshot_meta.rowset_metas()[1].set_partition_id(1);
         _snapshot_meta.rowset_metas()[1].set_rowset_state(VISIBLE);
 
-        _snapshot_meta.rowset_metas()[2].set_creation_time(time(NULL));
+        _snapshot_meta.rowset_metas()[2].set_creation_time(time(nullptr));
         _snapshot_meta.rowset_metas()[2].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
         _snapshot_meta.rowset_metas()[2].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[2].set_rowset_seg_id(5);

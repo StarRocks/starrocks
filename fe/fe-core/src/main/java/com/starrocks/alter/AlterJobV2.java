@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/alter/AlterJobV2.java
 
@@ -26,6 +39,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.TraceManager;
@@ -198,12 +212,12 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     /**
-     * should be call before executing the job.
+     * should be called before executing the job.
      * return false if table is not stable.
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         OlapTable tbl;
-        boolean isStable;
+        long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
         db.readLock();
         try {
             tbl = (OlapTable) db.getTable(tableId);
@@ -211,7 +225,7 @@ public abstract class AlterJobV2 implements Writable {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
 
-            isStable = tbl.isStable(GlobalStateMgr.getCurrentSystemInfo(),
+            unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                     GlobalStateMgr.getCurrentState().getTabletScheduler());
         } finally {
             db.readUnlock();
@@ -219,8 +233,8 @@ public abstract class AlterJobV2 implements Writable {
 
         db.writeLock();
         try {
-            if (!isStable) {
-                errMsg = "table is unstable";
+            if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
+                errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
                 LOG.warn("wait table {} to be stable before doing {} job", tableId, type);
                 tbl.setState(OlapTableState.WAITING_STABLE);
                 return false;

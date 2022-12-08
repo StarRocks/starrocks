@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/Cyan4973/xxHash/blob/dev/xxhash.h
 
@@ -467,7 +480,7 @@ XXH_PUBLIC_API XXH_CONSTF unsigned XXH_versionNumber(void);
 /* ****************************
 *  Common basic types
 ******************************/
-#include <stddef.h> /* size_t */
+#include <cstddef> /* size_t */
 /*!
  * @brief Exit code for the streaming API.
  */
@@ -489,7 +502,7 @@ typedef uint32_t XXH32_hash_t;
 
 #elif !defined(__VMS) && \
         (defined(__cplusplus) || (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */))
-#include <stdint.h>
+#include <cstdint>
 typedef uint32_t XXH32_hash_t;
 
 #else
@@ -760,7 +773,7 @@ XXH_PUBLIC_API XXH_PUREF XXH32_hash_t XXH32_hashFromCanonical(const XXH32_canoni
 typedef uint64_t XXH64_hash_t;
 #elif !defined(__VMS) && \
         (defined(__cplusplus) || (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */))
-#include <stdint.h>
+#include <cstdint>
 typedef uint64_t XXH64_hash_t;
 #else
 #include <limits.h>

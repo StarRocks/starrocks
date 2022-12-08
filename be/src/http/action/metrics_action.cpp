@@ -171,7 +171,7 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     case MetricType::GAUGE:
         for (auto& it : collector->metrics()) {
             const MetricLabels& labels = it.first;
-            Metric* metric = reinterpret_cast<Metric*>(it.second);
+            auto* metric = reinterpret_cast<Metric*>(it.second);
             rapidjson::Value metric_obj(rapidjson::kObjectType);
             rapidjson::Value tag_obj(rapidjson::kObjectType);
             tag_obj.AddMember("metric", rapidjson::Value(name.c_str(), allocator), allocator);
@@ -216,7 +216,11 @@ void MetricsAction::handle(HttpRequest* req) {
     }
 
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
-    HttpChannel::send_reply(req, str);
+    if (_mock_func == nullptr) {
+        HttpChannel::send_reply(req, str);
+    } else {
+        (*_mock_func)(str);
+    }
 }
 
 } // namespace starrocks

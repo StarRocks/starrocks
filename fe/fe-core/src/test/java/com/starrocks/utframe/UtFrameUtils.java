@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/utframe/UtFrameUtils.java
 
@@ -24,7 +37,9 @@ package com.starrocks.utframe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
@@ -40,6 +55,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -50,10 +66,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -81,6 +99,7 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
+import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -94,9 +113,11 @@ import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -253,6 +274,14 @@ public class UtFrameUtils {
         return be;
     }
 
+    public static void addBroker(String brokerName) throws Exception {
+        Collection<Pair<String, Integer>> addresses = new ArrayList<>();
+        Pair<String, Integer> pair = new Pair<>("127.0.0.1", 8080);
+        addresses.add(pair);
+        String location = "bos://backup-cmy";
+        GlobalStateMgr.getCurrentState().getBrokerMgr().addBrokers(brokerName, addresses);
+    }
+
     public static void dropMockBackend(int backendId) throws DdlException {
         GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
     }
@@ -289,6 +318,69 @@ public class UtFrameUtils {
         throw new RuntimeException("can not find valid port");
     }
 
+    /**
+     * Validate whether all the fragments belong to the fragment tree.
+     * @param plan The plan need to validate.
+     */
+    public static void validatePlanConnectedness(ExecPlan plan) {
+        PlanFragment root = plan.getTopFragment();
+
+        Queue<PlanFragment> queue = Lists.newLinkedList();
+        Set<PlanFragment> visitedFragments = Sets.newHashSet();
+        visitedFragments.add(root);
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanFragment fragment = queue.poll();
+            for (PlanFragment child : fragment.getChildren()) {
+                if (!visitedFragments.contains(child)) {
+                    visitedFragments.add(child);
+                    queue.add(child);
+                }
+            }
+        }
+
+        Assert.assertEquals("Some fragments do not belong to the fragment tree",
+                plan.getFragments().size(), visitedFragments.size());
+    }
+
+    /*
+     * Return analyzed statement and execution plan for MV maintenance
+     */
+    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext, String sql)
+            throws DdlException, CloneNotSupportedException {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+        connectContext.getDumpInfo().setOriginStmt(sql);
+        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        StatementBase statementBase = statements.get(0);
+
+        try {
+            // update session variable by adding optional hints.
+            if (statementBase instanceof QueryStatement &&
+                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
+                if (optHints != null) {
+                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
+                    for (String key : optHints.keySet()) {
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                    }
+                    connectContext.setSessionVariable(sessionVariable);
+                }
+            }
+
+            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
+            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
+            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
+        } finally {
+            // before returning we have to restore session variable.
+            connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
@@ -321,24 +413,35 @@ public class UtFrameUtils {
                     !statementBase.isExplain()) {
                 String viewName = "view" + INDEX.getAndIncrement();
                 String createView = "create view " + viewName + " as " + originStmt;
-                CreateViewStmt createTableStmt =
-                        (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                CreateViewStmt createTableStmt;
                 try {
-                    StatementBase viewStatement =
-                            com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
-                                    connectContext.getSessionVariable().getSqlMode()).get(0);
-                    com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
-                } catch (Exception e) {
-                    System.out.println(e.getMessage());
-                    throw e;
+                    createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                    try {
+                        StatementBase viewStatement =
+                                com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                        connectContext.getSessionVariable().getSqlMode()).get(0);
+                        com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
+                    } catch (Exception e) {
+                        System.out.println(e.getMessage());
+                        throw e;
+                    }
+                } catch (SemanticException | AnalysisException e) {
+                    if (!e.getMessage().contains("Duplicate column name")) {
+                        throw e;
+                    }
                 }
             }
 
+            validatePlanConnectedness(execPlan);
             return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
+    }
+
+    public static String printPlan(ExecPlan plan) {
+        return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
@@ -374,6 +477,16 @@ public class UtFrameUtils {
         // create resource
         for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
             starRocksAssert.withResource(createResourceStmt);
+        }
+
+        // mock replay external table info
+        if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
+            ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
+                    connectContext.getGlobalStateMgr().getLocalMetastore(),
+                    connectContext.getGlobalStateMgr().getConnectorMgr(),
+                    replayDumpInfo.getHmsTableMap(),
+                    replayDumpInfo.getTableStatisticsMap());
+            connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
         }
 
         // create table

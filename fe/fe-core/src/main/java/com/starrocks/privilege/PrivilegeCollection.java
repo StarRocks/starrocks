@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.privilege;
 
@@ -23,16 +36,26 @@ public class PrivilegeCollection {
 
     static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
         @SerializedName(value = "a")
-        private ActionSet actionSet;
+        protected ActionSet actionSet;
         @SerializedName(value = "o")
-        private PEntryObject object;
+        protected PEntryObject object;
         @SerializedName(value = "g")
-        private boolean isGrant;
+        protected boolean isGrant;
 
         public PrivilegeEntry(ActionSet actionSet, PEntryObject object, boolean isGrant) {
             this.actionSet = actionSet;
             this.object = object;
             this.isGrant = isGrant;
+        }
+
+        public PrivilegeEntry(PrivilegeEntry other) {
+            this.actionSet = new ActionSet(other.actionSet);
+            if (other.object == null) {
+                this.object = null;
+            } else {
+                this.object = other.object.clone();
+            }
+            this.isGrant = other.isGrant;
         }
 
         @Override
@@ -98,7 +121,8 @@ public class PrivilegeCollection {
         }
     }
 
-    public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
+    public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+            throws PrivilegeException {
         typeToPrivilegeEntryList.computeIfAbsent(type, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         if (objects == null) {
@@ -107,38 +131,44 @@ public class PrivilegeCollection {
             objects.add(null);
         }
         for (PEntryObject object : objects) {
-            PrivilegeEntry entry = findEntry(privilegeEntryList, object, isGrant);
-            PrivilegeEntry oppositeEntry = findEntry(privilegeEntryList, object, !isGrant);
-            if (oppositeEntry == null) {
-                // intend to grant with grant option, and there's no matching entry that grant without grant option
-                // or intend to grant without grant option, and there's no matching entry that grant with grant option
-                // either way it's simpler
-                addAction(privilegeEntryList, entry, actionSet, object, isGrant);
-            } else {
-                if (isGrant) {
-                    // intend to grant with grant option, and there's already an entry that grant without grant option
-                    // we should remove the entry and create a new one or added to the matching one
-                    removeAction(privilegeEntryList, oppositeEntry, actionSet);
-                    addAction(privilegeEntryList, entry, actionSet, object, true);
-                } else {
-                    // intend to grant without grant option, and there's already an entry that grant with grant option
-                    // we should check for each action, for those that's not in the existing entry
-                    // we should create a new entry or add to the matching one
-                    ActionSet remaining = oppositeEntry.actionSet.difference(actionSet);
-                    if (! remaining.isEmpty()) {
-                        addAction(privilegeEntryList, entry, remaining, object, false);
-                    }
-                }
-            }
-        } // for object in objects
+            grantObjectToList(actionSet, object, isGrant, privilegeEntryList);
+        }
     }
 
-    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+    private void grantObjectToList(
+            ActionSet actionSet, PEntryObject object, boolean isGrant, List<PrivilegeEntry> privilegeEntryList) {
+        PrivilegeEntry entry = findEntry(privilegeEntryList, object, isGrant);
+        PrivilegeEntry oppositeEntry = findEntry(privilegeEntryList, object, !isGrant);
+        if (oppositeEntry == null) {
+            // intend to grant with grant option, and there's no matching entry that grant without grant option
+            // or intend to grant without grant option, and there's no matching entry that grant with grant option
+            // either way it's simpler
+            addAction(privilegeEntryList, entry, actionSet, object, isGrant);
+        } else {
+            if (isGrant) {
+                // intend to grant with grant option, and there's already an entry that grant without grant option
+                // we should remove the entry and create a new one or added to the matching one
+                removeAction(privilegeEntryList, oppositeEntry, actionSet);
+                addAction(privilegeEntryList, entry, actionSet, object, true);
+            } else {
+                // intend to grant without grant option, and there's already an entry that grant with grant option
+                // we should check for each action, for those that's not in the existing entry
+                // we should create a new entry or add to the matching one
+                ActionSet remaining = oppositeEntry.actionSet.difference(actionSet);
+                if (! remaining.isEmpty()) {
+                    addAction(privilegeEntryList, entry, remaining, object, false);
+                }
+            }
+        }
+    }
+
+    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+            throws PrivilegeException {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             LOG.debug("revoke a non-existence type {}", type);
             return;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         if (objects == null) {
             // objects can be null, we should adjust it to a list of one null object
             objects = new ArrayList<>();
@@ -164,12 +194,12 @@ public class PrivilegeCollection {
     }
 
     public boolean check(short type, Action want, PEntryObject object) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             return false;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (objectMatch(privilegeEntry.object, object) && privilegeEntry.actionSet.contains(want)) {
+            if (objectMatch(object, privilegeEntry.object) && privilegeEntry.actionSet.contains(want)) {
                 return true;
             }
             // still looking for the next entry, maybe object match but with/without grant option
@@ -177,13 +207,17 @@ public class PrivilegeCollection {
         return false;
     }
 
-    public boolean checkAnyAction(short type, PEntryObject object) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+    public boolean searchObject(short type, PEntryObject object) {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             return false;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (objectMatch(privilegeEntry.object, object)) {
+            // 1. objectMatch(object, privilegeEntry.object):
+            //    checking if db1.table1 exists for a user that's granted with `ALL tables in db1` will return true
+            // 2. objectMatch(privilegeEntry.object, object):
+            //    checking if any table in db1 exists for a user that's granted with `db1.table1` will return true
+            if (objectMatch(object, privilegeEntry.object) || objectMatch(privilegeEntry.object, object)) {
                 return true;
             }
         }
@@ -191,16 +225,16 @@ public class PrivilegeCollection {
     }
 
     public boolean allowGrant(short type, ActionSet wantSet, List<PEntryObject> objects) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             return false;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         List<PEntryObject> unCheckedObjects = new ArrayList<>(objects);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
             Iterator<PEntryObject> iterator = unCheckedObjects.iterator();
             while (iterator.hasNext()) {
                 PEntryObject object = iterator.next();
-                if (privilegeEntry.isGrant && objectMatch(privilegeEntry.object, object)) {
+                if (privilegeEntry.isGrant && objectMatch(object, privilegeEntry.object)) {
                     if (privilegeEntry.actionSet.contains(wantSet)) {
                         iterator.remove();
                         if (unCheckedObjects.isEmpty()) {
@@ -238,10 +272,27 @@ public class PrivilegeCollection {
         }
     }
 
-    @Override
-    public String toString() {
-        return "PrivilegeCollection{" +
-                "typeToPrivilegeEntryList=" + GsonUtils.GSON.toJson(typeToPrivilegeEntryList) +
-                '}';
+    public void merge(PrivilegeCollection other) {
+        for (Map.Entry<Short, List<PrivilegeEntry>> typeEntry : other.typeToPrivilegeEntryList.entrySet()) {
+            short typeId = typeEntry.getKey();
+            ArrayList<PrivilegeEntry> otherList = (ArrayList<PrivilegeEntry>) typeEntry.getValue();
+            if (!typeToPrivilegeEntryList.containsKey(typeId)) {
+                // deep copy here
+                List<PrivilegeEntry> clonedList = new ArrayList<>();
+                for (PrivilegeEntry entry : otherList) {
+                    clonedList.add(new PrivilegeEntry(entry));
+                }
+                typeToPrivilegeEntryList.put(typeId, clonedList);
+            } else {
+                List<PrivilegeEntry> typeList = typeToPrivilegeEntryList.get(typeId);
+                for (PrivilegeEntry entry : otherList) {
+                    grantObjectToList(entry.actionSet, entry.object, entry.isGrant, typeList);
+                } // for privilege entry in other.list
+            }
+        } // for typeId, privilegeEntryList in other
+    }
+
+    public boolean isEmpty() {
+        return typeToPrivilegeEntryList.isEmpty();
     }
 }

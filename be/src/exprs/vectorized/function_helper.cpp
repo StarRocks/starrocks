@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "function_helper.h"
 
@@ -17,16 +29,16 @@ NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const C
         const auto& n1 = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column();
         const auto& n2 = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column();
         if (!v1->has_null()) {
-            result = std::move(n2->clone());
+            result = n2->clone();
         }
         if (!v2->has_null()) {
-            result = std::move(n1->clone());
+            result = n1->clone();
         }
         return union_null_column(n1, n2);
     } else if (v1->is_nullable()) {
-        result = std::move(ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column()->clone());
+        result = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column()->clone();
     } else if (v2->is_nullable()) {
-        result = std::move(ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column()->clone());
+        result = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column()->clone();
     } else {
         DCHECK(false);
         return nullptr;

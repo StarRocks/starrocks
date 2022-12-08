@@ -1,6 +1,6 @@
 # DROP RESOURCE
 
-## description
+## Description
 
 This statement is used to drop an existing resource. Only root or superuser can drop resources.
 
@@ -10,7 +10,7 @@ Syntax:
 DROP RESOURCE 'resource_name'
 ```
 
-## example
+## Examples
 
 1. Drop Spark resource named spark0.
 

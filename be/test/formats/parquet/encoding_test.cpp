@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/encoding.h"
 
@@ -98,8 +110,8 @@ struct DecoderChecker<Slice, is_dictionary> {
             ASSERT_TRUE(st.ok());
 
             const auto* check = (const Slice*)column->raw_data();
-            for (int i = 0; i < values.size(); ++i) {
-                ASSERT_EQ(values[i], *check);
+            for (auto value : values) {
+                ASSERT_EQ(value, *check);
                 check++;
             }
 
@@ -118,8 +130,8 @@ struct DecoderChecker<Slice, is_dictionary> {
             ASSERT_TRUE(st.ok());
 
             const auto* check = (const Slice*)column->data_column()->raw_data();
-            for (int i = 0; i < values.size(); ++i) {
-                ASSERT_EQ(values[i], *check);
+            for (auto value : values) {
+                ASSERT_EQ(value, *check);
                 check++;
             }
 
@@ -203,7 +215,7 @@ TEST_F(ParquetEncodingTest, String) {
 
     std::vector<Slice> slices;
     for (int i = 0; i < 20; ++i) {
-        slices.push_back(values[i]);
+        slices.emplace_back(values[i]);
     }
 
     const EncodingInfo* plain_encoding = nullptr;
@@ -270,7 +282,7 @@ TEST_F(ParquetEncodingTest, FixedString) {
 
     std::vector<Slice> slices;
     for (int i = 100; i < 200; ++i) {
-        slices.push_back(values[i - 100]);
+        slices.emplace_back(values[i - 100]);
     }
 
     const EncodingInfo* plain_encoding = nullptr;

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/page_cache_test.cpp
 
@@ -30,7 +43,7 @@ namespace starrocks {
 class StoragePageCacheTest : public testing::Test {
 public:
     StoragePageCacheTest() { _mem_tracker = std::make_unique<MemTracker>(); }
-    virtual ~StoragePageCacheTest() {}
+    ~StoragePageCacheTest() override = default;
 
 private:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
@@ -98,6 +111,32 @@ TEST_F(StoragePageCacheTest, normal) {
         size_t ori = cache.get_capacity();
         cache.set_capacity(ori / 2);
         ASSERT_EQ(ori / 2, cache.get_capacity());
+        cache.set_capacity(ori);
+    }
+
+    // adjust capacity
+    {
+        size_t ori = cache.get_capacity();
+        for (int i = 1; i <= 10; i++) {
+            cache.adjust_capacity(32);
+            ASSERT_EQ(cache.get_capacity(), ori + 32 * i);
+        }
+        cache.set_capacity(ori);
+        for (int i = 1; i <= 10; i++) {
+            cache.adjust_capacity(-32);
+            ASSERT_EQ(cache.get_capacity(), ori - 32 * i);
+        }
+        cache.set_capacity(ori);
+
+        int64_t delta = ori;
+        ASSERT_FALSE(cache.adjust_capacity(-delta / 2, ori));
+        ASSERT_EQ(cache.get_capacity(), ori);
+        ASSERT_TRUE(cache.adjust_capacity(-delta / 2, ori / 4));
+        cache.set_capacity(ori);
+
+        // overflow
+        cache.set_capacity(kNumShards);
+        ASSERT_FALSE(cache.adjust_capacity(-2 * kNumShards, 0));
     }
 }
 

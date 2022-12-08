@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.planner;
 
@@ -12,6 +25,8 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TNestLoopJoinNode;
+import com.starrocks.thrift.TNormalNestLoopJoinNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.commons.collections.CollectionUtils;
@@ -24,7 +39,7 @@ import java.util.stream.Collectors;
 
 /**
  * NESTLOOP JOIN
- *  TODO: support all kinds of join type
+ * Support all kinds of join type and join conjuncts
  */
 public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode {
 
@@ -35,8 +50,14 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
     }
 
+    /**
+     * Build the filter if inner table contains only one row, which is a common case for scalar subquery
+     */
     @Override
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator) {
+        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
+            return;
+        }
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         PlanNode buildStageNode = this.getChild(1);
         List<Expr> conjuncts = new ArrayList<>(otherJoinConjuncts);
@@ -88,7 +109,8 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        Preconditions.checkState(eqJoinConjuncts == null || eqJoinConjuncts.isEmpty());
+        Preconditions.checkState(CollectionUtils.isEmpty(eqJoinConjuncts));
+        Preconditions.checkState(!joinOp.isRightSemiAntiJoin());
         msg.node_type = TPlanNodeType.NESTLOOP_JOIN_NODE;
         msg.nestloop_join_node = new TNestLoopJoinNode();
         msg.nestloop_join_node.join_op = joinOp.toThrift();
@@ -107,4 +129,13 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         }
     }
 
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalNestLoopJoinNode nlJoinNode = new TNormalNestLoopJoinNode();
+        nlJoinNode.setJoin_op(getJoinOp().toThrift());
+        nlJoinNode.setJoin_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
+        planNode.setNestloop_join_node(nlJoinNode);
+        planNode.setNode_type(TPlanNodeType.NESTLOOP_JOIN_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
 }

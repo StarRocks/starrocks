@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/orc/tree/main/c++/src/Compression.cc
 
@@ -81,27 +94,23 @@ protected:
     int level;
 
     // Compressed data output buffer
-    char* outputBuffer;
+    char* outputBuffer{nullptr};
 
     // Size for compressionBuffer
-    int bufferSize;
+    int bufferSize{0};
 
     // Compress output position
-    int outputPosition;
+    int outputPosition{0};
 
     // Compress output buffer size
-    int outputSize;
+    int outputSize{0};
 };
 
 CompressionStreamBase::CompressionStreamBase(OutputStream* outStream, int compressionLevel, uint64_t capacity,
                                              uint64_t blockSize, MemoryPool& pool)
         : BufferedOutputStream(pool, outStream, capacity, blockSize),
           rawInputBuffer(pool, blockSize),
-          level(compressionLevel),
-          outputBuffer(nullptr),
-          bufferSize(0),
-          outputPosition(0),
-          outputSize(0) {
+          level(compressionLevel) {
     // PASS
 }
 
@@ -318,34 +327,34 @@ protected:
     DataBuffer<char> outputDataBuffer;
 
     // the current state
-    DecompressState state;
+    DecompressState state{DECOMPRESS_HEADER};
 
     // The starting and current position of the buffer for the uncompressed
     // data. It either points to the data buffer or the underlying input stream.
-    const char* outputBufferStart;
-    const char* outputBuffer;
-    size_t outputBufferLength;
+    const char* outputBufferStart{nullptr};
+    const char* outputBuffer{nullptr};
+    size_t outputBufferLength{0};
     // The uncompressed buffer length. For compressed chunk, it's the original
     // (ie. the overall) and the actual length of the decompressed data.
     // For uncompressed chunk, it's the length of the loaded data of this chunk.
-    size_t uncompressedBufferLength;
+    size_t uncompressedBufferLength{0};
 
     // The remaining size of the current chunk that is not yet consumed
     // ie. decompressed or returned in output if state==DECOMPRESS_ORIGINAL
-    size_t remainingLength;
+    size_t remainingLength{0};
 
     // the last buffer returned from the input
-    const char* inputBufferStart;
-    const char* inputBuffer;
-    const char* inputBufferEnd;
+    const char* inputBufferStart{nullptr};
+    const char* inputBuffer{nullptr};
+    const char* inputBufferEnd{nullptr};
 
     // Variables for saving the position of the header and the start of the
     // buffer. Used when we have to seek a position.
-    size_t headerPosition;
-    size_t inputBufferStartPosition;
+    size_t headerPosition{0};
+    size_t inputBufferStartPosition{0};
 
     // roughly the number of bytes returned
-    off_t bytesReturned;
+    off_t bytesReturned{0};
 
     ReaderMetrics* metrics;
 };
@@ -355,18 +364,7 @@ DecompressionStream::DecompressionStream(std::unique_ptr<SeekableInputStream> in
         : pool(_pool),
           input(std::move(inStream)),
           outputDataBuffer(pool, bufferSize),
-          state(DECOMPRESS_HEADER),
-          outputBufferStart(nullptr),
-          outputBuffer(nullptr),
-          outputBufferLength(0),
-          uncompressedBufferLength(0),
-          remainingLength(0),
-          inputBufferStart(nullptr),
-          inputBuffer(nullptr),
-          inputBufferEnd(nullptr),
-          headerPosition(0),
-          inputBufferStartPosition(0),
-          bytesReturned(0),
+
           metrics(_metrics) {}
 
 std::string DecompressionStream::getStreamName() const {

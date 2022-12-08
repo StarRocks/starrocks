@@ -19,8 +19,7 @@
 #include "gutil/macros.h"
 #include "util/debug/leak_annotations.h"
 
-namespace starrocks {
-namespace debug {
+namespace starrocks::debug {
 
 // Scoped object that generically disables LSAN leak checking in a given scope.
 // While this object is alive, calls to "new" will not be checked for leaks.
@@ -37,5 +36,4 @@ private:
     const ScopedLeakCheckDisabler& operator=(const ScopedLeakCheckDisabler&) = delete;
 };
 
-} // namespace debug
-} // namespace starrocks
+} // namespace starrocks::debug

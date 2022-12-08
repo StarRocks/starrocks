@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule;
 
@@ -109,8 +122,8 @@ public enum RuleType {
     TF_REMOVE_AGGREGATION_BY_AGG_TABLE,
     TF_REWRITE_GROUPING_SET,
 
-    TF_JOIN_FORCE_LIMIT,
     TF_INTERSECT_REORDER,
+    TF_INTERSECT_DISTINCT,
 
     TF_MERGE_PROJECT_WITH_CHILD,
 
@@ -128,11 +141,22 @@ public enum RuleType {
     TF_PRUNE_CTE_PRODUCE,
     TF_COMPUTE_CTE_COSTS,
 
+    TF_MV_ONLY_SCAN_RULE,
+    TF_MV_FILTER_SCAN_RULE,
+    TF_MV_ONLY_JOIN_RULE,
+    TF_MV_FILTER_JOIN_RULE,
+    TF_MV_AGGREGATE_SCAN_RULE,
+    TF_MV_AGGREGATE_FILTER_SCAN_RULE,
+    TF_MV_AGGREGATE_JOIN_RULE,
+    TF_MV_AGGREGATE_FILTER_JOIN_RULE,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
+    IMP_FILE_LSCAN_TO_PSCAN,
     IMP_ICEBERG_LSCAN_TO_PSCAN,
     IMP_HUDI_LSCAN_TO_PSCAN,
+    IMP_DELTALAKE_LSCAN_TO_PSCAN,
     IMP_SCHEMA_LSCAN_TO_PSCAN,
     IMP_MYSQL_LSCAN_TO_PSCAN,
     IMP_ES_LSCAN_TO_PSCAN,
@@ -160,6 +184,10 @@ public enum RuleType {
     IMP_CTE_ANCHOR,
     IMP_CTE_ANCHOR_TO_NO_CTE,
     IMP_CTE_PRODUCE,
+
+    IMP_STREAM_AGG,
+    IMP_STREAM_JOIN,
+    IMP_BINLOG_SOURCE,
 
     NUM_RULES;
 

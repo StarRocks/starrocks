@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/snapshot_manager.cpp
 
@@ -86,7 +99,9 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     int64_t timeout_s = request.__isset.timeout ? request.timeout : config::snapshot_expire_time_sec;
 
     StatusOr<std::string> res;
+    std::shared_lock rdlock(tablet->get_header_lock());
     int64_t cur_tablet_version = tablet->max_version().second;
+    rdlock.unlock();
     if (request.__isset.missing_version) {
         LOG(INFO) << "make incremental snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
                   << " req_version:" << JoinInts(request.missing_version, ",") << " timeout:" << timeout_s;
@@ -106,7 +121,11 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     } else if (request.__isset.version) {
         LOG(INFO) << "make full snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
                   << " req_version:" << request.version << " timeout:" << timeout_s;
-        res = snapshot_full(tablet, request.version, timeout_s);
+        if (request.__isset.is_restore_task) {
+            res = snapshot_full(tablet, request.version, timeout_s, request.is_restore_task);
+        } else {
+            res = snapshot_full(tablet, request.version, timeout_s);
+        }
     } else {
         LOG(INFO) << "make full snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
                   << " req_version:" << 0 << " timeout:" << timeout_s;
@@ -211,7 +230,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
                                           TabletSchema& tablet_schema, const RowsetId& rowset_id,
                                           RowsetMetaPB* new_rs_meta_pb) {
-    // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports beta rowset
+    // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
     if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
@@ -372,10 +391,21 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
 }
 
 StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version,
-                                                     int64_t timeout_s) {
+                                                     int64_t timeout_s, bool ignore) {
     TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
     std::vector<RowsetSharedPtr> snapshot_rowsets;
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
+
+    if (ignore) {
+        std::string snapshot_id_path = _calc_snapshot_id_path(tablet, timeout_s);
+        if (UNLIKELY(snapshot_id_path.empty())) {
+            return Status::RuntimeError("empty snapshot_id_path");
+        }
+        std::string snapshot_dir = get_schema_hash_full_path(tablet, snapshot_id_path);
+        (void)fs::remove_all(snapshot_dir);
+        RETURN_IF_ERROR(fs::create_directories(snapshot_dir));
+        return snapshot_id_path;
+    }
 
     // 1. Check whether the snapshot version exist.
     std::shared_lock rdlock(tablet->get_header_lock());
@@ -395,8 +425,23 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     (void)fs::remove_all(snapshot_dir);
     RETURN_IF_ERROR(fs::create_directories(snapshot_dir));
 
-    // 3. Link files to snapshot directory.
+    // 3. Link files to snapshot directory. But for the PrimaryKey tablet,
+    // we should dump snapshot meta file first and then link files because of the
+    // partial update.
     snapshot_rowset_metas.reserve(snapshot_rowsets.size());
+    for (const auto& rowset : snapshot_rowsets) {
+        snapshot_rowset_metas.emplace_back(rowset->rowset_meta());
+    }
+
+    if (tablet->updates() != nullptr) {
+        auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas,
+                                               snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
+        if (!st.ok()) {
+            (void)fs::remove_all(snapshot_id_path);
+            return st;
+        }
+    }
+
     for (const auto& snapshot_rowset : snapshot_rowsets) {
         auto st = snapshot_rowset->link_files_to(snapshot_dir, snapshot_rowset->rowset_id());
         if (!st.ok()) {
@@ -404,29 +449,22 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
             (void)fs::remove_all(snapshot_id_path);
             return st;
         }
-        snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
     }
 
-    // 4. Build snapshot header/meta file.
-    if (tablet->updates() == nullptr) {
-        snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
-        snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));
-        std::string header_path = _get_header_full_path(tablet, snapshot_dir);
-        if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
-            LOG(WARNING) << "Fail to save tablet meta to " << header_path;
-            (void)fs::remove_all(snapshot_id_path);
-            return Status::RuntimeError("Fail to save tablet meta to header file");
-        }
-        return snapshot_id_path;
-    } else {
-        auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas,
-                                               snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
-        if (!st.ok()) {
-            (void)fs::remove_all(snapshot_id_path);
-            return st;
-        }
+    // 4. Build snapshot header/meta file for the non-PrimaryKey tablet.
+    if (tablet->updates() != nullptr) {
         return snapshot_id_path;
     }
+
+    snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
+    snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));
+    std::string header_path = _get_header_full_path(tablet, snapshot_dir);
+    if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
+        LOG(WARNING) << "Fail to save tablet meta to " << header_path;
+        (void)fs::remove_all(snapshot_id_path);
+        return Status::RuntimeError("Fail to save tablet meta to header file");
+    }
+    return snapshot_id_path;
 }
 
 StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& tablet,
@@ -547,11 +585,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
     snapshot_meta.set_snapshot_format(snapshot_format);
     snapshot_meta.set_snapshot_type(snapshot_type);
     snapshot_meta.set_snapshot_version(snapshot_version);
-    snapshot_meta.rowset_metas().reserve(rowset_metas.size());
-    for (const auto& rowset_meta : rowset_metas) {
-        RowsetMetaPB& meta_pb = snapshot_meta.rowset_metas().emplace_back();
-        rowset_meta->to_rowset_pb(&meta_pb);
-    }
+    tablet->updates()->to_rowset_meta_pb(rowset_metas, snapshot_meta.rowset_metas());
     if (snapshot_type == SNAPSHOT_TYPE_FULL) {
         auto meta_store = tablet->data_dir()->get_meta();
         uint32_t new_rsid = 0;

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/orc/tree/main/c++/src/ColumnReader.cc
 
@@ -32,6 +45,7 @@
 #include "RLE.hh"
 #include "orc/Exceptions.hh"
 #include "orc/Int128.hh"
+
 namespace orc {
 
 StripeStreams::~StripeStreams() {
@@ -115,17 +129,6 @@ void ColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     if (notNullDecoder) {
         notNullDecoder->seek(positions->at(columnId));
     }
-}
-
-void ColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
-    throw ParseError("ColumnReader::lazyLoadSeekToRowGroup not implemented");
-}
-
-void ColumnReader::lazyLoadSkip(uint64_t numValues) {
-    throw ParseError("ColumnReader::lazyLoadSkip not implemented");
-}
-void ColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    throw ParseError("ColumnReader::lazyLoadNext not implemented");
 }
 
 /**
@@ -324,7 +327,7 @@ uint64_t TimestampColumnReader::skip(uint64_t numValues) {
 void TimestampColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
-    TimestampVectorBatch& timestampBatch = dynamic_cast<TimestampVectorBatch&>(rowBatch);
+    auto& timestampBatch = dynamic_cast<TimestampVectorBatch&>(rowBatch);
     int64_t* secsBuffer = timestampBatch.data.data();
     secondsRle->next(secsBuffer, numValues, notNull);
     int64_t* nanoBuffer = timestampBatch.nanoseconds.data();
@@ -383,8 +386,8 @@ private:
     std::unique_ptr<SeekableInputStream> inputStream;
     TypeKind columnKind;
     const uint64_t bytesPerValue;
-    const char* bufferPointer;
-    const char* bufferEnd;
+    const char* bufferPointer{nullptr};
+    const char* bufferEnd{nullptr};
     DataBuffer<double> localDoubleBuffer;
     // this shared buffer is just for testing
     // in prod environment, sharedBufferPtr is a pointer to sharedBuffer in Reader
@@ -436,7 +439,7 @@ private:
     // ORC-1137: [C++] Unroll loops and copy data directly in DoubleColumnReader::next() by stiga-huang ·
     // Pull Request #1071 · apache/orc https://github.com/apache/orc/pull/1071
     void readDoubleToLocalBuffer(int n) {
-        const uint8_t* data = reinterpret_cast<const uint8_t*>(readFullyToBuffer(n * 8));
+        const auto* data = reinterpret_cast<const uint8_t*>(readFullyToBuffer(n * 8));
         localDoubleBuffer.reserve(n);
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -454,7 +457,7 @@ private:
     }
 
     void readFloatToLocalBuffer(int n) {
-        const uint8_t* data = reinterpret_cast<const uint8_t*>(readFullyToBuffer(n * 4));
+        const auto* data = reinterpret_cast<const uint8_t*>(readFullyToBuffer(n * 4));
         localDoubleBuffer.reserve(n);
         for (int i = 0; i < n; i++) {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -477,7 +480,7 @@ private:
         for (uint64_t i = 0; i < 8; i++) {
             bits |= static_cast<int64_t>(readByte()) << (i * 8);
         }
-        double* result = reinterpret_cast<double*>(&bits);
+        auto* result = reinterpret_cast<double*>(&bits);
         return *result;
     }
 
@@ -486,7 +489,7 @@ private:
         for (uint64_t i = 0; i < 4; i++) {
             bits |= static_cast<int32_t>(readByte()) << (i * 8);
         }
-        float* result = reinterpret_cast<float*>(&bits);
+        auto* result = reinterpret_cast<float*>(&bits);
         return static_cast<double>(*result);
     }
 
@@ -519,8 +522,7 @@ DoubleColumnReader::DoubleColumnReader(const Type& type, StripeStreams& stripe)
         : ColumnReader(type, stripe),
           columnKind(type.getKind()),
           bytesPerValue((type.getKind() == FLOAT) ? 4 : 8),
-          bufferPointer(nullptr),
-          bufferEnd(nullptr),
+
           localDoubleBuffer(stripe.getMemoryPool(), 0),
           sharedBuffer(stripe.getMemoryPool(), 0) {
     inputStream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
@@ -541,7 +543,7 @@ uint64_t DoubleColumnReader::skip(uint64_t numValues) {
         bufferPointer += bytesPerValue * numValues;
     } else {
         size_t sizeToSkip = bytesPerValue * numValues - static_cast<size_t>(bufferEnd - bufferPointer);
-        const size_t cap = static_cast<size_t>(std::numeric_limits<int>::max());
+        const auto cap = static_cast<size_t>(std::numeric_limits<int>::max());
         while (sizeToSkip != 0) {
             size_t step = sizeToSkip > cap ? cap : sizeToSkip;
             inputStream->Skip(static_cast<int>(step));
@@ -765,7 +767,7 @@ void StringDictionaryColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t nu
     ColumnReader::next(rowBatch, numValues, notNull);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
-    StringVectorBatch& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
+    auto& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
     char* blob = dictionary->dictionaryBlob.data();
     int64_t* dictionaryOffsets = dictionary->dictionaryOffset.data();
     char** outputStarts = byteBatch.data.data();
@@ -813,7 +815,7 @@ void StringDictionaryColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     rowBatch.isEncoded = true;
 
-    EncodedStringVectorBatch& batch = dynamic_cast<EncodedStringVectorBatch&>(rowBatch);
+    auto& batch = dynamic_cast<EncodedStringVectorBatch&>(rowBatch);
     batch.dictionary = this->dictionary;
 
     // Length buffer is reused to save dictionary entry ids
@@ -888,7 +890,7 @@ uint64_t StringDirectColumnReader::skip(uint64_t numValues) {
     } else {
         // move the stream forward after accounting for the buffered bytes
         totalBytes -= lastBufferLength;
-        const size_t cap = static_cast<size_t>(std::numeric_limits<int>::max());
+        const auto cap = static_cast<size_t>(std::numeric_limits<int>::max());
         while (totalBytes != 0) {
             size_t step = totalBytes > cap ? cap : totalBytes;
             blobStream->Skip(static_cast<int>(step));
@@ -920,7 +922,7 @@ void StringDirectColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numVal
     ColumnReader::next(rowBatch, numValues, notNull);
     // update the notNull from the parent class
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
-    StringVectorBatch& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
+    auto& byteBatch = dynamic_cast<StringVectorBatch&>(rowBatch);
     char** startPtr = byteBatch.data.data();
     int64_t* lengthPtr = byteBatch.length.data();
 
@@ -1031,7 +1033,7 @@ StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) 
         uint64_t fi = 0;
         for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
             const Type& child = *type.getSubtype(i);
-            uint64_t columnId = static_cast<uint64_t>(child.getColumnId());
+            auto columnId = static_cast<uint64_t>(child.getColumnId());
             if (selectedColumns[columnId]) {
                 if (lazyLoadColumns[columnId]) {
                     lazyLoadChildren.push_back(buildReader(child, stripe));
@@ -1039,6 +1041,12 @@ StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) 
                 } else {
                     children.push_back(buildReader(child, stripe));
                     fieldIndex.push_back(fi);
+                    if (child.getKind() == TypeKind::STRUCT) {
+                        // If current child is a struct type, considering it's subfields may need
+                        // lazy load, we should add it to lazyLoadChildren too.
+                        lazyLoadChildren.push_back(buildReader(child, stripe));
+                        lazyLoadFieldIndex.push_back(fi);
+                    }
                 }
                 fi++;
             }
@@ -1072,17 +1080,26 @@ template <bool encoded, bool lazyLoad>
 void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnReader>>& children,
                                       const std::vector<uint64_t>& fieldIndex, ColumnVectorBatch& rowBatch,
                                       uint64_t numValues, char* notNull) {
-    if (!lazyLoad) {
+    if constexpr (!lazyLoad) {
         ColumnReader::next(rowBatch, numValues, notNull);
     }
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     for (auto iter = children.begin(); iter != children.end(); ++iter, ++i) {
         uint64_t fi = fieldIndex[i];
-        if (encoded) {
-            (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+        if constexpr (lazyLoad) {
+            if constexpr (encoded) {
+                (*iter)->lazyLoadNextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues,
+                                             notNull);
+            } else {
+                (*iter)->lazyLoadNext(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            }
         } else {
-            (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            if constexpr (encoded) {
+                (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            } else {
+                (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            }
         }
     }
 }
@@ -1105,6 +1122,7 @@ void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
         ptr->skip(numValues);
     }
 }
+
 void StructColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     nextInternal<false, true>(lazyLoadChildren, lazyLoadFieldIndex, rowBatch, numValues, notNull);
 }
@@ -1186,7 +1204,7 @@ void ListColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValu
 template <bool encoded>
 void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
-    ListVectorBatch& listBatch = dynamic_cast<ListVectorBatch&>(rowBatch);
+    auto& listBatch = dynamic_cast<ListVectorBatch&>(rowBatch);
     int64_t* offsets = listBatch.offsets.data();
     notNull = listBatch.hasNulls ? listBatch.notNull.data() : nullptr;
     rle->next(offsets, numValues, notNull);
@@ -1194,7 +1212,7 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
     if (notNull) {
         for (size_t i = 0; i < numValues; ++i) {
             if (notNull[i]) {
-                uint64_t tmp = static_cast<uint64_t>(offsets[i]);
+                auto tmp = static_cast<uint64_t>(offsets[i]);
                 offsets[i] = static_cast<int64_t>(totalChildren);
                 totalChildren += tmp;
             } else {
@@ -1203,7 +1221,7 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
         }
     } else {
         for (size_t i = 0; i < numValues; ++i) {
-            uint64_t tmp = static_cast<uint64_t>(offsets[i]);
+            auto tmp = static_cast<uint64_t>(offsets[i]);
             offsets[i] = static_cast<int64_t>(totalChildren);
             totalChildren += tmp;
         }
@@ -1311,7 +1329,7 @@ void MapColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValue
 template <bool encoded>
 void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
-    MapVectorBatch& mapBatch = dynamic_cast<MapVectorBatch&>(rowBatch);
+    auto& mapBatch = dynamic_cast<MapVectorBatch&>(rowBatch);
     int64_t* offsets = mapBatch.offsets.data();
     notNull = mapBatch.hasNulls ? mapBatch.notNull.data() : nullptr;
     rle->next(offsets, numValues, notNull);
@@ -1319,7 +1337,7 @@ void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValu
     if (notNull) {
         for (size_t i = 0; i < numValues; ++i) {
             if (notNull[i]) {
-                uint64_t tmp = static_cast<uint64_t>(offsets[i]);
+                auto tmp = static_cast<uint64_t>(offsets[i]);
                 offsets[i] = static_cast<int64_t>(totalChildren);
                 totalChildren += tmp;
             } else {
@@ -1328,7 +1346,7 @@ void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValu
         }
     } else {
         for (size_t i = 0; i < numValues; ++i) {
-            uint64_t tmp = static_cast<uint64_t>(offsets[i]);
+            auto tmp = static_cast<uint64_t>(offsets[i]);
             offsets[i] = static_cast<int64_t>(totalChildren);
             totalChildren += tmp;
         }
@@ -1438,7 +1456,7 @@ void UnionColumnReader::nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numVal
 template <bool encoded>
 void UnionColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
-    UnionVectorBatch& unionBatch = dynamic_cast<UnionVectorBatch&>(rowBatch);
+    auto& unionBatch = dynamic_cast<UnionVectorBatch&>(rowBatch);
     uint64_t* offsets = unionBatch.offsets.data();
     int64_t* counts = childrenCounts.data();
     memset(counts, 0, sizeof(int64_t) * numChildren);
@@ -1525,7 +1543,7 @@ protected:
         size_t offset = 0;
         while (true) {
             readBuffer();
-            unsigned char ch = static_cast<unsigned char>(*(buffer++));
+            auto ch = static_cast<unsigned char>(*(buffer++));
             value |= static_cast<uint64_t>(ch & 0x7f) << offset;
             offset += 7;
             if (!(ch & 0x80)) {
@@ -1607,7 +1625,7 @@ uint64_t Decimal64ColumnReader::skip(uint64_t numValues) {
 void Decimal64ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
-    Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
+    auto& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
     int64_t* values = batch.values.data();
     // read the next group of scales
     int64_t* scaleBuffer = batch.readScales.data();
@@ -1667,7 +1685,7 @@ private:
         uint32_t offset = 0;
         while (true) {
             readBuffer();
-            unsigned char ch = static_cast<unsigned char>(*(buffer++));
+            auto ch = static_cast<unsigned char>(*(buffer++));
             work = ch & 0x7f;
             work <<= offset;
             value |= work;
@@ -1693,7 +1711,7 @@ Decimal128ColumnReader::~Decimal128ColumnReader() {
 void Decimal128ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
-    Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
+    auto& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
     Int128* values = batch.values.data();
     // read the next group of scales
     int64_t* scaleBuffer = batch.readScales.data();
@@ -1754,7 +1772,7 @@ uint64_t Decimal64ColumnReaderV2::skip(uint64_t numValues) {
 void Decimal64ColumnReaderV2::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
-    Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
+    auto& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
     valueDecoder->next(batch.values.data(), numValues, notNull);
     batch.precision = precision;
     batch.scale = scale;
@@ -1779,7 +1797,7 @@ private:
         bool result = true;
         while (true) {
             readBuffer();
-            unsigned char ch = static_cast<unsigned char>(*(buffer++));
+            auto ch = static_cast<unsigned char>(*(buffer++));
             work = ch & 0x7f;
             // If we have read more than 128 bits, we flag the error, but keep
             // reading bytes so the stream isn't thrown off.
@@ -1823,7 +1841,7 @@ DecimalHive11ColumnReader::~DecimalHive11ColumnReader() {
 void DecimalHive11ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     ColumnReader::next(rowBatch, numValues, notNull);
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
-    Decimal128VectorBatch& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
+    auto& batch = dynamic_cast<Decimal128VectorBatch&>(rowBatch);
     Int128* values = batch.values.data();
     // read the next group of scales
     int64_t* scaleBuffer = batch.readScales.data();
@@ -1938,10 +1956,10 @@ std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& strip
 }
 
 void collectStringDictionary(ColumnReader* reader, std::unordered_map<uint64_t, StringDictionary*>& coll) {
-    StructColumnReader* sreader = static_cast<StructColumnReader*>(reader);
+    auto* sreader = static_cast<StructColumnReader*>(reader);
     for (size_t i = 0; i < sreader->size(); i++) {
         ColumnReader* cr = sreader->childReaderAt(i);
-        StringDictionaryColumnReader* sr = dynamic_cast<StringDictionaryColumnReader*>(cr);
+        auto* sr = dynamic_cast<StringDictionaryColumnReader*>(cr);
         if (sr != nullptr) {
             coll[cr->getColumnId()] = sr->getDictionary();
         }

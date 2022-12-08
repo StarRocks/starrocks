@@ -1,32 +1,49 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/primary_key_encoder.h"
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "column/datum.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
+#include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 
 using namespace std;
 
 namespace starrocks {
 
-static unique_ptr<vectorized::Schema> create_key_schema(const vector<FieldType>& types) {
-    vectorized::Fields fields;
+static unique_ptr<vectorized::VectorizedSchema> create_key_schema(const vector<LogicalType>& types) {
+    vectorized::VectorizedFields fields;
+    std::vector<ColumnId> sort_key_idxes(types.size());
     for (int i = 0; i < types.size(); i++) {
         string name = StringPrintf("col%d", i);
-        auto fd = new vectorized::Field(i, name, types[i], false);
+        auto fd = new vectorized::VectorizedField(i, name, types[i], false);
         fd->set_is_key(true);
         fd->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
         fields.emplace_back(fd);
+        sort_key_idxes[i] = i;
     }
-    return unique_ptr<vectorized::Schema>(new vectorized::Schema(std::move(fields)));
+    return std::make_unique<vectorized::VectorizedSchema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
-    auto sc = create_key_schema({OLAP_FIELD_TYPE_INT});
+    auto sc = create_key_schema({TYPE_INT});
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
@@ -47,7 +64,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
-    auto sc = create_key_schema({OLAP_FIELD_TYPE_LARGEINT});
+    auto sc = create_key_schema({TYPE_LARGEINT});
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
@@ -72,8 +89,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
-    auto sc = create_key_schema(
-            {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
+    auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1;
@@ -116,8 +132,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
-        auto sc = create_key_schema(
-                {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
+        auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;
@@ -136,8 +151,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     }
 
     {
-        auto sc = create_key_schema(
-                {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
+        auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/runtime/free_list_test.cpp
 
@@ -39,7 +52,7 @@ TEST(FreeListTest, Basic) {
     EXPECT_EQ(allocated_size, 0);
 
     uint8_t* mem = pool.allocate(FreeList::min_size());
-    EXPECT_TRUE(mem != NULL);
+    EXPECT_TRUE(mem != nullptr);
 
     list.add(mem, FreeList::min_size());
     free_list_mem = list.allocate(FreeList::min_size(), &allocated_size);
@@ -68,22 +81,22 @@ TEST(FreeListTest, Basic) {
     list.add(mem, FreeList::min_size());
 
     free_list_mem1 = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_TRUE(free_list_mem1 != NULL);
+    EXPECT_TRUE(free_list_mem1 != nullptr);
     EXPECT_EQ(allocated_size, FreeList::min_size());
     bzero(free_list_mem1, FreeList::min_size());
 
     free_list_mem2 = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_TRUE(free_list_mem2 != NULL);
+    EXPECT_TRUE(free_list_mem2 != nullptr);
     EXPECT_EQ(allocated_size, FreeList::min_size());
     bzero(free_list_mem2, FreeList::min_size());
 
     free_list_mem3 = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_TRUE(free_list_mem3 != NULL);
+    EXPECT_TRUE(free_list_mem3 != nullptr);
     EXPECT_EQ(allocated_size, FreeList::min_size());
     bzero(free_list_mem3, FreeList::min_size());
 
     free_list_mem = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_EQ(NULL, free_list_mem);
+    EXPECT_EQ(nullptr, free_list_mem);
     EXPECT_EQ(allocated_size, 0);
 
     list.add(free_list_mem1, FreeList::min_size());
@@ -91,22 +104,22 @@ TEST(FreeListTest, Basic) {
     list.add(free_list_mem3, FreeList::min_size());
 
     free_list_mem1 = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_TRUE(free_list_mem1 != NULL);
+    EXPECT_TRUE(free_list_mem1 != nullptr);
     EXPECT_EQ(allocated_size, FreeList::min_size());
     bzero(free_list_mem1, FreeList::min_size());
 
     free_list_mem2 = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_TRUE(free_list_mem2 != NULL);
+    EXPECT_TRUE(free_list_mem2 != nullptr);
     EXPECT_EQ(allocated_size, FreeList::min_size());
     bzero(free_list_mem2, FreeList::min_size());
 
     free_list_mem3 = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_TRUE(free_list_mem3 != NULL);
+    EXPECT_TRUE(free_list_mem3 != nullptr);
     EXPECT_EQ(allocated_size, FreeList::min_size());
     bzero(free_list_mem3, FreeList::min_size());
 
     free_list_mem = list.allocate(FreeList::min_size(), &allocated_size);
-    EXPECT_EQ(NULL, free_list_mem);
+    EXPECT_EQ(nullptr, free_list_mem);
     EXPECT_EQ(allocated_size, 0);
 
     // Try some allocations with different sizes
@@ -120,16 +133,16 @@ TEST(FreeListTest, Basic) {
 
     list.add(mem2, size2);
     free_list_mem = list.allocate(size4, &allocated_size);
-    EXPECT_EQ(NULL, free_list_mem);
+    EXPECT_EQ(nullptr, free_list_mem);
     EXPECT_EQ(allocated_size, 0);
 
     free_list_mem = list.allocate(size1, &allocated_size);
-    EXPECT_TRUE(free_list_mem != NULL);
+    EXPECT_TRUE(free_list_mem != nullptr);
     EXPECT_EQ(allocated_size, size2);
     bzero(free_list_mem, size1);
 
     free_list_mem = list.allocate(size1, &allocated_size);
-    EXPECT_EQ(NULL, free_list_mem);
+    EXPECT_EQ(nullptr, free_list_mem);
     EXPECT_EQ(allocated_size, 0);
 
     list.add(mem2, size2);

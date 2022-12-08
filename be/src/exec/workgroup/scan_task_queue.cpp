@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/workgroup/scan_task_queue.h"
 
@@ -21,13 +33,18 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
-    return _queue.blocking_put(std::move(task));
+    return _queue.try_put(std::move(task));
 }
 
 /// WorkGroupScanTaskQueue.
 bool WorkGroupScanTaskQueue::WorkGroupScanSchedEntityComparator::operator()(
-        const WorkGroupScanSchedEntityPtr& lhs, const WorkGroupScanSchedEntityPtr& rhs) const {
-    return lhs->vruntime_ns() < rhs->vruntime_ns();
+        const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const {
+    int64_t lhs_val = lhs_ptr->vruntime_ns();
+    int64_t rhs_val = rhs_ptr->vruntime_ns();
+    if (lhs_val != rhs_val) {
+        return lhs_val < rhs_val;
+    }
+    return lhs_ptr < rhs_ptr;
 }
 
 void WorkGroupScanTaskQueue::close() {
@@ -124,8 +141,9 @@ bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccount
 
     // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
     auto* wg_entity = _sched_entity(wg);
-    return _min_wg_entity.load() != wg_entity &&
-           _min_vruntime_ns.load() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
+    auto* min_entity = _min_wg_entity.load();
+    return min_entity != wg_entity && min_entity &&
+           min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
 }
 
 bool WorkGroupScanTaskQueue::_throttled(const workgroup::WorkGroupScanSchedEntity* wg_entity,
@@ -144,10 +162,8 @@ bool WorkGroupScanTaskQueue::_throttled(const workgroup::WorkGroupScanSchedEntit
 void WorkGroupScanTaskQueue::_update_min_wg() {
     auto* min_wg_entity = _take_next_wg();
     if (min_wg_entity == nullptr) {
-        _min_vruntime_ns = std::numeric_limits<int64_t>::max();
         _min_wg_entity = nullptr;
     } else {
-        _min_vruntime_ns = min_wg_entity->vruntime_ns();
         _min_wg_entity = min_wg_entity;
     }
 }
@@ -177,7 +193,7 @@ void WorkGroupScanTaskQueue::_enqueue_workgroup(workgroup::WorkGroupScanSchedEnt
         int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
         if (diff_vruntime_ns > 0) {
             DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
-            wg_entity->incr_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
+            wg_entity->adjust_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
         }
     }
 

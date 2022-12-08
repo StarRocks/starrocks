@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/binary_prefix_page.cpp
 
@@ -38,13 +51,13 @@ namespace starrocks {
 
 using strings::Substitute;
 
-size_t BinaryPrefixPageBuilder::add(const uint8_t* vals, size_t add_count) {
+uint32_t BinaryPrefixPageBuilder::add(const uint8_t* vals, uint32_t add_count) {
     DCHECK(!_finished);
     if (add_count == 0) {
         return 0;
     }
 
-    const Slice* src = reinterpret_cast<const Slice*>(vals);
+    const auto* src = reinterpret_cast<const Slice*>(vals);
     if (_count == 0) {
         _first_entry.assign_copy(reinterpret_cast<const uint8_t*>(src->get_data()), src->get_size());
     }
@@ -100,7 +113,7 @@ faststring* BinaryPrefixPageBuilder::finish() {
     return &_buffer;
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 const uint8_t* BinaryPrefixPageDecoder<Type>::_decode_value_lengths(const uint8_t* ptr, uint32_t* shared,
                                                                     uint32_t* non_shared) {
     if ((ptr = decode_varint32_ptr(ptr, _footer_start, shared)) == nullptr) {
@@ -115,7 +128,7 @@ const uint8_t* BinaryPrefixPageDecoder<Type>::_decode_value_lengths(const uint8_
     return ptr;
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_read_next_value() {
     if (_cur_pos >= _num_values) {
         return Status::NotFound("no more value to read");
@@ -132,14 +145,14 @@ Status BinaryPrefixPageDecoder<Type>::_read_next_value() {
     return Status::OK();
 }
 
-template <FieldType Type>
-Status BinaryPrefixPageDecoder<Type>::_seek_to_restart_point(size_t restart_point_index) {
+template <LogicalType Type>
+Status BinaryPrefixPageDecoder<Type>::_seek_to_restart_point(uint32_t restart_point_index) {
     _cur_pos = restart_point_index * _restart_point_internal;
     _next_ptr = _get_restart_point(restart_point_index);
     return _read_next_value();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::init() {
     _cur_pos = 0;
     _next_ptr = reinterpret_cast<const uint8_t*>(_data.get_data());
@@ -154,8 +167,8 @@ Status BinaryPrefixPageDecoder<Type>::init() {
     return _read_next_value();
 }
 
-template <FieldType Type>
-Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(size_t pos) {
+template <LogicalType Type>
+Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     DCHECK(_parsed);
     DCHECK_LE(pos, _num_values);
 
@@ -165,7 +178,7 @@ Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(size_t pos) {
         return Status::OK();
     }
 
-    size_t restart_point_index = pos / _restart_point_internal;
+    uint32_t restart_point_index = pos / _restart_point_internal;
     RETURN_IF_ERROR(_seek_to_restart_point(restart_point_index));
     while (_cur_pos < pos) {
         _cur_pos++;
@@ -174,7 +187,7 @@ Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(size_t pos) {
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::seek_at_or_after_value(const void* value, bool* exact_match) {
     DCHECK(_parsed);
     Slice target = *reinterpret_cast<const Slice*>(value);
@@ -212,7 +225,7 @@ Status BinaryPrefixPageDecoder<Type>::seek_at_or_after_value(const void* value, 
     }
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_read_next_value_to_output(Slice prev, MemPool* mem_pool, Slice* output) {
     if (_cur_pos >= _num_values) {
         return Status::NotFound("no more value to read");
@@ -238,7 +251,7 @@ Status BinaryPrefixPageDecoder<Type>::_read_next_value_to_output(Slice prev, Mem
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_copy_current_to_output(MemPool* mem_pool, Slice* output) {
     output->size = _current_value.size();
     if (output->size > 0) {
@@ -251,39 +264,7 @@ Status BinaryPrefixPageDecoder<Type>::_copy_current_to_output(MemPool* mem_pool,
     return Status::OK();
 }
 
-template <FieldType Type>
-Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, ColumnBlockView* dst) {
-    DCHECK(_parsed);
-    if (PREDICT_FALSE(*n == 0 || _cur_pos >= _num_values)) {
-        *n = 0;
-        return Status::OK();
-    }
-    size_t i = 0;
-    size_t max_fetch = std::min(*n, static_cast<size_t>(_num_values - _cur_pos));
-    auto out = reinterpret_cast<Slice*>(dst->data());
-    auto prev = out;
-
-    // first copy the current value to output
-    RETURN_IF_ERROR(_copy_current_to_output(dst->pool(), out));
-    i++;
-    out++;
-
-    // read and copy remaining values
-    for (; i < max_fetch; ++i) {
-        _cur_pos++;
-        RETURN_IF_ERROR(_read_next_value_to_output(prev[i - 1], dst->pool(), out));
-        out++;
-    }
-
-    //must update _current_value
-    _current_value.clear();
-    _current_value.assign_copy((uint8_t*)prev[i - 1].data, prev[i - 1].size);
-
-    *n = max_fetch;
-    return Status::OK();
-}
-
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
     if (_cur_pos >= _num_values) {
         return Status::NotFound("no more value to read");
@@ -301,17 +282,17 @@ Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
-    size_t begin = current_index();
+    uint32_t begin = current_index();
     read_range.add(vectorized::Range(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin + 1;
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_pos >= _num_values)) {
@@ -320,7 +301,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
     size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
 
     vectorized::SparseRangeIterator iter = range.new_iterator();
-    if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
+    if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
@@ -349,7 +330,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
     return Status::OK();
 }
 
-template class BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_CHAR>;
-template class BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
+template class BinaryPrefixPageDecoder<TYPE_CHAR>;
+template class BinaryPrefixPageDecoder<TYPE_VARCHAR>;
 
 } // namespace starrocks

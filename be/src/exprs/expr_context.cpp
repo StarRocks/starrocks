@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exprs/expr_context.cpp
 
@@ -42,9 +55,7 @@ ExprContext::ExprContext(Expr* root)
 
 ExprContext::~ExprContext() {
     // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
-    if (_prepared) {
-        close(_runtime_state);
-    }
+    close(_runtime_state);
     for (auto& _fn_context : _fn_contexts) {
         delete _fn_context;
     }
@@ -82,6 +93,9 @@ Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
 }
 
 void ExprContext::close(RuntimeState* state) {
+    if (!_prepared) {
+        return;
+    }
     bool expected = false;
     if (!_closed.compare_exchange_strong(expected, true)) {
         return;
@@ -180,11 +194,11 @@ std::string ExprContext::get_error_msg() const {
     return "";
 }
 
-StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
-    return evaluate(_root, chunk);
+StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk, uint8_t* filter) {
+    return evaluate(_root, chunk, filter);
 }
 
-StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
+StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk, uint8_t* filter) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(!_closed);
@@ -195,7 +209,12 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
     }
 #endif
     try {
-        auto ptr = e->evaluate(this, chunk);
+        ColumnPtr ptr = nullptr;
+        if (filter == nullptr) {
+            ASSIGN_OR_RETURN(ptr, e->evaluate_checked(this, chunk));
+        } else {
+            ASSIGN_OR_RETURN(ptr, e->evaluate_with_filter(this, chunk, filter));
+        }
         DCHECK(ptr != nullptr);
         if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
             ptr->resize(chunk->num_rows());

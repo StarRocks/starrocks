@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/clone/TabletSchedCtx.java
 
@@ -25,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -204,6 +218,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     private Set<Long> colocateBackendsSet = null;
     private int tabletOrderIdx = -1;
+    // ID of colocate group that this tablet belongs to
+    private GroupId colocateGroupId = null;
+    private boolean relocationForRepair = false;
 
     private SystemInfoService infoService;
 
@@ -458,6 +475,22 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public Set<Long> getColocateBackendsSet() {
         return colocateBackendsSet;
+    }
+
+    public void setColocateGroupId(GroupId gid) {
+        colocateGroupId = gid;
+    }
+
+    public GroupId getColocateGroupId() {
+        return colocateGroupId;
+    }
+
+    public void setRelocationForRepair(boolean isRepair) {
+        relocationForRepair = isRepair;
+    }
+
+    public boolean getRelocationForRepair() {
+        return relocationForRepair;
     }
 
     public void setTabletOrderIdx(int idx) {
@@ -839,7 +872,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 olapTable.isInMemory(),
                 olapTable.enablePersistentIndex(),
                 olapTable.getPartitionInfo().getTabletType(partitionId),
-                olapTable.getCompressionType());
+                olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
         createReplicaTask.setIsRecoverTask(true);
         taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 

@@ -76,7 +76,7 @@ public:
         if (code == CURLE_OK && ct != nullptr) {
             return ct;
         }
-        return std::string();
+        return {};
     }
 
     // Set the long gohead parameter to 1L to continue send authentication (user+password)

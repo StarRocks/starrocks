@@ -1,6 +1,6 @@
 # DROP FUNCTION
 
-## description
+## Description
 
 ### Syntax
 
@@ -17,7 +17,7 @@ DROP FUNCTION function_name
 
 Delete a custom function. It can only be deleted when its name and parameter type are consistent.
 
-## example
+## Examples
 
 1. Drop a function.
 

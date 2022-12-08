@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -38,12 +50,13 @@ public:
 
     void update_candidates(std::vector<CompactionCandidate> candidates);
 
-    void insert_candidates(std::vector<CompactionCandidate> candidates);
+    void remove_candidate(int64_t tablet_id);
 
-    CompactionCandidate pick_candidate();
+    bool pick_candidate(CompactionCandidate* candidate);
 
-    void update_tablet_async(TabletSharedPtr tablet, bool need_update_context, bool is_compaction = false);
-    void update_tablet(TabletSharedPtr tablet, bool need_update_context, bool is_compaction);
+    void update_tablet_async(TabletSharedPtr tablet);
+
+    void update_tablet(TabletSharedPtr tablet);
 
     void register_scheduler(CompactionScheduler* scheduler) {
         std::lock_guard lg(_scheduler_mutex);
@@ -68,7 +81,7 @@ public:
             LOG(WARNING) << "register compaction task failed for compaction is disabled";
             exceed = true;
         } else if (_running_tasks.size() >= _max_task_num) {
-            LOG(WARNING) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
+            VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
             exceed = true;
         }
         return exceed;
@@ -95,6 +108,8 @@ private:
     CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
 
     void _notify_schedulers();
+    void _dispatch_worker();
+    bool _check_precondition(const CompactionCandidate& candidate);
 
     std::mutex _candidates_mutex;
     // protect by _mutex
@@ -107,10 +122,16 @@ private:
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
     std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;
     std::unique_ptr<ThreadPool> _update_candidate_pool;
+    std::mutex _dispatch_mutex;
+    std::thread _dispatch_update_candidate_thread;
+    std::map<int64_t, std::pair<TabletSharedPtr, int32_t>> _dispatch_map;
+    std::atomic<bool> _stop = false;
+    int32_t _max_dispatch_count = 0;
 
     std::mutex _scheduler_mutex;
     std::vector<CompactionScheduler*> _schedulers;
-    int32_t _max_task_num;
+    int32_t _max_task_num = 0;
+    bool _disable_update_tablet = false;
 };
 
 } // namespace starrocks

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.common;
 
@@ -60,31 +73,6 @@ public class PriorityThreadPoolExecutorTest {
             futures[i].get();
         }
         assertEquals("01@00, 01@01, 01@02, 01@03, 01@04, 01@05, 01@06, 01@07, 01@08, 01@09, ", buffer.toString());
-    }
-
-    @Test
-    public void testRandomPriority() throws InterruptedException, ExecutionException {
-        PriorityBlockingQueue<Runnable> workQueue = new PriorityBlockingQueue<Runnable>(1000);
-        PriorityThreadPoolExecutor pool = new PriorityThreadPoolExecutor(1, 1, 1, TimeUnit.MINUTES, workQueue);
-        sleepFlag.set(true);
-
-        Future[] futures = new Future[3];
-        StringBuffer buffer = new StringBuffer();
-        for (int i = 0; i < futures.length; i++) {
-            int r = (int) (Math.random() * 100);
-            futures[i] = pool.submit(new TenSecondTask(i, r, buffer));
-        }
-        sleepFlag.set(false);
-        for (int i = 0; i < futures.length; i++) {
-            futures[i].get();
-        }
-
-        buffer.append("01@00");
-        String[] split = buffer.toString().split(", ");
-        for (int i = 2; i < split.length - 1; i++) {
-            String s = split[i].split("@")[0];
-            assertTrue(Integer.valueOf(s) >= Integer.valueOf(split[i + 1].split("@")[0]));
-        }
     }
 
     @Test

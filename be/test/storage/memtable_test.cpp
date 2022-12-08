@@ -1,10 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/memtable.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
+#include <random>
 
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
@@ -57,9 +71,9 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
     return std::make_shared<TabletSchema>(tspb);
 }
 
-static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
-    unique_ptr<Schema> ret;
-    Fields fields;
+static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) {
+    unique_ptr<VectorizedSchema> ret;
+    VectorizedFields fields;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     for (int i = 0; i < cs.size(); i++) {
         auto& c = cs[i];
@@ -69,23 +83,23 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         }
         ColumnId cid = i;
         string name = fs[0];
-        FieldType type = OLAP_FIELD_TYPE_UNKNOWN;
+        LogicalType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
-            type = OLAP_FIELD_TYPE_BOOL;
+            type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {
-            type = OLAP_FIELD_TYPE_TINYINT;
+            type = TYPE_TINYINT;
         } else if (fs[1] == "smallint") {
-            type = OLAP_FIELD_TYPE_SMALLINT;
+            type = TYPE_SMALLINT;
         } else if (fs[1] == "int") {
-            type = OLAP_FIELD_TYPE_INT;
+            type = TYPE_INT;
         } else if (fs[1] == "bigint") {
-            type = OLAP_FIELD_TYPE_BIGINT;
+            type = TYPE_BIGINT;
         } else if (fs[1] == "float") {
-            type = OLAP_FIELD_TYPE_FLOAT;
+            type = TYPE_FLOAT;
         } else if (fs[1] == "double") {
-            type = OLAP_FIELD_TYPE_DOUBLE;
+            type = TYPE_DOUBLE;
         } else if (fs[1] == "varchar") {
-            type = OLAP_FIELD_TYPE_VARCHAR;
+            type = TYPE_VARCHAR;
         } else {
             CHECK(false) << "create_tuple_desc_slots type not support";
         }
@@ -93,12 +107,12 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         if (fs.size() == 3 && fs[2] == "null") {
             nullable = true;
         }
-        auto fd = new Field(cid, name, type, nullable);
+        auto fd = new VectorizedField(cid, name, type, nullable);
         fd->set_is_key(i < nkey);
         fd->set_aggregate_method(i < nkey ? OLAP_FIELD_AGGREGATION_NONE : OLAP_FIELD_AGGREGATION_REPLACE);
         fields.emplace_back(fd);
     }
-    ret.reset(new Schema(std::move(fields)));
+    ret = std::make_unique<VectorizedSchema>(std::move(fields));
     return ret;
 }
 
@@ -107,13 +121,12 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
     TDescriptorTableBuilder dtb;
     TTupleDescriptorBuilder tuple_builder;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
-    for (int i = 0; i < cs.size(); i++) {
-        auto& c = cs[i];
+    for (auto& c : cs) {
         std::vector<std::string> fs = strings::Split(c, " ", strings::SkipWhitespace());
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
         }
-        PrimitiveType type = INVALID_TYPE;
+        LogicalType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
             type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {
@@ -187,7 +200,7 @@ public:
         _root_path = root;
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
-        _mem_tracker.reset(new MemTracker(-1, "root"));
+        _mem_tracker = std::make_unique<MemTracker>(-1, "root");
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
         _slots = create_tuple_desc_slots(&_runtime_state, slot_desc, _obj_pool);
         RowsetWriterContext writer_context;
@@ -203,9 +216,10 @@ public:
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
-        _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
+        _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
         _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
-        _mem_table.reset(new MemTable(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get()));
+        _mem_table =
+                std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     }
 
     void TearDown() override {
@@ -221,7 +235,7 @@ public:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
     unique_ptr<MemTable> _mem_table;
-    Schema _vectorized_schema;
+    VectorizedSchema _vectorized_schema;
     unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 
@@ -235,12 +249,12 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
-    unique_ptr<Schema> read_schema = create_schema("pk int", 1);
+    unique_ptr<VectorizedSchema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
@@ -282,12 +296,12 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
-    unique_ptr<Schema> read_schema = create_schema("pk int", 1);
+    unique_ptr<VectorizedSchema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
     RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
@@ -336,7 +350,7 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
@@ -368,7 +382,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
 }
@@ -404,7 +418,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_FALSE(_mem_table->finalize().ok());
 }

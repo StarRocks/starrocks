@@ -1,23 +1,31 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <butil/thread_local.h>
 #include <butil/time.h> // NOLINT
+#include <bvar/bvar.h>
 
 #include <atomic>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bvar/bvar.h>
-DIAGNOSTIC_POP
 
 #include "column/binary_column.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
 #include "column/object_column.h"
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/type_list.h"
 #include "gutil/dynamic_annotations.h"
@@ -108,7 +116,7 @@ class CACHELINE_ALIGNED ColumnPool {
             _curr_free.bytes = 0;
         }
 
-        ~LocalPool() {
+        ~LocalPool() noexcept {
             if (_curr_free.nfree > 0 && !_pool->_push_free_block(_curr_free)) {
                 for (size_t i = 0; i < _curr_free.nfree; i++) {
                     ASAN_UNPOISON_MEMORY_REGION(_curr_free.ptrs[i], sizeof(T));
@@ -220,8 +228,8 @@ public:
 
     // Destroy some objects in the *central* free list.
     // Returns the number of bytes freed to tcmalloc.
-    size_t release_free_columns(float free_ratio) {
-        free_ratio = std::min<float>(free_ratio, 1.0);
+    size_t release_free_columns(double free_ratio) {
+        free_ratio = std::min<double>(free_ratio, 1.0);
         int64_t now = butil::gettimeofday_s();
         std::vector<DynamicFreeBlock*> tmp;
         if (now - _first_push_time > 3) {
@@ -323,8 +331,7 @@ private:
     }
 
     bool _push_free_block(const FreeBlock& blk) {
-        DynamicFreeBlock* p =
-                (DynamicFreeBlock*)malloc(offsetof(DynamicFreeBlock, ptrs) + sizeof(*blk.ptrs) * blk.nfree);
+        auto* p = (DynamicFreeBlock*)malloc(offsetof(DynamicFreeBlock, ptrs) + sizeof(*blk.ptrs) * blk.nfree);
         if (UNLIKELY(p == nullptr)) {
             return false;
         }
@@ -407,7 +414,7 @@ inline void release_large_columns(size_t limit) {
 }
 
 template <typename T>
-inline size_t release_free_columns(float ratio) {
+inline size_t release_free_columns(double ratio) {
     static_assert(InList<ColumnPool<T>, ColumnPoolList>::value, "Cannot use column pool");
     return ColumnPool<T>::singleton()->release_free_columns(ratio);
 }

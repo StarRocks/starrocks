@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -7,6 +19,7 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -79,7 +92,7 @@ private:
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     connector::DataSourcePtr _data_source;
-    vectorized::ConnectorScanNode* _scan_node;
+    [[maybe_unused]] vectorized::ConnectorScanNode* _scan_node;
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
@@ -89,10 +102,11 @@ private:
 
     // =========================
     RuntimeState* _runtime_state = nullptr;
+    ChunkPipelineAccumulator _ck_acc;
+    Status _status = Status::OK();
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
-    uint64_t _bytes_read = 0;
 };
 
 } // namespace pipeline

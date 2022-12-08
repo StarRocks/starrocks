@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.qe;
 
@@ -34,6 +47,7 @@ import java.util.Map;
 public class CoordinatorTest {
     ConnectContext ctx;
     Coordinator coordinator;
+    CoordinatorPreprocessor coordinatorPreprocessor;
 
     @Before
     public void setUp() throws IOException {
@@ -42,6 +56,7 @@ public class CoordinatorTest {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new Coordinator(ctx, Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
+        coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
@@ -51,10 +66,13 @@ public class CoordinatorTest {
         PlanFragment fragment =
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
-        Coordinator.FragmentExecParams params = coordinator.new FragmentExecParams(fragment);
-        Coordinator.FInstanceExecParam instance0 = new Coordinator.FInstanceExecParam(null, null, 0, params);
-        Coordinator.FInstanceExecParam instance1 = new Coordinator.FInstanceExecParam(null, null, 1, params);
-        Coordinator.FInstanceExecParam instance2 = new Coordinator.FInstanceExecParam(null, null, 2, params);
+        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
+        CoordinatorPreprocessor.FInstanceExecParam instance0 =
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 0, params);
+        CoordinatorPreprocessor.FInstanceExecParam instance1 =
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 1, params);
+        CoordinatorPreprocessor.FInstanceExecParam instance2 =
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 2, params);
         instance0.bucketSeqToDriverSeq = ImmutableMap.of(2, -1, 0, -1);
         instance1.bucketSeqToDriverSeq = ImmutableMap.of(1, -1, 4, -1);
         instance2.bucketSeqToDriverSeq = ImmutableMap.of(3, -1, 5, -1);
@@ -65,7 +83,7 @@ public class CoordinatorTest {
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
-        coordinator.computeBucketSeq2InstanceOrdinal(params, 6);
+        coordinatorPreprocessor.computeBucketSeq2InstanceOrdinal(params, 6);
         params.setBucketSeqToInstanceForRuntimeFilters();
         Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
     }
@@ -99,19 +117,20 @@ public class CoordinatorTest {
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        Coordinator.FragmentExecParams params = coordinator.new FragmentExecParams(null);
-        Coordinator.BucketSeqToScanRange bucketSeqToScanRange = new Coordinator.BucketSeqToScanRange();
+        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(null);
+        CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange =
+                new CoordinatorPreprocessor.BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToAddress.keySet()) {
             bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
         }
 
-        coordinator.computeColocatedJoinInstanceParam(bucketSeqToAddress, bucketSeqToScanRange,
+        coordinatorPreprocessor.computeColocatedJoinInstanceParam(bucketSeqToAddress, bucketSeqToScanRange,
                 parallelExecInstanceNum, pipelineDop, enablePipeline, params);
         params.instanceExecParams.sort(Comparator.comparing(param -> param.host));
 
         Assert.assertEquals(expectedInstances, params.instanceExecParams.size());
         for (int i = 0; i < expectedInstances; ++i) {
-            Coordinator.FInstanceExecParam param = params.instanceExecParams.get(i);
+            CoordinatorPreprocessor.FInstanceExecParam param = params.instanceExecParams.get(i);
             Assert.assertEquals(expectedParamAddresses.get(i), param.host);
             Assert.assertEquals(expectedPipelineDops.get(i).intValue(), param.getPipelineDop());
 

@@ -45,54 +45,48 @@ Compared with traditional primary keys, sort keys in StarRocks have the followin
 
 ## Duplicate Key model
 
-The Duplicate Key model is the default data model at the creation of tables in StarRocks.
+The Duplicate Key model is the default model in StarRocks. If you did not specify a model when you create a table, a Duplicate Key table is created by default.
 
-When you create a table that uses the Duplicate Key model, you can define a sort key for that table. If the filter conditions for queries contain the sort key columns, StarRocks can quickly filter the data of the table to accelerate the queries. The Duplicate Key model allows you to append new data to the table. However, it does not allow you to modify the existing data in the table.
+When you create a Duplicate Key table, you can define a sort key for that table. If the filter conditions contain the sort key columns, StarRocks can quickly filter data from the table to accelerate queries. The Duplicate Key model allows you to append new data to the table. However, it does not allow you to modify existing data in the table.
 
 ### Scenarios
 
 The Duplicate Key model is suitable for the following scenarios:
 
 - Analyze raw data, such as raw logs and raw operation records.
-- Query data by using various methods without the need to be limited to preaggregate methods.
-- Load log data or time series data. New data is written in append-only mode, and existing data never changes.
+- Query data by using a variety of methods without being limited by the pre-aggregation method.
+- Load log data or time-series data. New data is written in append-only mode, and existing data is not updated.
 
 ### Create a table
 
 Suppose that you want to analyze the event data over a specific time range. In this example, create a table named `detail` and define `event_time` and `event_type` as sort key columns.
 
-The statement for creating the table is as follows:
+Statement for creating the table:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS detail (
-
     event_time DATETIME NOT NULL COMMENT "datetime of event",
-
     event_type INT NOT NULL COMMENT "type of event",
-
     user_id INT COMMENT "id of user",
-
     device_code INT COMMENT "device code",
-
     channel INT COMMENT ""
-
 )
-
 DUPLICATE KEY(event_time, event_type)
-
 DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 ```
+
+> You must specify `DISTRIBUTED BY HASH`. Otherwise, the table creation fails.
 
 ### Usage notes
 
 - Take note of the following points about the sort key of a table:
-  - You can use the `DUPLICATE KEY` keyword to explicitly define the columns that participate in the sort key.
+  - You can use the `DUPLICATE KEY` keyword to explicitly define the columns that are used in the sort key.
 
-    > Note: By default, if you do not define sort key columns, StarRocks selects the first three columns as sort key columns.
+    > Note: By default, if you do not specify sort key columns, StarRocks uses the **first three** columns as sort key columns.
 
-  - In the Duplicate Key model, the sort key can be composed of some or all columns.  
+  - In the Duplicate Key model, the sort key can consist of some or all of the dimension columns.
 
-- You can create indexes such as BITMAP indexes and Bloom Filter indexes at table creation.
+- You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
 - If two identical records are loaded, the Duplicate Key model considers the two records as one record instead of two.
 
@@ -156,29 +150,24 @@ The statement for creating the table is as follows:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
-
     site_id LARGEINT NOT NULL COMMENT "id of site",
-
     date DATE NOT NULL COMMENT "time of event",
-
     city_code VARCHAR(20) COMMENT "city_code of user",
-
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
-
 )
-
+AGGREGATE KEY(site_id, date, city_code)
 DISTRIBUTED BY HASH(site_id) BUCKETS 8;
 ```
 
 ### Usage notes
 
 - Take note of the following points about the sort key of a table:
-  - You can use the `AGGREGATE KEY` keyword to explicitly define the columns that participate in the sort key.
+  - You can use the `AGGREGATE KEY` keyword to explicitly define the columns that are used in the sort key.
 
-    - If the `AGGREGATE KEY` keyword does not include all dimension columns, the table cannot  be created.
+    - If the `AGGREGATE KEY` keyword does not include all the dimension columns, the table cannot be created.
     - By default, if you do not explicitly define sort key columns by using the `AGGREGATE KEY` keyword, StarRocks selects all columns except metric columns as the sort key columns.
 
-  - The sort key must be created on columns on which unique constraints are enforced. It must be composed of all dimension columns whose names cannot be changed.
+  - The sort key must be created on columns on which unique constraints are enforced. It must be composed of all the dimension columns whose names cannot be changed.
 
 - You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
 
@@ -233,19 +222,12 @@ The statement for creating the table is as follows:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS orders (
-
     create_time DATE NOT NULL COMMENT "create time of an order",
-
     order_id BIGINT NOT NULL COMMENT "id of an order",
-
     order_state INT COMMENT "state of an order",
-
     total_price BIGINT COMMENT "price of an order"
-
 )
-
 UNIQUE KEY(create_time, order_id)
-
 DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 ```
 
@@ -317,45 +299,25 @@ Example 1: Suppose that you need to analyze orders on a daily basis. In this exa
 
 ```SQL
 create table orders (
-
     dt date NOT NULL,
-
     order_id bigint NOT NULL,
-
     user_id int NOT NULL,
-
     merchant_id int NOT NULL,
-
     good_id int NOT NULL,
-
     good_name string NOT NULL,
-
     price int NOT NULL,
-
     cnt int NOT NULL,
-
     revenue int NOT NULL,
-
     state tinyint NOT NULL
-
 ) PRIMARY KEY (dt, order_id)
-
 PARTITION BY RANGE(`dt`) (
-
     PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),
-
     PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),
-
     ...
-
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
-
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
-
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
-
 PROPERTIES("replication_num" = "3",
-
 "enable_persistent_index" = "true");
 ```
 
@@ -363,37 +325,21 @@ Example 2: Suppose that you need to analyze user behavior in real time. In this 
 
 ```SQL
 create table users (
-
     user_id bigint NOT NULL,
-
     name string NOT NULL,
-
     email string NULL,
-
     address string NULL,
-
     age tinyint NULL,
-
     sex tinyint NULL,
-
     last_active datetime,
-
     property0 tinyint NOT NULL,
-
     property1 tinyint NOT NULL,
-
     property2 tinyint NOT NULL,
-
     property3 tinyint NOT NULL,
-
     ....
-
 ) PRIMARY KEY (user_id)
-
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
-
 PROPERTIES("replication_num" = "3",
-
 "enable_persistent_index" = "true");
 ```
 
@@ -431,9 +377,11 @@ PROPERTIES("replication_num" = "3",
 
 - When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
 
+- Since version 2.4.0, the Primary Key model supports to build a materialized view for a one table or multiple tables.
+
 - The Primary Key model does not support materialized views.
 
-- You cannot use the ALTER TABLE statement to change the data types of the columns for a table that uses the Primary Key model. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
 
 ### What to do next
 

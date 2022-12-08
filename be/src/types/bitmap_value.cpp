@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/bitmap_value.h
 
@@ -45,7 +58,7 @@ static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_h
     }
 }
 
-BitmapValue::BitmapValue() {}
+BitmapValue::BitmapValue() = default;
 
 BitmapValue::BitmapValue(BitmapValue&& other) noexcept
         : _bitmap(std::move(other._bitmap)), _set(std::move(other._set)), _sv(other._sv), _type(other._type) {
@@ -930,6 +943,30 @@ void BitmapValue::_convert_to_smaller_type() {
         }
         _bitmap->clear();
     }
+}
+
+int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
+    if (offset > 0 && offset >= _bitmap->cardinality()) {
+        return 0;
+    }
+    if (offset < 0 && std::abs(offset) > _bitmap->cardinality()) {
+        return 0;
+    }
+    int64_t abs_offset = offset;
+    if (offset < 0) {
+        abs_offset = _bitmap->cardinality() + offset;
+    }
+
+    int64_t count = 0;
+    int64_t offset_count = 0;
+    auto it = _bitmap->begin();
+    for (; it != _bitmap->end() && offset_count < abs_offset; ++it) {
+        ++offset_count;
+    }
+    for (; it != _bitmap->end() && count < len; ++it, ++count) {
+        ret_bitmap->add(*it);
+    }
+    return count;
 }
 
 } // namespace starrocks

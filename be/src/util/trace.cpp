@@ -102,8 +102,8 @@ void Trace::SubstituteAndTrace(const char* file_path, int line_number, StringPie
 TraceEntry* Trace::NewEntry(int msg_len, const char* file_path, int line_number) {
     int size = sizeof(TraceEntry) + msg_len;
     //uint8_t* dst = reinterpret_cast<uint8_t*>(arena_->AllocateBytes(size));
-    uint8_t* dst = reinterpret_cast<uint8_t*>(malloc(size));
-    TraceEntry* entry = reinterpret_cast<TraceEntry*>(dst);
+    auto* dst = reinterpret_cast<uint8_t*>(malloc(size));
+    auto* entry = reinterpret_cast<TraceEntry*>(dst);
     entry->timestamp_micros = GetCurrentTimeMicros();
     entry->message_len = msg_len;
     entry->file_path = file_path;

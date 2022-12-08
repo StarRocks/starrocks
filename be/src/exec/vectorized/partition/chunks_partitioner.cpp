@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/partition/chunks_partitioner.h"
+
+#include <utility>
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -10,10 +24,10 @@ namespace starrocks::vectorized {
 
 ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
                                      const std::vector<ExprContext*>& partition_exprs,
-                                     const std::vector<PartitionColumnType>& partition_types)
+                                     std::vector<PartitionColumnType> partition_types)
         : _has_nullable_partition_column(has_nullable_partition_column),
           _partition_exprs(partition_exprs),
-          _partition_types(partition_types) {
+          _partition_types(std::move(partition_types)) {
     _partition_columns.resize(partition_exprs.size());
 }
 
@@ -76,7 +90,7 @@ bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprC
             *has_null = true;
             size += 1; // 1 bytes for  null flag.
         }
-        PrimitiveType ptype = ctx->root()->type().type;
+        LogicalType ptype = ctx->root()->type().type;
         size_t byte_size = get_size_of_fixed_length_type(ptype);
         if (byte_size == 0) return false;
         size += byte_size;

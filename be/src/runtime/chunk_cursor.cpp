@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "runtime/chunk_cursor.h"
 
@@ -100,7 +112,7 @@ void ChunkCursor::next_for_pipeline() {
     }
     ++_current_pos;
     if (_current_pos >= _current_chunk->num_rows()) {
-        reset_with_next_chunk_for_pipeline();
+        next_chunk_for_pipeline();
         if (_current_chunk != nullptr) {
             ++_current_pos;
         }
@@ -150,7 +162,7 @@ void ChunkCursor::_reset_with_next_chunk() {
     }
 }
 
-void ChunkCursor::reset_with_next_chunk_for_pipeline() {
+void ChunkCursor::next_chunk_for_pipeline() {
     _current_order_by_columns.clear();
     Chunk* tmp_chunk = nullptr;
     _chunk_probe_supplier(&tmp_chunk);
@@ -159,6 +171,8 @@ void ChunkCursor::reset_with_next_chunk_for_pipeline() {
     if (_current_chunk == nullptr) {
         return;
     }
+    DCHECK(!_current_chunk->is_empty());
+
     // prepare order by columns
     _current_order_by_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr_ctx : *_sort_exprs) {
@@ -168,7 +182,7 @@ void ChunkCursor::reset_with_next_chunk_for_pipeline() {
 }
 
 SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkProvider chunk_provider, const std::vector<ExprContext*>* sort_exprs)
-        : _chunk_provider(chunk_provider), _sort_exprs(sort_exprs) {}
+        : _chunk_provider(std::move(chunk_provider)), _sort_exprs(sort_exprs) {}
 
 bool SimpleChunkSortCursor::is_data_ready() {
     if (!_data_ready && !_chunk_provider(nullptr, nullptr)) {
@@ -183,15 +197,14 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
     DCHECK(_sort_exprs);
 
     if (_eos) {
-        return {nullptr, {}};
+        return {nullptr, Columns{}};
     }
     ChunkUniquePtr chunk = nullptr;
     if (!_chunk_provider(&chunk, &_eos) || !chunk) {
-        return {nullptr, {}};
+        return {nullptr, Columns{}};
     }
-    DCHECK(!!chunk);
-    if (chunk->is_empty()) {
-        return {nullptr, {}};
+    if (!chunk || chunk->is_empty()) {
+        return {nullptr, Columns{}};
     }
 
     Columns sort_columns;
@@ -200,7 +213,7 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
         auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
         sort_columns.push_back(column);
     }
-    return {std::move(chunk), sort_columns};
+    return {std::move(chunk), std::move(sort_columns)};
 }
 
 bool SimpleChunkSortCursor::is_eos() {

@@ -1,14 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
+
+#include "common/compiler_util.h"
 #include "runtime/tablets_channel.h"
 #include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
@@ -28,6 +38,7 @@ class LocalTabletsChannel : public TabletsChannel {
     using AsyncDeltaWriterRequest = vectorized::AsyncDeltaWriterRequest;
     using AsyncDeltaWriterSegmentRequest = vectorized::AsyncDeltaWriterSegmentRequest;
     using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
+    using FailedRowsetInfo = vectorized::FailedRowsetInfo;
 
 public:
     LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
@@ -73,12 +84,12 @@ private:
         explicit WriteContext(PTabletWriterAddBatchResult* response)
                 : _response_lock(),
                   _response(response),
-                  _latch(nullptr),
+
                   _chunk(),
                   _row_indexes(),
                   _channel_row_idx_start_points() {}
 
-        ~WriteContext() {
+        ~WriteContext() noexcept {
             if (_latch) _latch->count_down();
         }
 
@@ -102,6 +113,12 @@ private:
             _response->add_tablet_vec()->Swap(tablet_info);
         }
 
+        void add_failed_tablet_info(PTabletInfo* tablet_info) {
+            DCHECK(_response != nullptr);
+            std::lock_guard l(_response_lock);
+            _response->add_failed_tablet_vec()->Swap(tablet_info);
+        }
+
         void set_count_down_latch(BThreadCountDownLatch* latch) { _latch = latch; }
 
     private:
@@ -109,7 +126,7 @@ private:
 
         mutable bthread::Mutex _response_lock;
         PTabletWriterAddBatchResult* _response;
-        BThreadCountDownLatch* _latch;
+        BThreadCountDownLatch* _latch{nullptr};
 
         vectorized::Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;
@@ -122,7 +139,7 @@ private:
 
         ~WriteCallback() override = default;
 
-        void run(const Status& st, const CommittedRowsetInfo* info) override;
+        void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info) override;
 
         WriteCallback(const WriteCallback&) = delete;
         void operator=(const WriteCallback&) = delete;

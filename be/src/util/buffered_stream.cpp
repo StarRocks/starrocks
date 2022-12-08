@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "util/buffered_stream.h"
 
@@ -10,8 +22,9 @@ namespace starrocks {
 
 // ===================================================================================
 
-DefaultBufferedInputStream::DefaultBufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length)
-        : _file(file), _offset(offset), _end_offset(offset + length) {}
+DefaultBufferedInputStream::DefaultBufferedInputStream(RandomAccessFile* file, [[may_unused]] uint64_t offset,
+                                                       uint64_t length)
+        : _file(file), _end_offset(offset + length) {}
 
 Status DefaultBufferedInputStream::get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek) {
     if (*nbytes <= num_remaining()) {
@@ -146,10 +159,12 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     if ((sb.offset > offset) || (sb.offset + sb.size) < (offset + *nbytes)) {
         return Status::RuntimeError("bad construction of shared buffer");
     }
+
     if (sb.buffer.capacity() == 0) {
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_file->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
+
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();
 }

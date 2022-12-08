@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -24,6 +36,9 @@
 #include "util/hash_util.hpp"
 
 namespace starrocks {
+
+class StreamLoadContext;
+
 namespace pipeline {
 
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
@@ -33,7 +48,7 @@ class FragmentContext {
     friend FragmentContextManager;
 
 public:
-    FragmentContext() {}
+    FragmentContext() = default;
     ~FragmentContext() {
         _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
         _drivers.clear();
@@ -50,10 +65,6 @@ public:
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
-    void set_report_profile() { _is_report_profile = true; }
-    bool is_report_profile() { return _is_report_profile; }
-    void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
-    const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
@@ -74,23 +85,16 @@ public:
 
     void set_final_status(const Status& status);
 
-    Status final_status() {
+    Status final_status() const {
         auto* status = _final_status.load();
         return status == nullptr ? Status::OK() : *status;
     }
 
-    void cancel(const Status& status) {
-        _runtime_state->set_is_cancelled(true);
-        set_final_status(status);
-        if (_runtime_state->query_options().query_type == TQueryType::LOAD) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                                 _fragment_instance_id);
-        }
-    }
+    void cancel(const Status& status);
 
     void finish() { cancel(Status::OK()); }
 
-    bool is_canceled() { return _runtime_state->is_cancelled(); }
+    bool is_canceled() const { return _runtime_state->is_cancelled(); }
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
@@ -128,16 +132,14 @@ public:
 
     PerDriverScanRangesMap& scan_ranges_per_driver() { return _scan_ranges_per_driver_seq; }
 
+    void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
+
 private:
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
-
-    bool _is_report_profile = false;
-    // Level of profile
-    TPipelineProfileLevel::type _profile_level;
 
     // promise used to determine whether fragment finished its execution
     FragmentPromise _finish_promise;
@@ -165,6 +167,8 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
+    std::vector<StreamLoadContext*> _stream_load_contexts;
+    bool _channel_stream_load = false;
 };
 
 class FragmentContextManager {

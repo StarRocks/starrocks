@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/string_parser.hpp
 
@@ -21,10 +34,11 @@
 
 #pragma once
 
+#include <fast_float/fast_float.h>
+
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <fast_float/fast_float.h>
 #include <limits>
 #include <string>
 #include <type_traits>
@@ -127,12 +141,10 @@ public:
     }
 
     template <typename T = __int128>
-    static inline T string_to_decimal(const char* s, int len, int type_precision, int type_scale,
-                                      ParseResult* result);
+    static inline T string_to_decimal(const char* s, int len, int type_precision, int type_scale, ParseResult* result);
 
     template <typename T>
-    static Status split_string_to_map(const std::string& base, const T element_separator,
-                                      const T key_value_separator,
+    static Status split_string_to_map(const std::string& base, const T element_separator, const T key_value_separator,
                                       std::map<std::string, std::string>* result) {
         int key_pos = 0;
         int key_end;
@@ -140,15 +152,14 @@ public:
         int val_end;
 
         while ((key_end = base.find(key_value_separator, key_pos)) != std::string::npos) {
-            if ((val_pos = base.find_first_not_of(key_value_separator, key_end)) ==
-                std::string::npos) {
+            if ((val_pos = base.find_first_not_of(key_value_separator, key_end)) == std::string::npos) {
                 break;
             }
             if ((val_end = base.find(element_separator, val_pos)) == std::string::npos) {
                 val_end = base.size();
             }
-            result->insert(std::make_pair(base.substr(key_pos, key_end - key_pos),
-                                          base.substr(val_pos, val_end - val_pos)));
+            result->insert(
+                    std::make_pair(base.substr(key_pos, key_end - key_pos), base.substr(val_pos, val_end - val_pos)));
             key_pos = val_end;
             if (key_pos != std::string::npos) {
                 ++key_pos;
@@ -213,8 +224,7 @@ public:
 
     // Our own definition of "isspace" that optimize on the ' ' branch.
     static inline bool is_whitespace(const char& c) {
-        return LIKELY(c == ' ') ||
-               UNLIKELY(c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r');
+        return LIKELY(c == ' ') || UNLIKELY(c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r');
     }
 
 }; // end of class StringParser
@@ -242,7 +252,7 @@ inline T StringParser::string_to_int_internal(const char* s, int len, ParseResul
     // This is the fast path where the string cannot overflow.
     if (LIKELY(len - i < StringParseTraits<T>::max_ascii_len())) {
         val = string_to_int_no_overflow<UnsignedT>(s + i, len - i, result);
-        return static_cast<T>(negative ? -val : val);
+        return static_cast<T>(negative ? (~val + 1) : val);
     }
 
     const T max_div_10 = max_val / 10;
@@ -255,7 +265,7 @@ inline T StringParser::string_to_int_internal(const char* s, int len, ParseResul
             // This is a tricky check to see if adding this digit will cause an overflow.
             if (UNLIKELY(val > (max_div_10 - (digit > max_mod_10)))) {
                 *result = PARSE_OVERFLOW;
-                return negative ? -max_val : max_val;
+                return negative ? (~max_val + 1) : max_val;
             }
             val = val * 10 + digit;
         } else {
@@ -267,16 +277,15 @@ inline T StringParser::string_to_int_internal(const char* s, int len, ParseResul
             }
             // Returning here is slightly faster than breaking the loop.
             *result = PARSE_SUCCESS;
-            return static_cast<T>(negative ? -val : val);
+            return static_cast<T>(negative ? (~val + 1) : val);
         }
     }
     *result = PARSE_SUCCESS;
-    return static_cast<T>(negative ? -val : val);
+    return static_cast<T>(negative ? (~val + 1) : val);
 }
 
 template <typename T>
-inline T StringParser::string_to_unsigned_int_internal(const char* s, int len,
-                                                       ParseResult* result) {
+inline T StringParser::string_to_unsigned_int_internal(const char* s, int len, ParseResult* result) {
     if (UNLIKELY(len <= 0)) {
         *result = PARSE_FAILURE;
         return 0;
@@ -323,8 +332,7 @@ inline T StringParser::string_to_unsigned_int_internal(const char* s, int len,
 }
 
 template <typename T>
-inline T StringParser::string_to_int_internal(const char* s, int len, int base,
-                                              ParseResult* result) {
+inline T StringParser::string_to_int_internal(const char* s, int len, int base, ParseResult* result) {
     typedef typename std::make_unsigned<T>::type UnsignedT;
     UnsignedT val = 0;
     UnsignedT max_val = StringParser::numeric_limits<T>(false);
@@ -373,12 +381,12 @@ inline T StringParser::string_to_int_internal(const char* s, int len, int base,
         // This is a tricky check to see if adding this digit will cause an overflow.
         if (UNLIKELY(val > (max_div_base - (digit > max_mod_base)))) {
             *result = PARSE_OVERFLOW;
-            return static_cast<T>(negative ? -max_val : max_val);
+            return static_cast<T>(negative ? (~max_val + 1) : max_val);
         }
         val = val * base + digit;
     }
     *result = PARSE_SUCCESS;
-    return static_cast<T>(negative ? -val : val);
+    return static_cast<T>(negative ? (~val + 1) : val);
 }
 
 template <typename T>
@@ -434,7 +442,7 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
         }
     }
 
-     if (i > j) {
+    if (i > j) {
         *result = PARSE_FAILURE;
         return 0;
     }
@@ -442,12 +450,12 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
     bool negative = false;
     // skip leading +/-
     switch (s[i]) {
-        case '-':
-            negative = true;
-            i = i + 1;
-            break;
-        case '+':
-            i = i + 1;
+    case '-':
+        negative = true;
+        i = i + 1;
+        break;
+    case '+':
+        i = i + 1;
     }
 
     if (i > j) {
@@ -458,8 +466,7 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
     // check int/-inf and nan
     for (int k = i; k <= j; ++k) {
         if (s[k] == 'i' || s[k] == 'I') {
-            if (len > k + 2 && (s[k + 1] == 'n' || s[k + 1] == 'N') &&
-                (s[k + 2] == 'f' || s[k + 2] == 'F')) {
+            if (len > k + 2 && (s[k + 1] == 'n' || s[k + 1] == 'N') && (s[k + 2] == 'f' || s[k + 2] == 'F')) {
                 // Note: Hive writes inf as Infinity, at least for text. We'll be a little loose
                 // here and interpret any column with inf as a prefix as infinity rather than
                 // checking every remaining byte.
@@ -471,8 +478,7 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
                 return 0;
             }
         } else if (s[k] == 'n' || s[k] == 'N') {
-            if (len > k + 2 && (s[k + 1] == 'a' || s[k + 1] == 'A') &&
-                (s[k + 2] == 'n' || s[k + 2] == 'N')) {
+            if (len > k + 2 && (s[k + 1] == 'a' || s[k + 1] == 'A') && (s[k + 2] == 'n' || s[k + 2] == 'N')) {
                 *result = PARSE_SUCCESS;
                 return negative ? -NAN : NAN;
             } else {
@@ -496,7 +502,7 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
                 return 0;
             }
         } else if (s[k] == '-' || s[k] == '+') {
-            if (LIKELY(k > i && (s[k-1] == 'e' || s[k-1] == 'E'))) {
+            if (LIKELY(k > i && (s[k - 1] == 'e' || s[k - 1] == 'E'))) {
                 continue;
             } else {
                 *result = PARSE_FAILURE;
@@ -517,7 +523,7 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
         } else {
             *result = PARSE_SUCCESS;
         }
-        return negative ? (T)-val: (T)val;
+        return negative ? (T)-val : (T)val;
     }
 
     *result = PARSE_FAILURE;
@@ -534,14 +540,13 @@ inline bool StringParser::string_to_bool_internal(const char* s, int len, ParseR
             return false;
         }
     } else if (len >= 4 && (s[0] == 't' || s[0] == 'T')) {
-        bool match = (s[1] == 'r' || s[1] == 'R') && (s[2] == 'u' || s[2] == 'U') &&
-                     (s[3] == 'e' || s[3] == 'E');
+        bool match = (s[1] == 'r' || s[1] == 'R') && (s[2] == 'u' || s[2] == 'U') && (s[3] == 'e' || s[3] == 'E');
         if (match && LIKELY(is_all_whitespace(s + 4, len - 4))) {
             return true;
         }
     } else if (len >= 5 && (s[0] == 'f' || s[0] == 'F')) {
-        bool match = (s[1] == 'a' || s[1] == 'A') && (s[2] == 'l' || s[2] == 'L') &&
-                     (s[3] == 's' || s[3] == 'S') && (s[4] == 'e' || s[4] == 'E');
+        bool match = (s[1] == 'a' || s[1] == 'A') && (s[2] == 'l' || s[2] == 'L') && (s[3] == 's' || s[3] == 'S') &&
+                     (s[4] == 'e' || s[4] == 'E');
         if (match && LIKELY(is_all_whitespace(s + 5, len - 5))) {
             return false;
         }
@@ -714,7 +719,7 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
                 if (LIKELY(divisor >= 0)) {
                     T remainder = value % divisor;
                     value /= divisor;
-                    if (abs(remainder) >= (divisor >> 1)) {
+                    if (std::abs(remainder) >= (divisor >> 1)) {
                         value += 1;
                     }
                 } else {

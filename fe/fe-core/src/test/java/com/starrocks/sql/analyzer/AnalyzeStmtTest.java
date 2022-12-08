@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -35,6 +48,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -122,7 +136,7 @@ public class AnalyzeStmtTest {
         AnalyzeJob analyzeJob = new AnalyzeJob(10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
-                ShowAnalyzeJobStmt.showAnalyzeJobs(analyzeJob).toString());
+                ShowAnalyzeJobStmt.showAnalyzeJobs(getConnectContext(), analyzeJob).toString());
 
         sql = "show analyze job";
         showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
@@ -136,7 +150,7 @@ public class AnalyzeStmtTest {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         analyzeStatus.setReason("Test Failed");
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, {}, Test Failed]",
-                ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+                ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
@@ -144,7 +158,7 @@ public class AnalyzeStmtTest {
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, null, StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
         Assert.assertEquals("[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%]",
-                ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
+                ShowBasicStatsMetaStmt.showBasicStatsMeta(getConnectContext(), basicStatsMeta).toString());
 
         sql = "show histogram meta";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
@@ -152,7 +166,7 @@ public class AnalyzeStmtTest {
                 StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
         Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
-                ShowHistogramStatsMetaStmt.showHistogramStatsMeta(histogramStatsMeta).toString());
+                ShowHistogramStatsMetaStmt.showHistogramStatsMeta(getConnectContext(), histogramStatsMeta).toString());
     }
 
     @Test
@@ -270,19 +284,19 @@ public class AnalyzeStmtTest {
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
-                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setProgress(50);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
-                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
-                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
-                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
     }
 
     @Test
@@ -293,16 +307,21 @@ public class AnalyzeStmtTest {
         Column kk1 = table.getColumn("kk1");
         Column kk2 = table.getColumn("kk2");
 
-        Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
-                        " cast(max(cast(max as int(11))) as string), cast(min(cast(min as int(11))) as string) " +
-                        "FROM column_statistics WHERE table_id = 10138 and column_name = \"kk1\" " +
-                        "GROUP BY db_id, table_id, column_name " +
-                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                        "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
-                        "FROM column_statistics WHERE table_id = 10138 and column_name = \"kk2\" " +
-                        "GROUP BY db_id, table_id, column_name",
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(kk1, kk2)));
+        String pattern = "SELECT cast\\(1 as INT\\), now\\(\\), db_id, table_id, column_name, sum\\(row_count\\), " +
+                "cast\\(sum\\(data_size\\) as bigint\\), hll_union_agg\\(ndv\\), sum\\(null_count\\), " +
+                " cast\\(max\\(cast\\(max as int\\(11\\)\\)\\) as string\\), cast\\(min\\(cast\\(min " +
+                "as int\\(11\\)\\)\\) as string\\) " +
+                "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk1\" " +
+                "GROUP BY db_id, table_id, column_name " +
+                "UNION ALL SELECT cast\\(1 as INT\\), now\\(\\), db_id, table_id, column_name, " +
+                "sum\\(row_count\\), " +
+                "cast\\(sum\\(data_size\\) as bigint\\), hll_union_agg\\(ndv\\), sum\\(null_count\\),  " +
+                "cast\\(max\\(cast\\(max as string\\)\\) as string\\), cast\\(min\\(cast\\(min as" +
+                " string\\)\\) as string\\) " +
+                "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk2\" " +
+                "GROUP BY db_id, table_id, column_name";
+        String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
+                Lists.newArrayList(kk1, kk2));
+        Assert.assertTrue(Pattern.matches(pattern, content));
     }
 }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/load/loadv2/SparkYarnConfigFiles.java
 
@@ -37,6 +50,7 @@ import java.io.File;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
@@ -54,8 +68,8 @@ public class SparkYarnConfigFiles {
     private static final String HADOOP_PREFIX = "hadoop.";
     private static final String YARN_PREFIX = "yarn.";
 
-    private String configDir;
-    private List<ConfigFile> configFiles;
+    private final String configDir;
+    private final List<ConfigFile> configFiles;
 
     public String getConfigDir() {
         return this.configDir;
@@ -170,19 +184,27 @@ public class SparkYarnConfigFiles {
             return;
         }
         if (file.isFile()) {
-            file.delete();
+            if (!file.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", file.getAbsolutePath());
+            }
             return;
         }
         File[] files = file.listFiles();
-        for (File file1 : files) {
-            clearAndDelete(file1.getAbsolutePath());
+        if (files != null) {
+            for (File file1 : files) {
+                clearAndDelete(file1.getAbsolutePath());
+            }
         }
-        file.delete();
+        if (!file.delete()) {
+            LOG.warn("Failed to delete directory, directoryPath={}", file.getAbsolutePath());
+        }
     }
 
     private void mkdir(String configDir) {
         File file = new File(configDir);
-        file.mkdirs();
+        if (!file.mkdirs()) {
+            LOG.warn("Failed to create directory, directoryPath={}", file.getAbsolutePath());
+        }
     }
 
     // xml config file
@@ -192,8 +214,8 @@ public class SparkYarnConfigFiles {
         private static final String NAME = "name";
         private static final String VALUE = "value";
 
-        private String filePath;
-        private Map<String, String> configProperties;
+        private final String filePath;
+        private final Map<String, String> configProperties;
 
         public XMLConfigFile(String filePath, Map<String, String> configProperties) {
             this.filePath = filePath;
@@ -224,6 +246,9 @@ public class SparkYarnConfigFiles {
                 }
 
                 TransformerFactory tff = TransformerFactory.newInstance();
+                // For sonar issue: XML parsers should not be vulnerable to XXE attacks
+                tff.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                tff.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
                 Transformer tf = tff.newTransformer();
 
                 tf.setOutputProperty(OutputKeys.INDENT, "yes");
@@ -234,7 +259,7 @@ public class SparkYarnConfigFiles {
         }
 
         private Node appendNode(Node parent, String tag, String content) {
-            Element child = null;
+            Element child;
             if (parent instanceof Document) {
                 child = ((Document) parent).createElement(tag);
             } else {

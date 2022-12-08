@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/column_writer.h
 
@@ -50,7 +63,7 @@ struct ColumnWriterOptions {
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members
     // - output: encoding/indexes/dict_page members
     ColumnMetaPB* meta;
-    size_t data_page_size = OLAP_PAGE_SIZE;
+    uint32_t data_page_size = OLAP_PAGE_SIZE;
     uint32_t page_format = 2;
     // store compressed page only when space saving is above the threshold.
     // space saving = 1 - compressed_size / uncompressed_size
@@ -81,8 +94,8 @@ public:
     static StatusOr<std::unique_ptr<ColumnWriter>> create(const ColumnWriterOptions& opts, const TabletColumn* column,
                                                           WritableFile* wfile);
 
-    explicit ColumnWriter(std::unique_ptr<Field> field, bool is_nullable)
-            : _field(std::move(field)), _is_nullable(is_nullable) {}
+    explicit ColumnWriter(TypeInfoPtr type_info, int length, bool is_nullable)
+            : _type_info(std::move(type_info)), _length(length), _is_nullable(is_nullable) {}
 
     virtual ~ColumnWriter() = default;
 
@@ -117,14 +130,16 @@ public:
     // not in global_dict, it will return false
     virtual bool is_global_dict_valid() { return true; }
 
+    TypeInfo* type_info() const { return _type_info.get(); }
+    int length() const { return _length; }
     bool is_nullable() const { return _is_nullable; }
-
-    Field* get_field() const { return _field.get(); }
 
     virtual uint64_t total_mem_footprint() const = 0;
 
-private:
-    std::unique_ptr<Field> _field;
+protected:
+    TypeInfoPtr _type_info;
+    // NOTE: only used for CHAR/VARCHAR type.
+    int _length;
     bool _is_nullable;
 };
 
@@ -134,7 +149,7 @@ private:
 // to file
 class ScalarColumnWriter final : public ColumnWriter {
 public:
-    ScalarColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field, WritableFile* output_file);
+    ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* output_file);
 
     ~ScalarColumnWriter() override;
 
@@ -246,7 +261,7 @@ private:
 
 class ArrayColumnWriter final : public ColumnWriter {
 public:
-    explicit ArrayColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field,
+    explicit ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
                                std::unique_ptr<ScalarColumnWriter> null_writer,
                                std::unique_ptr<ScalarColumnWriter> offset_writer,
                                std::unique_ptr<ColumnWriter> element_writer);
@@ -277,8 +292,6 @@ public:
     uint64_t total_mem_footprint() const override;
 
 private:
-    Status _append(const vectorized::Column& column);
-
     ColumnWriterOptions _opts;
 
     std::unique_ptr<ScalarColumnWriter> _null_writer;

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/rowset_merger.h"
 
@@ -25,7 +37,7 @@ namespace starrocks::vectorized {
 
 class TestRowsetWriter : public RowsetWriter {
 public:
-    ~TestRowsetWriter() = default;
+    ~TestRowsetWriter() override = default;
 
     Status init() override { return Status::OK(); }
 
@@ -38,7 +50,8 @@ public:
         return Status::NotSupported("");
     }
 
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
+    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
+                                    SegmentPB*) override {
         return Status::NotSupported("");
     }
 
@@ -50,19 +63,20 @@ public:
 
     StatusOr<RowsetSharedPtr> build() override { return RowsetSharedPtr(); }
 
-    Version version() override { return Version(); }
+    Version version() override { return {}; }
 
     int64_t num_rows() override { return all_pks->size(); }
 
     int64_t total_data_size() override { return 0; }
 
-    RowsetId rowset_id() override { return RowsetId(); }
+    RowsetId rowset_id() override { return {}; }
 
     Status flush() override { return Status::OK(); }
     Status flush_columns() override { return Status::OK(); }
     Status final_flush() override { return Status::OK(); }
 
-    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
+    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                       bool is_key) override {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         } else {
@@ -108,10 +122,10 @@ public:
         auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+        for (long key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -168,7 +182,7 @@ protected:
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
+                                                           vectorized::VectorizedSchema& schema) {
     vectorized::TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -203,7 +217,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -250,11 +264,11 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
-    const int64_t* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
 
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
@@ -299,7 +313,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
     writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));
@@ -309,9 +323,9 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     ASSERT_EQ(2, writer.non_key_columns.size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[0]->size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[1]->size());
-    const int64_t* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
-    const int16_t* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
-    const int32_t* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    const auto* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
+    const auto* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
         ASSERT_EQ(pks[i] % 100 + 1, raw_k2_array[i]);
@@ -362,11 +376,11 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
-    const int64_t* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
     }
@@ -410,7 +424,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
     writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));
@@ -420,9 +434,9 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     ASSERT_EQ(2, writer.non_key_columns.size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[0]->size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[1]->size());
-    const int64_t* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
-    const int16_t* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
-    const int32_t* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    const auto* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
+    const auto* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
         ASSERT_EQ(pks[i] % 100 + 1, raw_k2_array[i]);

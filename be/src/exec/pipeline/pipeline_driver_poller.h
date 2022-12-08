@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -12,8 +24,7 @@
 #include "pipeline_driver_queue.h"
 #include "util/thread.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class PipelineDriverPoller;
 using PipelineDriverPollerPtr = std::unique_ptr<PipelineDriverPoller>;
@@ -27,6 +38,7 @@ public:
               _is_shutdown(false) {}
 
     using DriverList = std::list<DriverRawPtr>;
+
     ~PipelineDriverPoller() { shutdown(); };
     // start poller thread
     void start();
@@ -38,9 +50,11 @@ public:
     void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
     // only used for collect metrics
     size_t blocked_driver_queue_len() const {
-        std::unique_lock<std::mutex> guard(_mutex);
-        return _blocked_drivers.size();
+        std::shared_lock guard(_local_mutex);
+        return _local_blocked_drivers.size();
     }
+
+    void iterate_immutable_driver(const IterateImmutableDriverFunc& call) const;
 
 private:
     void run_internal();
@@ -48,13 +62,16 @@ private:
     PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
 
 private:
-    mutable std::mutex _mutex;
+    mutable std::mutex _global_mutex;
     std::condition_variable _cond;
     DriverList _blocked_drivers;
+
+    mutable std::shared_mutex _local_mutex;
+    DriverList _local_blocked_drivers;
+
     DriverQueue* _driver_queue;
     scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

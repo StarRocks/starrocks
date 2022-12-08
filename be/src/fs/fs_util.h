@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -22,9 +34,21 @@ inline StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::
     return fs->new_sequential_file(path);
 }
 
+inline StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                     const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->new_sequential_file(opts, path);
+}
+
 inline StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
     return fs->new_random_access_file(path);
+}
+
+inline StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                          const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->new_random_access_file(opts, path);
 }
 
 inline StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) {
@@ -41,6 +65,11 @@ inline StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableF
 inline Status create_directories(const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
     return fs->create_dir_recursive(path);
+}
+
+inline Status sync_dir(const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->sync_dir(path);
 }
 
 inline Status delete_file(const std::string& path) {

@@ -26,11 +26,11 @@
 namespace orc {
 
 Int128 Int128::maximumValue() {
-    return Int128(0x7fffffffffffffff, 0xfffffffffffffff);
+    return {0x7fffffffffffffff, 0xfffffffffffffff};
 }
 
 Int128 Int128::minimumValue() {
-    return Int128(static_cast<int64_t>(0x8000000000000000), 0x0);
+    return {static_cast<int64_t>(0x8000000000000000), 0x0};
 }
 
 Int128::Int128(const std::string& str) {
@@ -292,7 +292,7 @@ Int128 Int128::divide(const Int128& divisor, Int128& remainder) const {
 
         // catch all of the cases where guess is two too large and most of the
         // cases where it is one too large
-        uint32_t rhat = static_cast<uint32_t>(highDividend - guess * static_cast<uint64_t>(divisorArray[0]));
+        auto rhat = static_cast<uint32_t>(highDividend - guess * static_cast<uint64_t>(divisorArray[0]));
         while (static_cast<uint64_t>(divisorArray[1]) * guess >
                (static_cast<uint64_t>(rhat) << 32) + dividendArray[j + 2]) {
             guess -= 1;
@@ -386,7 +386,7 @@ std::string Int128::toDecimalString(int32_t scale, bool trimTrailingZeros) const
     if (scale == 0) {
         return str;
     } else if (*this < 0) {
-        int32_t len = static_cast<int32_t>(str.length());
+        auto len = static_cast<int32_t>(str.length());
         if (len - 1 > scale) {
             result = str.substr(0, static_cast<size_t>(len - scale)) + "." +
                      str.substr(static_cast<size_t>(len - scale), static_cast<size_t>(len));
@@ -400,7 +400,7 @@ std::string Int128::toDecimalString(int32_t scale, bool trimTrailingZeros) const
             result += str.substr(1, std::string::npos);
         }
     } else {
-        int32_t len = static_cast<int32_t>(str.length());
+        auto len = static_cast<int32_t>(str.length());
         if (len > scale) {
             result = str.substr(0, static_cast<size_t>(len - scale)) + "." +
                      str.substr(static_cast<size_t>(len - scale), static_cast<size_t>(len));

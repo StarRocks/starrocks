@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.operator.logical;
 
@@ -17,12 +30,10 @@ import java.util.Map;
 import java.util.Set;
 
 public class LogicalHiveScanOperator extends LogicalScanOperator {
-    private final Table.TableType tableType;
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private boolean hasUnknownColumn;
 
     public LogicalHiveScanOperator(Table table,
-                                   Table.TableType tableType,
                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                    Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                    long limit,
@@ -35,7 +46,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
                 predicate, null);
 
         Preconditions.checkState(table instanceof HiveTable);
-        this.tableType = tableType;
         HiveTable hiveTable = (HiveTable) table;
         partitionColumns.addAll(hiveTable.getPartitionColumnNames());
     }
@@ -49,13 +59,8 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
                 builder.getPredicate(),
                 builder.getProjection());
 
-        this.tableType = builder.tableType;
         this.predicates = builder.predicates;
         this.partitionColumns = builder.partitionColumns;
-    }
-
-    public Table.TableType getTableType() {
-        return tableType;
     }
 
     @Override
@@ -83,7 +88,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalHiveScanOperator, LogicalHiveScanOperator.Builder> {
-        private Table.TableType tableType;
         private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
         private Set<String> partitionColumns = Sets.newHashSet();
 
@@ -96,7 +100,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         public LogicalHiveScanOperator.Builder withOperator(LogicalHiveScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.tableType = scanOperator.tableType;
             this.predicates = scanOperator.predicates;
             this.partitionColumns = scanOperator.partitionColumns;
             return this;

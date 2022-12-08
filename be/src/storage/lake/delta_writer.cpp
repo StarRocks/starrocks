@@ -1,11 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/lake/delta_writer.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
-DIAGNOSTIC_POP
+
+#include <memory>
 
 #include "column/chunk.h"
 #include "column/column.h"
@@ -42,7 +53,8 @@ public:
         return _writer->flush();
     }
 
-    Status flush_chunk_with_deletes(const Chunk& /*upserts*/, const Column& /*deletes*/) override {
+    Status flush_chunk_with_deletes(const Chunk& /*upserts*/, const Column& /*deletes*/,
+                                    starrocks::SegmentPB*) override {
         return Status::NotSupported("TabletWriterSink::flush_chunk_with_deletes");
     }
 
@@ -117,7 +129,7 @@ private:
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
     std::shared_ptr<const TabletSchema> _tablet_schema;
-    vectorized::Schema _vectorized_schema;
+    vectorized::VectorizedSchema _vectorized_schema;
     bool _schema_initialized;
 };
 
@@ -131,10 +143,11 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _schema_initialized = true;
     }
     if (_slots != nullptr) {
-        _mem_table.reset(new MemTable(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker));
+        _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(),
+                                                _mem_tracker);
     } else {
-        _mem_table.reset(
-                new MemTable(_tablet_id, &_vectorized_schema, _mem_table_sink.get(), _max_buffer_size, _mem_tracker));
+        _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _mem_table_sink.get(),
+                                                _max_buffer_size, _mem_tracker);
     }
     return Status::OK();
 }

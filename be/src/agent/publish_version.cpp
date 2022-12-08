@@ -1,13 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "publish_version.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 
+#include "common/compiler_util.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
@@ -26,13 +35,17 @@ const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 bvar::LatencyRecorder g_publish_latency("be", "publish");
 
 struct TabletPublishVersionTask {
+    // input params
     int64_t txn_id{0};
     int64_t partition_id{0};
     int64_t tablet_id{0};
-    int64_t version{0};
+    int64_t version{0}; // requested publish version
     RowsetSharedPtr rowset;
+    // output params
     Status st;
-    int64_t max_continuous_version{0}; // max continuous version after publish is done
+    // max continuous version after publish is done
+    // or 0 which means tablet not found or publish task cannot be submitted
+    int64_t max_continuous_version{0};
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
@@ -69,12 +82,12 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
         }
     }
     std::mutex affected_dirs_lock;
-    for (size_t i = 0; i < tablet_tasks.size(); i++) {
+    for (auto& tablet_task : tablet_tasks) {
         uint32_t retry_time = 0;
         Status st;
         while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
-            st = token->submit_func([&, i]() {
-                auto& task = tablet_tasks[i];
+            st = token->submit_func([&]() {
+                auto& task = tablet_task;
                 auto tablet_span = Tracer::Instance().add_span("tablet_publish_txn", span);
                 auto scoped_tablet_span = trace::Scope(tablet_span);
                 tablet_span->SetAttribute("txn_id", transaction_id);
@@ -88,10 +101,10 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                 }
                 TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
                 if (!tablet) {
-                    task.st = Status::NotFound(
-                            fmt::format("Not found tablet to publish_version. tablet_id: {}, txn_id: {}",
-                                        task.tablet_id, task.txn_id));
-                    LOG(WARNING) << task.st;
+                    // tablet may get dropped, it's ok to ignore this situation
+                    LOG(WARNING) << fmt::format(
+                            "publish_version tablet not found tablet_id: {}, version: {} txn_id: {}", task.tablet_id,
+                            task.version, task.txn_id);
                     return;
                 }
                 {
@@ -110,12 +123,12 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                               << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                               << " rowset:" << task.rowset->rowset_id();
                 }
-                task.version = tablet->max_continuous_version();
+                task.max_continuous_version = tablet->max_continuous_version();
             });
             if (st.is_service_unavailable()) {
                 int64_t retry_sleep_ms = 50 * retry_time;
                 LOG(WARNING) << "publish version threadpool is busy, retry in  " << retry_sleep_ms
-                             << "ms. txn_id: " << transaction_id << ", tablet:" << tablet_tasks[i].tablet_id;
+                             << "ms. txn_id: " << transaction_id << ", tablet:" << tablet_task.tablet_id;
                 // In general, publish version is fast. A small sleep is needed here.
                 auto wait_span = Tracer::Instance().add_span("retry_wait", span);
                 SleepFor(MonoDelta::FromMilliseconds(retry_sleep_ms));
@@ -125,7 +138,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
             }
         }
         if (!st.ok()) {
-            tablet_tasks[i].st = std::move(st);
+            tablet_task.st = std::move(st);
         }
     }
     span->AddEvent("all_task_submitted");
@@ -137,18 +150,17 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
     auto& error_tablet_ids = finish_task.error_tablet_ids;
     auto& tablet_versions = finish_task.tablet_versions;
     tablet_versions.reserve(tablet_tasks.size());
-    for (size_t i = 0; i < tablet_tasks.size(); i++) {
-        auto& task = tablet_tasks[i];
+    for (auto& task : tablet_tasks) {
         if (!task.st.ok()) {
             error_tablet_ids.push_back(task.tablet_id);
             if (st.ok()) {
                 st = task.st;
             }
         }
-        if (task.version > 0) {
+        if (task.max_continuous_version > 0) {
             auto& pair = tablet_versions.emplace_back();
             pair.__set_tablet_id(task.tablet_id);
-            pair.__set_version(task.version);
+            pair.__set_version(task.max_continuous_version);
         }
     }
 

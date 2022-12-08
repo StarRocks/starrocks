@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -13,8 +26,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 PARALLEL_TEST(VecStringFunctionsTest, sliceTest) {
     Slice a("abc");
@@ -46,7 +58,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringNormalTest) {
     columns.emplace_back(pos);
     columns.emplace_back(len);
 
-    ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -74,7 +86,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringChineseTest) {
     columns.emplace_back(pos);
     columns.emplace_back(len);
 
-    ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -102,7 +114,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringleftTest) {
     columns.emplace_back(pos);
     columns.emplace_back(len);
 
-    ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -135,8 +147,8 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstASCIITest) {
         state->is_const = true;
         state->pos = offset;
         state->len = len;
-        ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->size(), 2);
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
@@ -183,8 +195,8 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstZhTest) {
         state->is_const = true;
         state->pos = offset;
         state->len = len;
-        ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -266,8 +278,8 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstUtf8Test) {
         state->is_const = true;
         state->pos = offset;
         state->len = len;
-        ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -290,7 +302,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringOverleftTest) {
     columns.emplace_back(pos);
     columns.emplace_back(len);
 
-    ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -319,7 +331,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringConstTest) {
     columns.emplace_back(ConstColumn::create(pos, 1));
     columns.emplace_back(ConstColumn::create(len, 1));
 
-    ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -349,7 +361,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substringNullTest) {
     columns.emplace_back(ConstColumn::create(pos, 1));
     columns.emplace_back(ConstColumn::create(len, 1));
 
-    ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
     ASSERT_FALSE(result->is_binary());
     ASSERT_TRUE(result->is_nullable());
@@ -385,7 +397,7 @@ PARALLEL_TEST(VecStringFunctionsTest, concatNormalTest) {
     columns.emplace_back(str3);
     columns.emplace_back(str4);
 
-    ColumnPtr result = StringFunctions::concat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -415,7 +427,7 @@ PARALLEL_TEST(VecStringFunctionsTest, concatConstTest) {
     columns.emplace_back(ConstColumn::create(str3, 1));
     columns.emplace_back(ConstColumn::create(str4, 1));
 
-    ColumnPtr result = StringFunctions::concat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -447,7 +459,7 @@ PARALLEL_TEST(VecStringFunctionsTest, concatNullTest) {
     columns.emplace_back(str3);
     columns.emplace_back(NullableColumn::create(str4, null));
 
-    ColumnPtr result = StringFunctions::concat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
     ASSERT_FALSE(result->is_binary());
     ASSERT_TRUE(result->is_nullable());
@@ -475,7 +487,7 @@ PARALLEL_TEST(VecStringFunctionsTest, lowerNormalTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::lower(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::lower(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -501,7 +513,7 @@ PARALLEL_TEST(VecStringFunctionsTest, nullOrEmpty) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::null_or_empty(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::null_or_empty(ctx.get(), columns).value();
 
     auto v = ColumnHelper::as_column<BooleanColumn>(result);
     ASSERT_TRUE(v->get_data()[0]);
@@ -539,7 +551,7 @@ PARALLEL_TEST(VecStringFunctionsTest, split) {
 
     columns.emplace_back(str);
     columns.emplace_back(delim);
-    ColumnPtr result = StringFunctions::split(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
     auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
     ASSERT_EQ("['1', '2', '3'], ['aa', 'bb', 'cc'], ['a', 'b', 'c'], ['', '']", col_array->debug_string());
 
@@ -551,7 +563,7 @@ PARALLEL_TEST(VecStringFunctionsTest, split) {
     auto null_column = NullableColumn::create(str, null);
     columns.emplace_back(null_column);
     columns.emplace_back(delim);
-    result = StringFunctions::split(ctx.get(), columns);
+    result = StringFunctions::split(ctx.get(), columns).value();
     ASSERT_EQ("[['1', '2', '3'], ['aa', 'bb', 'cc'], ['a', 'b', 'c'], ['', ''], NULL]", result->debug_string());
 
     //two const param
@@ -564,7 +576,7 @@ PARALLEL_TEST(VecStringFunctionsTest, split) {
     columns.push_back(delim_const);
     ctx->impl()->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-    result = StringFunctions::split(ctx.get(), columns);
+    result = StringFunctions::split(ctx.get(), columns).value();
     ASSERT_EQ("['a', 'bc', 'd', 'eeee', 'f']", result->debug_string());
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
@@ -582,7 +594,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst1) {
     columns.push_back(delim_const);
     ctx->impl()->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-    ColumnPtr result = StringFunctions::split(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
     ASSERT_EQ("['a,bc', 'eeee,f']", result->debug_string());
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
@@ -605,7 +617,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
     columns.push_back(delim_const);
     ctx->impl()->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-    ColumnPtr result = StringFunctions::split(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
     ASSERT_EQ("['a', 'b', 'c'], ['aa', 'bb', 'cc'], ['eeeeeeeeee'], ['', '']", result->debug_string());
     ASSERT_TRUE(StringFunctions::split_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
@@ -722,7 +734,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     columns.emplace_back(delim);
     columns.emplace_back(field);
 
-    ColumnPtr result = StringFunctions::split_part(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::split_part(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<NullableColumn>(result);
 
     ASSERT_EQ("hello", v->get(0).get<Slice>().to_string());
@@ -761,7 +773,7 @@ PARALLEL_TEST(VecStringFunctionsTest, leftTest) {
     columns.emplace_back(str);
     columns.emplace_back(inx);
 
-    ColumnPtr result = StringFunctions::left(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::left(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -790,7 +802,7 @@ PARALLEL_TEST(VecStringFunctionsTest, rightTest) {
     columns.emplace_back(str);
     columns.emplace_back(inx);
 
-    ColumnPtr result = StringFunctions::right(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::right(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -818,7 +830,7 @@ PARALLEL_TEST(VecStringFunctionsTest, startsWithTest) {
     columns.emplace_back(str);
     columns.emplace_back(prefix);
 
-    ColumnPtr result = StringFunctions::starts_with(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::starts_with(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
@@ -853,7 +865,7 @@ PARALLEL_TEST(VecStringFunctionsTest, startsWithNullTest) {
     columns.emplace_back(str);
     columns.emplace_back(NullableColumn::create(prefix, null));
 
-    ColumnPtr result = StringFunctions::starts_with(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::starts_with(ctx.get(), columns).value();
 
     ASSERT_EQ(20, result->size());
     ASSERT_TRUE(result->is_nullable());
@@ -889,7 +901,7 @@ PARALLEL_TEST(VecStringFunctionsTest, endsWithNullTest) {
     columns.emplace_back(str);
     columns.emplace_back(NullableColumn::create(suffix, null));
 
-    ColumnPtr result = StringFunctions::ends_with(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::ends_with(ctx.get(), columns).value();
 
     ASSERT_EQ(20, result->size());
     ASSERT_TRUE(result->is_nullable());
@@ -922,14 +934,14 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentTest) {
     columns.emplace_back(str);
     columns.emplace_back(pad);
 
-    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns).value();
     ASSERT_EQ(3, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     ASSERT_EQ("qwer", v->get_data()[0].to_string());
     ASSERT_EQ("qwer", v->get_data()[1].to_string());
-    ASSERT_EQ("r", v->get_data()[2].to_string());
+    ASSERT_EQ("", v->get_data()[2].to_string());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentNullTest) {
@@ -947,7 +959,7 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentNullTest) {
     columns.emplace_back(str);
     columns.emplace_back(pad);
 
-    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
 
     ASSERT_TRUE(result->is_nullable());
@@ -970,7 +982,7 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentUTF8Test) {
     columns.emplace_back(str);
     columns.emplace_back(pad);
 
-    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -994,7 +1006,7 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentUTF8NullTest) {
     columns.emplace_back(str);
     columns.emplace_back(pad);
 
-    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::append_trailing_char_if_absent(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
 
     ASSERT_TRUE(result->is_nullable());
@@ -1012,7 +1024,7 @@ PARALLEL_TEST(VecStringFunctionsTest, lengthTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::length(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::length(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1036,7 +1048,7 @@ PARALLEL_TEST(VecStringFunctionsTest, lengthChineseTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::length(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::length(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1060,7 +1072,7 @@ PARALLEL_TEST(VecStringFunctionsTest, utf8LengthTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::utf8_length(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::utf8_length(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1084,7 +1096,7 @@ PARALLEL_TEST(VecStringFunctionsTest, utf8LengthChineseTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::utf8_length(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::utf8_length(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1108,7 +1120,7 @@ PARALLEL_TEST(VecStringFunctionsTest, upperTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::upper(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::upper(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -1139,8 +1151,8 @@ PARALLEL_TEST(VecStringFunctionsTest, caseToggleTest) {
             "φημὶγὰρἐγὼεἶναιτὸABCD_EFG_HIGK_LMNδίκαιονοὐκἄλλοτιOPQRST_"
             "UVWἢτὸτοῦκρείττονοςσυμφέρονXYZ");
     columns.push_back(src);
-    auto upper_dst = StringFunctions::upper(ctx.get(), columns);
-    auto lower_dst = StringFunctions::lower(ctx.get(), columns);
+    auto upper_dst = StringFunctions::upper(ctx.get(), columns).value();
+    auto lower_dst = StringFunctions::lower(ctx.get(), columns).value();
     auto binary_upper_dst = down_cast<BinaryColumn*>(upper_dst.get());
     auto binary_lower_dst = down_cast<BinaryColumn*>(lower_dst.get());
     ASSERT_TRUE(binary_upper_dst != nullptr);
@@ -1172,7 +1184,7 @@ PARALLEL_TEST(VecStringFunctionsTest, asciiTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::ascii(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::ascii(ctx.get(), columns).value();
     ASSERT_EQ(3, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1196,7 +1208,7 @@ PARALLEL_TEST(VecStringFunctionsTest, charTest) {
 
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::get_char(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::get_char(ctx.get(), columns).value();
     ASSERT_EQ(6, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -1223,7 +1235,7 @@ PARALLEL_TEST(VecStringFunctionsTest, instrTest) {
     columns.emplace_back(str);
     columns.emplace_back(sub);
 
-    ColumnPtr result = StringFunctions::instr(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::instr(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1247,7 +1259,7 @@ PARALLEL_TEST(VecStringFunctionsTest, instrChineseTest) {
     columns.emplace_back(str);
     columns.emplace_back(sub);
 
-    ColumnPtr result = StringFunctions::instr(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::instr(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1273,7 +1285,7 @@ PARALLEL_TEST(VecStringFunctionsTest, locateNullTest) {
     columns.emplace_back(NullableColumn::create(sub, null));
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::locate(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_TRUE(result->is_nullable());
 
@@ -1305,7 +1317,7 @@ PARALLEL_TEST(VecStringFunctionsTest, locatePosTest) {
     columns.emplace_back(str);
     columns.emplace_back(pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1336,7 +1348,7 @@ PARALLEL_TEST(VecStringFunctionsTest, locatePosChineseTest) {
     columns.emplace_back(str);
     columns.emplace_back(pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1374,7 +1386,7 @@ PARALLEL_TEST(VecStringFunctionsTest, concatWsTest) {
     columns.emplace_back(str2);
     columns.emplace_back(NullableColumn::create(str3, null));
 
-    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_FALSE(result->is_nullable());
 
@@ -1413,7 +1425,7 @@ PARALLEL_TEST(VecStringFunctionsTest, concatWs1Test) {
     columns.emplace_back(str2);
     columns.emplace_back(NullableColumn::create(str3, null));
 
-    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_FALSE(result->is_nullable());
 
@@ -1464,7 +1476,7 @@ PARALLEL_TEST(VecStringFunctionsTest, findInSetTest) {
     columns.emplace_back(str);
     columns.emplace_back(strlist);
 
-    ColumnPtr result = StringFunctions::find_in_set(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::find_in_set(ctx.get(), columns).value();
     ASSERT_EQ(9, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -1512,7 +1524,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractNullablePattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_extract(context, columns);
+    auto result = StringFunctions::regexp_extract(context, columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
@@ -1557,7 +1569,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractOnlyNullPattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_extract(context, columns);
+    auto result = StringFunctions::regexp_extract(context, columns).value();
     for (int i = 0; i < length; ++i) {
         ASSERT_TRUE(result->is_null(i));
     }
@@ -1596,7 +1608,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractConstPattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_extract(context, columns);
+    auto result = StringFunctions::regexp_extract(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -1640,7 +1652,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtract) {
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_extract(context, columns);
+    auto result = StringFunctions::regexp_extract(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -1687,7 +1699,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceNullablePattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_replace(context, columns);
+    auto result = StringFunctions::regexp_replace(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
     ASSERT_EQ(res[0], v->get_data()[0].to_string());
@@ -1727,7 +1739,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceOnlyNullPattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_replace(context, columns);
+    auto result = StringFunctions::regexp_replace(context, columns).value();
 
     ASSERT_TRUE(result->is_null(0));
     ASSERT_TRUE(result->is_null(1));
@@ -1766,7 +1778,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_replace(context, columns);
+    auto result = StringFunctions::regexp_replace(context, columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -1826,7 +1838,49 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = StringFunctions::regexp_replace(context, columns);
+    auto result = StringFunctions::regexp_replace(context, columns).value();
+    auto v = ColumnHelper::as_column<BinaryColumn>(result);
+
+    for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+        ASSERT_EQ(res[i], v->get_data()[i].to_string());
+    }
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceWithEmptyPattern) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto ptn = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
+    auto replace = BinaryColumn::create();
+
+    std::string strs[] = {"yyyy-mm-dd", "yyyy-mm-dd"};
+    std::string replaces[] = {"CHINA", "CHINA"};
+
+    std::string res[] = {"CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA",
+                         "CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA"};
+
+    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+        str->append(strs[i]);
+        replace->append(replaces[i]);
+    }
+
+    columns.emplace_back(str);
+    columns.emplace_back(ptn);
+    columns.emplace_back(replace);
+
+    context->impl()->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_replace(context, columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -1847,10 +1901,10 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatDouble) {
     Columns columns;
     auto money = DoubleColumn::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) money->append(moneys[i]);
+    for (double i : moneys) money->append(i);
 
     columns.emplace_back(money);
-    ColumnPtr result = StringFunctions::money_format_double(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::money_format_double(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 
     for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) ASSERT_EQ(results[i], v->get_data()[i].to_string());
@@ -1865,10 +1919,10 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatBigInt) {
     Columns columns;
     auto money = Int64Column::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) money->append(moneys[i]);
+    for (long i : moneys) money->append(i);
 
     columns.emplace_back(money);
-    ColumnPtr result = StringFunctions::money_format_bigint(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::money_format_bigint(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 
     for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) ASSERT_EQ(results[i], v->get_data()[i].to_string());
@@ -1892,12 +1946,12 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatLargeInt) {
     Columns columns;
     auto money = Int128Column::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) {
-        money->append(moneys[i]);
+    for (__int128 i : moneys) {
+        money->append(i);
     }
 
     columns.emplace_back(money);
-    ColumnPtr result = StringFunctions::money_format_largeint(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::money_format_largeint(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 
     for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) ASSERT_EQ(results[i], v->get_data()[i].to_string());
@@ -1916,12 +1970,12 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatDecimalV2Value) {
     Columns columns;
     auto money = DecimalColumn::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) {
-        money->append(moneys[i]);
+    for (auto i : moneys) {
+        money->append(i);
     }
 
     columns.emplace_back(money);
-    ColumnPtr result = StringFunctions::money_format_decimalv2val(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::money_format_decimalv2val(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 
     for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) ASSERT_EQ(results[i], v->get_data()[i].to_string());
@@ -1941,8 +1995,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlNullable) {
                           "http://werwrw:sdf@sdfsceesvdsdvs/ccvwfewf?cvx=value#sdfs",
                           "http://vdvsv:df23@hostname/path?cvxvv=value#dsfs"};
 
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        str->append(strs[i]);
+    for (auto& i : strs) {
+        str->append(i);
     }
 
     data->append("PATH");
@@ -1959,7 +2013,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlNullable) {
 
     ASSERT_TRUE(StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
-    auto result = StringFunctions::parse_url(context, columns);
+    auto result = StringFunctions::parse_url(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
     ASSERT_EQ("/dsfsf", v->get_data()[0].to_string());
@@ -1984,8 +2038,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlOnlyNull) {
                           "http://werwrw:sdf@hostname/path?cvx=value#sdfs",
                           "http://vdvsv:df23@hostname/path?cvxvv=value#dsfs"};
 
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        str->append(strs[i]);
+    for (auto& i : strs) {
+        str->append(i);
     }
 
     columns.emplace_back(str);
@@ -1995,7 +2049,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlOnlyNull) {
 
     ASSERT_TRUE(StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
-    auto result = StringFunctions::parse_url(context, columns);
+    auto result = StringFunctions::parse_url(context, columns).value();
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         ASSERT_TRUE(result->is_null(i));
@@ -2022,8 +2076,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
 
         std::string res[] = {"username:password@hostname", "starrockssss:apache", "wobushinidehao:kjkljq"};
 
-        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-            str->append(strs[i]);
+        for (auto& i : strs) {
+            str->append(i);
         }
 
         columns.emplace_back(str);
@@ -2034,7 +2088,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
         ASSERT_TRUE(
                 StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
-        auto result = StringFunctions::parse_url(context, columns);
+        auto result = StringFunctions::parse_url(context, columns).value();
         auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -2061,8 +2115,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
 
         std::string res[] = {"/path", "/csdwwww", "/wfefefe"};
 
-        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-            str->append(strs[i]);
+        for (auto& i : strs) {
+            str->append(i);
         }
 
         columns.emplace_back(str);
@@ -2073,7 +2127,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
         ASSERT_TRUE(
                 StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
-        auto result = StringFunctions::parse_url(context, columns);
+        auto result = StringFunctions::parse_url(context, columns).value();
         auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -2108,9 +2162,9 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrl) {
                          "username:password",
                          "http"};
 
-    for (int i = 0; i < sizeof(parts) / sizeof(parts[0]); ++i) {
+    for (auto& i : parts) {
         str->append(strs[0]);
-        part->append(parts[i]);
+        part->append(i);
     }
 
     columns.emplace_back(str);
@@ -2120,7 +2174,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrl) {
 
     ASSERT_TRUE(StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
-    auto result = StringFunctions::parse_url(context, columns);
+    auto result = StringFunctions::parse_url(context, columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -2140,13 +2194,13 @@ PARALLEL_TEST(VecStringFunctionsTest, hex_intTest) {
     int64_t values[] = {21, 16, 256, 514};
     std::string strs[] = {"15", "10", "100", "202"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ints->append(values[j]);
+    for (long value : values) {
+        ints->append(value);
     }
 
     columns.emplace_back(ints);
 
-    ColumnPtr result = StringFunctions::hex_int(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::hex_int(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
@@ -2162,13 +2216,13 @@ PARALLEL_TEST(VecStringFunctionsTest, hex_stringTest) {
     std::string values[] = {"21", "16", "256", "514"};
     std::string strs[] = {"3231", "3136", "323536", "353134"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ints->append(values[j]);
+    for (auto& value : values) {
+        ints->append(value);
     }
 
     columns.emplace_back(ints);
 
-    ColumnPtr result = StringFunctions::hex_string(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::hex_string(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
@@ -2185,13 +2239,13 @@ PARALLEL_TEST(VecStringFunctionsTest, unhexTest) {
     std::string strs[] = {"21", "16", "256", "514"};
     std::string values[] = {"3231", "3136", "323536", "353134"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ints->append(values[j]);
+    for (auto& value : values) {
+        ints->append(value);
     }
 
     columns.emplace_back(ints);
 
-    ColumnPtr result = StringFunctions::unhex(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::unhex(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
@@ -2214,10 +2268,10 @@ static void test_left_and_right_not_const(
     }
     columns.push_back(str_col);
     columns.push_back(len_col);
-    ColumnPtr left_result = StringFunctions::left(context.get(), columns);
-    ColumnPtr right_result = StringFunctions::right(context.get(), columns);
-    BinaryColumn* binary_left_result = down_cast<BinaryColumn*>(left_result.get());
-    BinaryColumn* binary_right_result = down_cast<BinaryColumn*>(right_result.get());
+    ColumnPtr left_result = StringFunctions::left(context.get(), columns).value();
+    ColumnPtr right_result = StringFunctions::right(context.get(), columns).value();
+    auto* binary_left_result = down_cast<BinaryColumn*>(left_result.get());
+    auto* binary_right_result = down_cast<BinaryColumn*>(right_result.get());
     ASSERT_TRUE(binary_left_result != nullptr);
     ASSERT_TRUE(binary_right_result != nullptr);
     const auto size = cases.size();
@@ -2250,9 +2304,9 @@ static void test_left_and_right_not_const(
         substr_state->is_const = true;
         substr_state->pos = 1;
         substr_state->len = len;
-        left_result = StringFunctions::left(context.get(), columns);
+        left_result = StringFunctions::left(context.get(), columns).value();
         substr_state->pos = -len;
-        right_result = StringFunctions::right(context.get(), columns);
+        right_result = StringFunctions::right(context.get(), columns).value();
         binary_left_result = down_cast<BinaryColumn*>(left_result.get());
         binary_right_result = down_cast<BinaryColumn*>(right_result.get());
         ASSERT_TRUE(binary_left_result != nullptr);
@@ -2326,7 +2380,7 @@ PARALLEL_TEST(VecStringFunctionsTest, leftAndRightNotConstUtf8Test) {
 }
 
 static void test_left_and_right_const(
-        ColumnPtr str_col,
+        const ColumnPtr& str_col,
         std::vector<std::tuple<int, std::vector<std::string>, std::vector<std::string>>> const& cases) {
     for (auto& c : cases) {
         auto [len, left_expect, right_expect] = c;
@@ -2341,8 +2395,8 @@ static void test_left_and_right_const(
         substr_state->is_const = true;
         substr_state->pos = 1;
         substr_state->len = len;
-        auto left_result = StringFunctions::left(context.get(), columns);
-        auto right_result = StringFunctions::right(context.get(), columns);
+        auto left_result = StringFunctions::left(context.get(), columns).value();
+        auto right_result = StringFunctions::right(context.get(), columns).value();
         auto binary_left_result = down_cast<BinaryColumn*>(left_result.get());
         auto binary_right_result = down_cast<BinaryColumn*>(right_result.get());
         ASSERT_TRUE(binary_left_result != nullptr);
@@ -2426,8 +2480,8 @@ static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, 
         len_col->append(std::get<2>(c));
     }
     Columns columns{str_col, off_col, len_col};
-    auto result = StringFunctions::substring(context.get(), columns);
-    BinaryColumn* binary_result = down_cast<BinaryColumn*>(result.get());
+    auto result = StringFunctions::substring(context.get(), columns).value();
+    auto* binary_result = down_cast<BinaryColumn*>(result.get());
     const auto size = cases.size();
     ASSERT_TRUE(binary_result != nullptr);
     ASSERT_EQ(binary_result->size(), size);
@@ -2588,5 +2642,43 @@ PARALLEL_TEST(VecStringFunctionsTest, substrNotConstUtf8Test) {
     test_substr_not_const(cases);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+PARALLEL_TEST(VecStringFunctionsTest, strcmpTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto lhs = BinaryColumn::create();
+    auto rhs = BinaryColumn::create();
+
+    lhs->append("");
+    rhs->append("");
+
+    lhs->append("");
+    rhs->append("text1");
+
+    lhs->append("text2");
+    rhs->append("");
+
+    lhs->append("text1");
+    rhs->append("text1");
+
+    lhs->append("text1");
+    rhs->append("text2");
+
+    lhs->append("text2");
+    rhs->append("text1");
+
+    columns.emplace_back(lhs);
+    columns.emplace_back(rhs);
+
+    ColumnPtr result = StringFunctions::strcmp(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+
+    ASSERT_EQ(6, result->size());
+    ASSERT_EQ(0, v->get_data()[0]);
+    ASSERT_EQ(-1, v->get_data()[1]);
+    ASSERT_EQ(1, v->get_data()[2]);
+    ASSERT_EQ(0, v->get_data()[3]);
+    ASSERT_EQ(-1, v->get_data()[4]);
+    ASSERT_EQ(1, v->get_data()[5]);
+}
+
+} // namespace starrocks::vectorized

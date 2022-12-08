@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/bitmap_index_reader.h
 
@@ -26,9 +39,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
-#include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -107,9 +117,7 @@ public:
               _dict_column_iter(std::move(dict_iter)),
               _bitmap_column_iter(std::move(bitmap_iter)),
               _has_null(has_null),
-              _num_bitmap(num_bitmap),
-              _current_rowid(0),
-              _pool(new MemPool()) {}
+              _num_bitmap(num_bitmap) {}
 
     bool has_null_bitmap() const { return _has_null; }
 
@@ -155,8 +163,7 @@ private:
     std::unique_ptr<IndexedColumnIterator> _bitmap_column_iter;
     bool _has_null;
     rowid_t _num_bitmap;
-    rowid_t _current_rowid;
-    std::unique_ptr<MemPool> _pool;
+    rowid_t _current_rowid{0};
 };
 
 } // namespace starrocks

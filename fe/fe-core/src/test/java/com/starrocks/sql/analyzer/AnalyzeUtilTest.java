@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -52,5 +65,23 @@ public class AnalyzeUtilTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(statementBase.get(0), session);
         stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
         Assert.assertEquals(stringDatabaseMap.size(), 2);
+
+        sql = "insert into test.t0 select * from db1.t0,db2.t1";
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
+        Assert.assertEquals(stringDatabaseMap.size(), 3);
+        Assert.assertEquals("[db1, test, db2]", stringDatabaseMap.keySet().toString());
+
+        sql = "update test.t0 set v1 = 1";
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
+        Assert.assertEquals(stringDatabaseMap.size(), 1);
+        Assert.assertEquals("[test]", stringDatabaseMap.keySet().toString());
+
+        sql = "delete from test.t0 where v1 = 1";
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
+        Assert.assertEquals(stringDatabaseMap.size(), 1);
+        Assert.assertEquals("[test]", stringDatabaseMap.keySet().toString());
     }
 }

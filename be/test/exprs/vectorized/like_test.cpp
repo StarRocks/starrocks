@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -7,12 +19,11 @@
 #include "exprs/vectorized/like_predicate.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class LikeTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -45,7 +56,7 @@ TEST_F(LikeTest, startConstPatternLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_numeric());
 
@@ -84,7 +95,7 @@ TEST_F(LikeTest, endConstPatternLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_nullable());
     ASSERT_FALSE(result->is_numeric());
@@ -128,7 +139,7 @@ TEST_F(LikeTest, substringConstPatternLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_numeric());
 
@@ -161,7 +172,7 @@ TEST_F(LikeTest, haystackConstantLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
@@ -196,7 +207,7 @@ TEST_F(LikeTest, haystackConstantLikeLargerThanHyperscan) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
@@ -231,7 +242,7 @@ TEST_F(LikeTest, haystackNullableLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_nullable());
     ASSERT_FALSE(result->is_numeric());
@@ -270,7 +281,7 @@ TEST_F(LikeTest, patternEmptyLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_numeric());
 
@@ -303,7 +314,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_numeric());
 
@@ -337,7 +348,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_numeric());
 
@@ -366,7 +377,7 @@ TEST_F(LikeTest, patternOnlyNullLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_TRUE(result->is_nullable());
@@ -400,7 +411,7 @@ TEST_F(LikeTest, rowsPatternLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_numeric());
 
@@ -447,7 +458,7 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_nullable());
     ASSERT_FALSE(result->is_numeric());
@@ -488,7 +499,7 @@ TEST_F(LikeTest, rowsPatternRegex) {
 
     ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::regex(context, columns);
+    auto result = LikePredicate::regex(context, columns).value();
 
     ASSERT_TRUE(result->is_numeric());
 
@@ -534,7 +545,7 @@ TEST_F(LikeTest, constValueLike) {
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::like(context, columns);
+    auto result = LikePredicate::like(context, columns).value();
     ASSERT_TRUE(result->is_numeric());
     ASSERT_EQ(num_rows, result->size());
 
@@ -569,7 +580,7 @@ TEST_F(LikeTest, constValueRegexp) {
 
     ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::regex(context, columns);
+    auto result = LikePredicate::regex(context, columns).value();
     ASSERT_TRUE(result->is_numeric());
     ASSERT_EQ(num_rows, result->size());
 
@@ -605,7 +616,7 @@ TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
 
     ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::regex(context, columns);
+    auto result = LikePredicate::regex(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
@@ -638,7 +649,7 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
 
     ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
-    auto result = LikePredicate::regex(context, columns);
+    auto result = LikePredicate::regex(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
@@ -647,5 +658,4 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
                         .ok());
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

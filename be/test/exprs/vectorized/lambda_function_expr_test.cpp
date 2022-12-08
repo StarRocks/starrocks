@@ -1,8 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <math.h>
+
+#include <cmath>
 
 #include "butil/time.h"
 #include "column/column_helper.h"
@@ -19,14 +32,13 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class FakeConstExpr : public starrocks::Expr {
 public:
     explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
 
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool*) const override { return nullptr; }
 
@@ -51,7 +63,7 @@ ColumnPtr build_int_column(const std::vector<int>& values, const std::vector<uin
 
 class VectorizedLambdaFunctionExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         // init the int_type.
         TTypeNode node;
         node.__set_type(TTypeNodeType::SCALAR);
@@ -141,9 +153,9 @@ public:
 
     void create_array_expr() {
         TypeDescriptor type_arr_int;
-        type_arr_int.type = PrimitiveType::TYPE_ARRAY;
+        type_arr_int.type = LogicalType::TYPE_ARRAY;
         type_arr_int.children.emplace_back();
-        type_arr_int.children.back().type = PrimitiveType::TYPE_INT;
+        type_arr_int.children.back().type = LogicalType::TYPE_INT;
 
         // [1,4]
         // [null,null]
@@ -184,7 +196,7 @@ public:
         _array_expr.push_back(array_special);
 
         // const([1,4]...)
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         auto const_col = ConstColumn::create(array, 3);
         auto* const_array = new_fake_const_expr(const_col, type_arr_int);
@@ -198,14 +210,14 @@ public:
         _array_expr.push_back(const_array);
 
         // const([null]...)
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum()}); // [null]...
         const_col = ConstColumn::create(array, 3);
         const_array = new_fake_const_expr(const_col, type_arr_int);
         _array_expr.push_back(const_array);
 
         // const([]...)
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{}); // []...
         const_col = ConstColumn::create(array, 3);
         const_array = new_fake_const_expr(const_col, type_arr_int);
@@ -221,7 +233,7 @@ public:
         return e;
     }
 
-    MockExpr* new_mock_expr(ColumnPtr value, const PrimitiveType& type) {
+    MockExpr* new_mock_expr(ColumnPtr value, const LogicalType& type) {
         return new_mock_expr(std::move(value), TypeDescriptor(type));
     }
 
@@ -266,6 +278,15 @@ private:
     ObjectPool _objpool;
 };
 
+TypeDescriptor array_type(const LogicalType& child_type) {
+    TypeDescriptor t;
+    t.type = TYPE_ARRAY;
+    t.children.resize(1);
+    t.children[0].type = child_type;
+    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
+    return t;
+}
+
 // just consider one level, not nested
 // array_map(lambdaFunction(x<type>, lambdaExpr),array<type>)
 TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
@@ -274,8 +295,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 0; i < 1; ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.fn.name.function_name = "array_map";
-            ArrayMapExpr array_map_expr(expr_node);
+            ArrayMapExpr array_map_expr(array_type(TYPE_INT));
             array_map_expr.clear_children();
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -350,8 +370,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 1; i < 5; ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.fn.name.function_name = "array_map";
-            ArrayMapExpr array_map_expr(expr_node);
+            ArrayMapExpr array_map_expr(array_type(TYPE_INT));
             array_map_expr.clear_children();
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -421,8 +440,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 5; i < _array_expr.size(); ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.fn.name.function_name = "array_map";
-            ArrayMapExpr array_map_expr(expr_node);
+            ArrayMapExpr array_map_expr(array_type(j == 1 ? TYPE_BOOLEAN : TYPE_INT));
             array_map_expr.clear_children();
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -445,7 +463,6 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
             }
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
-
             if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
@@ -506,10 +523,19 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 ASSERT_TRUE(result->get(2).get_array().empty());
             }
 
+            if (j == 1) { // array<int> -> array<bool>
+                if (result->is_nullable()) {
+                    auto col = std::dynamic_pointer_cast<NullableColumn>(result);
+                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(col->data_column());
+                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // nullable bool
+                } else {
+                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(result);
+                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // nullable bool
+                }
+            }
             Expr::close(expr_ctxs, &_runtime_state);
         }
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

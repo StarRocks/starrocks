@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/load/loadv2/SparkLoadJob.java
 
@@ -141,13 +154,13 @@ public class SparkLoadJob extends BulkLoadJob {
     // for straggler wait long time to commit transaction
     private long quorumFinishTimestamp = -1;
     // below for push task
-    private Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
-    private Map<Long, PushBrokerReaderParams> indexToPushBrokerReaderParams = Maps.newHashMap();
-    private Map<Long, Integer> indexToSchemaHash = Maps.newHashMap();
-    private Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask = Maps.newHashMap();
-    private Set<Long> finishedReplicas = Sets.newHashSet();
-    private Set<Long> quorumTablets = Sets.newHashSet();
-    private Set<Long> fullTablets = Sets.newHashSet();
+    private final Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
+    private final Map<Long, PushBrokerReaderParams> indexToPushBrokerReaderParams = Maps.newHashMap();
+    private final Map<Long, Integer> indexToSchemaHash = Maps.newHashMap();
+    private final Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask = Maps.newHashMap();
+    private final Set<Long> finishedReplicas = Sets.newHashSet();
+    private final Set<Long> quorumTablets = Sets.newHashSet();
+    private final Set<Long> fullTablets = Sets.newHashSet();
 
     // only for log replay
     public SparkLoadJob() {
@@ -173,8 +186,6 @@ public class SparkLoadJob extends BulkLoadJob {
 
     /**
      * merge system conf with load stmt
-     *
-     * @throws DdlException
      */
     private void setResourceInfo() throws DdlException {
         // spark resource
@@ -269,10 +280,7 @@ public class SparkLoadJob extends BulkLoadJob {
     private boolean checkState(JobState expectState) {
         readLock();
         try {
-            if (state == expectState) {
-                return true;
-            }
-            return false;
+            return state == expectState;
         } finally {
             readUnlock();
         }
@@ -334,8 +342,10 @@ public class SparkLoadJob extends BulkLoadJob {
             loadingStatus.setLoadFileInfo((int) dppResult.fileNumber, dppResult.fileSize);
             TUniqueId dummyId = new TUniqueId(0, 0);
             long dummyBackendId = -1L;
-            loadingStatus.getLoadStatistic().initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
-            loadingStatus.getLoadStatistic().updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
+            loadingStatus.getLoadStatistic()
+                    .initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
+            loadingStatus.getLoadStatistic()
+                    .updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
 
             Map<String, String> counters = loadingStatus.getCounters();
             counters.put(DPP_NORMAL_ALL, String.valueOf(dppResult.normalRows));
@@ -422,7 +432,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
     private Set<Long> submitPushTasks() throws UserException {
         // check db exist
-        Database db = null;
+        Database db;
         try {
             db = getDb();
         } catch (MetaNotFoundException e) {
@@ -673,7 +683,7 @@ public class SparkLoadJob extends BulkLoadJob {
             }
 
             // if all replicas are finished or stay in quorum finished for long time, try to commit it.
-            long stragglerTimeout = Config.load_straggler_wait_second * 1000;
+            long stragglerTimeout = Config.load_straggler_wait_second * 1000L;
             if ((quorumFinishTimestamp > 0 && System.currentTimeMillis() - quorumFinishTimestamp > stragglerTimeout)
                     || fullTablets.containsAll(totalTablets)) {
                 canCommitJob = true;
@@ -697,7 +707,7 @@ public class SparkLoadJob extends BulkLoadJob {
         db.writeLock();
         try {
             GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(
-                    dbId, transactionId, commitInfos,
+                    dbId, transactionId, commitInfos, Lists.newArrayList(),
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));
         } catch (TabletQuorumFailedException e) {
@@ -799,7 +809,7 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
-    protected String getResourceName() {
+    public String getResourceName() {
         return sparkResource.getName();
     }
 
@@ -821,7 +831,9 @@ public class SparkLoadJob extends BulkLoadJob {
         if (!Strings.isNullOrEmpty(logPath)) {
             File file = new File(logPath);
             if (file.exists()) {
-                file.delete();
+                if (!file.delete()) {
+                    LOG.warn("Failed to delete file, filepath={}", file.getAbsolutePath());
+                }
             }
         }
     }
@@ -969,11 +981,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 SlotDescriptor destSlotDesc = descTable.addSlotDescriptor(destTupleDesc);
                 destSlotDesc.setIsMaterialized(true);
                 destSlotDesc.setColumn(column);
-                if (column.isAllowNull()) {
-                    destSlotDesc.setIsNullable(true);
-                } else {
-                    destSlotDesc.setIsNullable(false);
-                }
+                destSlotDesc.setIsNullable(column.isAllowNull());
             }
             initTBrokerScanRange(descTable, destTupleDesc, columns, brokerDesc);
             initTDescriptorTable(descTable);

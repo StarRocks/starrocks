@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.tree.pdagg;
 
@@ -132,7 +145,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
 
-        if (project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef)) {
+        if (project.getColumnRefMap().entrySet().stream().allMatch(e -> e.getValue().equals(e.getKey()))) {
             return processChild(optExpression, context);
         }
 
@@ -140,6 +153,10 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
         context.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
         context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
+
+        if (project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef)) {
+            return processChild(optExpression, context);
+        }
 
         // handle specials functions case-when/if
         // split to groupBys and mock new aggregations by values, don't need to save
@@ -209,6 +226,11 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         // all constant can't push down
         if (!aggregate.getAggregations().isEmpty() &&
                 aggregate.getAggregations().values().stream().allMatch(ScalarOperator::isConstant)) {
+            return visit(optExpression, context);
+        }
+
+        // none group by don't push down
+        if (aggregate.getGroupingKeys().isEmpty()) {
             return visit(optExpression, context);
         }
 
@@ -474,7 +496,8 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         LOG.debug("Push down aggregation[" + aggStr + "]" +
                 " group by[" + groupStr + "]," +
-                " check statistics high[" + high.size() +
+                " check statistics rows[" + statistics.getOutputRowCount() +
+                "] high[" + high.size() +
                 "] mid[" + medium.size() +
                 "] low[" + lower.size() +
                 "] cartesian[" + lowerCartesian +
@@ -492,7 +515,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         if (high.isEmpty() && medium.isEmpty()) {
             if (lowerCartesian <= statistics.getOutputRowCount() || lower.size() <= 2) {
                 return true;
-            } else if (lower.size() <= 4 && lowerCartesian < lowerUpper) {
+            } else if (lower.size() <= 3 && lowerCartesian < lowerUpper) {
                 return true;
             } else {
                 return sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG;
@@ -507,14 +530,14 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return false;
         }
 
-        // 3. high cardinality < 2 and lower cardinality <= 3
-        if (high.size() == 1 && lower.size() <= 3) {
+        // 3. high cardinality < 2 and lower cardinality < 2
+        if (high.size() == 1 && lower.size() <= 2) {
             return sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_HIGH_CARDINALITY_AGG;
         }
 
         // 4. medium cardinality <= 2
-        if (lower.size() <= 3) {
-            if (sessionVariable.getCboPushDownAggregateMode() >= 2) {
+        if (lower.size() <= 2) {
+            if (sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG) {
                 return true;
             }
             return statistics.getOutputRowCount() >=
@@ -524,9 +547,9 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         return false;
     }
 
-    // high(2): cardinality/count > 1/5
-    // medium(1): cardinality/count < 1/5 and > 1/20
-    // lower(0): cardinality/count < 1/20
+    // high(2): cardinality/count > MEDIUM_AGGREGATE
+    // medium(1): cardinality/count <= MEDIUM_AGGREGATE and > LOW_AGGREGATE
+    // lower(0): cardinality/count < LOW_AGGREGATE
     private int groupByCardinality(ColumnStatistic statistic, double rowCount) {
         if (statistic.isUnknown()) {
             return 2;
@@ -534,11 +557,12 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         double distinct = statistic.getDistinctValuesCount();
 
-        if (rowCount == 0 || distinct * 5 >= rowCount) {
+        if (rowCount == 0 || distinct * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT > rowCount) {
             return 2;
-        } else if (distinct * 5 < rowCount && distinct * 20 >= rowCount) {
+        } else if (distinct * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT <= rowCount &&
+                distinct * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT > rowCount) {
             return 1;
-        } else if (distinct * 20 <= rowCount) {
+        } else if (distinct * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT <= rowCount) {
             return 0;
         }
 

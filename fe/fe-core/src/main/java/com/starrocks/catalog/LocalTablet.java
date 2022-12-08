@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/Tablet.java
 
@@ -143,11 +156,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return delete || !hasBackend;
     }
 
-    public void addReplica(Replica replica, boolean isRestore) {
+    public void addReplica(Replica replica, boolean updateInvertedIndex) {
         synchronized (replicas) {
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
                 replicas.add(replica);
-                if (!isRestore) {
+                if (updateInvertedIndex) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
                 }
             }
@@ -155,7 +168,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public void addReplica(Replica replica) {
-        addReplica(replica, false);
+        addReplica(replica, true);
     }
 
     /**
@@ -184,6 +197,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend == null) {
+                continue;
+            }
             backends.add(backend.getHost());
         }
         return backends;
@@ -207,8 +223,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Long, Long> getNormalReplicaBackendPathMap(int clusterId) {
-        Multimap<Long, Long> map = HashMultimap.create();
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
+        Multimap<Replica, Long> map = HashMultimap.create();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -218,7 +234,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             ReplicaState state = replica.getState();
             if (infoService.checkBackendAlive(replica.getBackendId())
                     && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
-                map.put(replica.getBackendId(), replica.getPathHash());
+                map.put(replica, replica.getPathHash());
             }
         }
         return map;
@@ -394,6 +410,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // we need to update immutableReplicas, because replicas after deserialization from a json string
         // will be different from the replicas initiated in the constructor
         immutableReplicas = Collections.unmodifiableList(replicas);
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 
     @Override
@@ -590,29 +611,36 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     /**
      * Check colocate table's tablet health
-     * 1. Mismatch:
-     * backends set:       1,2,3
+     * <p>
+     * 1. Mismatch:<p>
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2,5
      * <p>
-     * backends set:       1,2,3
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2
      * <p>
-     * backends set:       1,2,3
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2,4,5
      * <p>
-     * 2. Version incomplete:
+     * 2. Version incomplete:<p>
      * backend matched, but some replica's version is incomplete
      * <p>
-     * 3. Redundant:
-     * backends set:       1,2,3
+     * 3. Redundant:<p>
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2,3,4
      * <p>
+     * 4. Replica bad:<p>
+     * If a replica is marked bad, we need to migrate it and all the other replicas corresponding to the same bucket
+     * index in the colocate group to another backend, but the backend where the bad replica sits on may still be
+     * available, so the backend set won't be changed by ColocateBalancer, so we need to learn this state and update
+     * the backend set to replace the backend that has the bad replica. In order to be in consistent with the current
+     * logic, we return COLOCATE_MISMATCH not REPLICA_MISSING.
+     * <p></p>
      * No need to check if backend is available. We consider all backends in 'backendsSet' are available,
      * If not, unavailable backends will be relocated by ColocateTableBalancer first.
      */
     public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
-
         // 1. check if replicas' backends are mismatch
         Set<Long> replicaBackendIds = getBackendIds();
         for (Long backendId : backendsSet) {
@@ -627,6 +655,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             // this kind of replica should be drooped.
             if (!backendsSet.contains(replica.getBackendId())) {
                 continue;
+            }
+
+            if (replica.isBad()) {
+                return TabletStatus.COLOCATE_MISMATCH;
             }
 
             if (replica.getLastFailedVersion() > 0 || replica.getVersion() < visibleVersion) {
@@ -698,7 +730,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     // Note: this method does not require db lock to be held
     public boolean quorumReachVersion(long version, long quorum, TxnFinishState finishState) {
-        // TODO(cbl): support tablets doing schemachange/rollup
         long valid = 0;
         synchronized (replicas) {
             for (Replica replica : replicas) {
@@ -713,11 +744,37 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                     finishState.normalReplicas.add(replicaId);
                     finishState.abnormalReplicasWithVersion.remove(replicaId);
                 } else {
+                    if (replica.getState() == ReplicaState.ALTER && replicaVersion <= Partition.PARTITION_INIT_VERSION) {
+                        valid++;
+                    }
                     finishState.normalReplicas.remove(replicaId);
                     finishState.abnormalReplicasWithVersion.put(replicaId, replicaVersion);
                 }
             }
         }
         return valid >= quorum;
+    }
+
+    public void getAbnormalReplicaInfos(long version, long quorum, StringBuilder sb) {
+        synchronized (replicas) {
+            boolean empty = true;
+            for (Replica replica : replicas) {
+                long replicaVersion = replica.getVersion();
+                if (replicaVersion < version) {
+                    if (empty) {
+                        sb.append(String.format(" {tablet:%d quorum:%d version:%d #replica:%d err:", id, quorum, version,
+                                replicas.size()));
+                        empty = false;
+                    }
+                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    sb.append(String.format(" %s:%d%s",
+                            backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
+                            replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));
+                }
+            }
+            if (!empty) {
+                sb.append("}");
+            }
+        }
     }
 }

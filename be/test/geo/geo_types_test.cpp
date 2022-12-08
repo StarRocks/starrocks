@@ -29,8 +29,8 @@ namespace starrocks {
 
 class GeoTypesTest : public testing::Test {
 public:
-    GeoTypesTest() {}
-    virtual ~GeoTypesTest() {}
+    GeoTypesTest() = default;
+    ~GeoTypesTest() override = default;
 };
 
 TEST_F(GeoTypesTest, point_normal) {

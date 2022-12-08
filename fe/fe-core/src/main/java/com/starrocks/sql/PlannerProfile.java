@@ -1,10 +1,26 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,6 +28,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
+import static com.starrocks.connector.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
 
 /**
  * To timing a function or a piece of code, you could
@@ -29,30 +48,40 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 
 public class PlannerProfile {
+    private static final Logger LOG = LogManager.getLogger(PlannerProfile.class);
     private ConnectContext ctx;
 
     public static class ScopedTimer implements AutoCloseable {
-        private long startTime = 0;
         private volatile long currentThreadId = 0;
-        private long totalTime = 0;
         private int totalCount = 0;
         // possible to record p99?
+
+        private final Stopwatch watch = Stopwatch.createUnstarted();
 
         public void start() {
             Preconditions.checkState(currentThreadId == 0);
             currentThreadId = Thread.currentThread().getId();
-            startTime = System.currentTimeMillis();
+            watch.start();
         }
 
         public void close() {
             Preconditions.checkState(currentThreadId == Thread.currentThread().getId());
             currentThreadId = 0;
-            totalTime += (System.currentTimeMillis() - startTime);
             totalCount += 1;
+            watch.stop();
+
+            printBackgroundLog();
+        }
+
+        private void printBackgroundLog() {
+            String threadName = Thread.currentThread().getName();
+            if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
+                LOG.info("Get partitions or partition statistics cost time: {}", this.getTotalTime());
+            }
         }
 
         public long getTotalTime() {
-            return totalTime;
+            return watch.elapsed(TimeUnit.MICROSECONDS) / 1000;
         }
 
         public int getTotalCount() {
@@ -61,6 +90,7 @@ public class PlannerProfile {
     }
 
     private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
+    private final Map<String, String> customProperties = new ConcurrentHashMap<>();
 
     public PlannerProfile() {
     }
@@ -73,11 +103,9 @@ public class PlannerProfile {
         return timers.computeIfAbsent(name, (key) -> new ScopedTimer());
     }
 
-    private static final PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
-
     public static ScopedTimer getScopedTimer(String name) {
         // to avoid null.
-        PlannerProfile p = DEFAULT_INSTANCE;
+        PlannerProfile p = new PlannerProfile();
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             p = ctx.getPlannerProfile();
@@ -85,6 +113,24 @@ public class PlannerProfile {
         ScopedTimer t = p.getOrCreateScopedTimer(name);
         t.start();
         return t;
+    }
+
+    public static void addCustomProperties(String name, String value) {
+        PlannerProfile p = new PlannerProfile();
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            p = ctx.getPlannerProfile();
+        }
+        p.customProperties.put(name, value);
+
+        String threadName = Thread.currentThread().getName();
+        if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
+            LOG.info("Background collect hive column statistics profile: [{}:{}]", name, value);
+        }
+    }
+
+    public Map<String, ScopedTimer> getTimers() {
+        return timers;
     }
 
     private RuntimeProfile getRuntimeProfile(RuntimeProfile parent, Map<String, RuntimeProfile> cache,
@@ -119,11 +165,11 @@ public class PlannerProfile {
     }
 
     public void buildTimers(RuntimeProfile parent) {
-        List<String> keys = new ArrayList<>(timers.keySet());
-        Collections.sort(keys);
-
         Map<String, RuntimeProfile> profilers = new HashMap<>();
         profilers.put("", parent);
+
+        List<String> keys = new ArrayList<>(timers.keySet());
+        Collections.sort(keys);
         for (String key : keys) {
             String prefix = getKeyPrefix(key);
             String name = key.substring(prefix.length());
@@ -133,11 +179,62 @@ public class PlannerProfile {
         }
     }
 
+    public void buildCustomProperties(RuntimeProfile parent) {
+        Map<String, RuntimeProfile> profilers = new HashMap<>();
+        profilers.put("", parent);
+
+        List<String> keys = new ArrayList<>(customProperties.keySet());
+        Collections.sort(keys);
+
+        for (String key : keys) {
+            String prefix = getKeyPrefix(key);
+            String name = key.substring(prefix.length());
+            RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
+            String value = customProperties.get(key);
+            p.addInfoString(name, value);
+        }
+    }
+
     public void build(RuntimeProfile parent) {
         buildTimers(parent);
+        buildCustomProperties(parent);
     }
 
     public void reset() {
         timers.clear();
+        customProperties.clear();
+    }
+
+    private static Long getTime(String prefix, Map<String, PlannerProfile.ScopedTimer> times) {
+        if (times.containsKey(prefix)) {
+            return times.get(prefix).getTotalTime();
+        } else {
+            return 0L;
+        }
+    }
+
+    private static String print(String name, long time, int step) {
+        return String.join("", Collections.nCopies(step, "    ")) + "-- " + name + " " + time + "ms" + "\n";
+    }
+
+    public static String printPlannerTimeCost(PlannerProfile profile) {
+        StringBuilder trace = new StringBuilder();
+        Map<String, PlannerProfile.ScopedTimer> times = profile.getTimers();
+
+        trace.append(print("Total", getTime("Total", times), 0));
+        trace.append(print("Parser", getTime("Parser", times), 1));
+        trace.append(print("Analyzer", getTime("Analyzer", times), 1));
+        trace.append(print("Optimizer", getTime("Optimizer", times), 1));
+        trace.append(print("Optimizer.RuleBaseOptimize",
+                getTime("Optimizer.RuleBaseOptimize", times), 2));
+        trace.append(print("Optimizer.CostBaseOptimize",
+                getTime("Optimizer.CostBaseOptimize", times), 2));
+        trace.append(print("Optimizer.PhysicalRewrite",
+                getTime("Optimizer.PhysicalRewrite", times), 2));
+        trace.append(print("Optimizer.preprocessMvs",
+                getTime("Optimizer.preprocessMvs", times), 2));
+        trace.append(print("ExecPlanBuild", getTime("ExecPlanBuild", times), 1));
+
+        return trace.toString();
     }
 }

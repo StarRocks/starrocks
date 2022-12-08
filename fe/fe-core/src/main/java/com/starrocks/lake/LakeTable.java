@@ -1,10 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.lake;
 
-import com.staros.proto.CacheInfo;
-import com.staros.proto.ObjectStorageInfo;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.backup.Status;
@@ -29,8 +41,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -60,53 +70,36 @@ public class LakeTable extends OlapTable {
     }
 
     public String getStorageGroup() {
-        return getDefaultShardStorageInfo().getObjectStorageInfo().getObjectUri();
+        return getDefaultFilePathInfo().getFullPath();
     }
 
-    public ShardStorageInfo getDefaultShardStorageInfo() {
-        return tableProperty.getStorageInfo().getShardStorageInfo();
+    public FilePathInfo getDefaultFilePathInfo() {
+        return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
-    public ShardStorageInfo getPartitionShardStorageInfo(long partitionId) {
-        CacheInfo cacheInfo = null;
+    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+        return getDefaultFilePathInfo();
+    }
+
+    public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
+        FileCacheInfo cacheInfo = null;
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
         if (storageCacheInfo == null) {
-            cacheInfo = getDefaultShardStorageInfo().getCacheInfo();
+            cacheInfo = tableProperty.getStorageInfo().getCacheInfo();
         } else {
             cacheInfo = storageCacheInfo.getCacheInfo();
         }
-        return ShardStorageInfo.newBuilder(getDefaultShardStorageInfo()).setCacheInfo(cacheInfo).build();
+        return cacheInfo;
     }
 
-    public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS,
-                               boolean allowAsyncWriteBack) throws DdlException {
-        String storageGroup;
-        // s3://bucket/serviceId/tableId/
-        String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
-        try {
-            URI uri = new URI(path);
-            String scheme = uri.getScheme();
-            if (scheme == null) {
-                throw new DdlException("Invalid storage path [" + path + "]: no scheme");
-            }
-            storageGroup = uri.normalize().toString();
-        } catch (URISyntaxException e) {
-            throw new DdlException("Invalid storage path [" + path + "]: " + e.getMessage());
-        }
-
-        ObjectStorageInfo objectStorageInfo =
-                ObjectStorageInfo.newBuilder(shardStorageInfo.getObjectStorageInfo()).setObjectUri(storageGroup)
-                        .build();
-        CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
-                .setAllowAsyncWriteBack(allowAsyncWriteBack).build();
-        ShardStorageInfo newShardStorageInfo =
-                ShardStorageInfo.newBuilder(shardStorageInfo).setObjectStorageInfo(objectStorageInfo)
-                        .setCacheInfo(cacheInfo).build();
-
+    public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS,
+                               boolean asyncWriteBack) throws DdlException {
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
+                .setAsyncWriteBack(asyncWriteBack).build();
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(newShardStorageInfo));
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
     }
 
     @Override
@@ -174,17 +167,19 @@ public class LakeTable extends OlapTable {
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash, long partitionId) {
-        ShardStorageInfo shardStorageInfo = getPartitionShardStorageInfo(partitionId);
+        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
+        FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
+
         List<Long> shardIds = null;
         try {
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, shardStorageInfo);
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, partitionId);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
         for (long shardId : shardIds) {
             LakeTablet tablet = new LakeTablet(shardId);
-            index.addTablet(tablet, null /* tablet meta */, true /* is restore */);
+            index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
         }
         return Status.OK;
     }

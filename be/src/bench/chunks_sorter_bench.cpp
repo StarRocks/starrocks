@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <benchmark/benchmark.h>
 #include <gtest/gtest.h>
@@ -39,7 +51,7 @@ public:
 
     void TearDown() { _runtime_state.reset(); }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(TypeDescriptor type_desc,
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(const TypeDescriptor& type_desc,
                                                                                  int slot_index, bool low_card,
                                                                                  bool nullable) {
         DCHECK_EQ(TYPE_INT, type_desc.type);
@@ -67,8 +79,9 @@ public:
         return {column, std::move(expr)};
     }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(TypeDescriptor type_desc, int slot_index,
-                                                                          bool low_card, bool nullable) {
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(const TypeDescriptor& type_desc,
+                                                                          int slot_index, bool low_card,
+                                                                          bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
@@ -141,30 +154,34 @@ struct SortParameters {
     bool nullable = false;
     int max_buffered_chunks = ChunksSorterTopn::kDefaultBufferedChunks;
 
-    SortParameters() {}
+    SortParameters() = default;
 
-    static SortParameters with_limit(int limit, SortParameters params = SortParameters()) {
+    static SortParameters with_limit(int limit) {
+        SortParameters params;
         params.limit = limit;
         return params;
     }
 
-    static SortParameters with_low_card(bool low_card, SortParameters params = SortParameters()) {
+    static SortParameters with_low_card(bool low_card) {
+        SortParameters params;
         params.low_card = low_card;
         return params;
     }
 
-    static SortParameters with_nullable(bool nullable, SortParameters params = SortParameters()) {
+    static SortParameters with_nullable(bool nullable) {
+        SortParameters params;
         params.nullable = nullable;
         return params;
     }
 
-    static SortParameters with_max_buffered_chunks(int max_buffered_chunks, SortParameters params = SortParameters()) {
+    static SortParameters with_max_buffered_chunks(int max_buffered_chunks) {
+        SortParameters params;
         params.max_buffered_chunks = max_buffered_chunks;
         return params;
     }
 };
 
-static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, PrimitiveType data_type, int num_chunks,
+static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, LogicalType data_type, int num_chunks,
                      int num_columns, SortParameters params = SortParameters()) {
     // state.PauseTiming();
     ChunkSorterBase suite;
@@ -190,7 +207,10 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
         auto [column, expr] = suite.build_column(type_desc, i, params.low_card, params.nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -210,19 +230,21 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
 
         switch (sorter_algo) {
         case FullSort: {
-            sorter.reset(new ChunksSorterFullSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, ""));
+            sorter = std::make_unique<ChunksSorterFullSort>(suite._runtime_state.get(), &sort_exprs, &asc_arr,
+                                                            &null_first, "");
             expected_rows = total_rows;
             break;
         }
         case HeapSort: {
-            sorter.reset(new ChunksSorterHeapSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                                  limit_rows));
+            sorter = std::make_unique<ChunksSorterHeapSort>(suite._runtime_state.get(), &sort_exprs, &asc_arr,
+                                                            &null_first, "", 0, limit_rows);
             expected_rows = limit_rows;
             break;
         }
         case MergeSort: {
-            sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                              limit_rows, TTopNType::ROW_NUMBER, params.max_buffered_chunks));
+            sorter = std::make_unique<ChunksSorterTopn>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
+                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER,
+                                                        params.max_buffered_chunks);
             expected_rows = limit_rows;
             break;
         }
@@ -292,7 +314,11 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
         auto [column, expr] = suite.build_sorted_column(type_desc, i, false, false);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
+
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -373,7 +399,10 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
         auto [column, expr] = suite.build_sorted_column(type_desc, i, false, nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -394,7 +423,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
             }
         }
         SortedRuns merged;
-        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged, 0);
+        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
         ASSERT_EQ(input_rows, merged.num_rows());
 
         num_rows += merged.num_rows();

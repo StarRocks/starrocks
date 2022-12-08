@@ -1,10 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "runtime/jdbc_driver_manager.h"
 
 #include <atomic>
 #include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <chrono>
+#include <memory>
+#include <utility>
 
 #include "fmt/format.h"
 #include "fs/fs.h"
@@ -18,7 +32,8 @@
 namespace starrocks {
 
 struct JDBCDriverEntry {
-    JDBCDriverEntry(const std::string& name_, const std::string& checksum_) : name(name_), checksum(checksum_) {}
+    JDBCDriverEntry(std::string name_, std::string checksum_)
+            : name(std::move(name_)), checksum(std::move(checksum_)) {}
 
     ~JDBCDriverEntry();
 
@@ -47,7 +62,7 @@ JDBCDriverEntry::~JDBCDriverEntry() {
     }
 }
 
-JDBCDriverManager::JDBCDriverManager() {}
+JDBCDriverManager::JDBCDriverManager() = default;
 
 JDBCDriverManager::~JDBCDriverManager() {
     std::unique_lock<std::mutex> l(_lock);
@@ -57,7 +72,7 @@ JDBCDriverManager::~JDBCDriverManager() {
 JDBCDriverManager* JDBCDriverManager::getInstance() {
     static std::unique_ptr<JDBCDriverManager> manager;
     if (manager == nullptr) {
-        manager.reset(new JDBCDriverManager());
+        manager = std::make_unique<JDBCDriverManager>();
     }
     return manager.get();
 }

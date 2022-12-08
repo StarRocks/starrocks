@@ -6,7 +6,7 @@ Converts a string to a JSON value.
 
 ## Syntax
 
-```Plain%20Text
+```Haskell
 parse_json(string_expr)
 ```
 

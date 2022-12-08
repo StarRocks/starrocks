@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/thrift/BackendService.thrift
 
@@ -28,6 +41,7 @@ include "PlanNodes.thrift"
 include "AgentService.thrift"
 include "InternalService.thrift"
 include "StarrocksExternalService.thrift"
+include "MVMaintenance.thrift"
 
 struct TExportTaskRequest {
     1: required InternalService.TExecPlanFragmentParams params
@@ -95,6 +109,11 @@ struct TProxyResult {
     2: optional TKafkaMetaProxyResult kafka_meta_result;
 }
 
+struct TStreamLoadChannel {
+    1: optional string label
+    2: optional i32 channel_id
+}
+
 service BackendService {
     // Called by coord to start asynchronous execution of plan fragment in backend.
     // Returns as soon as all incoming data streams have been set up.
@@ -125,8 +144,7 @@ service BackendService {
 
     AgentService.TAgentResult submit_etl_task(1:AgentService.TMiniLoadEtlTaskRequest request);
 
-    AgentService.TMiniLoadEtlStatusResult get_etl_status(
-            1:AgentService.TMiniLoadEtlStatusRequest request);
+    AgentService.TMiniLoadEtlStatusResult get_etl_status(1:AgentService.TMiniLoadEtlStatusRequest request);
 
     AgentService.TAgentResult delete_etl_files(1:AgentService.TDeleteEtlFilesRequest request);
 
@@ -139,6 +157,8 @@ service BackendService {
     TTabletStatResult get_tablet_stat();
 
     Status.TStatus submit_routine_load_task(1:list<TRoutineLoadTask> tasks);
+
+    Status.TStatus finish_stream_load_channel(1:TStreamLoadChannel stream_load_channel);
 
     // starrocks will build  a scan context for this session, context_id returned if success
     StarrocksExternalService.TScanOpenResult open_scanner(1: StarrocksExternalService.TScanOpenParams params);

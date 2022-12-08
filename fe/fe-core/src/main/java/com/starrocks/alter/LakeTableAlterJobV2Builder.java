@@ -1,10 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
@@ -53,7 +67,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 long partitionId = partition.getId();
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), table.getPartitionShardStorageInfo(partitionId));
+                        createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
+                                     table.getPartitionFileCacheInfo(partitionId), partitionId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -77,7 +92,9 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @VisibleForTesting
-    public static List<Long> createShards(int shardCount, ShardStorageInfo storageInfo) throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, storageInfo);
+    public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+        throws DdlException {
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId);
     }
+
 }

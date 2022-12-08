@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/fragment_mgr.h
 
@@ -92,17 +105,17 @@ public:
                                          std::vector<int32_t>& cur_batch_report_indexes);
 
     // input: TScanOpenParams fragment_instance_id
-    // output: selected_columns
+    // output: selected_columns, query_id parsed from params
     // execute external query, all query info are packed in TScanOpenParams
     Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
-                                       std::vector<TScanColumnDesc>* selected_columns);
+                                       std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id);
     size_t running_fragment_count() const {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();
     }
 
 private:
-    void exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb);
+    void exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb);
 
     // This is input params
     ExecEnv* _exec_env;

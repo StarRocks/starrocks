@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/block_compression.cpp
 
@@ -509,7 +522,7 @@ LZ4F_preferences_t Lz4fBlockCompression::_s_preferences = {
 
 class SnappySlicesSource : public snappy::Source {
 public:
-    explicit SnappySlicesSource(const std::vector<Slice>& slices) : _available(0), _cur_slice(0), _slice_off(0) {
+    explicit SnappySlicesSource(const std::vector<Slice>& slices) {
         for (auto& slice : slices) {
             // We filter empty slice here to avoid complicated process
             if (slice.size == 0) {
@@ -569,9 +582,9 @@ public:
 
 private:
     std::vector<Slice> _slices;
-    size_t _available;
-    size_t _cur_slice;
-    size_t _slice_off;
+    size_t _available{0};
+    size_t _cur_slice{0};
+    size_t _slice_off{0};
 };
 
 class SnappyBlockCompression : public BlockCompressionCodec {

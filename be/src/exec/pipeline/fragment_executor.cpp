@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/fragment_executor.h"
 
@@ -17,7 +29,10 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/memory_scratch_sink_operator.h"
+#include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/vectorized/cross_join_node.h"
@@ -30,8 +45,13 @@
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/export_sink.h"
+#include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
+#include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/time.h"
@@ -75,7 +95,7 @@ static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelineP
 
 static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    auto* dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
+    auto* dop_counter = ADD_COUNTER_SKIP_MERGE(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(dop_counter, static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, dop_counter->value());
@@ -119,6 +139,13 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
 
+    if (query_options.__isset.enable_profile && query_options.enable_profile) {
+        _query_ctx->set_report_profile();
+    }
+    if (query_options.__isset.pipeline_profile_level) {
+        _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+    }
+
     bool enable_query_trace = false;
     if (query_options.__isset.enable_query_debug_trace && query_options.enable_query_debug_trace) {
         enable_query_trace = true;
@@ -132,20 +159,12 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
-    const auto& query_options = request.common().query_options;
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
-
-    if (query_options.__isset.is_report_success && query_options.is_report_success) {
-        _fragment_ctx->set_report_profile();
-    }
-    if (query_options.__isset.pipeline_profile_level) {
-        _fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
-    }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(fragment_instance_id) << " backend_num=" << request.backend_num();
@@ -165,7 +184,7 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-        RETURN_IF_ERROR(_query_ctx->init_query(wg.get()));
+        RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
         _wg = wg;
     }
     DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
@@ -185,6 +204,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
 
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_enable_pipeline_engine(true);
 
     if (wg != nullptr && wg->use_big_query_mem_limit()) {
         _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
@@ -200,8 +221,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.common().__isset.func_version ? request.common().func_version : 2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
@@ -320,6 +339,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             cache_param.slot_remapping[slot] = remapped_slot;
             cache_param.reverse_slot_remapping[remapped_slot] = slot;
         }
+        cache_param.can_use_multiversion = tcache_param.can_use_multiversion;
+        cache_param.keys_type = tcache_param.keys_type;
         _fragment_ctx->set_enable_cache(true);
     }
 
@@ -351,14 +372,14 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                         continue;
                     }
                     const auto& region = tcache_param.region_map.at(partition_id);
-                    std::string cache_suffix_key;
-                    cache_suffix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&partition_id,
+                    std::string cache_prefix_key;
+                    cache_prefix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&partition_id,
                                             ((uint8_t*)&partition_id) + sizeof(partition_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), region.begin(), region.end());
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&tablet_id,
+                    cache_prefix_key.insert(cache_prefix_key.end(), region.begin(), region.end());
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&tablet_id,
                                             ((uint8_t*)&tablet_id) + sizeof(tablet_id));
-                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_suffix_key);
+                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_prefix_key);
                 }
             }
         }
@@ -366,11 +387,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
         }
-        // TODO (by satanson): intra-tablet parallelism will emit multiple EOS, this situation hard to handled in
-        //  current version. shared_scan mechanism conflicts with per-tablet computation that is required for query
-        //  cache, so it is turned off at present. in the future, these two issues will be handled.
+        // TODO (by satanson): shared_scan mechanism conflicts with per-tablet computation that is required for query
+        //  cache, so it is turned off at present, it would be solved in the future.
         if (_fragment_ctx->enable_cache()) {
-            enable_tablet_internal_parallel = false;
             enable_shared_scan = false;
         }
 
@@ -401,7 +420,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
         if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            _query_ctx->set_scan_limit(physical_scan_limit);
+            _query_ctx->set_scan_limit(std::max(_wg->big_query_scan_rows_limit(), physical_scan_limit));
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
@@ -410,8 +429,60 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     return Status::OK();
 }
 
+Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+    const TExecPlanFragmentParams& unique_request = request.unique();
+    if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+        return Status::OK();
+    }
+    const auto& scan_range_map = unique_request.params.node_to_per_driver_seq_scan_ranges;
+    if (scan_range_map.size() == 0) {
+        return Status::OK();
+    }
+    auto iter = scan_range_map.begin();
+    if (iter->second.size() == 0) {
+        return Status::OK();
+    }
+    auto iter2 = iter->second.begin();
+    if (iter2->second.size() == 0) {
+        return Status::OK();
+    }
+    if (!iter2->second[0].scan_range.__isset.broker_scan_range) {
+        return Status::OK();
+    }
+    if (!iter2->second[0].scan_range.broker_scan_range.__isset.channel_id) {
+        return Status::OK();
+    }
+    std::vector<StreamLoadContext*> stream_load_contexts;
+    for (; iter != scan_range_map.end(); iter++) {
+        for (; iter2 != iter->second.end(); iter2++) {
+            for (const auto& scan_range : iter2->second) {
+                const TBrokerScanRange& broker_scan_range = scan_range.scan_range.broker_scan_range;
+                int channel_id = broker_scan_range.channel_id;
+                const string& label = broker_scan_range.params.label;
+                const string& db_name = broker_scan_range.params.db_name;
+                const string& table_name = broker_scan_range.params.table_name;
+                TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
+                TUniqueId load_id = broker_scan_range.ranges[0].load_id;
+                long txn_id = broker_scan_range.params.txn_id;
+                StreamLoadContext* ctx = nullptr;
+                RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
+                        exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+                DeferOp op([&] {
+                    if (ctx->unref()) {
+                        delete ctx;
+                    }
+                });
+                RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                stream_load_contexts.push_back(ctx);
+            }
+        }
+    }
+    _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
+    return Status::OK();
+}
+
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
-    const auto fragment_instance_id = request.fragment_instance_id();
+    const auto& fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
@@ -441,13 +512,13 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
         }
-        RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink));
+        RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink, tsink,
+                                                         fragment.output_exprs));
     }
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
     size_t driver_id = 0;
-    for (auto n = 0; n < pipelines.size(); ++n) {
-        const auto& pipeline = pipelines[n];
+    for (const auto& pipeline : pipelines) {
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto cur_pipeline_dop = pipeline->source_operator_factory()->degree_of_parallelism();
         VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << cur_pipeline_dop
@@ -472,6 +543,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     scan_operator->set_workgroup(_wg);
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
                         if (_wg != nullptr) {
                             scan_operator->set_scan_executor(exec_env->connector_scan_executor_with_workgroup());
@@ -548,8 +620,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
         if (prepare_success) {
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
-            auto* prepare_timer = fragment_ctx->runtime_state()->runtime_profile()->add_counter(
-                    "FragmentInstancePrepareTime", TUnit::TIME_NS);
+            auto* prepare_timer =
+                    ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
             COUNTER_SET(prepare_timer, prepare_time);
         } else {
             _fail_cleanup();
@@ -565,6 +637,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+    RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;
@@ -604,11 +677,7 @@ void FragmentExecutor::_fail_cleanup() {
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
-            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
-                if (_wg) {
-                    _wg->decr_num_queries();
-                }
-            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }
@@ -637,16 +706,22 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
             context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
             sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
             sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
-            fragment_ctx, sender->output_columns());
+            sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns());
     return exchange_sink;
 }
 
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wpotentially-evaluated-expression")
+#endif
 Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                                           const UnifiedExecPlanFragmentParams& request,
-                                                          std::unique_ptr<starrocks::DataSink>& datasink) {
+                                                          std::unique_ptr<starrocks::DataSink>& datasink,
+                                                          const TDataSink& thrift_sink,
+                                                          const std::vector<TExpr>& output_exprs) {
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
-        ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
+        auto* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
         // Result sink doesn't have plan node id;
         OpFactoryPtr op = nullptr;
         if (result_sink->get_sink_type() == TResultSinkType::FILE) {
@@ -660,7 +735,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
-        DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
+        auto* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto& t_stream_sink = request.output_sink().stream_sink;
 
@@ -679,7 +754,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // and source[B] will pull chunk from exchanger
         // so basically you can think exchanger is a chunk repository.
         // Further workflow explanation is in mcast_local_exchange.h file.
-        MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
+        auto* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
@@ -716,14 +791,100 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             fragment_ctx->pipelines().emplace_back(pp);
         }
     } else if (typeid(*datasink) == typeid(starrocks::stream_load::OlapTableSink)) {
-        runtime_state->set_per_fragment_instance_idx(request.sender_id());
+        size_t desired_tablet_sink_dop = request.pipeline_sink_dop();
+        DCHECK(desired_tablet_sink_dop > 0);
+        size_t source_operator_dop =
+                fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+
         runtime_state->set_num_per_fragment_instances(request.common().params.num_senders);
-        OpFactoryPtr op =
-                std::make_shared<OlapTableSinkOperatorFactory>(context->next_operator_id(), datasink, fragment_ctx);
+        std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>> tablet_sinks;
+        for (int i = 1; i < desired_tablet_sink_dop; i++) {
+            Status st;
+            std::unique_ptr<starrocks::stream_load::OlapTableSink> sink =
+                    std::make_unique<starrocks::stream_load::OlapTableSink>(runtime_state->obj_pool(), output_exprs,
+                                                                            &st, runtime_state);
+            RETURN_IF_ERROR(st);
+            if (sink != nullptr) {
+                RETURN_IF_ERROR(sink->init(thrift_sink, runtime_state));
+            }
+            RuntimeProfile* sink_profile = sink->profile();
+            if (sink_profile != nullptr) {
+                runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
+            }
+            tablet_sinks.emplace_back(std::move(sink));
+        }
+        OpFactoryPtr tablet_sink_op = std::make_shared<OlapTableSinkOperatorFactory>(
+                context->next_operator_id(), datasink, fragment_ctx, request.sender_id(), desired_tablet_sink_dop,
+                tablet_sinks);
+        // FE will pre-set the parallelism for all fragment instance which contains the tablet sink,
+        // For stream load, routine load or broker load, the desired_tablet_sink_dop set
+        // by FE is same as the source_operator_dop.
+        // For insert into select, in the simplest case like insert into table select * from table2;
+        // the desired_tablet_sink_dop set by FE is same as the source_operator_dop.
+        // However, if the select statement is complex, like insert into table select * from table2 limit 1,
+        // the desired_tablet_sink_dop set by FE is same as the source_operator_dop, and it needs to
+        // add a local passthrough exchange here
+        if (desired_tablet_sink_dop != source_operator_dop) {
+            std::vector<OpFactories> pred_operators_list;
+            pred_operators_list.push_back(fragment_ctx->pipelines().back()->get_op_factories());
+
+            size_t max_row_count = 0;
+            auto* source_operator =
+                    down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->get_op_factories()[0].get());
+            max_row_count += source_operator->degree_of_parallelism() * runtime_state->chunk_size();
+
+            auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
+            auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(
+                    max_row_count * PipelineBuilderContext::localExchangeBufferChunks());
+            auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(
+                    context->next_operator_id(), pseudo_plan_node_id, mem_mgr);
+            local_exchange_source->set_runtime_state(runtime_state);
+            auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
+
+            auto local_exchange_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(
+                    context->next_operator_id(), pseudo_plan_node_id, exchanger);
+            fragment_ctx->pipelines().back()->add_op_factory(local_exchange_sink);
+
+            OpFactories operators_source_with_local_exchange;
+            local_exchange_source->set_degree_of_parallelism(desired_tablet_sink_dop);
+            operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
+            operators_source_with_local_exchange.emplace_back(std::move(tablet_sink_op));
+
+            auto pipeline_with_local_exchange_source =
+                    std::make_shared<Pipeline>(context->next_pipe_id(), operators_source_with_local_exchange);
+            fragment_ctx->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
+        } else {
+            fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
+        }
+    } else if (typeid(*datasink) == typeid(starrocks::ExportSink)) {
+        auto* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        auto output_expr = export_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().export_sink, export_sink->get_output_expr(), dop,
+                fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::MysqlTableSink)) {
+        auto* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        auto output_expr = mysql_table_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().mysql_table_sink,
+                mysql_table_sink->get_output_expr(), dop, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::MemoryScratchSink)) {
+        auto* memory_scratch_sink = down_cast<starrocks::MemoryScratchSink*>(datasink.get());
+        auto output_expr = memory_scratch_sink->get_output_expr();
+        auto row_desc = memory_scratch_sink->get_row_desc();
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        DCHECK_EQ(dop, 1);
+        OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(context->next_operator_id(), row_desc,
+                                                                             output_expr, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 
     return Status::OK();
 }
+DIAGNOSTIC_POP
 
 } // namespace starrocks::pipeline

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.qe;
 
@@ -68,8 +81,9 @@ public class HDFSBackendSelectorTest {
         return ans;
     }
 
-    private Map<TNetworkAddress, Long> computeHostReadBytes(Coordinator.FragmentScanRangeAssignment assignment,
-                                                            int scanNodeId) {
+    private Map<TNetworkAddress, Long> computeHostReadBytes(
+            CoordinatorPreprocessor.FragmentScanRangeAssignment assignment,
+            int scanNodeId) {
         Map<TNetworkAddress, Long> stats = new HashMap<>();
         for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
             List<TScanRangeParams> scanRangeParams = entry.getValue().get(scanNodeId);
@@ -96,7 +110,8 @@ public class HDFSBackendSelectorTest {
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
-        Coordinator.FragmentScanRangeAssignment assignment = new Coordinator.FragmentScanRangeAssignment();
+        CoordinatorPreprocessor.FragmentScanRangeAssignment assignment =
+                new CoordinatorPreprocessor.FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
@@ -144,7 +159,8 @@ public class HDFSBackendSelectorTest {
             }
         }
 
-        Coordinator.FragmentScanRangeAssignment assignment = new Coordinator.FragmentScanRangeAssignment();
+        CoordinatorPreprocessor.FragmentScanRangeAssignment assignment =
+                new CoordinatorPreprocessor.FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);

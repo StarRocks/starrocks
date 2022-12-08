@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/common/config.h
 
@@ -51,6 +64,18 @@ CONF_mInt64(tc_use_memory_min, "0");
 CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
+
+CONF_mBool(enable_auto_adjust_pagecache, "true");
+// Memory urget water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache immediately, it should be between (memory_high_level, 100].
+CONF_mInt64(memory_urgent_level, "85");
+// Memory high water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache slowly, it should be between [1, memory_urgent_level).
+CONF_mInt64(memory_high_level, "75");
+// Pagecache size adjust period, default 20, it should be between [1, 180].
+CONF_mInt64(pagecache_adjust_period, "20");
+// Sleep time in seconds between pagecache adjust iterations.
+CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
 
 // Bound on the total amount of bytes allocated to thread caches.
 // This bound is not strict, so it is possible for the cache to go over this bound
@@ -123,6 +148,8 @@ CONF_mInt32(report_disk_state_interval_seconds, "60");
 CONF_mInt32(report_tablet_interval_seconds, "60");
 // The interval time(seconds) for agent report workgroup to FE.
 CONF_mInt32(report_workgroup_interval_seconds, "5");
+// The interval time (millisecond) for agent report resource usage to FE.
+CONF_mInt32(report_resource_usage_interval_ms, "1000");
 // The max download speed(KB/s).
 CONF_mInt32(max_download_speed_kbps, "50000");
 // The download low speed limit(KB/s).
@@ -239,8 +266,8 @@ CONF_mInt32(inc_rowset_expired_sec, "1800");
 // inc_rowset snapshot rs sweep time interval
 CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 // garbage sweep policy
-CONF_Int32(max_garbage_sweep_interval, "3600");
-CONF_Int32(min_garbage_sweep_interval, "180");
+CONF_mInt32(max_garbage_sweep_interval, "3600");
+CONF_mInt32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
 CONF_mInt32(trash_file_expire_time_sec, "259200");
 // check row nums for BE/CE and schema change. true is open, false is closed.
@@ -281,6 +308,7 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
@@ -306,7 +334,12 @@ CONF_mInt32(compaction_trace_threshold, "60");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_Bool(enable_event_based_compaction_framework, "false");
+CONF_Bool(enable_event_based_compaction_framework, "true");
+
+CONF_Bool(enable_size_tiered_compaction_strategy, "true");
+CONF_mInt64(size_tiered_min_level_size, "131072");
+CONF_mInt64(size_tiered_level_multiple, "5");
+CONF_mInt64(size_tiered_level_num, "7");
 
 CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
@@ -650,7 +683,8 @@ CONF_mInt32(sys_minidump_limit, "20480");
 // Interval(seconds) for cleaning old minidumps.
 CONF_mInt32(sys_minidump_interval, "600");
 #endif
-
+// dump trace info such as query-id and some runtime state
+CONF_Bool(dump_trace_info, "true");
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
 // requests will fail.
@@ -742,6 +776,12 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Int32(io_tasks_per_scan_operator, "4");
+CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
+CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
+CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
+CONF_Bool(scan_node_always_shared_scan, "false");
+CONF_Bool(connector_scan_node_always_shared_scan, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -813,7 +853,16 @@ CONF_String(dependency_librdkafka_debug, "all");
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
+// the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
+// the minimum number of idle connections that connection pool tries to maintain.
+// if the idle connections dip below this value and the total connections in the pool are less than jdbc_connection_pool_size,
+// the connection pool will make a best effort to add additional connections quickly.
+CONF_Int16(jdbc_minimum_idle_connections, "1");
+// the maximum amount of time that a connection is allowed to sit idle in the pool.
+// this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
+// The minimum allowed value is 10000(10 seconds).
+CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
@@ -840,14 +889,30 @@ CONF_Int64(max_length_for_to_base64, "200000");
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 CONF_Bool(block_cache_enable, "false");
+CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
-//CONF_Int64(block_cache_block_size, "4194304");    // 4MB
-CONF_Int64(block_cache_block_size, "1048576");
+CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
+CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+CONF_Bool(block_cache_checksum_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
+CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
+
+// exception_stack_level controls when to print exception's stack
+// -1, enable print all exceptions' stack
+// 0, disable print exceptions' stack
+// 1, print exceptions' stack whose prefix is in the white list(default)
+// 2, print exceptions' stack whose prefix is not in the black list
+// other value means the default value
+CONF_Int32(exception_stack_level, "1");
+CONF_String(exception_stack_white_list, "std::");
+CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
+
 } // namespace starrocks::config

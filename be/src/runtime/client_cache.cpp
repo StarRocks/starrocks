@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/client_cache.cpp
 
@@ -50,7 +63,7 @@ Status ClientCacheHelper::get_client(const TNetworkAddress& hostport, const clie
                                      void** client_key, int timeout_ms) {
     std::lock_guard<std::mutex> lock(_lock);
     //VLOG_RPC << "get_client(" << hostport << ")";
-    ClientCacheMap::iterator cache_entry = _client_cache.find(hostport);
+    auto cache_entry = _client_cache.find(hostport);
 
     if (cache_entry == _client_cache.end()) {
         cache_entry = _client_cache.insert(std::make_pair(hostport, std::list<void*>())).first;
@@ -79,7 +92,7 @@ Status ClientCacheHelper::get_client(const TNetworkAddress& hostport, const clie
 
 Status ClientCacheHelper::reopen_client(const client_factory& factory_method, void** client_key, int timeout_ms) {
     std::lock_guard<std::mutex> lock(_lock);
-    ClientMap::iterator i = _client_map.find(*client_key);
+    auto i = _client_map.find(*client_key);
     DCHECK(i != _client_map.end());
     ThriftClientImpl* info = i->second;
     const std::string ipaddress = info->ipaddress();
@@ -134,10 +147,10 @@ Status ClientCacheHelper::create_client(const TNetworkAddress& hostport, const c
 void ClientCacheHelper::release_client(void** client_key) {
     DCHECK(*client_key != nullptr) << "Trying to release NULL client";
     std::lock_guard<std::mutex> lock(_lock);
-    ClientMap::iterator client_map_entry = _client_map.find(*client_key);
+    auto client_map_entry = _client_map.find(*client_key);
     DCHECK(client_map_entry != _client_map.end());
     ThriftClientImpl* info = client_map_entry->second;
-    ClientCacheMap::iterator j = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
+    auto j = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
     DCHECK(j != _client_cache.end());
 
     if (_max_cache_size_per_host >= 0 && j->second.size() >= _max_cache_size_per_host) {
@@ -162,14 +175,14 @@ void ClientCacheHelper::release_client(void** client_key) {
 
 void ClientCacheHelper::close_connections(const TNetworkAddress& hostport) {
     std::lock_guard<std::mutex> lock(_lock);
-    ClientCacheMap::iterator cache_entry = _client_cache.find(hostport);
+    auto cache_entry = _client_cache.find(hostport);
     if (cache_entry == _client_cache.end()) {
         return;
     }
 
     auto& client_keys = cache_entry->second;
     for (void* client_key : client_keys) {
-        ClientMap::iterator client_map_entry = _client_map.find(client_key);
+        auto client_map_entry = _client_map.find(client_key);
         DCHECK(client_map_entry != _client_map.end());
         ThriftClientImpl* info = client_map_entry->second;
         info->close();
@@ -183,7 +196,7 @@ std::string ClientCacheHelper::debug_string() {
     std::stringstream out;
     out << "ClientCacheHelper(#hosts=" << _client_cache.size() << " [";
 
-    for (ClientCacheMap::iterator i = _client_cache.begin(); i != _client_cache.end(); ++i) {
+    for (auto i = _client_cache.begin(); i != _client_cache.end(); ++i) {
         if (i != _client_cache.begin()) {
             out << " ";
         }

@@ -1,14 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
 
 #include <cstdint>
 #include <string>
 
 #include "common/compiler_util.h"
 
-#pragma once
-
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // Date: Julian Date -2000-01-01 ~ 9999-01-01
 // MAX USE 22 bits
@@ -418,5 +429,4 @@ inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, i
 
     return to_date(julian, year, month, day);
 }
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

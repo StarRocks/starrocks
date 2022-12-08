@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "aggregate_distinct_streaming_source_operator.h"
 
@@ -40,7 +52,7 @@ void AggregateDistinctStreamingSourceOperator::close(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_chunk(RuntimeState* state) {
     if (!_aggregator->is_chunk_buffer_empty()) {
-        return std::move(_aggregator->poll_chunk_buffer());
+        return _aggregator->poll_chunk_buffer();
     }
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
@@ -53,30 +65,12 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_ch
 void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vectorized::ChunkPtr* chunk,
                                                                            RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                   \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) \
-            _aggregator->it_hash() = _aggregator->hash_set_variant().NAME->hash_set.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-        else {
-            DCHECK(false);
-        }
+        _aggregator->hash_set_variant().visit(
+                [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
     }
 
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME)                   \
-            _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, state->chunk_size(), chunk);
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-    else {
-        DCHECK(false);
-    }
+    _aggregator->convert_hash_set_to_chunk(state->chunk_size(), chunk);
 }
 
 } // namespace starrocks::pipeline

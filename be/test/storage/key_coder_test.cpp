@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/key_coder_test.cpp
 
@@ -22,8 +35,8 @@
 #include "storage/key_coder.h"
 
 #include <gtest/gtest.h>
-#include <string.h>
 
+#include <cstring>
 #include <limits>
 
 #include "runtime/mem_pool.h"
@@ -33,14 +46,14 @@ namespace starrocks {
 
 class KeyCoderTest : public testing::Test {
 public:
-    KeyCoderTest() {}
-    virtual ~KeyCoderTest() {}
+    KeyCoderTest() = default;
+    ~KeyCoderTest() override = default;
 
 private:
     MemPool _pool;
 };
 
-template <FieldType type>
+template <LogicalType type>
 void test_integer_encode() {
     using CppType = typename CppTypeTraits<type>::CppType;
 
@@ -106,20 +119,20 @@ void test_integer_encode() {
 }
 
 TEST_F(KeyCoderTest, test_int) {
-    test_integer_encode<OLAP_FIELD_TYPE_TINYINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_SMALLINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_INT>();
-    test_integer_encode<OLAP_FIELD_TYPE_UNSIGNED_INT>();
-    test_integer_encode<OLAP_FIELD_TYPE_BIGINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_LARGEINT>();
+    test_integer_encode<TYPE_TINYINT>();
+    test_integer_encode<TYPE_SMALLINT>();
+    test_integer_encode<TYPE_INT>();
+    test_integer_encode<TYPE_UNSIGNED_INT>();
+    test_integer_encode<TYPE_BIGINT>();
+    test_integer_encode<TYPE_UNSIGNED_BIGINT>();
+    test_integer_encode<TYPE_LARGEINT>();
 
-    test_integer_encode<OLAP_FIELD_TYPE_DATETIME>();
+    test_integer_encode<TYPE_DATETIME_V1>();
 }
 
 TEST_F(KeyCoderTest, test_date) {
     using CppType = uint24_t;
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_DATE);
+    auto key_coder = get_key_coder(TYPE_DATE_V1);
 
     {
         std::string buf;
@@ -178,7 +191,7 @@ TEST_F(KeyCoderTest, test_date) {
 }
 
 TEST_F(KeyCoderTest, test_decimal) {
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_DECIMAL);
+    auto key_coder = get_key_coder(TYPE_DECIMAL);
 
     decimal12_t val1(1, 100000000);
     std::string buf1;
@@ -222,7 +235,7 @@ TEST_F(KeyCoderTest, test_decimal) {
 }
 
 TEST_F(KeyCoderTest, test_char) {
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_CHAR);
+    auto key_coder = get_key_coder(TYPE_CHAR);
 
     char buf[] = "1234567890";
     Slice slice(buf, 10);
@@ -255,7 +268,7 @@ TEST_F(KeyCoderTest, test_char) {
 }
 
 TEST_F(KeyCoderTest, test_varchar) {
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_VARCHAR);
+    auto key_coder = get_key_coder(TYPE_VARCHAR);
 
     char buf[] = "1234567890";
     Slice slice(buf, 10);

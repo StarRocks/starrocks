@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/backup/Repository.java
 
@@ -184,7 +197,7 @@ public class Repository implements Writable {
                 createTime = TimeUtils.timeStringToLong((String) root.get("create_time"));
                 if (createTime == -1) {
                     return new Status(ErrCode.COMMON_ERROR,
-                            "failed to parse create time of repository: " + (String) root.get("create_time"));
+                            "failed to parse create time of repository: " + root.get("create_time"));
                 }
                 return Status.OK;
 
@@ -192,7 +205,9 @@ public class Repository implements Writable {
                 return new Status(ErrCode.COMMON_ERROR, "failed to read repo info file: " + e.getMessage());
             } finally {
                 File localFile = new File(localFilePath);
-                localFile.delete();
+                if (!localFile.delete()) {
+                    LOG.warn("Failed to delete file, filepath={}", localFile.getAbsolutePath());
+                }
             }
 
         } else if (remoteFiles.size() > 1) {
@@ -328,7 +343,9 @@ public class Repository implements Writable {
             return new Status(ErrCode.COMMON_ERROR, "Failed to create job info from file: "
                     + "" + localInfoFile.getName() + ". msg: " + e.getMessage());
         } finally {
-            localInfoFile.delete();
+            if (!localInfoFile.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", localInfoFile.getAbsolutePath());
+            }
         }
 
         return Status.OK;
@@ -355,7 +372,9 @@ public class Repository implements Writable {
             return new Status(ErrCode.COMMON_ERROR, "Failed create backup meta from file: "
                     + localMetaFile.getAbsolutePath() + ", msg: " + e.getMessage());
         } finally {
-            localMetaFile.delete();
+            if (!localMetaFile.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", localMetaFile.getAbsolutePath());
+            }
         }
 
         return Status.OK;
@@ -367,7 +386,7 @@ public class Repository implements Writable {
         // Preconditions.checkArgument(remoteFilePath.startsWith(location), remoteFilePath);
         // get md5usm of local file
         File file = new File(localFilePath);
-        String md5sum = null;
+        String md5sum;
         try {
             md5sum = DigestUtils.md5Hex(new FileInputStream(file));
         } catch (FileNotFoundException e) {
@@ -445,7 +464,7 @@ public class Repository implements Writable {
         }
 
         // 3. verify checksum
-        String localMd5sum = null;
+        String localMd5sum;
         try {
             localMd5sum = DigestUtils.md5Hex(new FileInputStream(localFilePath));
         } catch (FileNotFoundException e) {
@@ -517,7 +536,7 @@ public class Repository implements Writable {
         }
 
         // get proper broker for this backend
-        FsBroker brokerAddr = null;
+        FsBroker brokerAddr;
         try {
             brokerAddr = globalStateMgr.getBrokerMgr().getBroker(storage.getBrokerName(), be.getHost());
         } catch (AnalysisException e) {
@@ -633,7 +652,9 @@ public class Repository implements Writable {
                 // delete tmp local file
                 File localFile = new File(localFilePath);
                 if (localFile.exists()) {
-                    localFile.delete();
+                    if (!localFile.delete()) {
+                        LOG.warn("Failed to delete file, filepath={}", localFile.getAbsolutePath());
+                    }
                 }
             }
         }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/PartitionKey.java
 
@@ -183,7 +196,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             case INT:
             case BIGINT: {
                 IntLiteral intLiteral = (IntLiteral) literal;
-                final long maxValue = 1L << ((type.getSlotSize() << 3) - 1) - 1L;
+                final long maxValue = (1L << ((type.getSlotSize() << 3) - 1)) - 1L;
                 long succ = intLiteral.getValue();
                 succ += succ < maxValue ? 1L : 0L;
                 key.pushColumn(new IntLiteral(succ, Type.fromPrimitiveType(type)), type);
@@ -244,11 +257,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 sb.append(value);
                 continue;
             } else {
-                value = "\"" + expr.getRealValue() + "\"";
-                if (expr instanceof DateLiteral) {
-                    DateLiteral dateLiteral = (DateLiteral) expr;
-                    value = dateLiteral.toSql();
-                }
+                value = "\"" + expr.getStringValue() + "\"";
             }
             sb.append(value);
 
@@ -275,11 +284,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             if (expr == MaxLiteral.MAX_VALUE) {
                 value = expr.toSql();
             } else {
-                value = expr.getRealValue();
-                if (expr instanceof DateLiteral) {
-                    DateLiteral dateLiteral = (DateLiteral) expr;
-                    value = dateLiteral.getStringValue();
-                }
+                value = expr.getStringValue();
             }
             if (keys.size() - 1 == i) {
                 builder.append(value);

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -14,19 +26,19 @@ class BitmapUnionAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction> {
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const BitmapColumn* col = down_cast<const BitmapColumn*>(columns[0]);
+        const auto* col = down_cast<const BitmapColumn*>(columns[0]);
         this->data(state) |= *(col->get_object(row_num));
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
+        const auto* col = down_cast<const BitmapColumn*>(column);
         DCHECK(col->is_object());
         this->data(state) |= *(col->get_object(row_num));
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state));
+        auto* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state));
         col->append(std::move(bitmap));
     }
 
@@ -36,8 +48,8 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state));
+        auto* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state));
         col->append(std::move(bitmap));
     }
 

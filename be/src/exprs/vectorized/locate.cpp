@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <algorithm>
 
@@ -199,11 +211,11 @@ ColumnPtr haystack_vector_and_needle_vector(const ColumnPtr& haystack_ptr, const
     return builder.build(ColumnHelper::is_all_const({haystack_ptr, needle_ptr, start_pos_ptr}));
 }
 
-ColumnPtr StringFunctions::instr(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::instr(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnPtr haystack = columns[0];
-    ColumnPtr needle = columns[1];
+    const ColumnPtr& haystack = columns[0];
+    const ColumnPtr& needle = columns[1];
     ColumnPtr start_pos = ColumnHelper::create_const_column<TYPE_INT>(1, columns[0]->size());
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
@@ -213,11 +225,11 @@ ColumnPtr StringFunctions::instr(FunctionContext* context, const Columns& column
 }
 
 // locate without specified position
-ColumnPtr StringFunctions::locate(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::locate(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnPtr haystack = columns[1];
-    ColumnPtr needle = columns[0];
+    const ColumnPtr& haystack = columns[1];
+    const ColumnPtr& needle = columns[0];
     ColumnPtr start_pos = ColumnHelper::create_const_column<TYPE_INT>(1, columns[0]->size());
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
@@ -227,12 +239,12 @@ ColumnPtr StringFunctions::locate(FunctionContext* context, const Columns& colum
 }
 
 // locate with specified position
-ColumnPtr StringFunctions::locate_pos(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::locate_pos(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnPtr haystack = columns[1];
-    ColumnPtr needle = columns[0];
-    ColumnPtr start_pos = columns[2];
+    const ColumnPtr& haystack = columns[1];
+    const ColumnPtr& needle = columns[0];
+    const ColumnPtr& start_pos = columns[2];
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
     } else {

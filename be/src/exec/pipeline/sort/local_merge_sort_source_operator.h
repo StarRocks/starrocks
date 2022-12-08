@@ -1,14 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/sort_exec_exprs.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 class SortContext;
 
 /*
@@ -48,9 +61,9 @@ private:
 class LocalMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
-                                        const std::shared_ptr<SortContextFactory>& sort_context_factory)
+                                        std::shared_ptr<SortContextFactory> sort_context_factory)
             : SourceOperatorFactory(id, "local_merge_source", plan_node_id),
-              _sort_context_factory(sort_context_factory) {}
+              _sort_context_factory(std::move(sort_context_factory)) {}
 
     ~LocalMergeSortSourceOperatorFactory() override = default;
 
@@ -61,5 +74,4 @@ private:
     std::shared_ptr<SortContextFactory> _sort_context_factory;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

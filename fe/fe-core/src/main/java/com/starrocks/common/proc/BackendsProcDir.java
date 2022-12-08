@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/proc/BackendsProcDir.java
 
@@ -57,7 +70,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
-                .add("DataUsedPct").add("CpuCores");
+                .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
         if (Config.integrate_starmgr) {
             builder.add("StarletPort").add("WorkerId");
         }
@@ -175,6 +188,12 @@ public class BackendsProcDir implements ProcDirInterface {
 
             // Num CPU cores
             backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+
+            backendInfo.add(backend.getNumRunningQueries());
+            double memUsedPct = backend.getMemUsedPct();
+            backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
+            backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
+
             if (Config.integrate_starmgr) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);

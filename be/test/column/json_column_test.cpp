@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "column/json_column.h"
 
@@ -282,7 +294,7 @@ PARALLEL_TEST(JsonColumnTest, test_fmt) {
     std::cerr << json;
 
     std::string str = fmt::format("{}", json);
-    ASSERT_EQ("1", str);
+    ASSERT_EQ("\"1\"", str);
 }
 
 // NOLINTNEXTLINE
@@ -330,7 +342,7 @@ PARALLEL_TEST(JsonColumnTest, test_column_builder) {
             // unwrap nullable column
             Column* unwrapped = ColumnHelper::get_data_column(copy.get());
 
-            JsonColumn* json_column_ptr = down_cast<JsonColumn*>(unwrapped);
+            auto* json_column_ptr = down_cast<JsonColumn*>(unwrapped);
             ASSERT_EQ(1, json_column_ptr->size());
             ASSERT_EQ(0, json_column_ptr->compare_at(0, 0, *column, 0));
         }

@@ -57,7 +57,7 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 
 ## Does StarRocks support updating particular fields in a table by executing the UPSERT statement?
 
-StarRocks 2.2 and later support updating specific fields in a table by using the primary key model. StarRocks 1.9 and later support updating all fields in a table by using the primary key model. For more information, see [Primary key model](https://docs.starrocks.com/en-us/2.2/table_design/Data_model#primary-key-model) in StarRocks 2.2.
+StarRocks 2.2 and later support updating specific fields in a table by using the primary key model. StarRocks 1.9 and later support updating all fields in a table by using the primary key model. For more information, see [Primary key model](../table_design/Data_model.md#primary-key-model) in StarRocks 2.2.
 
 ## How to swap the data between two tables or two partitions？
 
@@ -184,7 +184,7 @@ If you execute the DROP TABLE statement to delete a table, StarRocks takes a whi
 
 ## How to view the current version of StarRocks?
 
-Run the `select current_version();` command or the CLI command `sh bin/show_fe_version.sh` to view the current version.
+Run the `select current_version();` command or the CLI command `./bin/show_fe_version.sh` to view the current version.
 
 ## How to set the memory size of an FE?
 
@@ -214,7 +214,7 @@ StarRocks supports single node deployment, so you need to configure at least one
 
 You can create a new user account and then set the data permission by granting permissions on the table query to the user.
 
-## Why does the profile fail to display after I set `is_report_success` to `true`?
+## Why does the profile fail to display after I set `enable_profile` to `true`?
 
 The report is only submitted to the leader FE for access.
 
