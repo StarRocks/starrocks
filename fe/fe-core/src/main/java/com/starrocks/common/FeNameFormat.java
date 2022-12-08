@@ -31,6 +31,8 @@ public class FeNameFormat {
 
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
+
+    public static final String TABLE_NAME_REGEX = "^^[^\0]{1,1024}$$";
     // Now we can not accept all characters because current design of delete save delete cond contains column name
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
@@ -57,13 +59,13 @@ public class FeNameFormat {
     }
 
     public static void checkTableName(String tableName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(COMMON_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(TABLE_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
     }
 
     public static void verifyTableName(String tableName) {
-        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(COMMON_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(TABLE_NAME_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
     }
