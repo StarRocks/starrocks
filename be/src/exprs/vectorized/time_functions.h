@@ -618,6 +618,9 @@ private:
                                       const cctz::time_zone& to);
 
 public:
+    static TimestampValue start_of_time_slice;
+    static std::string info_reported_by_time_slice;
+
     enum FormatType {
         yyyyMMdd,
         yyyy_MM_dd,

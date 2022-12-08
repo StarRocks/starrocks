@@ -55,7 +55,7 @@ struct MaxByDispatcherInner {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr ((pt_is_aggregate<arg_type> || pt_is_string<arg_type>)&&(pt_is_aggregate<ret_type> ||
                                                                               pt_is_string<ret_type>)) {
-            resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+            resolver->add_aggregate_mapping_variadic<arg_type, ret_type, MaxByAggregateData<arg_type>>(
                     "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
         }
     }

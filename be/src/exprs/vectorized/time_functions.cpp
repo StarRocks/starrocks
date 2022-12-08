@@ -771,6 +771,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
 #define DEFINE_TIME_SLICE_FN(UNIT)                                                                 \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_start_##UNIT##Impl, v, period) {          \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<false>(period);                                   \
         return result;                                                                             \
     }                                                                                              \
@@ -778,6 +781,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     DEFINE_TIME_CALC_FN(time_slice_datetime_start_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME); \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_end_##UNIT##Impl, v, period) {            \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<true>(period);                                    \
         return result;                                                                             \
     }                                                                                              \
@@ -785,6 +791,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     DEFINE_TIME_CALC_FN(time_slice_datetime_end_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);   \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_start_##UNIT##Impl, v, period) {              \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<false>(period);                                   \
         return result;                                                                             \
     }                                                                                              \
@@ -792,6 +801,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     DEFINE_TIME_CALC_FN(time_slice_date_start_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);             \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_end_##UNIT##Impl, v, period) {                \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<true>(period);                                    \
         return result;                                                                             \
     }                                                                                              \
@@ -2024,6 +2036,9 @@ Status TimeFunctions::date_trunc_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
+// used as start point of time_slice.
+TimestampValue TimeFunctions::start_of_time_slice = TimestampValue::create(1, 1, 1, 0, 0, 0);
+std::string TimeFunctions::info_reported_by_time_slice = "time used with time_slice can't before 0001-01-01 00:00:00";
 #undef DEFINE_TIME_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_WITH_IMPL
 #undef DEFINE_TIME_BINARY_FN
