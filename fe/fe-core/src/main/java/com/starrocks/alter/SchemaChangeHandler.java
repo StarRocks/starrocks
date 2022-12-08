@@ -513,6 +513,25 @@ public class SchemaChangeHandler extends AlterHandler {
         indexSchemaMap.put(targetIndexId, newSchema);
     }
 
+    private void processReorderColumnOfPrimaryKey(ReorderColumnsClause alterClause, OlapTable olapTable,
+                            Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws DdlException {
+        LinkedList<Column> targetIndexSchema = indexSchemaMap.get(olapTable.getIndexIdByName(olapTable.getName()));
+        // check sort key column list
+        Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        
+        for (String colName : alterClause.getColumnsByPos()) {
+            Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
+            if (!oneCol.isPresent()) {
+                throw new DdlException("Column[" + colName + "] not exists");
+            }
+            if (!colNameSet.add(colName)) {
+                throw new DdlException("Duplicated column[" + colName + "]");
+            }
+            int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
+            sortKeyIdxes.add(sortKeyIdx);
+        }
+    }
+
     /*
      * Add 'newColumn' to specified index.
      * Modified schema will be saved in 'indexSchemaMap'
@@ -1020,6 +1039,43 @@ public class SchemaChangeHandler extends AlterHandler {
         return jobBuilder.build();
     }
 
+    private AlterJobV2 createJobForProcessReorderColumnOfPrimaryKey(long dbId, OlapTable olapTable,
+                Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws UserException {
+        if (olapTable.getState() == OlapTableState.ROLLUP) {
+            throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
+        }
+
+        // for now table's state can only be NORMAL
+        Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+
+        // create job
+        AlterJobV2Builder jobBuilder = olapTable.alterTable();
+        jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
+                .withDbId(dbId)
+                .withTimeoutSeconds(Config.alter_table_timeout_second)
+                .withStartTime(ConnectContext.get().getStartTime())
+                .withSortKeyIdxes(sortKeyIdxes);
+
+        long tableId = olapTable.getId();
+        for (Long alterIndexId : indexSchemaMap.keySet()) {
+            List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
+
+            short newShortKeyCount = 0;
+            if (sortKeyIdxes != null) {
+                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null, sortKeyIdxes);
+            } else {
+                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null);
+            }
+
+            LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
+            jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, originSchema);
+
+            LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
+        } // end for indices
+
+        return jobBuilder.build();
+    }
+
     @Override
     protected void runAfterCatalogReady() {
         super.runAfterCatalogReady();
@@ -1163,9 +1219,13 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support reorder column");
+                    List<Integer> sortKeyIdxes = new ArrayList<>();
+                    processReorderColumnOfPrimaryKey((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes);
+                    return createJobForProcessReorderColumnOfPrimaryKey(db.getId(), olapTable,
+                            indexSchemaMap, sortKeyIdxes);
+                } else {
+                    processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
                 }
-                processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties
                 // do nothing, properties are already in propertyMap
