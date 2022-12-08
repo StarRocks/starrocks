@@ -79,6 +79,7 @@ This topic describes FE, BE, Broker, and system parameters. It also provides sug
 |empty_load_as_error|TRUE|Switch value to control if to return error `all partitions have no load data` when the data to load is empty. If this parameter is set as `false`, the system returns `OK` instead of the error when the data to load is empty.|
 |export_max_bytes_per_be_per_task|268435456| Maximum amount of data exported by a single export job on a single be, 256M by default |
 |export_task_pool_size|5| Size of export task thread pool, 5 by default |
+|broker_client_timeout_ms| 10000 | The default expiration duration for Broker RPC. Unit: ms. Default value: 10000, which is 10s. |
 |consistency_check_start_time|23| The start time for FE to initiate replica consistency check |
 |consistency_check_end_time|4| The end time for FE to initiate replica consistency check |
 |check_consistency_default_timeout_second|600| Timeout for replica consistency check |
