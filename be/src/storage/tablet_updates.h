@@ -36,6 +36,7 @@ class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
+class ChunkAllocator;
 } // namespace vectorized
 
 struct CompactionInfo {
@@ -162,6 +163,8 @@ public:
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         vectorized::ChunkChanger* chunk_changer);
+
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -407,6 +410,8 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
+
+    vectorized::ChunkAllocator* _chunk_allocator = nullptr;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;

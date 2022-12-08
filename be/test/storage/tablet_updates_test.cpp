@@ -167,6 +167,34 @@ public:
         return *writer->build();
     }
 
+    RowsetSharedPtr create_rowset_schema_change_sort_key(const TabletSharedPtr& tablet, const vector<int64_t>& keys) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        const auto nkeys = keys.size();
+        auto chunk = ChunkHelper::new_chunk(schema, nkeys);
+        auto& cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(nkeys - 1 - key)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key)));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
+    }
+
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
@@ -218,7 +246,8 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    TabletSharedPtr create_tablet_with_sort_key(int64_t tablet_id, int32_t schema_hash) {
+    TabletSharedPtr create_tablet_with_sort_key(int64_t tablet_id, int32_t schema_hash,
+                                                std::vector<int32_t> sort_key_idxes) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -226,7 +255,7 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
-        request.tablet_schema.sort_key_idxes = {1};
+        request.tablet_schema.sort_key_idxes = sort_key_idxes;
 
         TColumn k1;
         k1.column_name = "pk";
@@ -443,6 +472,7 @@ public:
     void test_link_from(bool enable_persistent_index);
     void test_convert_from(bool enable_persistent_index);
     void test_convert_from_with_pending(bool enable_persistent_index);
+    void test_reorder_from(bool enable_persistent_index);
     void test_load_snapshot_incremental(bool enable_persistent_index);
     void test_load_snapshot_incremental_ignore_already_committed_version(bool enable_persistent_index);
     void test_load_snapshot_incremental_mismatched_tablet_id(bool enable_persistent_index);
@@ -624,6 +654,76 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     return count;
 }
 
+static ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletSharedPtr& tablet, int64_t version,
+                                                                const vector<int64_t>& keys) {
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    if (iter == nullptr) {
+        return -1;
+    }
+    const auto nkeys = keys.size();
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
+    auto& cols = full_chunk->columns();
+    for (long key : keys) {
+        cols[0]->append_datum(vectorized::Datum((int64_t)(nkeys - 1 - key)));
+        cols[1]->append_datum(vectorized::Datum((int16_t)key));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(nkeys - 1 - key)));
+    }
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    size_t count = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            for (auto i = 0; i < chunk->num_rows(); i++) {
+                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
+            }
+            count += chunk->num_rows();
+            chunk->reset();
+        } else {
+            return -1;
+        }
+    }
+    return count;
+}
+
+static ssize_t read_tablet_and_compare_schema_changed_sort_key2(const TabletSharedPtr& tablet, int64_t version,
+                                                                const vector<int64_t>& keys) {
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    if (iter == nullptr) {
+        return -1;
+    }
+    const auto nkeys = keys.size();
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
+    auto& cols = full_chunk->columns();
+    for (long key : keys) {
+        cols[0]->append_datum(vectorized::Datum((int64_t)key));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(nkeys - 1 - key)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)key));
+    }
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    size_t count = 0;
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            for (auto i = 0; i < chunk->num_rows(); i++) {
+                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
+            }
+            count += chunk->num_rows();
+            chunk->reset();
+        } else {
+            return -1;
+        }
+    }
+    return count;
+}
+
 void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
@@ -660,7 +760,7 @@ TEST_F(TabletUpdatesTest, writeread_with_persistent_index) {
 
 TEST_F(TabletUpdatesTest, writeread_with_sort_key) {
     srand(GetCurrentTimeMicros());
-    _tablet = create_tablet_with_sort_key(rand(), rand());
+    _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
     // write
     const int N = 8000;
     std::vector<int64_t> keys;
@@ -723,7 +823,7 @@ TEST_F(TabletUpdatesTest, writeread_with_delete_with_persistent_index) {
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_sort_key) {
-    _tablet = create_tablet_with_sort_key(rand(), rand());
+    _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
     // write
     const int N = 8000;
     std::vector<int64_t> keys;
@@ -1245,7 +1345,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
 
     int N = 100;
     srand(GetCurrentTimeMicros());
-    _tablet = create_tablet_with_sort_key(rand(), rand());
+    _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
@@ -1320,7 +1420,7 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
 
     int N = 100;
     srand(GetCurrentTimeMicros());
-    _tablet = create_tablet_with_sort_key(rand(), rand());
+    _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
     std::vector<int64_t> keys;
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
@@ -1519,6 +1619,39 @@ TEST_F(TabletUpdatesTest, convert_from_with_pending) {
 
 TEST_F(TabletUpdatesTest, convert_from_with_pending_and_persistent_index) {
     test_convert_from_with_pending(true);
+}
+
+void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    const auto& tablet_with_sort_key1 = create_tablet_with_sort_key(rand(), rand(), {1});
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset_schema_change_sort_key(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset_schema_change_sort_key(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset_schema_change_sort_key(_tablet, keys)).ok());
+
+    tablet_with_sort_key1->set_tablet_state(TABLET_NOTREADY);
+    ASSERT_TRUE(tablet_with_sort_key1->updates()->reorder_from(_tablet, 4).ok());
+
+    ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key1(tablet_with_sort_key1, 4, keys));
+
+    const auto& tablet_with_sort_key2 = create_tablet_with_sort_key(rand(), rand(), {2});
+    tablet_with_sort_key2->set_tablet_state(TABLET_NOTREADY);
+    ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4).ok());
+    ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key2(tablet_with_sort_key2, 4, keys));
+}
+
+TEST_F(TabletUpdatesTest, reorder_from) {
+    test_reorder_from(false);
+}
+
+TEST_F(TabletUpdatesTest, reorder_from_with_persistent_index) {
+    test_reorder_from(true);
 }
 
 // NOLINTNEXTLINE

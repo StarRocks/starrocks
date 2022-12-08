@@ -580,7 +580,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
         if (_context.schema_change_sorting) {
-            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
+                _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                        _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
@@ -677,7 +678,8 @@ Status HorizontalRowsetWriter::_final_merge() {
             ChunkIteratorPtr itr;
             // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
             if (_context.schema_change_sorting) {
-                if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+                if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
+                    _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                     itr = new_mask_merge_iterator(seg_iterators, mask_buffer.get());
                 } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                            _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
@@ -747,7 +749,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
         if (_context.schema_change_sorting) {
-            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
+                _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                        _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
