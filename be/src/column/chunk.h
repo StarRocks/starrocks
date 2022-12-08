@@ -31,6 +31,44 @@ class ChunkPB;
 namespace vectorized {
 
 class DatumTuple;
+class ChunkExtraData;
+using ChunkExtraDataPtr = std::shared_ptr<ChunkExtraData>;
+
+/**
+ * ChunkExtraData is an extra data which are not belong to the regular columns in the Chunk,
+ * it is used to extend the Chunk to attach more hidden infos or extra infos beside the schema.
+ *
+ * NOTE: `ChunkExtraColumnsData` is a specific implementation which include extra columns besides
+ * schema, and it supports common methods like Chunk and supports cross exchange by design.
+ * eg, In Stream MV scenes, the hidden `_op_` column can be added in the ChunkExtraData.
+ *
+ * TODO: Optimize old variables use this extendable method, eg owner_info.
+ */
+struct ChunkExtraDataMeta {
+    TypeDescriptor type;
+    bool is_null;
+    bool is_const;
+};
+class ChunkExtraData {
+public:
+    virtual ~ChunkExtraData() = default;
+    ChunkExtraData() = default;
+
+    virtual std::vector<ChunkExtraDataMeta> chunk_data_metas() const = 0;
+
+    virtual void filter(const Buffer<uint8_t>& selection) const = 0;
+    virtual void filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) const = 0;
+    virtual ChunkExtraDataPtr clone_empty(size_t size) const = 0;
+    virtual void append(const ChunkExtraDataPtr& src, size_t offset, size_t count) = 0;
+    virtual void append_selective(const ChunkExtraDataPtr& src, const uint32_t* indexes, uint32_t from,
+                                  uint32_t size) = 0;
+
+    // serialize/deserialize to exchange, now only supports encode_level = 0
+    // TODO: support encode_level configuration.
+    virtual int64_t max_serialized_size(const int encode_level = 0) = 0;
+    virtual uint8_t* serialize(uint8_t* buff, bool sorted = false, const int encode_level = 0) = 0;
+    virtual const uint8_t* deserialize(const uint8_t* buff, bool sorted = false, const int encode_level = 0) = 0;
+};
 
 class Chunk {
 public:
@@ -43,6 +81,11 @@ public:
     Chunk(Columns columns, VectorizedSchemaPtr schema);
     Chunk(Columns columns, SlotHashMap slot_map);
     Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
+
+    // Chunk with extra data implements.
+    Chunk(Columns columns, VectorizedSchemaPtr schema, ChunkExtraDataPtr extra_data);
+    Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
+    Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map, ChunkExtraDataPtr extra_data);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
@@ -255,6 +298,9 @@ public:
     }
 
     query_cache::owner_info& owner_info() { return _owner_info; }
+    const ChunkExtraDataPtr& get_extra_data() const { return _extra_data; }
+    void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
+    bool has_extra_data() const { return this->_extra_data != nullptr; }
 
 private:
     void rebuild_cid_index();
@@ -267,6 +313,7 @@ private:
     TupleHashMap _tuple_id_to_index;
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
+    ChunkExtraDataPtr _extra_data;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

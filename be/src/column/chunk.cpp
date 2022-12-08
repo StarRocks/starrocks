@@ -69,7 +69,17 @@ bool Chunk::has_large_column() const {
     return false;
 }
 
-Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
+Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : Chunk(std::move(columns), std::move(schema), nullptr) {}
+
+// TODO: FlatMap don't support std::move
+Chunk::Chunk(Columns columns, SlotHashMap slot_map) : Chunk(std::move(columns), std::move(slot_map), nullptr) {}
+
+// TODO: FlatMap don't support std::move
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
+        : Chunk(std::move(columns), std::move(slot_map), std::move(tuple_map), nullptr) {}
+
+Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema, ChunkExtraDataPtr extra_data)
+        : _columns(std::move(columns)), _schema(std::move(schema)), _extra_data(std::move(extra_data)) {
     // bucket size cannot be 0.
     _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
     _slot_id_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
@@ -79,17 +89,18 @@ Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : _columns(std::move(c
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, SlotHashMap slot_map)
-        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)) {
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data)
+        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)), _extra_data(std::move(extra_data)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
     _tuple_id_to_index.reserve(1);
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map, ChunkExtraDataPtr extra_data)
         : _columns(std::move(columns)),
           _slot_id_to_index(std::move(slot_map)),
-          _tuple_id_to_index(std::move(tuple_map)) {
+          _tuple_id_to_index(std::move(tuple_map)),
+          _extra_data(std::move(extra_data)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
 
@@ -98,6 +109,7 @@ void Chunk::reset() {
         c->reset_column();
     }
     _delete_state = DEL_NOT_SATISFIED;
+    _extra_data.reset();
 }
 
 void Chunk::swap_chunk(Chunk& other) {
@@ -107,6 +119,7 @@ void Chunk::swap_chunk(Chunk& other) {
     _slot_id_to_index.swap(other._slot_id_to_index);
     _tuple_id_to_index.swap(other._tuple_id_to_index);
     std::swap(_delete_state, other._delete_state);
+    _extra_data.swap(other._extra_data);
 }
 
 void Chunk::set_num_rows(size_t count) {
@@ -205,7 +218,12 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_slot(size_t size) const {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }
-    return std::make_unique<Chunk>(columns, _slot_id_to_index);
+    // with extra data
+    ChunkExtraDataPtr extra_data;
+    if (_extra_data) {
+        extra_data = _extra_data->clone_empty(size);
+    }
+    return std::make_unique<Chunk>(columns, _slot_id_to_index, extra_data);
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_schema() const {
@@ -218,7 +236,12 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }
-    return std::make_unique<Chunk>(columns, _schema);
+    // with extra data
+    ChunkExtraDataPtr extra_data;
+    if (_extra_data) {
+        extra_data = _extra_data->clone_empty(size);
+    }
+    return std::make_unique<Chunk>(columns, _schema, extra_data);
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple() const {
@@ -231,7 +254,12 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple(size_t size) const {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }
-    return std::make_unique<Chunk>(columns, _slot_id_to_index, _tuple_id_to_index);
+    // with extra data
+    ChunkExtraDataPtr extra_data;
+    if (_extra_data) {
+        extra_data = _extra_data->clone_empty(size);
+    }
+    return std::make_unique<Chunk>(columns, _slot_id_to_index, _tuple_id_to_index, extra_data);
 }
 
 std::unique_ptr<Chunk> Chunk::clone_unique() const {
@@ -241,6 +269,7 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
         chunk->_columns[idx] = std::move(column);
     }
     chunk->_owner_info = _owner_info;
+    chunk->_extra_data = _extra_data;
     chunk->check_or_die();
     return chunk;
 }
@@ -249,6 +278,9 @@ void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t
     DCHECK_EQ(_columns.size(), src.columns().size());
     for (size_t i = 0; i < _columns.size(); ++i) {
         _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+    }
+    if (_extra_data) {
+        _extra_data->append_selective(src.get_extra_data(), indexes, from, size);
     }
 }
 
@@ -269,12 +301,18 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
     for (auto& column : _columns) {
         column->filter(selection);
     }
+    if (_extra_data) {
+        _extra_data->filter(selection);
+    }
     return num_rows();
 }
 
 size_t Chunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& column : _columns) {
         column->filter_range(selection, from, to);
+    }
+    if (_extra_data) {
+        _extra_data->filter_range(selection, from, to);
     }
     return num_rows();
 }
@@ -397,6 +435,9 @@ void Chunk::append(const Chunk& src, size_t offset, size_t count) {
         ColumnPtr& c = get_column_by_index(i);
         c->append(*src.get_column_by_index(i), offset, count);
     }
+    if (_extra_data) {
+        _extra_data->append(src.get_extra_data(), offset, count);
+    }
 }
 
 void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
@@ -409,6 +450,10 @@ void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
         if (c->size() == cur_rows) {
             c->append(*src.get_column_by_index(i), offset, count);
         }
+    }
+
+    if (_extra_data && src.get_extra_data()) {
+        _extra_data->append(src.get_extra_data(), offset, count);
     }
 }
 

@@ -76,6 +76,19 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
         return Status::InternalError("build chunk meta error");
     }
+
+    // decode extra chunk meta
+    if (!pb_chunk.extra_data_metas().empty()) {
+        int extra_meta_size = pb_chunk.extra_data_metas().size();
+        _chunk_meta.extra_data_metas.resize(extra_meta_size);
+        for (int i = 0; i < extra_meta_size; i++) {
+            auto extra_meta_pb = pb_chunk.extra_data_metas()[i];
+            auto& extra_meta = _chunk_meta.extra_data_metas[i];
+            extra_meta.type = TypeDescriptor::from_protobuf(extra_meta_pb.type_desc());
+            extra_meta.is_null = extra_meta_pb.is_null();
+            extra_meta.is_const = extra_meta_pb.is_const();
+        }
+    }
     return Status::OK();
 }
 

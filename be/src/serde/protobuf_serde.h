@@ -110,6 +110,8 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_consts;
     vectorized::Chunk::SlotHashMap slot_id_to_index;
     vectorized::Chunk::TupleHashMap tuple_id_to_index;
+    // extra data meta
+    std::vector<vectorized::ChunkExtraDataMeta> extra_data_metas;
 };
 
 class ProtobufChunkDeserializer {
