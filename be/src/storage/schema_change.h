@@ -72,6 +72,19 @@ private:
     size_t _memory_limitation;
 };
 
+class ChunkSorter {
+public:
+    explicit ChunkSorter(ChunkAllocator* allocator);
+    virtual ~ChunkSorter();
+
+    bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
+
+private:
+    ChunkAllocator* _chunk_allocator = nullptr;
+    ChunkPtr _swap_chunk;
+    size_t _max_allocated_rows;
+};
+
 class SchemaChange {
 public:
     SchemaChange() = default;
@@ -129,10 +142,10 @@ public:
     Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                       TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-private:
     static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                   TabletSharedPtr tablet);
 
+private:
     ChunkChanger* _chunk_changer = nullptr;
     size_t _memory_limitation;
     ChunkAllocator* _chunk_allocator = nullptr;
