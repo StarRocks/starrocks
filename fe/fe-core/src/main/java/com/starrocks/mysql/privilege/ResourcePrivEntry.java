@@ -22,7 +22,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 
 import java.io.DataInput;
@@ -136,6 +136,6 @@ public class ResourcePrivEntry extends PrivEntry {
     public String toGrantSQL() {
         GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "RESOURCE", getUserIdent());
         stmt.setAnalysedResource(privSet, new ResourcePattern(origResource));
-        return AST2SQL.toString(stmt);
+        return AstToStringBuilder.toString(stmt);
     }
 }

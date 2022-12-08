@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.UserException;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
@@ -93,6 +93,6 @@ public class LoadStmtTest {
     @Test
     public void testToString() {
         LoadStmt stmt = (LoadStmt) analyzeSuccess("LOAD        LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\", \"password\"=\"PASSWORDDDD\") PROPERTIES (\"strict_mode\"=\"true\")");
-        Assert.assertEquals("LOAD LABEL `test`.`testLabel`(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)WITH BROKER hdfs_broker (\"password\"  =  \"***\", \"username\"  =  \"sr\")PROPERTIES (\"strict_mode\" = \"true\")", AST2SQL.toString(stmt));
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel`(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)WITH BROKER hdfs_broker (\"password\"  =  \"***\", \"username\"  =  \"sr\")PROPERTIES (\"strict_mode\" = \"true\")", AstToStringBuilder.toString(stmt));
     }
 }

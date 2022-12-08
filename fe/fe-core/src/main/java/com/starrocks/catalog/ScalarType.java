@@ -483,10 +483,18 @@ public class ScalarType extends Type implements Cloneable {
         StringBuilder stringBuilder = new StringBuilder();
         switch (type) {
             case CHAR:
-                stringBuilder.append("char").append("(").append(len).append(")");
+                if (len == -1) {
+                    stringBuilder.append("char");
+                } else {
+                    stringBuilder.append("char").append("(").append(len).append(")");
+                }
                 break;
             case VARCHAR:
-                stringBuilder.append("varchar").append("(").append(len).append(")");
+                if (len == -1) {
+                    stringBuilder.append("varchar");
+                } else {
+                    stringBuilder.append("varchar").append("(").append(len).append(")");
+                }
                 break;
             case DECIMALV2:
                 stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
