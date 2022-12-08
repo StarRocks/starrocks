@@ -59,6 +59,7 @@ class ExprContext;
 class RuntimeState;
 namespace vectorized {
 class SchemaScanner;
+class IcebergDeleteFileMeta;
 } // namespace vectorized
 class OlapTableSchemaParam;
 class PTupleDescriptor;
@@ -110,6 +111,7 @@ private:
     friend class TupleDescriptor;
     friend class vectorized::SchemaScanner;
     friend class OlapTableSchemaParam;
+    friend class vectorized::IcebergDeleteFileMeta;
 
     const SlotId _id;
     TypeDescriptor _type;

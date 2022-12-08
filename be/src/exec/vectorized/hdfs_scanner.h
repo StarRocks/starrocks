@@ -297,6 +297,7 @@ protected:
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
+    std::set<std::int64_t> _need_skip_rowids;
 };
 
 } // namespace starrocks::vectorized

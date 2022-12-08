@@ -88,6 +88,7 @@ set(EXEC_FILES
     vectorized/hdfs_scanner_orc.cpp
     vectorized/hdfs_scanner_parquet.cpp
     vectorized/hdfs_scanner_text.cpp
+    vectorized/iceberg/iceberg_delete_builder.cpp
     vectorized/json_scanner.cpp
     vectorized/json_parser.cpp
     vectorized/project_node.cpp

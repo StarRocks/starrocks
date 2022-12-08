@@ -40,9 +40,9 @@
 
 namespace starrocks::vectorized {
 
-OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors)
+OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors)
         : _src_slot_descriptors(std::move(src_slot_descriptors)),
-          _read_chunk_size(state->chunk_size()),
+          _read_chunk_size(chunk_size),
           _tzinfo(cctz::utc_time_zone()),
           _tzoffset_in_seconds(0),
           _drop_nanoseconds_in_datetime(false),
@@ -1104,6 +1104,21 @@ Status OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*
         _row_reader_options.searchArgument(std::move(sargs));
     }
     return Status::OK();
+}
+
+ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted_pos) {
+    int64_t start_pos = _row_reader->getRowNumber();
+    auto num_rows = _batch->numElements;
+    ColumnPtr filter_column = BooleanColumn::create(num_rows, 1);
+    auto& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
+    auto iter = deleted_pos.lower_bound(start_pos);
+    auto end = deleted_pos.upper_bound(start_pos + num_rows);
+    for (; iter != end; iter++) {
+        const int64_t file_pos = *iter - start_pos;
+        filter[file_pos] = 0;
+    }
+
+    return filter_column;
 }
 
 #define DOWN_CAST_ASSIGN_MIN_MAX(TYPE)                         \
