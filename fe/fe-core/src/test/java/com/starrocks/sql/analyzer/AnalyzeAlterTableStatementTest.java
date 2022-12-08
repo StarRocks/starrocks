@@ -63,12 +63,6 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test(expected = SemanticException.class)
-    public void testIllegalNewTableName() {
-        TableRenameClause clause = new TableRenameClause("__newName");
-        clauseAnalyzerVisitor.analyze(clause, connectContext);
-    }
-
-    @Test(expected = SemanticException.class)
     public void testNoClause() {
         List<AlterClause> ops = Lists.newArrayList();
         AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
