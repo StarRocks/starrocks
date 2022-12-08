@@ -20,7 +20,7 @@ namespace starrocks::pipeline {
 class ContextWithDependency {
 public:
     ContextWithDependency() = default;
-    ~ContextWithDependency() = default;
+    virtual ~ContextWithDependency() = default;
 
     ContextWithDependency(const ContextWithDependency&) = delete;
     ContextWithDependency(ContextWithDependency&&) = delete;
