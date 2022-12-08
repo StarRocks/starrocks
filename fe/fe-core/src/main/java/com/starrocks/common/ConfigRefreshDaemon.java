@@ -22,11 +22,13 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ConfigRefreshDaemon extends LeaderDaemon {
+    private static final int REFRESH_INTERVAL_MS = 10000;
+
     private final List<ConfigRefreshListener> listeners = new ArrayList<>();
     private final Lock lock = new ReentrantLock();
 
     public ConfigRefreshDaemon() {
-        super("config-refresh-daemon", 10000);
+        super("config-refresh-daemon", REFRESH_INTERVAL_MS);
     }
 
     @Override
