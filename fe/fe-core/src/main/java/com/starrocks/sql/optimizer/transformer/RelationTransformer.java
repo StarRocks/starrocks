@@ -103,6 +103,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -422,6 +423,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
         }
 
+        boolean isMVPlanner = session.getSessionVariable().isMVPlanner();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
         LogicalScanOperator scanOperator;
@@ -439,7 +441,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
             if (node.isMetaQuery()) {
                 scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
-            } else {
+            } else if (!isMVPlanner) {
                 scanOperator = new LogicalOlapScanOperator(node.getTable(),
                         colRefToColumnMetaMapBuilder.build(),
                         columnMetaToColRefMap,
@@ -451,6 +453,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         node.getPartitionNames(),
                         Lists.newArrayList(),
                         node.getTabletIds());
+            } else {
+                scanOperator = new LogicalBinlogScanOperator(
+                        node.getTable(),
+                        colRefToColumnMetaMapBuilder.build(),
+                        columnMetaToColRefMap,
+                        Operator.DEFAULT_LIMIT);
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),

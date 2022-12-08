@@ -186,7 +186,7 @@ public enum RuleType {
 
     IMP_STREAM_AGG,
     IMP_STREAM_JOIN,
-    IMP_BINLOG_SOURCE,
+    IMP_BINLOG_SCAN,
 
     NUM_RULES;
 

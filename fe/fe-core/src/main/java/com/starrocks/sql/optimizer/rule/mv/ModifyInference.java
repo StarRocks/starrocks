@@ -47,7 +47,7 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
 
     @Override
     public ModifyOp visitPhysicalFilter(OptExpression optExpression, Void ctx) {
-        return visit(optExpression.inputAt(0), ctx);
+        return infer(optExpression.inputAt(0));
     }
 
     @Override

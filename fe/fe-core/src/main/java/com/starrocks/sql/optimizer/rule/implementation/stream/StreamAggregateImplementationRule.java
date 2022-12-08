@@ -28,10 +28,10 @@ import java.util.List;
 
 public class StreamAggregateImplementationRule extends StreamImplementationRule {
 
-    private static final com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule INSTANCE =
-            new com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule(RuleType.IMP_STREAM_AGG);
+    private static final StreamAggregateImplementationRule INSTANCE =
+            new StreamAggregateImplementationRule(RuleType.IMP_STREAM_AGG);
 
-    public static com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule getInstance() {
+    public static StreamAggregateImplementationRule getInstance() {
         return INSTANCE;
     }
 

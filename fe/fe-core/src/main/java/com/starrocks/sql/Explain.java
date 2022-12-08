@@ -699,7 +699,7 @@ public class Explain {
         public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, ExplainContext context) {
             PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
 
-            StringBuilder sb = new StringBuilder("- SCAN [")
+            StringBuilder sb = new StringBuilder("- StreamScan [")
                     .append(((OlapTable) scan.getTable()).getName())
                     .append("]")
                     .append(buildOutputColumns(scan,

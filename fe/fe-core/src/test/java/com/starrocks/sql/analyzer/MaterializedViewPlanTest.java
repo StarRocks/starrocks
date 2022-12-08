@@ -54,17 +54,15 @@ public class MaterializedViewPlanTest extends PlanTestBase {
         String plan = UtFrameUtils.printPlan(pair.second);
         Assert.assertEquals("- Output => [1:v1, 7:count]\n" +
                 "    - StreamAgg[1:v1]\n" +
-                "            Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 1.0}\n" +
+                "            Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
                 "            7:count := count()\n" +
                 "        - StreamJoin/INNER JOIN [1:v1 = 4:v4] => [1:v1]\n" +
-                "                Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 1.0}\n" +
-                "            - SCAN [t0] => [1:v1]\n" +
-                "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.5}\n" +
-                "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
-                "                    predicate: 1:v1 IS NOT NULL\n" +
-                "            - SCAN [t1] => [4:v4]\n" +
-                "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.5}\n" +
-                "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
-                "                    predicate: 4:v4 IS NOT NULL\n", plan);
+                "                Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
+                "            - PREDICATE [1: v1 IS NOT NULL]\n" +
+                "                - StreamScan [t0] => [1:v1, 2:v2, 3:v3]\n" +
+                "                        Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
+                "            - PREDICATE [4: v4 IS NOT NULL]\n" +
+                "                - StreamScan [t1] => [4:v4, 5:v5, 6:v6]\n" +
+                "                        Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n", plan);
     }
 }

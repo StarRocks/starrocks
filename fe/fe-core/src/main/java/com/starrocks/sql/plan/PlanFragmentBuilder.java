@@ -2578,11 +2578,8 @@ public class PlanFragmentBuilder {
             PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
 
             // 1. Build distributionMode
-            JoinNode.DistributionMode distributionMode =
-                    inferDistributionMode(optExpr, leftFragmentPlanRoot, rightFragmentPlanRoot);
-            if (distributionMode.equals(JoinNode.DistributionMode.REPLICATED)) {
-                throw new NotImplementedException("Replicated join is not supported");
-            }
+            // TODO(murphy): support other distribution mode
+            JoinNode.DistributionMode distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
             // 2. Build join expression
             JoinExprInfo joinExpr = buildJoinExpr(optExpr, context);
             List<Expr> eqJoinConjuncts = joinExpr.eqJoinConjuncts;
