@@ -260,10 +260,15 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
     }
 
     // Take drivers from queue.
+    int i = 0;
     for (auto* out_driver : out_drivers) {
         auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.ok());
-        ASSERT_EQ(out_driver, maybe_driver.value());
+        ASSERT_EQ(out_driver, maybe_driver.value())
+                << "The " << i << "-th driver failed, "
+                << "lhs_vruntime=" << out_driver->workgroup()->driver_sched_entity()->vruntime_ns() << ", "
+                << "rhs_vruntime=" << maybe_driver.value()->workgroup()->driver_sched_entity()->vruntime_ns();
+        ++i;
     }
 }
 
