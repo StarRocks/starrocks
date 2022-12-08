@@ -15,7 +15,7 @@
 ```SQL
 CREATE [READ ONLY] REPOSITORY <repository_name>
 WITH BROKER
-ON LOCATION <repository_location>
+ON LOCATION "<repository_location>"
 PROPERTIES ("key"="value", ...)
 ```
 
@@ -34,7 +34,7 @@ PROPERTIES ("key"="value", ...)
 
 ```SQL
 CREATE REPOSITORY `oss_repo`
-WITH BROKER `oss_broker`
+WITH BROKER
 ON LOCATION "oss://starRocks_backup"
 PROPERTIES
 (
@@ -48,7 +48,7 @@ PROPERTIES
 
 ```SQL
 CREATE READ ONLY REPOSITORY `oss_repo`
-WITH BROKER `oss_broker`
+WITH BROKER
 ON LOCATION "oss://starRocks_backup"
 PROPERTIES
 (
@@ -62,7 +62,7 @@ PROPERTIES
 
 ```SQL
 CREATE REPOSITORY `hdfs_repo`
-WITH BROKER `hdfs_broker`
+WITH BROKER
 ON LOCATION "hdfs://hadoop-name-node:54310/path/to/repo/"
 PROPERTIES
 (

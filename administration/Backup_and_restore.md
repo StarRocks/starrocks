@@ -23,7 +23,7 @@ StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
 
 ```SQL
 CREATE REPOSITORY test_repo
-WITH BROKER hdfs_broker
+WITH BROKER
 ON LOCATION "hdfs://xxx.xx.xxx.xxxx:xxxx/data/sr_backup"
 PROPERTIES("username" = "xxxx");
 ```

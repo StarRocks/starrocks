@@ -9,26 +9,27 @@
 > **注意**
 >
 > - 仅限拥有 ADMIN 权限的用户执行备份功能。
-> - 单一数据库内，仅可同时执行一个备份或恢复作业。
+> - 单一数据库内，仅可同时执行一个备份或恢复作业，否则系统报错。
 
 ## 语法
 
 ```SQL
 BACKUP SNAPSHOT <db_name>.<snapshot_name>
 TO <repository_name>
-[ON (<table_name> [PARTITION (<partition_name>, ...)], ...)]
-[PROPERTIES ("key"="value", ...)]
+[ ON ( <table_name> [ PARTITION ( <partition_name> [, ...] ) ]
+       [, ...] ) ]
+[ PROPERTIES ("key"="value" [, ...] ) ]
 ```
 
 ## 参数说明
 
 | **参数**        | **说明**                                                     |
 | --------------- | ------------------------------------------------------------ |
-| db_name         | 需要备份的数据所属的数据库名。                               |
-| snapshot_name   | 指定数据快照名。                                             |
-| repository_name | 仓库名。                                                     |
-| ON              | 需要备份的表名。如不指定则备份整个数据库。                   |
-| PARTITION       | 需要备份的分区名。如不指定则备份对应表的所有分区。           |
+| db_name         | 需要备份的数据所属的数据库名。                                   |
+| snapshot_name   | 指定数据快照名。全局范围内，快照名不可重复。                      |
+| repository_name | 仓库名。您可以通过 [CREATE REPOSITORY](../data-definition/CREATE%20REPOSITORY.md) 创建仓库。 |
+| ON              | 需要备份的表名。如不指定则备份整个数据库。                         |
+| PARTITION       | 需要备份的分区名。如不指定则备份对应表的所有分区。                   |
 | PROPERTIES      | 数据快照属性。现支持以下属性：`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。`timeout`：任务超时时间。单位：秒。默认：`86400`。 |
 
 ## 示例
