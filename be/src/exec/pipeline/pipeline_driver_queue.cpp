@@ -195,8 +195,13 @@ DriverRawPtr SubQuerySharedDriverQueue::take() {
 
 /// WorkGroupDriverQueue.
 bool WorkGroupDriverQueue::WorkGroupDriverSchedEntityComparator::operator()(
-        const WorkGroupDriverSchedEntityPtr& lhs, const WorkGroupDriverSchedEntityPtr& rhs) const {
-    return lhs->vruntime_ns() < rhs->vruntime_ns();
+        const WorkGroupDriverSchedEntityPtr& lhs_ptr, const WorkGroupDriverSchedEntityPtr& rhs_ptr) const {
+    int64_t lhs_val = lhs_ptr->vruntime_ns();
+    int64_t rhs_val = rhs_ptr->vruntime_ns();
+    if (lhs_val != rhs_val) {
+        return lhs_val < rhs_val;
+    }
+    return lhs_ptr < rhs_ptr;
 }
 
 void WorkGroupDriverQueue::close() {
