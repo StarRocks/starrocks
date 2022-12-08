@@ -371,6 +371,11 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
         *upserts = src;
         return Status::OK();
     }
+    if (!_merge_condition.empty()) {
+        // Do not support delete with condition now
+        return Status::InternalError(
+                fmt::format("memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
+    }
     vector<uint32_t> indexes[2];
     indexes[TOpType::UPSERT].reserve(nupsert);
     indexes[TOpType::DELETE].reserve(ndel);
