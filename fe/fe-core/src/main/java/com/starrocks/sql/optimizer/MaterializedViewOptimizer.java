@@ -114,14 +114,14 @@ public class MaterializedViewOptimizer {
 
     private List<Range<PartitionKey>> getLatestPartitionRange(OlapTable table, Set<String> modifiedPartitionNames) {
         // partitions that will be excluded
-        Set<Long> modifiedIds = Sets.newHashSet();
+        Set<Long> filteredIds = Sets.newHashSet();
         for (Partition p : table.getPartitions()) {
-            if (modifiedPartitionNames.contains(p.getName())) {
-                modifiedIds.add(p.getId());
+            if (modifiedPartitionNames.contains(p.getName()) || !p.hasData()) {
+                filteredIds.add(p.getId());
             }
         }
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-        List<Range<PartitionKey>> latestPartitionRanges = rangePartitionInfo.getRangeList(modifiedIds, false);
+        List<Range<PartitionKey>> latestPartitionRanges = rangePartitionInfo.getRangeList(filteredIds, false);
         return latestPartitionRanges;
     }
 }
