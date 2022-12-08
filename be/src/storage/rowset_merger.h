@@ -15,7 +15,7 @@ struct MergeConfig {
     CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
 };
 
-// heap based rowset merger used for updatable tablet's compaction
+// heap based rowset merger used for updatable tabl·et's compaction
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
                                 RowsetWriter* writer, const MergeConfig& cfg);
