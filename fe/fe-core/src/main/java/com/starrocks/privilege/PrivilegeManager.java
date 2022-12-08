@@ -243,6 +243,7 @@ public class PrivilegeManager {
             case DATABASE:
             case RESOURCE:
             case CATALOG:
+            case RESOURCE_GROUP:
                 objects.add(provider.generateObject(
                         type.name(),
                         Arrays.asList(type.getPlural()),
@@ -636,6 +637,18 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkResourceGroupAction(ConnectContext context, String name,
+                                                   PrivilegeType.ResourceGroupAction action) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            return manager.checkResourceGroupAction(collection, name, action);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check action[{}] on resource group {}", action, name, e);
+            return false;
+        }
+    }
+
     public static boolean checkCatalogAction(ConnectContext context, String name,
                                              PrivilegeType.CatalogAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -781,6 +794,12 @@ public class PrivilegeManager {
     protected boolean checkResourceAction(PrivilegeCollection collection, String name, PrivilegeType.ResourceAction action)
             throws PrivilegeException {
         return checkAction(collection, PrivilegeType.RESOURCE, action.name(), Arrays.asList(name));
+    }
+
+    protected boolean checkResourceGroupAction(PrivilegeCollection collection, String name,
+                                               PrivilegeType.ResourceGroupAction action)
+            throws PrivilegeException {
+        return checkAction(collection, PrivilegeType.RESOURCE_GROUP, action.name(), Arrays.asList(name));
     }
 
     protected boolean checkCatalogAction(PrivilegeCollection collection, String name,
