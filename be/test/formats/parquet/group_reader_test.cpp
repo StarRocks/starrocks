@@ -310,7 +310,7 @@ Status GroupReaderTest::_create_filemeta(FileMetaData** file_meta, GroupReaderPa
     auto* t_file_meta = _create_t_filemeta(param);
 
     *file_meta = _pool.add(new FileMetaData());
-    return (*file_meta)->init(*t_file_meta);
+    return (*file_meta)->init(*t_file_meta, true);
 }
 
 static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tparquet::Type::type par_type,
