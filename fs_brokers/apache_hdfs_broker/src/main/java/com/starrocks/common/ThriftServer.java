@@ -29,6 +29,7 @@ import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 
 /**
  * Created by zhaochun on 14-9-2.

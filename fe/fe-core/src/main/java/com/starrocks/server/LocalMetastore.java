@@ -2029,7 +2029,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (properties != null) {
                     hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                 }
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                        DataProperty.getInferredDefaultDataProperty());
                 if (hasMedium) {
                     olapTable.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -2150,7 +2151,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                                DataProperty.DEFAULT_DATA_PROPERTY);
+                                DataProperty.getInferredDefaultDataProperty());
                         DynamicPartitionUtil
                                 .checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
@@ -3200,7 +3201,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             }
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.DEFAULT_DATA_PROPERTY);
+                    DataProperty.getInferredDefaultDataProperty());
             if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
                 // set storage cooldown time into table property,
@@ -4260,6 +4261,13 @@ public class LocalMetastore implements ConnectorMetadata {
         // remove the tablets in old partitions
         for (Long tabletId : oldTabletIds) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            // Ensure that only the leader records truncate information.
+            // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
+            // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
+            // solution.
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentInvertedIndex().markTabletTruncated(tabletId);
+            }
         }
 
         // if it is lake table, need to delete shard and drop tablet

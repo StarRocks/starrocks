@@ -173,19 +173,38 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
+
+    bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
+    bool could_local_shuffle = context->need_local_shuffle(ops_with_sink);
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        std::vector<ExprContext*> group_by_expr_ctxs;
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::prepare(group_by_expr_ctxs, runtime_state());
+        Expr::open(group_by_expr_ctxs, runtime_state());
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
+    };
+
+    // 1. Finalize aggregation:
+    //   - Without group by clause, it cannot be parallelized and need local passthough.
+    //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+    // 2. Non-finalize aggregation:
+    //   - Without group by clause, it can be parallelized and needn't local shuffle.
+    //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
     if (agg_node.need_finalize) {
-        // If finalize aggregate with group by clause, then it can be paralized
-        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            if (context->need_local_shuffle(ops_with_sink)) {
-                std::vector<ExprContext*> group_by_expr_ctxs;
-                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-                ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
-                                                                                  group_by_expr_ctxs);
-            }
-        } else {
+        if (!has_group_by_keys) {
             ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+        } else if (could_local_shuffle) {
+            ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+        }
+    } else {
+        if (!has_group_by_keys) {
+            // Do nothing.
+        } else if (could_local_shuffle) {
+            ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
         }
     }
+
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
     // and we may set other parallelism for source operator in many special cases
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
