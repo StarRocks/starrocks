@@ -518,7 +518,7 @@ public class ExpressionTest extends PlanTestBase {
                 "(c0 INT, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
-        String sql = "select * from test_lambda_on_scan where array_map(x -> x, c2) is not null";
+        String sql = "select * from test_lambda_on_scan where array_map(x -> x + 1, c2) is not null";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("array_map"));
     }
