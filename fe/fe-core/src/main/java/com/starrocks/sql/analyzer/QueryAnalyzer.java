@@ -403,6 +403,11 @@ public class QueryAnalyzer {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
+                // check the join on predicate, example:
+                // we have col_json, we can't join on table_a.col_json = table_b.col_json,
+                // but we can join on cast(table_a.col_json->"a" as int) = cast(table_b.col_json->"a" as int)
+                // similarly, we can join on table_a.col_map['a'] = table_b.col_map['a'],
+                // and table_a.col_struct.a = table_b.col_struct.a
                 checkJoinEqual(joinEqual);
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
