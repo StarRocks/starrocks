@@ -22,17 +22,17 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.sql.optimizer.operator.physical.stream.IMTInfo;
+import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamJoinNode;
-import javax.ws.rs.NotSupportedException;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.ws.rs.NotSupportedException;
 
 public class StreamJoinNode extends JoinNode {
     // TODO: support bi-stream join

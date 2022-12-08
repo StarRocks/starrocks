@@ -77,10 +77,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.LogicalBinlogScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
+import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 
 /**
  * OperatorVisitor is used to traverse Operator

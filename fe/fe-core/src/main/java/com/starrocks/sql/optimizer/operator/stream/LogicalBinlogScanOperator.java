@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.operator.physical.stream;
+package com.starrocks.sql.optimizer.operator.stream;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
