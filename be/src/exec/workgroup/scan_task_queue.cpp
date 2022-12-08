@@ -26,8 +26,13 @@ bool PriorityScanTaskQueue::try_offer(ScanTask task) {
 
 /// WorkGroupScanTaskQueue.
 bool WorkGroupScanTaskQueue::WorkGroupScanSchedEntityComparator::operator()(
-        const WorkGroupScanSchedEntityPtr& lhs, const WorkGroupScanSchedEntityPtr& rhs) const {
-    return lhs->vruntime_ns() < rhs->vruntime_ns();
+        const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const {
+    int64_t lhs_val = lhs_ptr->vruntime_ns();
+    int64_t rhs_val = rhs_ptr->vruntime_ns();
+    if (lhs_val != rhs_val) {
+        return lhs_val < rhs_val;
+    }
+    return lhs_ptr < rhs_ptr;
 }
 
 void WorkGroupScanTaskQueue::close() {
