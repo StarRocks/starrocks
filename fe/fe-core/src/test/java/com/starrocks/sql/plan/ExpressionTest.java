@@ -543,7 +543,7 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select 3*c1, array_map(x->x+ 3 *c1, c2) from test_array";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("common expressions"));
-        Assert.assertTrue(plan.contains("array_map(<slot 5> -> CAST(<slot 5> AS BIGINT) + 8: multiply, 2: c2)"));
+        Assert.assertTrue(plan.contains("array_map(<slot 5> -> CAST(<slot 5> AS BIGINT) + 8: multiply"));
 
         sql = "select arr,array_length(arr) from (select array_map(x->x+1, [1,2]) as arr)T";
         plan = getFragmentPlan(sql);
@@ -554,7 +554,7 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("common expressions"));
         Assert.assertTrue(plan.contains(
-                "array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) + 7: multiply + 7: multiply, 2: c2)"));
+                "array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) + 7: multiply + 7: multiply"));
     }
 
     @Test
