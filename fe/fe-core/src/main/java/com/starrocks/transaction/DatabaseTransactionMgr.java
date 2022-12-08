@@ -1507,6 +1507,11 @@ public class DatabaseTransactionMgr {
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             Table table = db.getTable(tableCommitInfo.getTableId());
+            // table may be dropped by force after transaction committed
+            // so that it will be a visible edit log after drop table
+            if (table == null) {
+                continue;
+            }
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyVisibleLog(transactionState, tableCommitInfo, db);
         }
