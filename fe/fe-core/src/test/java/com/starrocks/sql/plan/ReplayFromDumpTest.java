@@ -479,7 +479,8 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second.contains("  194:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
 
@@ -495,17 +496,16 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 22:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: if(20: c_0_0 != 1: c_0_0, 4: c_0_3, 21: c_0_3) = '1969-12-28', " +
-                "CASE WHEN (22: countRows IS NULL) OR (22: countRows = 0) THEN FALSE " +
-                "WHEN 1: c_0_0 IS NULL THEN NULL WHEN 16: c_0_0 IS NOT NULL THEN TRUE " +
-                "WHEN 23: countNotNulls < 22: countRows THEN NULL ELSE FALSE END IS NULL"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  22:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, CASE WHEN (24: countRows IS NULL) " +
+                "OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL WHEN 17: c_0_0 IS NOT NULL " +
+                "THEN TRUE WHEN 25: countNulls < 24: countRows THEN NULL ELSE FALSE END IS NULL\n"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 16: c_0_0 = 1: c_0_0\n" +
-                "  |  other join predicates: if(16: c_0_0 != 1: c_0_0, 4: c_0_3, 18: c_0_3) = '1969-12-28'"));
+                "  |  equal join conjunct: 17: c_0_0 = 1: c_0_0\n" +
+                "  |  other join predicates: if(17: c_0_0 != 1: c_0_0, 4: c_0_3, 19: c_0_3) = 18: expr"));
     }
 }

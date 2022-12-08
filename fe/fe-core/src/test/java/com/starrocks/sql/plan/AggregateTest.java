@@ -1325,14 +1325,6 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testMultiCountDistinctWithNoneGroup3() throws Exception {
-        String sql = "select count(distinct t1b), count(distinct t1c) from test_all_type";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: multi_distinct_count(2: t1b), multi_distinct_count(3: t1c)\n");
-    }
-
-    @Test
     public void testMultiCountDistinctWithNoneGroup4() throws Exception {
         connectContext.getSessionVariable().setCboCteReuse(true);
         String sql = "select count(distinct t1b + 1), count(distinct t1c + 2) from test_all_type";
@@ -1469,15 +1461,14 @@ public class AggregateTest extends PlanTestBase {
 
         sql =  "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "25:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: sum(26: t1b)\n" +
-                "  |  group by: 27: t1c, 28: expr\n" +
+                "  |  group by: 23: t1b, 24: t1c, 25: expr\n" +
                 "  |  \n" +
-                "  25:Project\n" +
-                "  |  <slot 26> : 2: t1b\n" +
-                "  |  <slot 27> : 3: t1c\n" +
-                "  |  <slot 28> : 11: expr");
+                "  24:Project\n" +
+                "  |  <slot 23> : 2: t1b\n" +
+                "  |  <slot 24> : 3: t1c\n" +
+                "  |  <slot 25> : 11: expr");
         connectContext.getSessionVariable().setCboCteReuse(false);
     }
 

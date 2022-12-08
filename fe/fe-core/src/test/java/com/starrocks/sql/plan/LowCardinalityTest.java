@@ -557,11 +557,10 @@ public class LowCardinalityTest extends PlanTestBase {
             sql = "select * from supplier l join supplier r on " +
                     "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
             plan = getCostExplain(sql);
-            Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
+            assertContains(plan, "  1:OlapScanNode\n" +
                     "     table: supplier, rollup: supplier\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
-                    "     dict_col=S_COMMENT"));
+                    "     dict_col=S_ADDRESS,S_COMMENT");
         }
     }
 

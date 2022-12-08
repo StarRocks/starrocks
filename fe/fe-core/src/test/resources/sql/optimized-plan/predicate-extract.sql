@@ -62,10 +62,9 @@ AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(29: sum)}] group by [[]] having [nul
                     SCAN (columns[18: P_PARTKEY, 21: P_BRAND, 23: P_SIZE, 24: P_CONTAINER] predicate[21: P_BRAND IN (Brand#45, Brand#11) AND 24: P_CONTAINER IN (SM CASE, SM BOX, SM PACK, SM PKG, MED BAG, MED BOX, MED PKG, MED PACK)])
 [end]
 
-
 /**
- * ScalarRangePredicateExtractor
-*/
+/** * ScalarRangePredicateExtractor*/
+
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where v2 = 2 or (v2 = 3 and v3 = 3) or (v2 = 4 and v3=4)
 [result]
@@ -81,7 +80,7 @@ select v1 from t0 inner join t1 on v3 = v4 where (v2 = 2 or v2 = 3);
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 3)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
@@ -90,16 +89,16 @@ select v1 from t0 inner join t1 on v3 = v4 where (v2 = 2 or v2 = 3) and (v3 = 3 
 INNER JOIN (join-predicate [3: v3 = 4: v4 AND 3: v3 = 3 OR 4: v4 = 4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 3)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where  v2 = 2 or (v2 = 3 and v3 = 3) or (v2 = 4 and v3=4 and v3 = 5);
 [result]
-INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
-    SCAN (columns[4: v4] predicate[null])
-    EXCHANGE SHUFFLE[3]
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 = 4 AND 3: v3 = 4 AND 3: v3 = 5 AND 2: v2 IN (2, 3, 4)])
+INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 = 4 AND 3: v3 = 4 AND 3: v3 = 5 AND 2: v2 IN (2, 3, 4)])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
@@ -144,7 +143,7 @@ select v1 from t0 inner join t1 on v3 = v4 where (v1 = 1 AND v2 = 2) OR (v1 = 3 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 1: v1 = 3 AND 2: v2 = 4 AND 1: v1 != 5 AND 1: v1 IN (1, 3) AND 2: v2 IN (2, 4)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
@@ -162,7 +161,7 @@ select v1 from t0 inner join t1 on v3 = v4 where (v1 = 1 AND v2 = 2) OR (v2 = 4 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 2: v2 = 4 AND 1: v1 NOT IN (1, 2) AND 2: v2 IN (2, 4)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
