@@ -43,7 +43,21 @@ VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<C
         DCHECK_LT(cids[i], schema->_fields.size());
         _fields[i] = schema->_fields[cids[i]];
     }
-    _sort_key_idxes = schema->sort_key_idxes();
+    auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
+    _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
+    _build_index_map(_fields);
+}
+
+VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<ColumnId>& cids,
+                                   const std::vector<ColumnId>& scids)
+        : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
+    DCHECK(!scids.empty());
+    _fields.resize(cids.size());
+    for (int i = 0; i < cids.size(); i++) {
+        DCHECK_LT(cids[i], schema->_fields.size());
+        _fields[i] = schema->_fields[cids[i]];
+    }
+    _sort_key_idxes = scids;
     auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);

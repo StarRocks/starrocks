@@ -107,7 +107,7 @@ struct MergeEntry {
                     PrimaryKeyEncoder::encode(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
                 } else {
                     // just use chunk's first column
-                    chunk_pk_column = chunk->get_column_by_index(0);
+                    chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
                 }
                 DCHECK(chunk_pk_column->size() > 0);
                 DCHECK(chunk_pk_column->size() == chunk->num_rows());
@@ -235,7 +235,7 @@ public:
         MonotonicStopWatch timer;
         timer.start();
         if (cfg.algorithm == VERTICAL_COMPACTION) {
-            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.tablet_schema().sort_key_idxes(),
+            CompactionUtils::split_column_into_groups(tablet.num_columns(), schema.sort_key_idxes(),
                                                       config::vertical_compaction_max_columns_per_group,
                                                       &column_groups);
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
@@ -250,7 +250,8 @@ public:
         StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
         StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
         StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
-        LOG(INFO) << "compaction merge finished. tablet=" << tablet.tablet_id() << " #key=" << schema.num_key_fields()
+        LOG(INFO) << "compaction merge finished. tablet=" << tablet.tablet_id()
+                  << " #key=" << schema.sort_key_idxes().size()
                   << " algorithm=" << CompactionUtils::compaction_algorithm_to_string(cfg.algorithm)
                   << " column_group_size=" << column_groups.size() << " input("
                   << "entry=" << _entries.size() << " rows=" << stats.raw_rows_read
@@ -269,14 +270,8 @@ private:
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
         std::unique_ptr<vectorized::Column> sort_column;
-        std::vector<ColumnId> sort_key_idxes;
         if (schema.sort_key_idxes().size() > 1) {
-            sort_key_idxes = schema.sort_key_idxes();
-            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, sort_key_idxes).ok()) {
-                LOG(FATAL) << "create column for primary key encoder failed";
-            }
-        } else if (schema.num_key_fields() > 1) {
-            if (!PrimaryKeyEncoder::create_column(schema, &sort_column).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         }
@@ -426,7 +421,9 @@ private:
         }
         {
             VectorizedSchema schema =
-                    ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
+                    tablet.tablet_schema().sort_key_idxes().empty()
+                            ? ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0])
+                            : ChunkHelper::get_sort_key_schema_with_format_v2(tablet.tablet_schema());
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
@@ -533,7 +530,13 @@ private:
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
                                 RowsetWriter* writer, const MergeConfig& cfg) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
+    VectorizedSchema schema = [&tablet]() {
+        if (tablet.tablet_schema().sort_key_idxes().empty()) {
+            return ChunkHelper::get_sort_key_schema_by_primary_key_format_v2(tablet.tablet_schema());
+        } else {
+            return ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
+        }
+    }();
     std::unique_ptr<RowsetMerger> merger;
     auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes());
     switch (key_type) {
