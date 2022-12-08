@@ -87,6 +87,7 @@ import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.starrocks.connector.hive.glue.util.AWSGlueConfig.CUSTOM_EXECUTOR_FACTORY_CONF;
 import static org.apache.hadoop.hive.metastore.HiveMetaStore.PUBLIC;
 import static org.apache.hadoop.hive.metastore.TableType.EXTERNAL_TABLE;
 import static org.apache.hadoop.hive.metastore.TableType.MANAGED_TABLE;
@@ -105,11 +106,7 @@ public class GlueMetastoreClientDelegate {
     public static final Long NO_MAX = -1L;
     public static final String MATCH_ALL = ".*";
 
-    public static final String INDEX_PREFIX = "index_prefix";
-
     private static final int BATCH_CREATE_PARTITIONS_MAX_REQUEST_SIZE = 100;
-
-    public static final String CUSTOM_EXECUTOR_FACTORY_CONF = "hive.metastore.executorservice.factory.class";
 
     static final String GLUE_METASTORE_DELEGATE_THREADPOOL_NAME_FORMAT = "glue-metastore-delegate-%d";
 
@@ -120,7 +117,6 @@ public class GlueMetastoreClientDelegate {
     private final String catalogId;
 
     public static final String CATALOG_ID_CONF = "hive.metastore.glue.catalogid";
-    public static final String NUM_PARTITION_SEGMENTS_CONF = "aws.glue.partition.num.segments";
 
     protected ExecutorService getExecutorService() {
         Class<? extends ExecutorServiceFactory> executorFactoryClass = this.conf
