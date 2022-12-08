@@ -4,120 +4,125 @@ This topic describes FE, BE, Broker, and system parameters. It also provides sug
 
 ## FE configuration items
 
-|Configuration Item|Default|Role|
-|---|---|---|
-|log_roll_size_mb|1024|Size of log split, per 1G|
-|sys_log_dir|StarRocksFe.STARROCKS_HOME_DIR/log|Directory where logs are kept|
-|sys_log_level|INFO|log level，INFO < WARNING < ERROR < FATAL|sys_log_roll_num|10| The number of logs to keep |
-|sys_log_verbose_modules| empty string | Modules for log printing, write `org.starrocks.catalog` to print only the logs that are under the catalog module |
-|sys_log_roll_interval|DAY| The interval for log splitting |
-|sys_log_delete_age|7d| The interval for log deletion |
-|sys_log_roll_mode|1024| The size of the log split, per 1G |
-|audit_log_dir|starrocksFe.STARROCKS_HOME_DIR/log| Directory where audit logs are kept |
-|audit_log_roll_num|90| The number of audit logs to keep |
-|audit_log_modules|"slow_query", "query"| Modules for audit log printing, default retains `slow_query` and `query` |
-|qe_slow_log_ms|5000| |Length of time for Slow query. The default value is 5000ms |
-|audit_log_roll_interval|DAY| The interval for audit log splitting |
-|audit_log_delete_age|30d| The interval for audit log deletion |
-|audit_log_roll_mode|TIME-DAY| The interval for audit log splitting |
-|label_keep_max_second|259200|The time to keep the label, with a default value of 3 days. The longer the keep time, the more memory to consume |
-|history_job_keep_max_second|604800| Maximum retention time for historical jobs, such as schema change jobs, 7 days by default |
-|label_clean_interval_second|14400|The interval for label cleaning|
-|transaction_clean_interval_second|30| The interval for transaction cleaning |
-|meta_dir|StarRocksFe.STARROCKS_HOME_DIR/meta| Directory for metadata |
-|tmp_dir|starrocksFe.STARROCKS_HOME_DIR/temp_ddir| Directory where temporary files are kept, such as backup/restore, etc. |
-|edit_log_port|9010| The port used for communication between FE Groups (Master, Follower, Observer) |
-|edit_log_roll_num|50000| Split size of image log |
-|meta_delay_toleration_second|300| Maximum metadata lag time tolerated by non-leader nodes |
-|master_sync_policy|SYNC| Swipe method for leader’s log, SYNC by default |
-|replica_sync_policy|SYNC| Swipe method for follower’s log, SYNC by default |
-|replica_ack_policy|SIMPLE_MAJORITY| The form in which logs are considered valid. The default is for the majority to return a confirmation message, which is considered to be in effect |
-|bdbje_heartbeat_timeout_second|30|The interval for BDBJE heartbeat timeout|
-|bdbje_lock_timeout_second|1| The interval for BDBJE lock timeout |
-|txn_rollback_limit|100| the upper limit of transaction rollback |
-|frontend_address|0.0.0.0| FE IP address |
-|priority_networks| empty string | Specify BE IP address in the form of CIDR 10.10.10.0/24 for machines with multiple IPs |
-|metadata_failure_recovery|false| Forced reset of FE metadata. Use with caution |
-|ignore_meta_check|false| Ignore the metadata lag |
-|max_bdbje_clock_delta_ms|5000| Maximum tolerated time offset between leader and non-leader |
-|http_port|8030| Port of Http Server |
-|http_backlog_num|1024|HttpServer port backlog|
-|thrift_backlog_num|1024|ThriftServer port backlog|
-|rpc_port|9020| Thrift server port of FE |
-|query_port|9030| MySQL server port of FE |
-|mysql_service_nio_enabled|false| Whether the nio is enabled for the service connected to FE |
-|mysql_service_io_threads_num|false| The number of threads of the service connected to FE|
-|auth_token|empty string|Whether the token is enabled automatically |
-|tablet_create_timeout_second|1| Timeout for table creation |
-|max_create_table_timeout_second|60| Maximum timeout for table creation |
-|publish_version_timeout_second|30| Timeout for version to be published |
-|publish_version_interval_ms|10| Interval for version to be published |
-|load_straggler_wait_second|300| Maximum tolerated import lag time for BE replications, beyond which cloning will be performed |
-|max_layout_length_per_row|100000|maximum length of a single row, 100KB|
-|load_checker_interval_second|5|Interval for import polling|
-|broker_load_default_timeout_second|14400|Timeout for Broker Load, 4 hours by default |
-|mini_load_default_timeout_second|3600|Timeout for small batch import, 1 hour by default |
-|insert_load_default_timeout_second|3600|Timeout for Insert Into statement, 1 hour by default |
-|stream_load_default_timeout_second|600|Timeout for StreamLoad, 10 minutes by default |
-|max_load_timeout_second|259200| Applicable to all imports, maximum timeout, 3 days by default |
-|min_load_timeout_second|1| Applicable to all imports, minimum timeout, 1 second by default |
-|desired_max_waiting_jobs|100| Max_waiting_jobs for all tasks, including table creation, import, schema change |
-|max_running_txn_num_per_db|100| The number of concurrent import jobs |
-|async_load_task_pool_size|10| The size of the thread pool for import job execution |
-|tablet_delete_timeout_second|2| Timeout for table deletion |
-|capacity_used_percent_high_water|0.75|Measurements of disk capacity used on Backend. Try not to send creation or clone tasks to this tablet when this parameter exceeds 0.75, until it is back to normal |
-|alter_table_timeout_second|86400|Timeout for schema change|
-|max_backend_down_time_second|3600| Maximum time for BE to rejoin after it disconnects to FE|
-|storage_cooldown_second|2592000| Duration of media migration, 30 days by default |
-|catalog_trash_expire_second|86400| Length of time that metadata remains in the recycle bin after deleting a table/database, beyond which data cannot be recovered|
-|min_bytes_per_broker_scanner|67108864|Minimum amount of data to be processed by a single instance, 64MB by default |
-|max_broker_concurrency|100|Maximum number of concurrent instances for a single task, 10 by default |
-|load_parallel_instance_num|1|Number of concurrent instances on a single BE, 1 by default |
-|export_checker_interval_second|5| Interval for exporting thread polling |
-|export_running_job_num_limit|5| Maximum number of exporting jobs |
-|export_task_default_timeout_second|7200| Timeout for export job, 2 hours by default |
-|empty_load_as_error|TRUE|Switch value to control if to return error `all partitions have no load data` when the data to load is empty. If this parameter is set as `false`, the system returns `OK` instead of the error when the data to load is empty.|
-|export_max_bytes_per_be_per_task|268435456| Maximum amount of data exported by a single export job on a single be, 256M by default |
-|export_task_pool_size|5| Size of export task thread pool, 5 by default |
-|broker_client_timeout_ms| 10000 | The default expiration duration for Broker RPC. Unit: ms. Default value: 10000, which is 10s. |
-|consistency_check_start_time|23| The start time for FE to initiate replica consistency check |
-|consistency_check_end_time|4| The end time for FE to initiate replica consistency check |
-|check_consistency_default_timeout_second|600| Timeout for replica consistency check |
-|qe_max_connection|1024| Maximum number of connections received on the FE, for all users |
-|max_conn_per_user|100| Maximum number of connections that a single user can handle |
-|query_colocate_join_memory_limit_penalty_factor|8| Memory limit for Colocate Join |
-|disable_colocate_join|false| Colocate Join is not enabled|
-|expr_children_limit|10000| The number of in's that can be involved in a query |
-|expr_depth_limit|3000| |the number of nestings in the query |
-|locale|zh_CN.UTF-8| Character set |
-|remote_fragment_exec_timeout_ms|5000| RPC timeout for FE sending query planning, not involving task execution |
-|max_query_retry_time|2| The number of query retries on FE |
-|catalog_try_lock_timeout_ms|5000| Timeout for Catalog Lock fetch |
-|disable_load_job|false|No import job is received, which is a stopgap measure when the cluster fails |
-|es_state_sync_interval_second|10| Interval for FE to fetch Elastic Search Index |
-|tablet_repair_delay_factor_second|60| Interval for replica repair controlled by FE |
-|enable_statistic_collect|TRUE|Whether to collect statistics. This parameter is turned on by default.|
-|enable_collect_full_statistic|TRUE|Whether to enable automatic full statistics collection. This parameter is turned on by default.|
-|statistic_auto_collect_ratio|0.8|The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.|
-|statistic_max_full_collect_data_size|100|The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead.|
-|statistic_collect_interval_sec|300|The interval for checking data updates during automatic collection. Unit: seconds.|
-|statistic_sample_collect_rows|200000|The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.|
-|histogram_buckets_size|64|The default bucket number for a histogram.|
-|histogram_mcv_size|100|The number of most common values (MVC) for a histogram.|
-|histogram_sample_ratio|0.1|The sampling ratio for a histogram.|
-|histogram_max_sample_row_count|10000000|The maximum number of rows to collect for a histogram.|
-|statistics_manager_sleep_time_sec|60|The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval: create tables for storing statistics, delete statistics that have been deleted, delete expired statistics.|
-|statistic_update_interval_sec|24 \* 60 \* 60|The interval at which the cache of statistical information is updated. Unit: seconds.|
-|statistic_analyze_status_keep_second|259200|The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds.|
-|statistic_collect_concurrency|3|The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. You can only modify this parameter in the **fe.conf** file. You must restart the FE for the modification to take effect.|
-|max_routine_load_job_num|100| maximum number of routine load jobs |
-|max_routine_load_task_concurrent_num|5| Maximum number of concurrent execution tasks per routine load job |
-|max_routine_load_task_num_per_be|5| Maximum number of concurrent routine load tasks per BE, which needs to be less than or equal to the number specified in the configuration |
-|max_routine_load_batch_size|524288000| The maximum amount of data to import per routine load task, default by 500M |
-|routine_load_task_consume_second|3|Maximum time to consume data per routine load task, default by 3s|
-|routine_load_task_timeout_second|15|Timeout for routine load task, default by 15s|
-|enable_strict_storage_medium_check|TRUE|Whether the FE checks available storage space.|
-|storage_cooldown_second|-1|The delay of cooldown from HDD storage to SSD storage. Unit: seconds. The default value indicates to disable the auto-cooldown.|
+### FE static parameters
+
+This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE to make the new parameter settings take effect.
+
+#### Logging
+
+| Parameter               | Default                                 | Description                                                  |
+| ----------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| log_roll_size_mb        | 1024                                    | The size per log file. Unit: MB. The default value `1024` specifies the size per log file as 1 GB. |
+| sys_log_dir             | StarRocksFE.STARROCKS_HOME_DIR + "/log" | The directory that stores system log files.                  |
+| sys_log_level           | INFO                                    | The severity levels into which system log entries are classified. Valid values: `INFO`, `WARN`, `ERROR`, and `FATAL`. |
+| sys_log_verbose_modules | Empty string                            | The modules for which StarRocks generates system logs. If this parameter is set to `org.apache.starrocks.catalog`, StarRocks generates system logs only for the catalog module. |
+| sys_log_roll_interval   | DAY                                     | The time interval at which StarRocks rotates system log entries. Valid values: `DAY` and `HOUR`.<ul><li>If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of system log files.</li><li>If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of system log files.</li></ul> |
+| sys_log_delete_age      | 7d                                      | The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago. |
+| sys_log_roll_num        | 10                                      | The maximum number of system log files that can be retaind within each retention period specified by the `sys_log_roll_interval` parameter. |
+| audit_log_dir           | StarRocksFE.STARROCKS_HOME_DIR + "/log" | The directory that stores audit log files.                   |
+| audit_log_roll_num      | 90                                      | The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter. |
+| audit_log_modules       | slow_query, query                       | The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. Separate the module names with a comma (,) and a space. |
+| audit_log_roll_interval | DAY                                     | The time interval at which StarRocks rotates audit log entries. Valid values: `DAY` and `HOUR`.<ul><li>If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of audit log files.</li><li>If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of audit log files.</li></ul> |
+| audit_log_delete_age    | 30d                                     | The retention period of audit log files. The default value `30d` specifies that each audit log file can be retained for 30 days. StarRocks checks each audit log file and deletes those that were generated 30 days ago. |
+| dump_log_dir            | StarRocksFE.STARROCKS_HOME_DIR + "/log" | The directory that stores dump log files.                    |
+| dump_log_modules        | query                                   | The modules for which StarRocks generates dump log entries. By default, StarRocks generates dump logs for the the query module. Separate the module names with a comma (,) and a space. |
+| dump_log_roll_interval  | DAY                                     | The time interval at which StarRocks rotates dump log entries. Valid values: `DAY` and `HOUR`.<ul><li>If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of dump log files.</li><li>If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of dump log files.</li></ul> |
+| dump_log_roll_num       | 10                                      | The maximum number of dump log files that can be retained within each retention period specified by the `dump_log_roll_interval` parameter. |
+| dump_log_delete_age     | 7d                                      | The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago. |
+
+#### Server
+
+| Parameter                            | Default           | Description                                                  |
+| ------------------------------------ | ----------------- | ------------------------------------------------------------ |
+| frontend_address                     | 0.0.0.0           | The IP address of the FE node.                               |
+| priority_networks                    | Empty string      | Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected. |
+| http_port                            | 8030              | The port on which the HTTP server in the FE node listens.    |
+| http_backlog_num                     | 1024              | The length of the backlog queue held by the HTTP server in the FE node. |
+| cluster_name                         | StarRocks Cluster | The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page. |
+| rpc_port                             | 9020              | The port on which the Thrift server in the FE node listens.  |
+| thrift_backlog_num                   | 1024              | The length of the backlog queue held by the Thrift server in the FE node. |
+| thrift_server_type                   | THREAD_POOL       | The service model that is used by the Thrift server in the FE node. Valid values: `SIMPLE`, `THREADED`, and `THREAD_POOL`. |
+| thrift_server_max_worker_threads     | 4096              | The maximum number of worker threads that are supported by the Thrift server in the FE node. |
+| thrift_client_timeout_ms             | 0                 | The length of time after which requests from clients time out. Unit: ms. The default value `0` specifies that requests from clients never time out. |
+| brpc_idle_wait_max_time              | 10000             | The maximum length of time for which BRPC clients wait as in the idle state. Unit: ms. |
+| query_port                           | 9030              | The port on which the MySQL server in the FE node listens.   |
+| mysql_service_nio_enabled            | TRUE              | Specifies whether asynchronous I/O is enabled for the FE node. |
+| mysql_service_io_threads_num         | 4                 | The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events. |
+| mysql_nio_backlog_num                | 1024              | The length of the backlog queue held by the MySQL server in the FE node. |
+| max_mysql_service_task_threads_num   | 4096              | The maximum number of threads that can be run by the MySQL server in the FE node to process tasks. |
+| max_connection_scheduler_threads_num | 4096              | The maximum number of threads that are supported by the connection scheduler. |
+| qe_max_connection                    | 1024              | The maximum number of connections that can be established by all users to the FE node. |
+| check_java_version                   | TRUE              | Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs. |
+
+#### Metadata and cluster management
+
+| Parameter                         | Default                                  | Description                                                  |
+| --------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| meta_dir                          | StarRocksFE.STARROCKS_HOME_DIR + "/meta" | The directory that stores metadata.                          |
+| heartbeat_mgr_threads_num         | 8                                        | The number of threads that can be run by the Heartbeat Manager to run heartbeat tasks. |
+| heartbeat_mgr_blocking_queue_size | 1024                                     | The size of the blocking queue that stores heartbeat tasks run by the Heartbeat Manager. |
+| metadata_failure_recovery         | FALSE                                    | Specifies whether to forcibly reset the metadata of the FE. Exercise caution when you set this parameter. |
+| edit_log_port                     | 9010                                     | The port that is used for communication among the leader, follower, and observer FEs in the StarRocks cluster. |
+| edit_log_type                     | BDB                                      | The type of edit log that can be generated. Set the value to `BDB`. |
+| bdbje_heartbeat_timeout_second    | 30                                       | The amount of time after which the heartbeats among the leader, follower, and observer FEs in the StarRocks cluster time out. Unit: second. |
+| bdbje_lock_timeout_second         | 1                                        | The amount of time after which a lock in the BDB JE-based FE times out. Unit: second. |
+| max_bdbje_clock_delta_ms          | 5000                                     | The maximum clock offset that is allowed between the leader FE and the follower or observer FEs in the StarRocks cluster. Unit: ms. |
+| txn_rollback_limit                | 100                                      | The maximum number of transactions that can be rolled back.  |
+| bdbje_replica_ack_timeout_second  | 10                                       | The maximum amount of time for which the leader FE can wait for ACK messages from a specified number of follower FEs when metadata is written from the leader FE to the follower FEs. Unit: second. If a large amount of metadata is being written, the follower FEs require a long time before they can return ACK messages to the leader FE, causing ACK timeout. In this situation, metadata writes fail, and the FE process exits. We recommend that you increase the value of this parameter to prevent this situation. |
+| master_sync_policy                | SYNC                                     | The policy based on which the leader FE flushes logs to disk. This parameter is valid only when the current FE is a leader FE. Valid values:<ul><li>`SYNC`: When a transaction is commited, a log entry is generated and flushed to disk simultaneously.</li><li>`NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.</li><li>`WRITE_NO_SYNC`: When a transaction is commited, a log entry is generated simultaneously but is not flushed to disk.</li></ul>If you have deployed only one follower FE, we recommend that you set this parameter to `SYNC`. If you have deployed three or more follower FEs, we recommend that you set this parameter and the `replica_sync_policy` both to `WRITE_NO_SYNC`. |
+| replica_sync_policy               | SYNC                                     | The policy based on which the follower FE flushes logs to disk. This parameter is valid only when the current FE is a follower FE. Valid values:<ul><li>`SYNC`: When a transaction is commited, a log entry is generated and flushed to disk simultaneously.</li><li>`NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.</li><li>`WRITE_NO_SYNC`: When a transaction is commited, a log entry is generated simultaneously but is not flushed to disk.</li></ul> |
+| replica_ack_policy                | SIMPLE_MAJORITY                          | The policy based on which a log entry is considered valid. The default value `SIMPLE_MAJORITY` specifies that a log entry is considered valid if a majority of follower FEs return ACK messages. |
+| cluster_id                        | -1                                       | The ID of the StarRocks cluster to which the FE belongs. FEs or BEs that have the same cluster ID belong to the same StarRocks cluster. Valid values: any positive integer. The default value `-1` specifies that StarRocks will generate a random cluster ID for the StarRocks cluster at the time when the leader FE of the cluster is started for the first time. |
+
+#### Query engine
+
+| Parameter                   | Default | Description                                                  |
+| --------------------------- | ------- | ------------------------------------------------------------ |
+| publish_version_interval_ms | 10      | The time interval at which release validation tasks are issued. Unit: ms. |
+| statistic_cache_columns     | 100000  | The number of rows that can be cached for the statistics table. |
+
+#### Loading and unloading
+
+| Parameter                         | Default                                                      | Description                                                  |
+| --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| async_load_task_pool_size         | 10                                                           | The size of the load task thread pool. This parameter is valid only for Broker Load. |
+| load_checker_interval_second      | 5                                                            | The time interval at which load jobs are processed on a rolling basis. Unit: second. |
+| transaction_clean_interval_second | 30                                                           | The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner. |
+| label_clean_interval_second       | 14400                                                        | The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. |
+| spark_dpp_version                 | 1.0.0                                                        | The version of Spark Dynamic Partition Pruning (DPP) used.   |
+| spark_resource_path               | Empty string                                                 | The root directory of the Spark dependency package.          |
+| spark_launcher_log_dir            | sys_log_dir + "/spark_launcher_log"                          | The directory that stores Spark log files.                   |
+| yarn_client_path                  | StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn" | The root directory of the Yarn client package.               |
+| yarn_config_dir                   | StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"          | The directory that stores the Yarn configuration file.       |
+| export_checker_interval_second    | 5                                                            | The time interval at which load jobs are scheduled.          |
+| export_task_pool_size             | 5                                                            | The size of the unload task thread pool.                     |
+
+#### Storage
+
+| Parameter                            | Default         | Description                                                  |
+| ------------------------------------ | --------------- | ------------------------------------------------------------ |
+| default_storage_medium               | HDD             | The default storage media that is used for a table or partition at the time of table or partition creation if no storage media is specified. Valid values: `HDD` and `SSD`. When you create a table or partition, the default storage media specified by this parameter is used if you do not specify a storage media type for the table or partition. |
+| tablet_sched_balancer_strategy       | disk_and_tablet | The policy based on which load balancing is implemented among tablets. The alias of this parameter is `tablet_balancer_strategy`. Valid values: `disk_and_tablet` and `be_load_score`. |
+| tablet_sched_storage_cooldown_second | -1              | The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`. |
+| tablet_stat_update_interval_second   | 300             | The time interval at which the FE retrieves tablet statistics from each BE. Unit: second. |
+
+#### Other
+
+| Parameter                          | Default                                         | Description                                                  |
+| ---------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| plugin_dir                         | STARROCKS_HOME_DIR/plugins                      | The directory that stores plugin installation packages.      |
+| small_file_dir                     | StarRocksFE.STARROCKS_HOME_DIR + "/small_files" | The root directory of small files.                           |
+| max_agent_task_threads_num         | 4096                                            | The maximum number of threads that are allowed in the agent task thread pool. |
+| auth_token                         | Empty string                                    | The token that is used for identity authentication whitin the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time. |
+| tmp_dir                            | StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"    | The directory that stores temporary files such as files generated during backup and restore procedures. After these procedures finish, the generated temporary files are deleted. |
+| locale                             | zh_CN.UTF-8                                     | The character set that is used by the FE.                    |
+| hive_meta_load_concurrency         | 4                                               | The maximum number of concurrent threads that are supported for Hive metadata. |
+| hive_meta_cache_refresh_interval_s | 7200                                            | The time interval at which the cached metadata of Hive external tables is updated. Unit: second. |
+| hive_meta_cache_ttl_s              | 86400                                           | The amount of time after which the cached metadata of Hive external tables expires. Unit: second. |
+| hive_meta_store_timeout_s          | 10                                              | The amount of time after which a connection to a Hive metastore times out. Unit: second. |
+| es_state_sync_interval_second      | 10                                              | The time interval at which the FE obtains Elasticsearch indexes and synchronizes the metadata of StarRocks external tables. Unit: second. |
+| enable_auth_check                  | TRUE                                            | Specifies whether to enable the authentication chek feature. Valide values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature. |
+| enable_metric_calculator           | TRUE                                            | Specifies whether to enable the feature that is used to periodically collect metrics. Valide values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature. |
 
 ## BE configuration items
 
