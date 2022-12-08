@@ -39,7 +39,8 @@ public class AuditEvent {
         CONNECTION,
         DISCONNECTION,
         BEFORE_QUERY,
-        AFTER_QUERY
+        AFTER_QUERY,
+        SECURITY_WARN
     }
 
     @Retention(RetentionPolicy.RUNTIME)
@@ -96,6 +97,8 @@ public class AuditEvent {
     public String stmt = "";
     @AuditField(value = "Digest")
     public String digest = "";
+    @AuditField(value = "EventType")
+    public String eventType = "";
     @AuditField(value = "PlanCpuCost")
     public double planCpuCosts = 0.0;
     @AuditField(value = "PlanMemCost")
@@ -122,6 +125,13 @@ public class AuditEvent {
 
         public AuditEventBuilder setEventType(EventType eventType) {
             auditEvent.type = eventType;
+
+            if (eventType == EventType.AFTER_QUERY) {
+                auditEvent.eventType = "NORMAL";
+            } else if (eventType == EventType.SECURITY_WARN) {
+                auditEvent.eventType = "SECURITY_WARN";
+            }
+
             return this;
         }
 

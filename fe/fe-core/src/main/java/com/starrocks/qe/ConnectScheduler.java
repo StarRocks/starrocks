@@ -183,6 +183,8 @@ public class ConnectScheduler {
                 context.setConnectScheduler(ConnectScheduler.this);
                 // authenticate check failed.
                 if (!MysqlProto.negotiate(context)) {
+                    ConnectProcessor processor = new ConnectProcessor(context);
+                    processor.auditAfterExec("login", null, null, true);
                     return;
                 }
 
@@ -196,6 +198,7 @@ public class ConnectScheduler {
 
                 context.setStartTime();
                 ConnectProcessor processor = new ConnectProcessor(context);
+                processor.auditAfterExec("login", null, null, false);
                 processor.loop();
             } catch (Exception e) {
                 // for unauthrorized access such lvs probe request, may cause exception, just log it in debug level

@@ -24,6 +24,7 @@ package com.starrocks.metric;
 import com.starrocks.common.Config;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -58,6 +59,9 @@ public class MetricCalculator extends TimerTask {
         }
 
         long interval = (currentTs - lastTs) / 1000 + 1;
+
+        Long count = GlobalStateMgr.getCurrentState().securityWarnCount();
+        MetricRepo.GAUGE_SECURITY_WARN_COUNT.setValue(count);
 
         // qps
         long currentQueryCounter = MetricRepo.COUNTER_QUERY_ALL.getValue();

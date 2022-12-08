@@ -294,6 +294,8 @@ public class GlobalStateMgr {
     private MetaContext metaContext;
     private long epoch = 0;
 
+    private AtomicLong securityWarnCount;
+
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
     // Operations like Get or Put do not need lock.
@@ -531,6 +533,8 @@ public class GlobalStateMgr {
         this.statisticAutoCollector = new StatisticAutoCollector();
         this.statisticStorage = new CachedStatisticStorage();
 
+        this.securityWarnCount = new AtomicLong(0L);
+
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
         this.feType = FrontendNodeType.INIT;
@@ -639,6 +643,14 @@ public class GlobalStateMgr {
         } else {
             return SingletonHolder.INSTANCE;
         }
+    }
+
+    public Long securityWarnCount() {
+        return this.securityWarnCount.longValue();
+    }
+
+    public void addSecurityWarnCount() {
+        this.securityWarnCount.incrementAndGet();
     }
 
     @VisibleForTesting

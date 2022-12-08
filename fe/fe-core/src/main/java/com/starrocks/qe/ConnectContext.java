@@ -174,6 +174,8 @@ public class ConnectContext {
 
     protected SSLContext sslContext;
 
+    protected boolean securityWarning = false;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -545,6 +547,18 @@ public class ConnectContext {
 
     public void setCurrentCatalog(String currentCatalog) {
         this.currentCatalog = currentCatalog;
+    }
+
+    public void setSecurityWarning() {
+        securityWarning = true;
+    }
+
+    public void resetSecurityWarning() {
+        securityWarning = false;
+    }
+
+    public boolean securityWarning() {
+        return securityWarning;
     }
 
     // kill operation with no protect.
