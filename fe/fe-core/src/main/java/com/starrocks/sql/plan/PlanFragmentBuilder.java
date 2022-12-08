@@ -1651,6 +1651,26 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
+        private void setNullableForJoin(JoinOperator joinOperator,
+                PlanFragment leftFragment, PlanFragment rightFragment, ExecPlan context) {
+            Set<TupleId> nullableTupleIds = new HashSet<>();
+            nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
+            nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
+            if (joinOperator.isLeftOuterJoin()) {
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isRightOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isFullOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            }
+            for (TupleId tupleId : nullableTupleIds) {
+                TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(tupleId);
+                tupleDescriptor.getSlots().forEach(slot -> slot.setIsNullable(true));
+                tupleDescriptor.computeMemLayout();
+            }
+        }
+
         private PlanFragment visitPhysicalJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
@@ -1781,22 +1801,7 @@ public class PlanFragmentBuilder {
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
-                if (joinOperator.isLeftOuterJoin()) {
-                    for (TupleId tupleId : rightFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                } else if (joinOperator.isRightOuterJoin()) {
-                    for (TupleId tupleId : leftFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                } else if (joinOperator.isFullOuterJoin()) {
-                    for (TupleId tupleId : leftFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                    for (TupleId tupleId : rightFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                }
+                setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
 
                 JoinNode joinNode;
                 if (node instanceof PhysicalHashJoinOperator) {
