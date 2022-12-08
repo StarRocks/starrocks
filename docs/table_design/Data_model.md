@@ -45,23 +45,23 @@ Compared with traditional primary keys, sort keys in StarRocks have the followin
 
 ## Duplicate Key model
 
-The Duplicate Key model is the default data model at the creation of tables in StarRocks.
+The Duplicate Key model is the default model in StarRocks. If you did not specify a model when you create a table, a Duplicate Key table is created by default.
 
-When you create a table that uses the Duplicate Key model, you can define a sort key for that table. If the filter conditions for queries contain the sort key columns, StarRocks can quickly filter the data of the table to accelerate the queries. The Duplicate Key model allows you to append new data to the table. However, it does not allow you to modify the existing data in the table.
+When you create a Duplicate Key table, you can define a sort key for that table. If the filter conditions contain the sort key columns, StarRocks can quickly filter data from the table to accelerate queries. The Duplicate Key model allows you to append new data to the table. However, it does not allow you to modify existing data in the table.
 
 ### Scenarios
 
 The Duplicate Key model is suitable for the following scenarios:
 
 - Analyze raw data, such as raw logs and raw operation records.
-- Query data by using various methods without the need to be limited to preaggregate methods.
-- Load log data or time series data. New data is written in append-only mode, and existing data never changes.
+- Query data by using a variety of methods without being limited by the pre-aggregation method.
+- Load log data or time-series data. New data is written in append-only mode, and existing data is not updated.
 
 ### Create a table
 
 Suppose that you want to analyze the event data over a specific time range. In this example, create a table named `detail` and define `event_time` and `event_type` as sort key columns.
 
-The statement for creating the table is as follows:
+Statement for creating the table:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS detail (
@@ -83,16 +83,18 @@ DUPLICATE KEY(event_time, event_type)
 DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 ```
 
+> You must specify `DISTRIBUTED BY HASH`. Otherwise, the table creation fails.
+
 ### Usage notes
 
 - Take note of the following points about the sort key of a table:
-  - You can use the `DUPLICATE KEY` keyword to explicitly define the columns that participate in the sort key.
+  - You can use the `DUPLICATE KEY` keyword to explicitly define the columns that are used in the sort key.
 
-    > Note: By default, if you do not define sort key columns, StarRocks selects the first three columns as sort key columns.
+    > Note: By default, if you do not specify sort key columns, StarRocks uses the **first three** columns as sort key columns.
 
-  - In the Duplicate Key model, the sort key can be composed of some or all columns.  
+  - In the Duplicate Key model, the sort key can consist of some or all of the dimension columns.
 
-- You can create indexes such as BITMAP indexes and Bloom Filter indexes at table creation.
+- You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
 - If two identical records are loaded, the Duplicate Key model considers the two records as one record instead of two.
 
@@ -173,12 +175,12 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 8;
 ### Usage notes
 
 - Take note of the following points about the sort key of a table:
-  - You can use the `AGGREGATE KEY` keyword to explicitly define the columns that participate in the sort key.
+  - You can use the `AGGREGATE KEY` keyword to explicitly define the columns that are used in the sort key.
 
-    - If the `AGGREGATE KEY` keyword does not include all dimension columns, the table cannot  be created.
+    - If the `AGGREGATE KEY` keyword does not include all the dimension columns, the table cannot be created.
     - By default, if you do not explicitly define sort key columns by using the `AGGREGATE KEY` keyword, StarRocks selects all columns except metric columns as the sort key columns.
 
-  - The sort key must be created on columns on which unique constraints are enforced. It must be composed of all dimension columns whose names cannot be changed.
+  - The sort key must be created on columns on which unique constraints are enforced. It must be composed of all the dimension columns whose names cannot be changed.
 
 - You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
 

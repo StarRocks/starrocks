@@ -5,10 +5,12 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -33,8 +35,10 @@ public class PushDownPredicateCTEConsumeRule extends TransformationRule {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) input.getInputs().get(0).getOp();
 
+        ScalarOperator mergedPredicate = Utils.compoundAnd(filter.getPredicate(), consume.getPredicate());
+
         LogicalCTEConsumeOperator newConsume = new LogicalCTEConsumeOperator.Builder()
-                .withOperator(consume).setPredicate(filter.getPredicate()).build();
+                .withOperator(consume).setPredicate(mergedPredicate).build();
 
         OptExpression output = OptExpression.create(newConsume,
                 OptExpression.create(filter, input.getInputs().get(0).getInputs()));

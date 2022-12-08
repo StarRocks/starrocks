@@ -14,6 +14,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -308,8 +309,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         if (t != o.getType().getPrimitiveType()
                 && (!t.isCharFamily() && !o.getType().getPrimitiveType().isCharFamily())
                 && (!t.isDecimalOfAnyVersion() && !o.getType().getPrimitiveType().isDecimalOfAnyVersion())) {
-            throw new StarRocksPlannerException(
-                    "Constant " + this.toString() + " can't compare with Constant " + o.toString(),
+            throw new StarRocksPlannerException("Constant " + this + " can't compare with Constant " + o,
                     ErrorType.INTERNAL_ERROR);
         }
 
@@ -403,19 +403,20 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return ConstantOperator.createDouble(Double.parseDouble(childString));
         } else if (desc.isDate() || desc.isDatetime()) {
             DateLiteral literal;
+            String dateStr = StringUtils.strip(childString, "\r\n\t ");
             try {
                 // DateLiteral will throw Exception if cast failed
                 // 1.try cast by format "yyyy-MM-dd HH:mm:ss"
-                if (childString.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
-                    literal = new DateLiteral(childString, Type.DATETIME);
+                if (dateStr.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
+                    literal = new DateLiteral(dateStr, Type.DATETIME);
                 } else {
                     // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
-                    LocalDateTime localDateTime = LocalDateTime.from(DATE_TIME_FORMATTER_MS.parse(childString));
+                    LocalDateTime localDateTime = LocalDateTime.from(DATE_TIME_FORMATTER_MS.parse(dateStr));
                     return ConstantOperator.createDatetime(localDateTime, desc);
                 }
             } catch (Exception e) {
                 // 2.try cast by format "yyyy-MM-dd", will original operator if failed
-                literal = new DateLiteral(childString, Type.DATE);
+                literal = new DateLiteral(dateStr, Type.DATE);
             }
 
             if (Type.DATE.equals(desc)) {

@@ -961,5 +961,4 @@ TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
 }
-
 } // namespace starrocks::parquet
