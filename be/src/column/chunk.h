@@ -35,12 +35,12 @@ class ChunkExtraData;
 using ChunkExtraDataPtr = std::shared_ptr<ChunkExtraData>;
 
 /**
- * ChunkExtraData is an extra data which are not belong to the regular columns in the Chunk,
- * it is used to extend the Chunk to attach more hidden infos or extra infos beside the schema.
+ * ChunkExtraData is an extra data which can be used to extend Chunk and 
+ * attach extra infos beside the schema. eg, In Stream MV scenes, 
+ * the hidden `_op_` column can be added in the ChunkExtraData.
  *
- * NOTE: `ChunkExtraColumnsData` is a specific implementation which include extra columns besides
- * schema, and it supports common methods like Chunk and supports cross exchange by design.
- * eg, In Stream MV scenes, the hidden `_op_` column can be added in the ChunkExtraData.
+ * NOTE: `ChunkExtraColumnsData` is a specific implementation which includes extra 
+ * columns besides the schema, and it supports common methods like Chunk.
  *
  * TODO: Optimize old variables use this extendable method, eg owner_info.
  */
