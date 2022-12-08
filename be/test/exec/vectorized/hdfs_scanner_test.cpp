@@ -1472,4 +1472,68 @@ TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
     }
 }
 
+// =============================================================================
+
+/*
+id 0 ~ 99
+A "00" ~ "99"
+
+file schema: schema
+--------------------------------------------------------------------------------
+id:          OPTIONAL INT64 R:0 D:1
+A:           OPTIONAL BINARY O:UTF8 R:0 D:1
+
+row group 1: RC:100 TS:1730 OFFSET:4
+--------------------------------------------------------------------------------
+id:           INT64 SNAPPY DO:4 FPO:432 SZ:595/981/1.65 VC:100 ENC:PLAIN,RLE,PLAIN_DICTIONARY
+A:            BINARY SNAPPY DO:693 FPO:1139 SZ:581/749/1.29 VC:100 ENC:PLAIN,RLE,PLAIN_DICTIONARY
+*/
+
+TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
+    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                                {"a", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/upcase_field.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    param->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+
+    // expect a = '05'
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "05");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "05");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1);
+    EXPECT_EQ(scanner->raw_rows_read(), 100);
+    scanner->close(_runtime_state);
+}
+
 } // namespace starrocks::vectorized
