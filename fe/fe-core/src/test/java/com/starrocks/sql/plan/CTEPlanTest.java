@@ -592,9 +592,9 @@ public class CTEPlanTest extends PlanTestBase {
                 "on with_t_0.v1 = subwith_t_0.v2 and with_t_0.v1 > 0\n" +
                 "where with_t_0.v4 < 100;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "11:SELECT\n" +
+        assertContains(plan, "6:SELECT\n" +
                 "  |  predicates: 19: v1 > 0, 22: v4 < 100");
-        assertContains(plan, "14:SELECT\n" +
+        assertContains(plan, "9:SELECT\n" +
                 "  |  predicates: 26: v2 > 0, 28: v4 = 123");
     }
 }
