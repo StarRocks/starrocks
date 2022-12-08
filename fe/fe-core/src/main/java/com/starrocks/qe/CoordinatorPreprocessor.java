@@ -28,6 +28,7 @@ import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -80,6 +81,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -96,6 +100,7 @@ public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
     private static final int BUCKET_ABSENT = 2147483647;
+    static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final Random random = new Random();
 
@@ -119,6 +124,7 @@ public class CoordinatorPreprocessor {
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
     private final Set<TUniqueId> instanceIds = Sets.newHashSet();
 
+    private final TDescriptorTable descriptorTable;
     private final List<PlanFragment> fragments;
     private final List<ScanNode> scanNodes;
 
@@ -152,15 +158,29 @@ public class CoordinatorPreprocessor {
     private TWorkGroup resourceGroup = null;
 
     public CoordinatorPreprocessor(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
-                                   List<ScanNode> scanNodes,
+                                   List<ScanNode> scanNodes, TDescriptorTable descriptorTable,
                                    TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
         this.connectContext = context;
         this.queryId = queryId;
+        this.descriptorTable = descriptorTable;
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryGlobals = queryGlobals;
         this.queryOptions = queryOptions;
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
+        TQueryGlobals queryGlobals = new TQueryGlobals();
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        queryGlobals.setNow_string(nowString);
+        queryGlobals.setTimestamp_ms(startTime);
+        if (timezone.equals("CST")) {
+            queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+        } else {
+            queryGlobals.setTime_zone(timezone);
+        }
+        return queryGlobals;
     }
 
     public TNetworkAddress getCoordAddress() {
@@ -209,6 +229,10 @@ public class CoordinatorPreprocessor {
 
     public Set<TUniqueId> getInstanceIds() {
         return instanceIds;
+    }
+
+    public TDescriptorTable getDescriptorTable() {
+        return descriptorTable;
     }
 
     public List<PlanFragment> getFragments() {

@@ -45,6 +45,7 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
@@ -232,6 +233,21 @@ public class ConnectContext {
         }
 
         this.sslContext = sslContext;
+    }
+
+    public static ConnectContext buildDefault() {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        // TODO(murphy) Use other user instead of root ?
+        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setPipelineDop(0);
+        UUID uuid = UUID.randomUUID();
+        TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        connectContext.setQueryId(uuid);
+        connectContext.setExecutionId(queryId);
+        return connectContext;
     }
 
     public long getStmtId() {
