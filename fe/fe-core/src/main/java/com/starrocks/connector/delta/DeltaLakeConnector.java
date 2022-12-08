@@ -21,6 +21,8 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.credential.AWSCredential;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -57,12 +59,20 @@ public class DeltaLakeConnector implements Connector {
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
+        Configuration configuration = null;
+        AWSCredential awsCredential = AWSCredential.buildS3Credential(properties);
+        if (awsCredential != null) {
+            configuration = awsCredential.generateHadoopConfiguration();
+        } else {
+            configuration = new Configuration();
+        }
 
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
                 internalMgr.getHiveMetastoreConf(),
-                properties.get(HIVE_METASTORE_URIS)
+                properties.get(HIVE_METASTORE_URIS),
+                configuration
         );
     }
 
@@ -72,5 +82,10 @@ public class DeltaLakeConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+    }
+
+    @Override
+    public Map<String, String> getConnectorProperties() {
+        return properties;
     }
 }

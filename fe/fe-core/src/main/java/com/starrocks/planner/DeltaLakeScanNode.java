@@ -23,10 +23,16 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
+import com.starrocks.credential.AWSCredential;
+import com.starrocks.credential.CloudCredential;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TAWSCredential;
+import com.starrocks.thrift.TCloudCredential;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -65,6 +71,7 @@ public class DeltaLakeScanNode extends ScanNode {
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private Optional<Expression> deltaLakePredicates = Optional.empty();
+    private CloudCredential cloudCredential;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -77,6 +84,12 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public DeltaLakeTable getDeltaLakeTable() {
         return deltaLakeTable;
+    }
+
+    public void setupCloudCredential() {
+        Connector connector =
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(deltaLakeTable.getCatalogName());
+        cloudCredential = AWSCredential.buildS3Credential(connector.getConnectorProperties());
     }
 
     @Override
@@ -253,6 +266,14 @@ public class DeltaLakeScanNode extends ScanNode {
 
         if (deltaLakeTable != null) {
             msg.hdfs_scan_node.setTable_name(deltaLakeTable.getName());
+        }
+
+        if (cloudCredential != null) {
+            TAWSCredential tAWSCredential = new TAWSCredential();
+            cloudCredential.toThrift(tAWSCredential);
+            TCloudCredential tCloudCredential = new TCloudCredential();
+            tCloudCredential.setAws_credential(tAWSCredential);
+            msg.hdfs_scan_node.setCloud_credential(tCloudCredential);
         }
     }
 

@@ -787,6 +787,8 @@ public class PlanFragmentBuilder {
 
             hudiScanNode.setLimit(node.getLimit());
 
+            hudiScanNode.setupCloudCredential();
+
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hudiScanNode);
 
@@ -826,6 +828,8 @@ public class PlanFragmentBuilder {
             }
 
             hdfsScanNode.setLimit(node.getLimit());
+
+            hdfsScanNode.setupCloudCredential();
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hdfsScanNode);
@@ -915,6 +919,8 @@ public class PlanFragmentBuilder {
 
             deltaLakeScanNode.setLimit(node.getLimit());
 
+            deltaLakeScanNode.setupCloudCredential();
+
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(deltaLakeScanNode);
 
@@ -962,6 +968,8 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setLimit(node.getLimit());
+
+            icebergScanNode.setupCloudCredential();
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(icebergScanNode);

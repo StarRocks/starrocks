@@ -884,6 +884,20 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
+struct TAWSCredential {
+    1: optional bool use_instance_profile;
+    2: optional string access_key;
+    3: optional string secret_key;
+    4: optional string iam_role_arn;
+    5: optional string external_id;
+    6: optional string region;
+    7: optional string endpoint;
+}
+
+struct TCloudCredential {
+    1: optional TAWSCredential aws_credential;
+}
+
 struct THdfsScanNode {
     1: optional Types.TTupleId tuple_id
 
@@ -919,6 +933,8 @@ struct THdfsScanNode {
 
     // Flag to indicate wheather the column names are case sensitive
     12: optional bool case_sensitive;
+
+    13: optional TCloudCredential cloud_credential;
 }
 
 struct TProjectNode {

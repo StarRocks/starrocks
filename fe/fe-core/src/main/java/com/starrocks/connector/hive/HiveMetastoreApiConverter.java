@@ -27,8 +27,11 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.AWSCredential;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -118,7 +121,15 @@ public class HiveMetastoreApiConverter {
 
     public static HudiTable toHudiTable(Table table, String catalogName) {
         String hudiBasePath = table.getSd().getLocation();
-        Configuration conf = new Configuration();
+        Connector connector =
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        AWSCredential awsCredential = AWSCredential.buildS3Credential(connector.getConnectorProperties());
+        Configuration conf = null;
+        if (awsCredential != null) {
+            conf = awsCredential.generateHadoopConfiguration();
+        } else {
+            conf = new Configuration();
+        }
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();

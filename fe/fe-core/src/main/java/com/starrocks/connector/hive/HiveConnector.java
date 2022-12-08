@@ -96,4 +96,9 @@ public class HiveConnector implements Connector {
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
+
+    @Override
+    public Map<String, String> getConnectorProperties() {
+        return properties;
+    }
 }

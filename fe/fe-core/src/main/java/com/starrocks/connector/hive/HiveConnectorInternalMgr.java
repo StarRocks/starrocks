@@ -21,6 +21,7 @@ import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.credential.AWSCredential;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
@@ -98,7 +99,15 @@ public class HiveConnectorInternalMgr {
 
     public RemoteFileIO createRemoteFileIO() {
         // TODO(stephen): Abstract the creator class to construct RemoteFiloIO
-        Configuration configuration = new Configuration();
+
+        Configuration configuration = null;
+        AWSCredential awsS3Credential = AWSCredential.buildS3Credential(properties);
+        if (awsS3Credential != null) {
+            configuration = awsS3Credential.generateHadoopConfiguration();
+        } else {
+            configuration = new Configuration();
+        }
+
         RemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
 
         RemoteFileIO baseRemoteFileIO;

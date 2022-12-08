@@ -201,7 +201,10 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
         } catch (AmazonServiceException e) {
             String msg = "Unable to verify existence of default database: ";
             LOGGER.error(msg, e);
-            throw new MetaException(msg + e);
+            throw new MetaException(msg + e.getErrorMessage());
+        } catch (Exception e) {
+            LOGGER.error(e);
+            throw new MetaException(e.getMessage());
         }
         return true;
     }

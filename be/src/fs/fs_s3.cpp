@@ -16,6 +16,8 @@
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/sts/STSClient.h>
+#include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/CreateBucketRequest.h>
@@ -41,6 +43,7 @@
 #include "io/s3_output_stream.h"
 #include "util/hdfs_util.h"
 #include "util/random.h"
+#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
 
@@ -118,6 +121,32 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
         if (_configs[i] == config) return _clients[i];
     }
 
+    if (opts.cloud_credential != nullptr) {
+        const TCloudCredential* cloud_credential = opts.cloud_credential;
+        // We only use aws credential in s3
+        DCHECK(cloud_credential->__isset.aws_credential);
+        const TAWSCredential& aws_credential = cloud_credential->aws_credential;
+        std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credential_provider = nullptr;
+        if (aws_credential.use_instance_profile) {
+            credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
+            if (aws_credential.__isset.iam_role_arn) {
+                auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
+                credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(aws_credential.iam_role_arn, Aws::String(), aws_credential.external_id, Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
+            }
+        } else if (aws_credential.__isset.access_key) {
+            DCHECK(aws_credential.__isset.access_key);
+            DCHECK(aws_credential.__isset.secret_key);
+            credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(aws_credential.access_key, aws_credential.secret_key);
+            if (aws_credential.__isset.iam_role_arn) {
+                auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
+                credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(aws_credential.iam_role_arn, Aws::String(), aws_credential.external_id, Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
+            }
+        } else {
+            credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
+        }
+        return std::make_shared<Aws::S3::S3Client>(credential_provider, config);
+    }
+
     S3ClientPtr client;
     string access_key_id;
     string secret_access_key;
@@ -163,7 +192,16 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
-    if (hdfs_properties != nullptr) {
+    if (opts.cloud_credential != nullptr) {
+        DCHECK(opts.cloud_credential->__isset.aws_credential);
+        const TAWSCredential& aws_credential = opts.cloud_credential->aws_credential;
+        if (aws_credential.__isset.endpoint) {
+            config.endpointOverride = aws_credential.endpoint;
+        }
+        if (aws_credential.__isset.region) {
+            config.region = aws_credential.region;
+        }
+    } else if (hdfs_properties != nullptr) {
         DCHECK(hdfs_properties->__isset.end_point);
         if (hdfs_properties->__isset.end_point) {
             config.endpointOverride = hdfs_properties->end_point;

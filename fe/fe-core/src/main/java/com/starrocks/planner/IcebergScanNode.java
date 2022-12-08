@@ -31,9 +31,12 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
+import com.starrocks.credential.AWSCredential;
+import com.starrocks.credential.CloudCredential;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -43,6 +46,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TAWSCredential;
+import com.starrocks.thrift.TCloudCredential;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -91,9 +96,18 @@ public class IcebergScanNode extends ScanNode {
 
     private boolean isFinalized = false;
 
+    private CloudCredential cloudCredential;
+
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         srIcebergTable = (IcebergTable) desc.getTable();
+    }
+
+    public void setupCloudCredential() {
+        //TODO
+        Connector connector =
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(srIcebergTable.getCatalog());
+        cloudCredential = AWSCredential.buildS3Credential(connector.getConnectorProperties());
     }
 
     @Override
@@ -339,6 +353,14 @@ public class IcebergScanNode extends ScanNode {
 
         if (srIcebergTable != null) {
             msg.hdfs_scan_node.setTable_name(srIcebergTable.getTable());
+        }
+
+        if (cloudCredential != null) {
+            TAWSCredential tAWSCredential = new TAWSCredential();
+            cloudCredential.toThrift(tAWSCredential);
+            TCloudCredential tCloudCredential = new TCloudCredential();
+            tCloudCredential.setAws_credential(tAWSCredential);
+            msg.hdfs_scan_node.setCloud_credential(tCloudCredential);
         }
     }
 

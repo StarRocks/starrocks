@@ -22,6 +22,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.iceberg.hive.CachedClientPool;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.credential.AWSCredential;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -57,9 +58,16 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
     public static synchronized IcebergHiveCatalog getInstance(String uri, Map<String, String> properties) {
         if (!METASTORE_URI_TO_CATALOG.containsKey(uri)) {
+            Configuration configuration;
+            AWSCredential awsCredential = AWSCredential.buildS3Credential(properties);
+            if (awsCredential != null) {
+                configuration = awsCredential.generateHadoopConfiguration();
+            } else {
+                configuration = new Configuration();
+            }
             properties.put(CatalogProperties.URI, uri);
             METASTORE_URI_TO_CATALOG.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
-                    new Configuration(), properties).loadCatalog());
+                    configuration, properties).loadCatalog());
         }
         return METASTORE_URI_TO_CATALOG.get(uri);
     }
@@ -107,7 +115,14 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         this.name = inputName;
         if (conf == null) {
             LOG.warn("No Hadoop Configuration was set, using the default environment Configuration");
-            this.conf = new Configuration();
+            Configuration configuration = null;
+            AWSCredential awsCredential = AWSCredential.buildS3Credential(properties);
+            if (awsCredential != null) {
+                configuration = awsCredential.generateHadoopConfiguration();
+            } else {
+                configuration = new Configuration();
+            }
+            this.conf = configuration;
         }
 
         if (properties.containsKey(CatalogProperties.URI)) {

@@ -73,4 +73,9 @@ public class HudiConnector implements Connector {
     public void shutdown() {
         internalMgr.shutdown();
     }
+
+    @Override
+    public Map<String, String> getConnectorProperties() {
+        return properties;
+    }
 }

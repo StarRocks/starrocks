@@ -25,6 +25,7 @@ import com.amazonaws.services.glue.AWSGlueClientBuilder;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.connector.hive.glue.util.AWSGlueConfig;
+import com.starrocks.credential.AWSCredential;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.MetaException;
@@ -37,44 +38,65 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
 
     private final HiveConf conf;
 
+    private final AWSCredential glueCredential;
+
     public AWSGlueClientFactory(HiveConf conf) {
         Preconditions.checkNotNull(conf, "HiveConf cannot be null");
         this.conf = conf;
+        this.glueCredential = AWSCredential.buildGlueCredential(conf);
     }
 
     @Override
     public AWSGlue newClient() throws MetaException {
-        try {
-            AWSGlueClientBuilder glueClientBuilder = AWSGlueClientBuilder.standard()
-                    .withCredentials(getAWSCredentialsProvider(conf));
-
-            String regionStr = getProperty(AWSGlueConfig.AWS_REGION, conf);
-            String glueEndpoint = getProperty(AWSGlueConfig.AWS_GLUE_ENDPOINT, conf);
-
-            // ClientBuilder only allows one of EndpointConfiguration or Region to be set
-            if (StringUtils.isNotBlank(glueEndpoint)) {
-                LOGGER.info("Setting glue service endpoint to " + glueEndpoint);
-                glueClientBuilder
-                        .setEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(glueEndpoint, null));
-            } else if (StringUtils.isNotBlank(regionStr)) {
-                LOGGER.info("Setting region to : " + regionStr);
-                glueClientBuilder.setRegion(regionStr);
-            } else {
-                Region currentRegion = Regions.getCurrentRegion();
-                if (currentRegion != null) {
-                    LOGGER.info("Using region from ec2 metadata : " + currentRegion.getName());
-                    glueClientBuilder.setRegion(currentRegion.getName());
-                } else {
-                    LOGGER.info("No region info found, using SDK default region: us-east-1");
+        if (glueCredential != null) {
+            try {
+                AWSCredentialsProvider awsCredentialsProvider = glueCredential.generateAWSCredentialsProvider();
+                AWSGlueClientBuilder glueClientBuilder =
+                        AWSGlueClientBuilder.standard().withCredentials(awsCredentialsProvider);
+                if (!glueCredential.getRegion().isEmpty()) {
+                    glueClientBuilder.setRegion(glueCredential.getRegion());
                 }
+                // TODO Endpoint not handle
+                glueClientBuilder.setClientConfiguration(buildClientConfiguration(conf));
+                return glueClientBuilder.build();
+            } catch (Exception e) {
+                String message = "Unable to build AWSGlueClient: " + e;
+                LOGGER.error(message);
+                throw new MetaException(message);
             }
+        } else {
+            try {
+                AWSGlueClientBuilder glueClientBuilder = AWSGlueClientBuilder.standard()
+                        .withCredentials(getAWSCredentialsProvider(conf));
 
-            glueClientBuilder.setClientConfiguration(buildClientConfiguration(conf));
-            return glueClientBuilder.build();
-        } catch (Exception e) {
-            String message = "Unable to build AWSGlueClient: " + e;
-            LOGGER.error(message);
-            throw new MetaException(message);
+                String regionStr = getProperty(AWSGlueConfig.AWS_REGION, conf);
+                String glueEndpoint = getProperty(AWSGlueConfig.AWS_GLUE_ENDPOINT, conf);
+
+                // ClientBuilder only allows one of EndpointConfiguration or Region to be set
+                if (StringUtils.isNotBlank(glueEndpoint)) {
+                    LOGGER.info("Setting glue service endpoint to " + glueEndpoint);
+                    glueClientBuilder
+                            .setEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(glueEndpoint, null));
+                } else if (StringUtils.isNotBlank(regionStr)) {
+                    LOGGER.info("Setting region to : " + regionStr);
+                    glueClientBuilder.setRegion(regionStr);
+                } else {
+                    Region currentRegion = Regions.getCurrentRegion();
+                    if (currentRegion != null) {
+                        LOGGER.info("Using region from ec2 metadata : " + currentRegion.getName());
+                        glueClientBuilder.setRegion(currentRegion.getName());
+                    } else {
+                        LOGGER.info("No region info found, using SDK default region: us-east-1");
+                    }
+                }
+
+                glueClientBuilder.setClientConfiguration(buildClientConfiguration(conf));
+                return glueClientBuilder.build();
+            } catch (Exception e) {
+                String message = "Unable to build AWSGlueClient: " + e;
+                LOGGER.error(message);
+                throw new MetaException(message);
+            }
         }
     }
 

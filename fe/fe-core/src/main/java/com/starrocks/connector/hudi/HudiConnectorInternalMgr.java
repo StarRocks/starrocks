@@ -26,6 +26,7 @@ import com.starrocks.connector.hive.CachingHiveMetastoreConf;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.credential.AWSCredential;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
@@ -98,7 +99,13 @@ public class HudiConnectorInternalMgr {
 
     public RemoteFileIO createRemoteFileIO() {
         // TODO(stephen): Abstract the creator class to construct RemoteFiloIO
-        Configuration configuration = new Configuration();
+        Configuration configuration = null;
+        AWSCredential awsS3Credential = AWSCredential.buildS3Credential(properties);
+        if (awsS3Credential != null) {
+            configuration = awsS3Credential.generateHadoopConfiguration();
+        } else {
+            configuration = new Configuration();
+        }
         RemoteFileIO remoteFileIO = new HudiRemoteFileIO(configuration);
 
         RemoteFileIO baseRemoteFileIO;

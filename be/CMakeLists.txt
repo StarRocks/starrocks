@@ -213,7 +213,7 @@ foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
 endforeach()
-find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
+find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
 
 add_library(libevent STATIC IMPORTED)

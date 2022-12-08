@@ -31,12 +31,12 @@ public class DeltaLakeMetadataFactory {
     private final Configuration configuration;
 
     public DeltaLakeMetadataFactory(String catalogName, IHiveMetastore metastore, CachingHiveMetastoreConf hmsConf,
-                                    String uri) {
+                                    String uri, Configuration configuration) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
-        configuration = new Configuration();
-        configuration.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), uri);
+        this.configuration = configuration;
+        this.configuration.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), uri);
     }
 
     public DeltaLakeMetadata create() {

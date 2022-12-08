@@ -99,4 +99,9 @@ public class JDBCConnector implements Connector {
         }
         return metadata;
     }
+
+    @Override
+    public Map<String, String> getConnectorProperties() {
+        return properties;
+    }
 }

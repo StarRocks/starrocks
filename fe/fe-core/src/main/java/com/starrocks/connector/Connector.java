@@ -15,6 +15,8 @@
 
 package com.starrocks.connector;
 
+import java.util.Map;
+
 public interface Connector {
     /**
      * Get the connector meta of connector
@@ -31,4 +33,6 @@ public interface Connector {
      * have been returned from the connector.
      */
     default void shutdown() {}
+
+    Map<String, String> getConnectorProperties();
 }

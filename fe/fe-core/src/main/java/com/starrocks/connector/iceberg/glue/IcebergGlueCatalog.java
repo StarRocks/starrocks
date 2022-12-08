@@ -25,6 +25,7 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.credential.AWSCredential;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.iceberg.BaseMetastoreCatalog;
@@ -104,7 +105,14 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
         this.name = inputName;
         if (conf == null) {
             LOG.warn("No Hadoop Configuration was set, using the default environment Configuration");
-            this.conf = new Configuration();
+            Configuration configuration;
+            AWSCredential awsCredential = AWSCredential.buildS3Credential(properties);
+            if (awsCredential != null) {
+                configuration = awsCredential.generateHadoopConfiguration();
+            } else {
+                configuration = new Configuration();
+            }
+            this.conf = configuration;
         }
 
         String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);

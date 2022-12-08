@@ -21,8 +21,14 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteScanRangeLocations;
+import com.starrocks.credential.AWSCredential;
+import com.starrocks.credential.CloudCredential;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TAWSCredential;
+import com.starrocks.thrift.TCloudCredential;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -36,6 +42,8 @@ public class HudiScanNode extends ScanNode {
 
     private HudiTable hudiTable;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+
+    private CloudCredential cloudCredential;
 
     public HudiScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -60,6 +68,12 @@ public class HudiScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
         scanRangeLocations.setupScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+    }
+
+    public void setupCloudCredential() {
+        Connector connector =
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(hudiTable.getCatalogName());
+        cloudCredential = AWSCredential.buildS3Credential(connector.getConnectorProperties());
     }
 
     @Override
@@ -150,6 +164,14 @@ public class HudiScanNode extends ScanNode {
         if (hudiTable != null) {
             msg.hdfs_scan_node.setHive_column_names(hudiTable.getDataColumnNames());
             msg.hdfs_scan_node.setTable_name(hudiTable.getName());
+        }
+
+        if (cloudCredential != null) {
+            TAWSCredential tAWSCredential = new TAWSCredential();
+            cloudCredential.toThrift(tAWSCredential);
+            TCloudCredential tCloudCredential = new TCloudCredential();
+            tCloudCredential.setAws_credential(tAWSCredential);
+            msg.hdfs_scan_node.setCloud_credential(tCloudCredential);
         }
     }
 
