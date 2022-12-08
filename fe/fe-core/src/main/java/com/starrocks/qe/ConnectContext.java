@@ -314,10 +314,19 @@ public class ConnectContext {
     }
 
     public SetStmt getModifiedSessionVariables() {
+        List<SetVar> sessionVariables = new ArrayList<>();
         if (!modifiedSessionVariables.isEmpty()) {
-            return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));
+            sessionVariables.addAll(modifiedSessionVariables.values());
         }
-        return null;
+        if (!userVariables.isEmpty()) {
+            sessionVariables.addAll(userVariables.values());
+        }
+
+        if (sessionVariables.isEmpty()) {
+            return null;
+        } else {
+            return new SetStmt(sessionVariables);
+        }
     }
 
     public SessionVariable getSessionVariable() {

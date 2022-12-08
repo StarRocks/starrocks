@@ -132,7 +132,7 @@ public class AnalyzeJoinTest {
     @Test
     public void testJoinPreceding() {
         QueryStatement query = ((QueryStatement) analyzeSuccess("select * from t0,t1 inner join t2 on v4 = v7"));
-        System.out.println(AST2SQL.toString(query));
+        System.out.println(AstToStringBuilder.toString(query));
     }
 
     @Test

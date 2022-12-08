@@ -634,7 +634,103 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
 
         ASSERT_TRUE(index.get(keys.size(), key_slices.data(), get_values.data()).ok());
         ASSERT_EQ(keys.size(), get_values.size());
-        for (int i = 0; i < values.size(); i++) {
+        for (int i = 0; i < get_values.size(); i++) {
+            ASSERT_EQ(values[i], get_values[i]);
+        }
+    }
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_small_varlen_mutable_index_snapshot_wal";
+    const std::string kIndexFile = "./PersistentIndexTest_test_small_varlen_mutable_index_snapshot_wal/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 100000;
+
+    // insert
+    vector<Key> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values.emplace_back(i);
+        key_slices.emplace_back(keys[i]);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    {
+        EditVersion version(0, 0);
+        index_meta.set_key_size(0);
+        index_meta.set_size(0);
+        version.to_pb(index_meta.mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+        version.to_pb(snapshot_meta->mutable_version());
+
+        PersistentIndex index(kPersistentIndexDir);
+
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(1, 0)));
+        ASSERT_OK(index.insert(N, key_slices.data(), values.data(), false));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+
+        const int NUM_SNAPSHOT = 10;
+        vector<Key> snapshot_keys(NUM_SNAPSHOT);
+        vector<Slice> snapshot_key_slices;
+        vector<IndexValue> snapshot_values;
+        snapshot_key_slices.reserve(NUM_SNAPSHOT);
+        for (int i = 0; i < NUM_SNAPSHOT; i++) {
+            snapshot_keys[i] = "test_varlen_" + std::to_string(i);
+            snapshot_values.emplace_back(i * 2);
+            snapshot_key_slices.emplace_back(snapshot_keys[i]);
+        }
+
+        std::vector<IndexValue> old_values(NUM_SNAPSHOT);
+        ASSERT_OK(index.prepare(EditVersion(2, 0)));
+        ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data()));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+
+        const int NUM_WAL = 20000;
+        vector<Key> wal_keys(NUM_WAL);
+        vector<Slice> wal_key_slices;
+        vector<IndexValue> wal_values;
+        wal_key_slices.reserve(NUM_WAL);
+        for (int i = NUM_SNAPSHOT; i < NUM_WAL + NUM_SNAPSHOT; i++) {
+            wal_keys[i - NUM_SNAPSHOT] = "test_varlen_" + std::to_string(i);
+            wal_values.emplace_back(i * 3);
+            wal_key_slices.emplace_back(wal_keys[i - NUM_SNAPSHOT]);
+        }
+
+        config::l0_l1_merge_ratio = 1;
+        std::vector<IndexValue> wal_old_values(NUM_WAL);
+        ASSERT_OK(index.prepare(EditVersion(3, 0)));
+        ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data()));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+
+        std::vector<IndexValue> get_values(keys.size());
+        ASSERT_TRUE(index.get(keys.size(), key_slices.data(), get_values.data()).ok());
+        ASSERT_EQ(keys.size(), get_values.size());
+
+        for (int i = 0; i < NUM_SNAPSHOT; i++) {
+            ASSERT_EQ(snapshot_values[i], get_values[i]);
+        }
+        for (int i = NUM_SNAPSHOT; i < NUM_WAL + NUM_SNAPSHOT; i++) {
+            ASSERT_EQ(wal_values[i - NUM_SNAPSHOT], get_values[i]);
+        }
+        for (int i = NUM_WAL + NUM_SNAPSHOT; i < N; i++) {
             ASSERT_EQ(values[i], get_values[i]);
         }
     }

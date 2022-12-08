@@ -35,7 +35,7 @@ public class AnalyzeShowTest {
         Assert.assertEquals("SELECT information_schema.SESSION_VARIABLES.VARIABLE_NAME AS Variable_name, " +
                         "information_schema.SESSION_VARIABLES.VARIABLE_VALUE AS Value " +
                         "FROM information_schema.SESSION_VARIABLES WHERE variables_name = 't1'",
-                AST2SQL.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(statement.toSelectStmt()));
 
         ShowVariablesStmt stmt = (ShowVariablesStmt) analyzeSuccess("show global variables like 'abc'");
         Assert.assertEquals("abc", stmt.getPattern());
@@ -65,7 +65,7 @@ public class AnalyzeShowTest {
                         "information_schema.tables.CREATE_OPTIONS AS Create_options, " +
                         "information_schema.tables.TABLE_COMMENT AS Comment " +
                         "FROM information_schema.tables WHERE information_schema.tables.TABLE_NAME = 't1'",
-                AST2SQL.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(statement.toSelectStmt()));
     }
 
     @Test
@@ -74,7 +74,7 @@ public class AnalyzeShowTest {
         ShowStmt statement = (ShowStmt) analyzeSuccess("show databases where `database` = 't1';");
         Assert.assertEquals("SELECT information_schema.schemata.SCHEMA_NAME AS Database " +
                         "FROM information_schema.schemata WHERE information_schema.schemata.SCHEMA_NAME = 't1'",
-                AST2SQL.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(statement.toSelectStmt()));
     }
 
     @Test
@@ -85,7 +85,7 @@ public class AnalyzeShowTest {
                 "SELECT information_schema.tables.TABLE_NAME AS Tables_in_test " +
                         "FROM information_schema.tables " +
                         "WHERE (information_schema.tables.TABLE_SCHEMA = 'test') AND (table_name = 't1')",
-                AST2SQL.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(statement.toSelectStmt()));
 
         statement = (ShowTableStmt) analyzeSuccess("show tables from `test`");
         Assert.assertEquals("test", statement.getDb());
@@ -102,7 +102,7 @@ public class AnalyzeShowTest {
                         "information_schema.COLUMNS.COLUMN_DEFAULT AS Default, " +
                         "information_schema.COLUMNS.EXTRA AS Extra " +
                         "FROM information_schema.COLUMNS WHERE information_schema.COLUMNS.COLUMN_NAME = 'v1'",
-                AST2SQL.toString(statement.toSelectStmt()));
+                AstToStringBuilder.toString(statement.toSelectStmt()));
     }
 
     @Test
@@ -138,21 +138,21 @@ public class AnalyzeShowTest {
                 "SHOW PARTITIONS FROM `test`.`t0` " +
                         "WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'");
         Assert.assertEquals("LastConsistencyCheckTime > '2019-12-22 10:22:11'",
-                AST2SQL.toString(showPartitionsStmt.getFilterMap().get("lastconsistencychecktime")));
+                AstToStringBuilder.toString(showPartitionsStmt.getFilterMap().get("lastconsistencychecktime")));
 
         showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM `test`.`t0`" +
                 " WHERE `PartitionName` LIKE '%p2019%'");
         Assert.assertEquals("PartitionName LIKE '%p2019%'",
-                AST2SQL.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
+                AstToStringBuilder.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
 
         showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM `test`.`t0`" +
                 " WHERE `PartitionName` = 'p1'");
         Assert.assertEquals("PartitionName = 'p1'",
-                AST2SQL.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
+                AstToStringBuilder.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
 
         showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM " +
                 "`test`.`t0` ORDER BY `PartitionId` ASC LIMIT 10\"");
         Assert.assertEquals(" LIMIT 10",
-                AST2SQL.toString(showPartitionsStmt.getLimitElement()));
+                AstToStringBuilder.toString(showPartitionsStmt.getLimitElement()));
     }
 }
