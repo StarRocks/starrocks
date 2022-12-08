@@ -14,7 +14,7 @@ SQL 语句在 StarRocks 中的生命周期可以分为查询解析、规划、�
 
 ## 下载并解压安装包
 
-[下载](https://www.starrocks.com/zh-CN/download) StarRocks 并解压二进制安装包。
+[下载](https://www.mirrorship.cn/zh-CN/download) StarRocks 并解压二进制安装包。
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
