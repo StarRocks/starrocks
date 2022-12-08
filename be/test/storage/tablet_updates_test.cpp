@@ -686,7 +686,11 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
 
 static ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletSharedPtr& tablet, int64_t version,
                                                                 const vector<int64_t>& keys) {
+<<<<<<< HEAD
     vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+=======
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+>>>>>>> d25e71b68 ([Feature] Support assign sort key of primary key model by schema change reorder. (#13642))
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -721,7 +725,11 @@ static ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletShar
 
 static ssize_t read_tablet_and_compare_schema_changed_sort_key2(const TabletSharedPtr& tablet, int64_t version,
                                                                 const vector<int64_t>& keys) {
+<<<<<<< HEAD
     vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+=======
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+>>>>>>> d25e71b68 ([Feature] Support assign sort key of primary key model by schema change reorder. (#13642))
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
