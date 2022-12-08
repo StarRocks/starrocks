@@ -30,6 +30,7 @@ class IntersectContext final : public ContextWithDependency {
 public:
     IntersectContext(const int dst_tuple_id, const size_t intersect_times)
             : _dst_tuple_id(dst_tuple_id), _intersect_times(intersect_times) {}
+    ~IntersectContext() override = default;
 
     bool is_ht_empty() const { return _is_hash_set_empty; }
 

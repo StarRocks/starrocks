@@ -38,6 +38,7 @@ public:
               _rf_conjuncts_ctx(std::move(params.filters)),
               _rf_hub(params.rf_hub),
               _rf_descs(std::move(params.rf_descs)) {}
+    ~NLJoinContext() override = default;
 
     void close(RuntimeState* state) override;
 
