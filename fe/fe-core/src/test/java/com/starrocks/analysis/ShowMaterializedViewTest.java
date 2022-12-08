@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowMaterializedViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
@@ -85,7 +85,7 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.TABLE_ROWS AS rows " +
                         "FROM information_schema.materialized_views " +
                         "WHERE information_schema.materialized_views.TABLE_NAME = 'mv1'",
-                AST2SQL.toString(stmt.toSelectStmt()));
+                AstToStringBuilder.toString(stmt.toSelectStmt()));
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());

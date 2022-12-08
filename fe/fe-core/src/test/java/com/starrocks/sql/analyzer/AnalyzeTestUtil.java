@@ -236,7 +236,7 @@ public class AnalyzeTestUtil {
 
             if (statementBase instanceof QueryStatement) {
                 StatementBase viewStatement =
-                        com.starrocks.sql.parser.SqlParser.parse(ViewDefBuilder.build(statementBase),
+                        com.starrocks.sql.parser.SqlParser.parse(AstToSQLBuilder.toSQL(statementBase),
                                 connectContext.getSessionVariable()).get(0);
                 Analyzer.analyze(viewStatement, connectContext);
             }
