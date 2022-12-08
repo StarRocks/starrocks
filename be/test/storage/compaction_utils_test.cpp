@@ -78,6 +78,15 @@ TEST(CompactionUtilsTest, test_split_column_into_groups) {
     ASSERT_EQ(5, column_groups[1].size());
     ASSERT_EQ(5, column_groups[2].size());
     ASSERT_EQ(4, column_groups[3].size());
+
+    std::vector<std::vector<uint32_t>> column_groups1;
+    CompactionUtils::split_column_into_groups(num_columns, {0}, max_columns_per_group, &column_groups1);
+    ASSERT_EQ(5, column_groups1.size());
+    ASSERT_EQ(1, column_groups1[0].size());
+    ASSERT_EQ(5, column_groups1[1].size());
+    ASSERT_EQ(5, column_groups1[2].size());
+    ASSERT_EQ(5, column_groups1[3].size());
+    ASSERT_EQ(1, column_groups1[4].size());
 }
 
 TEST(CompactionUtilsTest, test_choose_compaction_algorithm) {
