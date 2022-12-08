@@ -37,7 +37,18 @@ public:
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static vectorized::Schema get_short_key_schema_with_format_v2(const TabletSchema& tablet_schema);
 
+<<<<<<< HEAD
     static ColumnId max_column_id(const vectorized::Schema& schema);
+=======
+    // Get schema with format v2 type containing sort key columns from TabletSchema.
+    static vectorized::VectorizedSchema get_sort_key_schema_with_format_v2(const TabletSchema& tablet_schema);
+
+    // Get schema with format v2 type containing sort key columns filled by primary key columns from TabletSchema.
+    static vectorized::VectorizedSchema get_sort_key_schema_by_primary_key_format_v2(
+            const starrocks::TabletSchema& tablet_schema);
+
+    static ColumnId max_column_id(const vectorized::VectorizedSchema& schema);
+>>>>>>> 82e374f0b ([BugFix] Fix key index out of bound in schema of _do_merge_horizontally. (#13963))
 
     // Create an empty chunk according to the |schema| and reserve it of size |n|.
     static std::shared_ptr<vectorized::Chunk> new_chunk(const vectorized::Schema& schema, size_t n);
