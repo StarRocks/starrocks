@@ -42,6 +42,7 @@
   + Catalog
     + [概述](/data_source/catalog/catalog_overview.md)
     + [Default catalog](/data_source/catalog/default_catalog.md)
+    + [Delta Lake catalog](/data_source/catalog/deltalake_catalog.md)
     + [Hive catalog](/data_source/catalog/hive_catalog.md)
     + [Iceberg catalog](/data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](/data_source/catalog/hudi_catalog.md)
