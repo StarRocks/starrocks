@@ -15,7 +15,6 @@ import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,7 +33,6 @@ class DeleteLakeTableTask implements Runnable {
     public void run() {
         Tablet anyTablet = null;
         Set<Long> tabletIds = new HashSet<>();
-        List<Long> shardGroupIds = new ArrayList<>();
         for (Partition partition : table.getAllPartitions()) {
             List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex materializedIndex : allIndices) {
@@ -43,7 +41,6 @@ class DeleteLakeTableTask implements Runnable {
                     anyTablet = tablet;
                 }
             }
-            shardGroupIds.add(partition.getShardGroupId());
         }
 
         if (tabletIds.isEmpty()) {
@@ -65,7 +62,6 @@ class DeleteLakeTableTask implements Runnable {
             LakeService lakeService = BrpcProxy.getLakeService(address);
             Future<DropTableResponse> future = lakeService.dropTable(request);
             DropTableResponse response = future.get();
-            GlobalStateMgr.getCurrentStarOSAgent().deleteShardGroup(shardGroupIds);
 
         } catch (Throwable ex) {
             LOG.info("Fail to get lake service proxy: {}", ex.getMessage());

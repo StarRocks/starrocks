@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -437,7 +438,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         writeEditLog(this);
 
         // Replace the current index with shadow index.
-        List<Long> shardGroupIds = new ArrayList<>();
+        List<MaterializedIndex> droppedIndexes;
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             LakeTable table = (db != null) ? db.getTable(tableId) : null;
             if (table == null) {
@@ -445,11 +446,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 return;
             }
             // Below this point, all query and load jobs will use the new schema.
-            shardGroupIds = visualiseShadowIndex(table);
+            droppedIndexes = visualiseShadowIndex(table);
         }
 
-        // Delete shard groups from StarOS
-        GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShardGroup(shardGroupIds);
+        // Delete tablet and shards
+        List<Long> unusedShards = new ArrayList<>();
+        for (MaterializedIndex droppedIndex : droppedIndexes) {
+            List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
+            unusedShards.addAll(shards);
+        }
+        GlobalStateMgr.getCurrentShardDeleter().dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
 
         if (span != null) {
             span.end();
@@ -622,8 +628,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @NotNull
-    List<Long> visualiseShadowIndex(@NotNull LakeTable table) {
-        List<Long> shardGroupIds = new ArrayList<>();
+    List<MaterializedIndex> visualiseShadowIndex(@NotNull LakeTable table) {
+        List<MaterializedIndex> droppedIndexes = new ArrayList<>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Column column : table.getColumns()) {
@@ -634,7 +640,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : table.getPartitions()) {
-            shardGroupIds.add(partition.getShardGroupId());
             Preconditions.checkState(commitVersionMap.containsKey(partition.getId()));
             long commitVersion = commitVersionMap.get(partition.getId());
 
@@ -676,6 +681,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 for (Tablet originTablet : droppedIdx.getTablets()) {
                     invertedIndex.deleteTablet(originTablet.getId());
                 }
+                droppedIndexes.add(droppedIdx);
             }
         }
 
@@ -714,7 +720,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         table.setState(OlapTable.OlapTableState.NORMAL);
 
-        return shardGroupIds;
+        return droppedIndexes;
     }
 
     @Override

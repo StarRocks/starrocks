@@ -717,6 +717,10 @@ public class GlobalStateMgr {
         return getCurrentState().getStarOSAgent();
     }
 
+    public static ShardDeleter getCurrentShardDeleter() {
+        return getCurrentState().getShardDeleter();
+    }
+
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
         return getCurrentState().getHeartbeatMgr();
     }
@@ -771,6 +775,10 @@ public class GlobalStateMgr {
 
     public StarOSAgent getStarOSAgent() {
         return starOSAgent;
+    }
+
+    public ShardDeleter getShardDeleter() {
+        return shardDeleter;
     }
 
     public CatalogMgr getCatalogMgr() {

@@ -32,7 +32,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -292,7 +291,6 @@ public class StarOSAgent {
         return shardGroupInfo;
     }
 
-
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {
         prepare();
@@ -318,6 +316,30 @@ public class StarOSAgent {
 
         Preconditions.checkState(shardInfos.size() == numShards);
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
+    public List<Long> listShard(long groupId) throws DdlException {
+        prepare();
+
+        List<Long> groupIds = new ArrayList<>();
+        groupIds.add(groupId);
+        List<List<ShardInfo>> shardInfo = new ArrayList<>();
+        try {
+            shardInfo = client.listShard(serviceId, groupIds);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to list shards. error: " + e.getMessage());
+        }
+        return shardInfo.get(0).stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
+    public void deleteShards(Set<Long> shardIds) throws DdlException {
+        prepare();
+        try {
+            client.deleteShard(serviceId, shardIds);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete shards. error: {}", e.getMessage());
+            throw new DdlException("Failed to delete shards. error: " + e.getMessage());
+        }
     }
 
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
