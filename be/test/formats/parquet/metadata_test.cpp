@@ -67,7 +67,7 @@ TEST_F(ParquetMetaDataTest, NumRows) {
     auto t_meta = _create_t_file_meta();
 
     FileMetaData meta_data;
-    Status status = meta_data.init(t_meta);
+    Status status = meta_data.init(t_meta, true);
     ASSERT_TRUE(status.ok());
 
     // check
