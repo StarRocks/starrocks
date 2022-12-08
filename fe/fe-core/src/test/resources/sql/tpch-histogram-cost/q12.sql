@@ -142,7 +142,7 @@ OutPut Exchange Id: 03
 1:OlapScanNode
 table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: 25: L_SHIPMODE IN ('REG AIR', 'MAIL'), [22: L_COMMITDATE, DATE, false] < [23: L_RECEIPTDATE, DATE, false], [21: L_SHIPDATE, DATE, false] < [22: L_COMMITDATE, DATE, false], [23: L_RECEIPTDATE, DATE, false] >= '1997-01-01', [23: L_RECEIPTDATE, DATE, false] < '1998-01-01'
+Predicates: [23: L_RECEIPTDATE, DATE, false] < '1998-01-01', [23: L_RECEIPTDATE, DATE, false] >= '1997-01-01', 25: L_SHIPMODE IN ('REG AIR', 'MAIL'), [22: L_COMMITDATE, DATE, false] < [23: L_RECEIPTDATE, DATE, false], [21: L_SHIPDATE, DATE, false] < [22: L_COMMITDATE, DATE, false]
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=30.0
 cardinality: 6508504

@@ -192,9 +192,9 @@ INNER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
 select v1 from t0 inner join t1 on t0.v1 = t1.v5 where t0.v2 = 2 and t1.v5 > 5
 [result]
 INNER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 2 AND 1: v1 > 5 AND 1: v1 IS NOT NULL])
+    SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 2 AND 1: v1 > 5])
     EXCHANGE SHUFFLE[5]
-        SCAN (columns[5: v5] predicate[5: v5 > 5 AND 5: v5 IS NOT NULL])
+        SCAN (columns[5: v5] predicate[5: v5 > 5])
 [end]
 
 [sql]

@@ -129,7 +129,7 @@ public class OptimizerTest {
 
         OptExpression expr1 = optimizer1.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
-        Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
+        Assert.assertTrue(expr1.getOp() instanceof LogicalFilterOperator);
     }
 
     private MaterializedView getMv(String dbName, String mvName) {

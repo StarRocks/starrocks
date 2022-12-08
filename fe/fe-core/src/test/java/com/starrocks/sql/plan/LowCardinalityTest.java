@@ -1249,11 +1249,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select S_ADDRESS, S_COMMENT from (select S_ADDRESS, " +
                 "S_COMMENT from supplier_nullable order by S_COMMENT limit 10) tb where S_ADDRESS = 'SS' order by S_ADDRESS ";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  5:SORT\n" +
-                "  |  order by: <slot 3> 3 ASC\n" +
-                "  |  offset: 0\n" +
-                "  |  \n" +
-                "  4:SELECT\n" +
+        assertContains(plan, "4:SELECT\n" +
                 "  |  predicates: 3 = 'SS'\n" +
                 "  |  \n" +
                 "  3:Decode\n" +

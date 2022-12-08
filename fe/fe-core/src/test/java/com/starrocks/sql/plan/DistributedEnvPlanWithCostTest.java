@@ -790,7 +790,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select S_SUPPKEY,S_NAME from supplier where s_name <> 'Supplier#000000050' and s_name >= 'Supplier#000000086'";
         String plan = getCostExplain(sql);
-        assertContains(plan, "cardinality: 500000");
+        assertContains(plan, "cardinality: 499999");
 
         // test_all_type column statistics are unknown
         sql = "select t1a,t1b from test_all_type where t1a <> 'xxx'";

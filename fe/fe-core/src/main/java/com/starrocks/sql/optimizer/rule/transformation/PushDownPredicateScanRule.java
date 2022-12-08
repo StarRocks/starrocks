@@ -74,6 +74,9 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
+
+        predicates = PushDownJoinPredicateBase.equivalenceDerive(predicates, true);
+
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
         predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
                 .stream().map(rangeExtractor::rewriteOnlyColumn).collect(Collectors.toList())));

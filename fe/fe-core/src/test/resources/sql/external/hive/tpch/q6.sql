@@ -44,8 +44,8 @@ OutPut Exchange Id: 03
 |
 0:HdfsScanNode
 TABLE: lineitem
-NON-PARTITION PREDICATES: 11: l_shipdate >= '1995-01-01', 11: l_shipdate < '1996-01-01', 7: l_discount >= 0.02, 7: l_discount <= 0.04, 5: l_quantity < 24
-MIN/MAX PREDICATES: 19: l_shipdate >= '1995-01-01', 20: l_shipdate < '1996-01-01', 21: l_discount >= 0.02, 22: l_discount <= 0.04, 23: l_quantity < 24
+NON-PARTITION PREDICATES: 5: l_quantity < 24, 7: l_discount <= 0.04, 7: l_discount >= 0.02, 11: l_shipdate < '1996-01-01', 11: l_shipdate >= '1995-01-01'
+MIN/MAX PREDICATES: 19: l_quantity < 24, 20: l_discount <= 0.04, 21: l_discount >= 0.02, 22: l_shipdate < '1996-01-01', 23: l_shipdate >= '1995-01-01'
 partitions=1/1
 avgRowSize=44.0
 numNodes=0

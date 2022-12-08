@@ -123,8 +123,8 @@ public class ExpressionTest extends PlanTestBase {
                 + "  |  <slot 5> : 2: v2 & ~ 1: v1 | 3: v3 ^ 1\n"
                 + "  |  common expressions:\n"
                 + "  |  <slot 6> : CAST(1: v1 AS DOUBLE)\n"));
-        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 >= 1, 1: v1 <= 10, 2: v2 > 1, 2: v2 < 10, 3: "
-                + "v3 != 10, 3: v3 <=> 10, (1: v1 != 1) OR (2: v2 != 2), 3: v3 != 3, 1: v1 <= 2\n"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 2, 3: v3 != 3, 3: v3 <=> 10, 3: v3 != 10, 2: v2 < 10, " +
+                "2: v2 > 1, 1: v1 <= 10, 1: v1 >= 1, (1: v1 != 1) OR (2: v2 != 2)\n"));
     }
 
     @Test
@@ -418,15 +418,16 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select * from test_all_type where t1a = 123 AND t1b = 999999999 AND t1d = 999999999 "
                 + "AND id_datetime = '2020-12-20 20:20:20' AND id_date = '2020-12-11' AND id_datetime = 'asdlfkja';";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "8: id_datetime = '2020-12-20 20:20:20', 4: t1d = 999999999, 9: id_date = '2020-12-11', " +
-                "1: t1a = '123', CAST(2: t1b AS INT) = 999999999, 8: id_datetime = CAST('asdlfkja' AS DATETIME)");
+        assertContains(plan, "PREDICATES: 9: id_date = '2020-12-11', 8: id_datetime = '2020-12-20 20:20:20'," +
+                " 4: t1d = 999999999, 1: t1a = '123', CAST(2: t1b AS INT) = 999999999," +
+                " 8: id_datetime = CAST('asdlfkja' AS DATETIME)\n");
     }
 
     @Test
     public void testDateTypeReduceCast() throws Exception {
         String sql = "select * from test_all_type_distributed_by_datetime " +
                 "where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
-                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
+                "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(
                 plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-03 00:00:00'"));

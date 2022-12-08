@@ -52,7 +52,7 @@ TOP-N (order by [[2: S_NAME ASC NULLS FIRST]])
                         AGGREGATE ([GLOBAL] aggregate [{48: sum=sum(48: sum)}] group by [[33: L_SUPPKEY, 32: L_PARTKEY]] having [null]
                             EXCHANGE SHUFFLE[32, 33]
                                 AGGREGATE ([LOCAL] aggregate [{48: sum=sum(35: L_QUANTITY)}] group by [[33: L_SUPPKEY, 32: L_PARTKEY]] having [null]
-                                    SCAN (columns[33: L_SUPPKEY, 35: L_QUANTITY, 41: L_SHIPDATE, 32: L_PARTKEY] predicate[41: L_SHIPDATE >= 1993-01-01 AND 41: L_SHIPDATE < 1994-01-01])
+                                    SCAN (columns[33: L_SUPPKEY, 35: L_QUANTITY, 41: L_SHIPDATE, 32: L_PARTKEY] predicate[41: L_SHIPDATE < 1994-01-01 AND 41: L_SHIPDATE >= 1993-01-01])
             EXCHANGE SHUFFLE[1]
                 INNER JOIN (join-predicate [4: S_NATIONKEY = 9: N_NATIONKEY] post-join-predicate [null])
                     SCAN (columns[1: S_SUPPKEY, 2: S_NAME, 3: S_ADDRESS, 4: S_NATIONKEY] predicate[null])
@@ -73,7 +73,7 @@ TOP-N (order by [[2: S_NAME ASC NULLS FIRST]])
                         AGGREGATE ([GLOBAL] aggregate [{48: sum=sum(48: sum)}] group by [[33: L_SUPPKEY, 32: L_PARTKEY]] having [null]
                             EXCHANGE SHUFFLE[32, 33]
                                 AGGREGATE ([LOCAL] aggregate [{48: sum=sum(35: L_QUANTITY)}] group by [[33: L_SUPPKEY, 32: L_PARTKEY]] having [null]
-                                    SCAN (columns[33: L_SUPPKEY, 35: L_QUANTITY, 41: L_SHIPDATE, 32: L_PARTKEY] predicate[41: L_SHIPDATE >= 1993-01-01 AND 41: L_SHIPDATE < 1994-01-01])
+                                    SCAN (columns[33: L_SUPPKEY, 35: L_QUANTITY, 41: L_SHIPDATE, 32: L_PARTKEY] predicate[41: L_SHIPDATE < 1994-01-01 AND 41: L_SHIPDATE >= 1993-01-01])
             EXCHANGE SHUFFLE[1]
                 INNER JOIN (join-predicate [4: S_NATIONKEY = 9: N_NATIONKEY] post-join-predicate [null])
                     SCAN (columns[1: S_SUPPKEY, 2: S_NAME, 3: S_ADDRESS, 4: S_NATIONKEY] predicate[null])

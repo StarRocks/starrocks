@@ -45,7 +45,7 @@ OutPut Exchange Id: 03
 0:OlapScanNode
 table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: [11: L_SHIPDATE, DATE, false] >= '1995-01-01', [11: L_SHIPDATE, DATE, false] < '1996-01-01', [7: L_DISCOUNT, DOUBLE, false] >= 0.02, [7: L_DISCOUNT, DOUBLE, false] <= 0.04, [5: L_QUANTITY, DOUBLE, false] < 24.0
+Predicates: [5: L_QUANTITY, DOUBLE, false] < 24.0, [7: L_DISCOUNT, DOUBLE, false] <= 0.04, [7: L_DISCOUNT, DOUBLE, false] >= 0.02, [11: L_SHIPDATE, DATE, false] < '1996-01-01', [11: L_SHIPDATE, DATE, false] >= '1995-01-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=36.0
 cardinality: 11504008

@@ -290,7 +290,7 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         defaultCTEReuse();
         assertContains(plan, "3:SELECT\n" +
-                "  |  predicates: 4: v1 = 2\n" +
+                "  |  predicates: 4: v1 = 2, 5: v2 IS NOT NULL\n" +
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  <slot 4> : 1: v1\n" +
