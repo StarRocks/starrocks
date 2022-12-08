@@ -37,7 +37,7 @@ The default value of the `time_zone` parameter is `Asia/Shanghai`.
 To view the time zone setting, run the following command.
 
 ```Plain%20Text
- SHOW variables like '%time_zone%';
+ SHOW VARIABLES LIKE '%time_zone%';
 ```
 
 ## Impacts of time zone settings
