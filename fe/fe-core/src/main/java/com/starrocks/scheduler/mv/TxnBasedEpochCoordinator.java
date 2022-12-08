@@ -51,9 +51,9 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
     // TODO(murphy) make it configurable
     private static final long MAX_EXEC_MILLIS = 1000;
-    private static final long MAX_SCAN_ROWS = 10 * 10000;
+    private static final long MAX_SCAN_ROWS = 100_000;
     private static final long JOB_TIMEOUT = 120;
-    private static final long TXN_VISIBLE_TIMEOUT_MILLIS = 100_1000;
+    private static final long TXN_VISIBLE_TIMEOUT_MILLIS = 100_000;
 
     private final MVMaintenanceJob mvMaintenanceJob;
 

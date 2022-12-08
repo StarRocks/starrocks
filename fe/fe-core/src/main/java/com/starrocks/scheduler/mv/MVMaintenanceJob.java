@@ -239,7 +239,7 @@ public class MVMaintenanceJob implements Writable {
                 TNetworkAddress beHost = execParams.instanceExecParams.get(i).getHost();
                 MVMaintenanceTask task =
                         tasksByBe.computeIfAbsent(beId,
-                                (k) -> MVMaintenanceTask.build(this, taskId, beId, beHost, new ArrayList<>()));
+                                k -> MVMaintenanceTask.build(this, taskId, beId, beHost, new ArrayList<>()));
                 task.addFragmentInstance(tParams.get(i));
             }
         }
