@@ -2837,7 +2837,7 @@ TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
                             .ok());
 
         try {
-            ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns).value();
+            ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
         } catch (std::runtime_error const& e ) {
             ASSERT_EQ("time used with time_slice can't before 0001-01-01 00:00:00", std::string(e.what()));
         }
