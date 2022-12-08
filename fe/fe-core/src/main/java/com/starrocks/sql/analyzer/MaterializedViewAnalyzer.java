@@ -275,7 +275,7 @@ public class MaterializedViewAnalyzer {
                 // TODO: store the plan in create-mv statement and persist it at executor
                 // TODO: refine the output fragment
                 boolean hasOutputFragment = false;
-                ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, ctx, logicalPlan.getOutputColumn(), columnRefFactory,
                         queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
                 createStmt.setMaintenancePlan(execPlan, columnRefFactory);

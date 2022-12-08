@@ -41,7 +41,7 @@ public class StreamAggNode extends PlanNode {
     private IMTInfo aggImt;
 
     public StreamAggNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo) {
-        super(id, aggInfo.getOutputTupleId().asList(), "STREAM_AGG");
+        super(id, aggInfo.getOutputTupleId().asList(), "StreamAgg");
         this.aggInfo = aggInfo;
         this.children.add(input);
     }

@@ -96,6 +96,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
@@ -172,23 +173,29 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
-    CoordinatorPreprocessor(List<ScanNode> scanNodes) {
+    CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
         this.scanNodes = scanNodes;
-        this.queryId = null;
         this.connectContext = ConnectContext.buildDefault();
+        this.queryId = connectContext.getExecutionId();
         this.queryGlobals =
                 genQueryGlobals(System.currentTimeMillis(), connectContext.getSessionVariable().getTimeZone());
         this.queryOptions = connectContext.getSessionVariable().toThrift();
         this.usePipeline = true;
         this.descriptorTable = null;
-        this.fragments = null;
+        this.fragments = fragments;
 
         this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
         this.idToComputeNode = buildComputeNodeInfo();
 
+        Map<PlanFragmentId, PlanFragment> fragmentMap =
+                fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, x -> x));
         for (ScanNode scan : scanNodes) {
             PlanFragmentId id = scan.getFragmentId();
-            PlanFragment fragment = new PlanFragment(id, scan, DataPartition.RANDOM);
+            PlanFragment fragment = fragmentMap.get(id);
+            if (fragment == null) {
+                // Fake a fragment for this node
+                fragment = new PlanFragment(id, scan, DataPartition.RANDOM);
+            }
             fragmentExecParamsMap.put(scan.getFragmentId(), new FragmentExecParams(fragment));
         }
     }
@@ -364,7 +371,8 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private void prepareFragments() {
+    @VisibleForTesting
+    void prepareFragments() {
         for (PlanFragment fragment : fragments) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }
@@ -1016,7 +1024,8 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private void computeFragmentExecParams() throws Exception {
+    @VisibleForTesting
+    void computeFragmentExecParams() throws Exception {
         // fill hosts field in fragmentExecParams
         computeFragmentHosts();
 
@@ -1771,6 +1780,13 @@ public class CoordinatorPreprocessor {
             }
             sb.append("]"); // end of instances
             sb.append("}");
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            appendTo(sb);
+            return sb.toString();
         }
     }
 

@@ -34,6 +34,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -133,9 +134,11 @@ public final class AggregateInfo extends AggregateInfoBase {
     private ArrayList<Integer> lastIdx_ = Lists.newArrayList();
 
     private List<Expr> intermediateAggrExprs = Lists.newArrayList();
+
     // C'tor creates copies of groupingExprs and aggExprs.
-    private AggregateInfo(ArrayList<Expr> groupingExprs,
-                          ArrayList<FunctionCallExpr> aggExprs, AggPhase aggPhase) {
+    @VisibleForTesting
+    public AggregateInfo(ArrayList<Expr> groupingExprs,
+                         ArrayList<FunctionCallExpr> aggExprs, AggPhase aggPhase) {
         this(groupingExprs, aggExprs, aggPhase, false);
     }
 

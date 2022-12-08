@@ -17,9 +17,13 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.AggregateInfo;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -29,6 +33,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.Backend;
@@ -444,7 +449,7 @@ public class CoordinatorTest extends PlanTestBase {
         binlogScan.finalizeStats(null);
 
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
-        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(scanNodes);
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes);
         prepare.computeScanRangeAssignment();
 
         CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeMap =
@@ -460,5 +465,66 @@ public class CoordinatorTest extends PlanTestBase {
                 ranges.stream().map(x -> x.getScan_range().getBinlog_scan_range().getTablet_id())
                         .collect(Collectors.toList());
         Assert.assertEquals(olapTableTabletIds, tabletIds);
+    }
+
+    @Test
+    public void testStreamAgg() throws Exception {
+        new MockUp<BinlogScanNode>() {
+
+            @Mock
+            TBinlogOffset getBinlogOffset(long tabletId) {
+                TBinlogOffset offset = new TBinlogOffset();
+                offset.setTablet_id(1);
+                offset.setLsn(2);
+                offset.setVersion(3);
+                return offset;
+            }
+        };
+
+        PlanFragmentId fragmentId = new PlanFragmentId(0);
+        TupleDescriptor scanTuple = new TupleDescriptor(new TupleId(2));
+        scanTuple.setTable(getOlapTable("t0"));
+        TupleDescriptor aggTuple = new TupleDescriptor(new TupleId(3));
+        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", Type.INT, false);
+        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", Type.INT, false);
+        aggTuple.addSlot(groupBySlot);
+        aggTuple.addSlot(aggFuncSlot);
+
+        // Build scan node
+        List<PlanFragment> fragments = new ArrayList<>();
+        BinlogScanNode binlogScan = new BinlogScanNode(new PlanNodeId(1), scanTuple);
+        binlogScan.setFragmentId(fragmentId);
+        binlogScan.finalizeStats(null);
+        List<ScanNode> scanNodes = Arrays.asList(binlogScan);
+
+        // Build agg node
+        AggregateInfo aggInfo = new AggregateInfo(new ArrayList<>(), new ArrayList<>(), AggregateInfo.AggPhase.SECOND);
+        aggInfo.setOutputTupleDesc(aggTuple);
+        StreamAggNode aggNode = new StreamAggNode(new PlanNodeId(2), binlogScan, aggInfo);
+
+        // Build fragment
+        PlanFragment fragment = new PlanFragment(fragmentId, aggNode, DataPartition.RANDOM);
+        fragments.add(fragment);
+
+        // Build topology
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes);
+        prepare.prepareFragments();
+        prepare.computeScanRangeAssignment();
+        prepare.computeFragmentExecParams();
+
+        // Assert
+        Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentParams =
+                prepare.getFragmentExecParamsMap();
+        fragmentParams.forEach((k, v) -> {
+            System.err.println("Fragment " + k + " : " + v);
+        });
+        Assert.assertTrue(fragmentParams.containsKey(fragmentId));
+        CoordinatorPreprocessor.FragmentExecParams fragmentParam = fragmentParams.get(fragmentId);
+        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
+        List<CoordinatorPreprocessor.FInstanceExecParam> instances = fragmentParam.instanceExecParams;
+        Assert.assertFalse(fragmentParams.isEmpty());
+        Assert.assertEquals(1, scanRangeAssignment.size());
+        Assert.assertEquals(1, instances.size());
+
     }
 }
