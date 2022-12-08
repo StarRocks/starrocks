@@ -50,6 +50,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
+import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.DeltaLakeScanNode;
@@ -142,6 +143,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -194,7 +196,8 @@ public class PlanFragmentBuilder {
     private void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
                                       List<ColumnRefOperator> outputColumns,
                                       boolean hasOutputFragment) {
-        if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned() || !hasOutputFragment) {
+        if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned() ||
+                !hasOutputFragment) {
             List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
                     .buildExecExpression(variable,
                             new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr()))
@@ -1406,7 +1409,8 @@ public class PlanFragmentBuilder {
 
             outputTupleDesc.computeMemLayout();
 
-            return new AggregateExprInfo(groupingExpressions, aggregateExprList, partitionExpressions, intermediateAggrExprs);
+            return new AggregateExprInfo(groupingExpressions, aggregateExprList, partitionExpressions,
+                    intermediateAggrExprs);
         }
 
         @Override
@@ -1422,7 +1426,8 @@ public class PlanFragmentBuilder {
             List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
 
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
-            AggregateExprInfo aggExpr = buildAggregateTuple(aggregations, groupBys, partitionBys, outputTupleDesc, context);
+            AggregateExprInfo aggExpr =
+                    buildAggregateTuple(aggregations, groupBys, partitionBys, outputTupleDesc, context);
             ArrayList<Expr> groupingExpressions = aggExpr.groupExpr;
             ArrayList<FunctionCallExpr> aggregateExprList = aggExpr.aggregateExpr;
             ArrayList<Expr> partitionExpressions = aggExpr.partitionExpr;
@@ -2496,7 +2501,6 @@ public class PlanFragmentBuilder {
             public final List<Expr> otherJoin;
             public final List<Expr> conjuncts;
 
-
             public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts) {
                 this.eqJoinConjuncts = eqJoinConjuncts;
                 this.otherJoin = otherJoin;
@@ -2551,7 +2555,6 @@ public class PlanFragmentBuilder {
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
-
 
             return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
         }
@@ -2786,5 +2789,45 @@ public class PlanFragmentBuilder {
             inputFragment.setPlanRoot(aggNode);
             return inputFragment;
         }
+
+        // TODO: distinguish various stream scan node, only binlog scan now
+        @Override
+        public PlanFragment visitPhysicalStreamScan(OptExpression optExpr, ExecPlan context) {
+            PhysicalStreamScanOperator node = (PhysicalStreamScanOperator) optExpr.getOp();
+            OlapTable scanTable = (OlapTable) node.getTable();
+            context.getDescTbl().addReferencedTable(scanTable);
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(scanTable);
+
+            BinlogScanNode binlogScanNode = new BinlogScanNode(context.getNextNodeId(), tupleDescriptor);
+            binlogScanNode.computeStatistics(optExpr.getStatistics());
+
+            // Add OPS column of binlog
+            SlotDescriptor opsSlot = context.getDescTbl().addSlotDescriptor(tupleDescriptor);
+            opsSlot.setIsNullable(false);
+            opsSlot.setType(Type.TINYINT);
+            opsSlot.setLabel("ops");
+            ColumnRefOperator columnRef =
+                    new ColumnRefOperator(opsSlot.getId().asInt(), opsSlot.getType(), "ops", opsSlot.getIsNullable());
+            context.getColRefToExpr().put(columnRef, new SlotRef(opsSlot.getLabel(), opsSlot));
+
+            // Add slots from table
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            context.getScanNodes().add(binlogScanNode);
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), binlogScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
     }
 }

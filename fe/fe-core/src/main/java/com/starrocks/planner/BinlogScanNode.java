@@ -1,0 +1,179 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
+package com.starrocks.planner;
+
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.StreamSourceType;
+import com.starrocks.thrift.TBinlogOffset;
+import com.starrocks.thrift.TBinlogScanNode;
+import com.starrocks.thrift.TBinlogScanRange;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocation;
+import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStreamScanNode;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.NotImplementedException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * BinlogScanNode read data from binlog of SR table
+ */
+public class BinlogScanNode extends ScanNode {
+
+    private static final Logger LOG = LogManager.getLogger(BinlogScanNode.class);
+
+    private boolean isFinalized = false;
+    private OlapTable olapTable;
+    private List<Long> tabletIds;
+    private Set<Long> scanBackendIds;
+    private List<TScanRangeLocations> scanRanges;
+
+    public BinlogScanNode(PlanNodeId id, TupleDescriptor desc) {
+        super(id, desc, "BinlogScanNode");
+        olapTable = (OlapTable) Preconditions.checkNotNull(desc.getTable());
+    }
+
+    @Override
+    protected void toThrift(TPlanNode msg) {
+        TBinlogScanNode binlogScan = new TBinlogScanNode();
+        binlogScan.setTuple_id(desc.getId().asInt());
+
+        TStreamScanNode streamScan = new TStreamScanNode();
+        streamScan.setBinlog_scan(binlogScan);
+        streamScan.setSource_type(StreamSourceType.BINLOG);
+
+        msg.setStream_scan_node(streamScan);
+        msg.setNode_type(TPlanNodeType.STREAM_SCAN_NODE);
+    }
+
+    private TBinlogOffset getBinlogOffset(long tabletId) {
+        throw new NotImplementedException("TODO");
+    }
+
+    @Override
+    public void init(Analyzer analyzer) throws UserException {
+        super.init(analyzer);
+    }
+
+    @Override
+    public void computeStats(Analyzer analyzer) {
+        numNodes = scanBackendIds.size();
+    }
+
+    @Override
+    public void finalizeStats(Analyzer analyzer) throws UserException {
+        if (!isFinalized) {
+            return;
+        }
+        computeScanRanges();
+        computeStats(analyzer);
+        isFinalized = true;
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
+
+    @Override
+    protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(prefix).append("table: ").append(olapTable.getName());
+        sb.append(prefix).append("tabletList: %s").append(Joiner.on(",").join(tabletIds));
+        return sb.toString();
+    }
+
+    public void computeScanRanges() throws UserException {
+        scanRanges = new ArrayList<>();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        long localBeId = -1;
+        long dbId = -1;
+        String dbName = null;
+        for (Partition partition : CollectionUtils.emptyIfNull(olapTable.getAllPartitions())) {
+            MaterializedIndex table = partition.getBaseIndex();
+            long partitionId = partition.getId();
+            long tableId = olapTable.getId();
+
+            for (Tablet tablet : CollectionUtils.emptyIfNull(table.getTablets())) {
+                if (dbId == -1) {
+                    TabletMeta meta = invertedIndex.getTabletMeta(tablet.getId());
+                    dbId = meta.getDbId();
+                    dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
+                }
+
+                long tabletId = tablet.getId();
+                tabletIds.add(tabletId);
+                TBinlogOffset binlogOffset = getBinlogOffset(tabletId);
+                TBinlogScanRange binlogRange = new TBinlogScanRange();
+                binlogRange.setTablet_id(tabletId);
+                binlogRange.setOffset(getBinlogOffset(tabletId));
+                binlogRange.setPartition_id(partitionId);
+                binlogRange.setTable_id(tableId);
+                binlogRange.setDb_name(dbName);
+
+                TScanRange scanRange = new TScanRange();
+                scanRange.setBinlog_scan_range(binlogRange);
+                TScanRangeLocations locations = new TScanRangeLocations();
+                locations.setScan_range(scanRange);
+
+                // Choose replicas
+                int schemaHash = olapTable.getSchemaHashByIndexId(olapTable.getBaseIndexId());
+                long visibleVersion = partition.getVisibleVersion();
+
+                List<Replica> allQueryableReplicas = Lists.newArrayList();
+                List<Replica> localReplicas = Lists.newArrayList();
+                tablet.getQueryableReplicas(allQueryableReplicas, localReplicas, visibleVersion, localBeId, schemaHash);
+                if (CollectionUtils.isEmpty(allQueryableReplicas)) {
+                    throw new UserException("No queryable replica for tablet " + tabletId);
+                }
+                for (Replica replica : allQueryableReplicas) {
+                    Backend backend = Preconditions.checkNotNull(
+                            GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()),
+                            "backend not found: " + replica.getBackendId());
+                    scanBackendIds.add(backend.getId());
+                    TScanRangeLocation replicaLocation = new TScanRangeLocation(new TNetworkAddress(backend.getHost(),
+                            backend.getBePort()));
+                    locations.addToLocations(replicaLocation);
+                }
+
+                scanRanges.add(locations);
+            }
+
+        }
+    }
+
+    @Override
+    public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+        return scanRanges;
+    }
+
+    @Override
+    public int getNumInstances() {
+        return scanRanges.size();
+    }
+
+}
