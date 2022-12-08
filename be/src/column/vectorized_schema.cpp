@@ -40,7 +40,6 @@ VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<C
                                    const std::vector<ColumnId>& scids)
         : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     DCHECK(!scids.empty());
-    DCHECK(cids.size() == scids.size());
     _fields.resize(cids.size());
     for (int i = 0; i < cids.size(); i++) {
         DCHECK_LT(cids[i], schema->_fields.size());
