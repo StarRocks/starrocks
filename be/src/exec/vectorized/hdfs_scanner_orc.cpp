@@ -24,6 +24,7 @@
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
+#include "exec/vectorized/iceberg/iceberg_delete_builder.h"
 
 namespace starrocks::vectorized {
 
