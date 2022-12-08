@@ -634,7 +634,6 @@ public class MvRewriteOptimizationTest {
     public void testAggregateMvRewrite() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(300000000);
 
-        /*
         createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
                 " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -806,10 +805,8 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan12, "agg_join_mv_5");
 
         dropMv("test", "agg_join_mv_5");
-        */
 
         // test aggregate with projection
-
         createAndRefreshMv("test", "agg_mv_6", "create materialized view agg_mv_6" +
                 " distributed by hash(`empid`) as select empid, abs(empid) as abs_empid, avg(salary) as total" +
                 " from emps group by empid");

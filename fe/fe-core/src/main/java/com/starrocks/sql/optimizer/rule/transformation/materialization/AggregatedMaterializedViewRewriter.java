@@ -159,7 +159,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         if (isRollup) {
             return rewriteForRollup(queryAgg, swappedQueryAggs, swappedMvGroupingKeys,
-                    queryAggGroupingKeys, swappedQueryAggs.values(), normalizedViewMap, rewriteContext, targetExpr);
+                    queryAggGroupingKeys, normalizedViewMap, rewriteContext, targetExpr);
         } else {
             return rewriteProjection(rewriteContext, normalizedViewMap, targetExpr);
         }
@@ -192,7 +192,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Map<ColumnRefOperator, ScalarOperator> queryAggregation,
             List<ScalarOperator> swappedMvGroupingKeys,
             List<ScalarOperator> swappedQueryGroupingKeys,
-            Collection<ScalarOperator> swappedQueryAggs,
             Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
             RewriteContext rewriteContext,
             OptExpression targetExpr) {
@@ -245,7 +244,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // TODO: consider avg(x) -> sum(x) / count(x)
         // avg can not be rolled up, but after changed into sum(x) / count(x),
         // then it can be rolled up
-        if (queryProjectionAggs.stream().anyMatch(agg -> !swappedQueryAggs.contains(agg))) {
+        if (queryProjectionAggs.stream().anyMatch(agg -> !queryAggregation.containsValue(agg))) {
             // aggregation projections with rollup is not supported
             // the following query can not be rewritten by mv
             // mv: sum(c) + 1 group by a, b
