@@ -142,12 +142,16 @@ public class LoadPlanner {
         this.strictMode = strictMode;
         this.timeoutS = timeoutS;
         this.partialUpdate = partialUpdate;
-        this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
         if (context != null) {
             this.context = context;
         } else {
             this.context = new ConnectContext();
+        }
+        if (this.context.getSessionVariable().getEnableAdaptiveSinkDop()) {
+            this.parallelInstanceNum = this.context.getSessionVariable().getDegreeOfParallelism();
+        } else {
+            this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
         this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
         this.analyzer.setTimezone(timezone);
