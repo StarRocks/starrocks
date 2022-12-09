@@ -718,7 +718,22 @@ public abstract class Type implements Cloneable {
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
+<<<<<<< HEAD
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType() && !isFunctionType();
+=======
+        return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
+                && !isFunctionType() && !isBinaryType();
+    }
+
+    public boolean isKeyType() {
+        // TODO(zhuming): support define a key column of type array.
+        return !(isFloatingPointType() || isComplexType() || isOnlyMetricType() || isJsonType() || isBinaryType());
+    }
+
+    public boolean canBeWindowFunctionArgumentTypes() {
+        return !(isNull() || isChar() || isTime() || isComplexType()
+                || isPseudoType() || isFunctionType() || isBinaryType());
+>>>>>>> ecbb76b84 ([Feature] support several window functions for JSON type (#14858))
     }
 
     /**
