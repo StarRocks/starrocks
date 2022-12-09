@@ -14,11 +14,11 @@
 #include <string_view>
 
 #include "common/statusor.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
 #include "runtime/descriptors.h"
 #include "util/slice.h"
-#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
 
@@ -42,14 +42,14 @@ struct SpaceInfo {
 struct FSOptions {
 private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
-              const ResultFileOptions* result_file_options, const TUploadReq* upload,
-              const TDownloadReq* download, const TCloudCredential* cloud_credential)
+              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
+              const TCloudCredential* cloud_credential)
             : scan_range_params(scan_range_params),
               export_sink(export_sink),
               result_file_options(result_file_options),
               upload(upload),
               download(download),
-              cloud_credential(cloud_credential){}
+              cloud_credential(cloud_credential) {}
 
 public:
     FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
@@ -66,7 +66,8 @@ public:
 
     FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download, nullptr) {}
 
-    FSOptions(const TCloudCredential* cloud_credential) :FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_credential) {}
+    FSOptions(const TCloudCredential* cloud_credential)
+            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_credential) {}
 
     const THdfsProperties* hdfs_properties() const;
 

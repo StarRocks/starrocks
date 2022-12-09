@@ -16,9 +16,8 @@
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/sts/STSClient.h>
-#include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/core/utils/threading/Executor.h>
+#include <aws/identity-management/auth/STSAssumeRoleCredentialsProvider.h>
 #include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
@@ -30,6 +29,7 @@
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
+#include <aws/sts/STSClient.h>
 #include <fmt/core.h>
 
 #include <ctime>
@@ -38,12 +38,12 @@
 #include "common/config.h"
 #include "common/s3_uri.h"
 #include "fs/output_stream_adapter.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/util.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
 #include "util/hdfs_util.h"
 #include "util/random.h"
-#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
 
@@ -131,15 +131,20 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
             credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
             if (aws_credential.__isset.iam_role_arn) {
                 auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
-                credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(aws_credential.iam_role_arn, Aws::String(), aws_credential.external_id, Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
+                credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
+                        aws_credential.iam_role_arn, Aws::String(), aws_credential.external_id,
+                        Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
             }
         } else if (aws_credential.__isset.access_key) {
             DCHECK(aws_credential.__isset.access_key);
             DCHECK(aws_credential.__isset.secret_key);
-            credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(aws_credential.access_key, aws_credential.secret_key);
+            credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(aws_credential.access_key,
+                                                                                            aws_credential.secret_key);
             if (aws_credential.__isset.iam_role_arn) {
                 auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
-                credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(aws_credential.iam_role_arn, Aws::String(), aws_credential.external_id, Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
+                credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
+                        aws_credential.iam_role_arn, Aws::String(), aws_credential.external_id,
+                        Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
             }
         } else {
             credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
