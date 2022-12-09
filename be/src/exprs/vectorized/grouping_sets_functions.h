@@ -18,7 +18,7 @@
 #include "common/status.h"
 #include "exprs/vectorized/function_helper.h"
 #include "geo/geo_common.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 
 namespace starrocks::vectorized {
 

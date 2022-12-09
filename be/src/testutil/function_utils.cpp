@@ -37,8 +37,7 @@
 #include <vector>
 
 #include "runtime/mem_pool.h"
-#include "udf/udf.h"
-#include "udf/udf_internal.h"
+#include "exprs/function_context.h"
 
 namespace starrocks {
 
@@ -46,18 +45,18 @@ FunctionUtils::FunctionUtils() {
     FunctionContext::TypeDesc return_type;
     std::vector<FunctionContext::TypeDesc> arg_types;
     _memory_pool = new MemPool();
-    _fn_ctx = FunctionContextImpl::create_context(_state, _memory_pool, return_type, arg_types, 0, false);
+    _fn_ctx = FunctionContext::create_context(_state, _memory_pool, return_type, arg_types);
 }
 FunctionUtils::FunctionUtils(RuntimeState* state) {
     _state = state;
     FunctionContext::TypeDesc return_type;
     std::vector<FunctionContext::TypeDesc> arg_types;
     _memory_pool = new MemPool();
-    _fn_ctx = FunctionContextImpl::create_context(_state, _memory_pool, return_type, arg_types, 0, false);
+    _fn_ctx = FunctionContext::create_context(_state, _memory_pool, return_type, arg_types);
 }
 
 FunctionUtils::~FunctionUtils() {
-    _fn_ctx->impl()->close();
+    _fn_ctx->close();
     delete _fn_ctx;
     delete _memory_pool;
 }

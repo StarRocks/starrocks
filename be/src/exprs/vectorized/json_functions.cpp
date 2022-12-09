@@ -27,7 +27,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/json.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"

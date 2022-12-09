@@ -30,8 +30,7 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "udf/udf.h"
-#include "udf/udf_internal.h"
+#include "exprs/function_context.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 

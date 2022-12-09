@@ -983,7 +983,7 @@ TEST_F(AggregateTest, test_window_funnel) {
     const_columns.emplace_back(const_column1); // first column
     const_columns.emplace_back(column3);
     const_columns.emplace_back(column3); // 3rd const column
-    local_ctx->impl()->set_constant_columns(const_columns);
+    local_ctx->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_column; // to column list.
     raw_column.resize(4);
@@ -1209,7 +1209,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
     Columns const_columns;
     const_columns.emplace_back(data_column);
     const_columns.emplace_back(separator_column);
-    local_ctx->impl()->set_constant_columns(const_columns);
+    local_ctx->set_constant_columns(const_columns);
 
     // test update
     group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
@@ -1313,7 +1313,7 @@ TEST_F(AggregateTest, test_intersect_count) {
     const_columns.emplace_back(nullptr);
     const_columns.emplace_back(int_const1);
     const_columns.emplace_back(int_const2);
-    ctx->impl()->set_constant_columns(const_columns);
+    ctx->set_constant_columns(const_columns);
 
     // test update
     group_concat_function->update_batch_single_state(ctx, data_column->size(), raw_columns.data(), state->state());
@@ -1394,7 +1394,7 @@ TEST_F(AggregateTest, test_histogram) {
     const_columns.emplace_back(const1); // first column
     const_columns.emplace_back(const2);
     const_columns.emplace_back(const3); // 3rd const column
-    local_ctx->impl()->set_constant_columns(const_columns);
+    local_ctx->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_columns;
     raw_columns.resize(4);

@@ -23,7 +23,7 @@
 #include "exprs/vectorized/decimal_binary_function.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/unary_function.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {

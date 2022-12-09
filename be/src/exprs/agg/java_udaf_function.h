@@ -31,8 +31,7 @@
 #include "runtime/primitive_type.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
-#include "udf/udf.h"
-#include "udf/udf_internal.h"
+#include "exprs/function_context.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
@@ -55,7 +54,7 @@ public:
             input_column = down_cast<const BinaryColumn*>(column);
         }
         Slice slice = input_column->get_slice(row_num);
-        auto* udaf_ctx = ctx->impl()->udaf_ctxs();
+        auto* udaf_ctx = ctx->udaf_ctxs();
 
         if (udaf_ctx->buffer->capacity() < slice.get_size()) {
             udaf_ctx->buffer_data.resize(slice.get_size());
@@ -81,7 +80,7 @@ public:
         }
 
         size_t old_size = column->get_bytes().size();
-        auto* udaf_ctx = ctx->impl()->udaf_ctxs();
+        auto* udaf_ctx = ctx->udaf_ctxs();
         int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle);
         if (udaf_ctx->buffer->capacity() < serialize_size) {
             udaf_ctx->buffer_data.resize(serialize_size);
@@ -99,7 +98,7 @@ public:
 
     void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const final {
-        auto* udaf_ctx = ctx->impl()->udaf_ctxs();
+        auto* udaf_ctx = ctx->udaf_ctxs();
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
         release_jvalue(udaf_ctx->finalize->method_desc[0].is_box, val);
@@ -109,7 +108,7 @@ public:
                                      ColumnPtr* dst) const final {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = ctx->impl()->udaf_ctxs();
+        auto* udf_ctxs = ctx->udaf_ctxs();
         // 1 convert input as state
         // 1.1 create state list
         auto rets = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->create->method.handle(), batch_size);
@@ -136,11 +135,11 @@ public:
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
         // 2 batch call update
-        helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                  ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
+        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                  ctx->udaf_ctxs()->update->method.handle(), args.data(), args.size());
         // 3 get serialize size
         auto serialize_szs = (jintArray)helper.int_batch_call(
-                ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), batch_size);
+                ctx, rets, ctx->udaf_ctxs()->serialize_size->method.handle(), batch_size);
         RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
 
@@ -157,8 +156,8 @@ public:
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {rets, buffer_array};
-        helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                  ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
+        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                  ctx->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
 
         // 5 ready
         std::vector<Slice> slices(batch_size);
@@ -178,12 +177,12 @@ public:
     // jclass
     // newInstance -> handle
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        new (ptr) State(ctx->impl()->udaf_ctxs()->_func->create());
+        new (ptr) State(ctx->udaf_ctxs()->_func->create());
     }
 
     // Call Destroy method
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
-        ctx->impl()->udaf_ctxs()->_func->destroy(data(ptr).handle);
+        ctx->udaf_ctxs()->_func->destroy(data(ptr).handle);
         data(ptr).~State();
     }
 
@@ -208,8 +207,8 @@ public:
             auto st =
                     JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
-            helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                ctx->impl()->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
+            helper.batch_update(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                ctx->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
                                 args.size());
         }
     }
@@ -228,8 +227,8 @@ public:
             auto st =
                     JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
-            helper.batch_update_if_not_null(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                            ctx->impl()->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
+            helper.batch_update_if_not_null(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                            ctx->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
                                             args.size());
         }
         helper.getEnv()->PopLocalFrame(nullptr);
@@ -248,7 +247,7 @@ public:
                     JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
-            auto* stub = ctx->impl()->udaf_ctxs()->update_batch_call_stub.get();
+            auto* stub = ctx->udaf_ctxs()->update_batch_call_stub.get();
             auto state_handle = this->data(state).handle;
             helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
         }
@@ -295,8 +294,8 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
-            helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                      ctx->impl()->udaf_ctxs()->merge->method.handle(), state_and_buffer, 2);
+            helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                      ctx->udaf_ctxs()->merge->method.handle(), state_and_buffer, 2);
         };
         _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
     }
@@ -313,8 +312,8 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[] = {buffer_array};
-            helper.batch_update_if_not_null(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                            ctx->impl()->udaf_ctxs()->merge->method.handle(), state_array,
+            helper.batch_update_if_not_null(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                            ctx->udaf_ctxs()->merge->method.handle(), state_array,
                                             state_and_buffer, 1);
         };
         _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
@@ -332,8 +331,8 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
-            helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                      ctx->impl()->udaf_ctxs()->merge->method.handle(), state_and_buffer, 2);
+            helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                      ctx->udaf_ctxs()->merge->method.handle(), state_and_buffer, 2);
         };
         _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
     }
@@ -342,7 +341,7 @@ public:
                          size_t state_offset, Column* to) const override {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = ctx->impl()->udaf_ctxs();
+        auto* udf_ctxs = ctx->udaf_ctxs();
 
         const size_t origin_chunk_size = to->size();
         auto defer = DeferOp([&]() {
@@ -365,7 +364,7 @@ public:
 
         // step 2 serialize size
         auto serialize_szs = (jintArray)helper.int_batch_call(
-                ctx, state_array, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), batch_size);
+                ctx, state_array, ctx->udaf_ctxs()->serialize_size->method.handle(), batch_size);
         RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
 
@@ -382,8 +381,8 @@ public:
         auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {state_array, buffer_array};
-        helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
-                                  ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
+        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
+                                  ctx->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
 
         int offsets = 0;
         std::vector<Slice> slices(batch_size);
@@ -398,7 +397,7 @@ public:
                         size_t state_offset, Column* to) const override {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
-        auto* udf_ctxs = ctx->impl()->udaf_ctxs();
+        auto* udf_ctxs = ctx->udaf_ctxs();
 
         const size_t origin_chunk_size = to->size();
         auto defer = DeferOp([&]() {

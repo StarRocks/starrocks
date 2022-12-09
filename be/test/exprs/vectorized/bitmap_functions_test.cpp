@@ -23,7 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
 #include "types/bitmap_value.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {

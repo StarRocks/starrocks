@@ -20,7 +20,7 @@
 #include "column/column_viewer.h"
 #include "column/map_column.h"
 #include "exprs/vectorized/function_helper.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 

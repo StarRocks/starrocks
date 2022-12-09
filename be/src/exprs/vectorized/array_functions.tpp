@@ -20,7 +20,7 @@
 #include "column/type_traits.h"
 #include "exprs/vectorized/function_helper.h"
 #include "runtime/primitive_type.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 

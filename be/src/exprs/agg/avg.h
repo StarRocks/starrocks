@@ -20,7 +20,7 @@
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 
 namespace starrocks::vectorized {
 

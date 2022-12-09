@@ -45,7 +45,7 @@
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 
 namespace starrocks {
 

@@ -23,7 +23,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/bitmap_intersect.h"
 
 namespace starrocks::vectorized {

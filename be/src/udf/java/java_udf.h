@@ -20,7 +20,7 @@
 #include "common/statusor.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c

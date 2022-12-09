@@ -824,7 +824,7 @@ TEST_P(ShaTestFixture, test_sha2) {
     }
     columns.emplace_back(hash_length);
 
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     ASSERT_TRUE(EncryptionFunctions::sha2_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     if (len != -1) {

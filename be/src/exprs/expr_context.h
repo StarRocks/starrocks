@@ -34,12 +34,12 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "udf/udf.h"
-#include "udf/udf_internal.h" // for ArrayVal
+#include "exprs/function_context.h"
 // Only include column/vectorized_fwd.h in this file, you need include what you need
 // in the source files. Please NOT add unnecessary includes in this file.
 
@@ -88,8 +88,6 @@ public:
     /// the caller to NULL.
     Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
 
-    Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx, Expr* root);
-
     /// Closes all FunctionContexts. Must be called on every ExprContext, including clones.
     void close(RuntimeState* state);
 
@@ -98,7 +96,7 @@ public:
     /// Prepare() and save the returned index. 'varargs_buffer_size', if specified, is the
     /// size of the varargs buffer in the created FunctionContext (see udf-internal.h).
     int register_func(RuntimeState* state, const FunctionContext::TypeDesc& return_type,
-                      const std::vector<FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size);
+                      const std::vector<FunctionContext::TypeDesc>& arg_types);
 
     /// Retrieves a registered FunctionContext. 'i' is the index returned by the call to
     /// register_func(). This should only be called by Exprs.
@@ -114,12 +112,6 @@ public:
 
     bool opened() { return _opened; }
 
-    /// Returns an error status if there was any error in evaluating the expression
-    /// or its sub-expressions. 'start_idx' and 'end_idx' correspond to the range
-    /// within the vector of FunctionContext for the sub-expressions of interest.
-    /// The default parameters correspond to the entire expr 'root_'.
-    Status get_error(int start_idx, int end_idx) const;
-
     Status get_udf_error();
 
     std::string get_error_msg() const;
@@ -129,21 +121,13 @@ public:
 
 private:
     friend class Expr;
-    friend class ScalarFnCall;
-    friend class InPredicate;
     friend class OlapScanNode;
     friend class vectorized::OlapScanNode;
-    friend class EsScanNode;
     friend class EsPredicate;
 
     /// FunctionContexts for each registered expression. The FunctionContexts are created
     /// and owned by this ExprContext.
     std::vector<FunctionContext*> _fn_contexts;
-
-    /// Array access to fn_contexts_. Used by ScalarFnCall's codegen'd compute function
-    /// to access the correct FunctionContext.
-    /// TODO: revisit this
-    FunctionContext** _fn_contexts_ptr;
 
     /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
     std::unique_ptr<MemPool> _pool;

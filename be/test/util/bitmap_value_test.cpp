@@ -43,7 +43,7 @@
 #include "exprs/vectorized/bitmap_functions.h"
 #include "types/bitmap_value.h"
 #include "types/bitmap_value_detail.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {

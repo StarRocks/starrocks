@@ -31,7 +31,7 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
     std::string libpath;
     std::string state = symbol + "$State";
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fid, url, checksum, &libpath));
-    auto* udaf_ctx = context->impl()->udaf_ctxs();
+    auto* udaf_ctx = context->udaf_ctxs();
     auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     auto analyzer = std::make_unique<ClassAnalyzer>();
     RETURN_IF_ERROR(udf_classloader->init());
