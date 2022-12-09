@@ -275,7 +275,6 @@ struct OlapReaderStatistics {
     int64_t block_fetch_ns = 0; // time of rowset reader's `next_batch()` call
     int64_t block_seek_num = 0;
     int64_t block_seek_ns = 0;
-    int64_t block_convert_ns = 0;
 
     int64_t decode_dict_ns = 0;
     int64_t late_materialize_ns = 0;
@@ -292,7 +291,6 @@ struct OlapReaderStatistics {
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;
     int64_t segment_init_ns = 0;
-    int64_t segment_create_chunk_ns = 0;
 
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
@@ -300,8 +298,6 @@ struct OlapReaderStatistics {
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
     int64_t del_filter_ns = 0;
-
-    int64_t index_load_ns = 0;
 
     int64_t total_pages_num = 0;
     int64_t cached_pages_num = 0;
