@@ -25,7 +25,7 @@ TO <repository_name>
 
 | **参数**        | **说明**                                                     |
 | --------------- | ------------------------------------------------------------ |
-| db_name         | 恢复数据至该数据库。                                           |
+| db_name         | 需要备份的数据所属的数据库名。                                   |
 | snapshot_name   | 指定数据快照名。全局范围内，快照名不可重复。                      |
 | repository_name | 仓库名。您可以通过 [CREATE REPOSITORY](../data-definition/CREATE%20REPOSITORY.md) 创建仓库。 |
 | ON              | 需要备份的表名。如不指定则备份整个数据库。                         |
