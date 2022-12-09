@@ -485,6 +485,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 result.add(basePartitionName);
             }
         }
+        if (baseTable.isMaterializedView()) {
+            Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
+            result.addAll(partitionNames);
+        }
         return result;
     }
 
@@ -797,7 +801,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (!table.isLocalTable()) {
                     return Sets.newHashSet();
                 }
-                Set<String> partitionNames = getUpdatedPartitionNames(table);
+                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
                 if (!partitionNames.isEmpty()) {
                     return getPartitionNames();
                 }
@@ -815,6 +819,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return Sets.newHashSet();
     }
 
+    /*
     private Set<String> getUpdatedPartitionNames(Table table) {
         Set<String> partitionNames;
         if (table.isMaterializedView()) {
@@ -825,6 +830,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
         return partitionNames;
     }
+
+     */
 
     private Set<String> getUpdatedPartitionNamesForPartitionBy() {
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
@@ -839,7 +846,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
             }
-            Set<String> partitionNames = getUpdatedPartitionNames(table);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
             if (!partitionNames.isEmpty()) {
                 return getPartitionNames();
             }
