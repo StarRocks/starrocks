@@ -1110,7 +1110,7 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "partial_mv_9");
         dropMv("test", "partial_mv_10");
 
-        starRocksAssert.withTable("CREATE TABLE t1 (\n" +
+        starRocksAssert.withTable("CREATE TABLE ttl_base_table (\n" +
                 "                            k1 INT,\n" +
                 "                            v1 INT,\n" +
                 "                            v2 INT)\n" +
@@ -1125,7 +1125,7 @@ public class MvRewriteOptimizationTest {
                 "                        PARTITION `p6` VALUES LESS THAN ('7')\n" +
                 "                        )\n" +
                 "                        DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
-        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,2,1),(1,2,2),\n" +
+        cluster.runSql("test", "insert into ttl_base_table values (1,1,1),(1,1,2),(1,2,1),(1,2,2),\n" +
                 "                                              (2,1,1),(2,1,2),(2,2,1),(2,2,2),\n" +
                 "                                              (3,1,1),(3,1,2),(3,2,1),(3,2,2);");
         createAndRefreshMv("test", "ttl_mv_2", "CREATE MATERIALIZED VIEW ttl_mv_2\n" +
@@ -1135,14 +1135,14 @@ public class MvRewriteOptimizationTest {
                 "               PROPERTIES(\n" +
                 "               \"partition_ttl_number\"=\"4\"\n" +
                 "               )\n" +
-                "               AS SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;");
+                "               AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
         MaterializedView ttlMv2 = getMv("test", "ttl_mv_2");
         waitTtl(ttlMv2, 4, 100);
 
-        String query16 = "select k1, sum(v1) FROM t1 where k1=3 group by k1";
+        String query16 = "select k1, sum(v1) FROM ttl_base_table where k1=3 group by k1";
         String plan16 = getFragmentPlan(query16);
         PlanTestBase.assertContains(plan16, "ttl_mv_2");
-        starRocksAssert.dropTable("t1");
+        starRocksAssert.dropTable("ttl_base_table");
         dropMv("test", "ttl_mv_2");
     }
 
