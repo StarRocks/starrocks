@@ -49,50 +49,6 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: substr = 15: substr");
-
-        // RIGHT ANTI JOIN + AGGREGATE count(*)
-        sql = "select count(*) from (select t2.id_char, t2.id_varchar " +
-                "from test_all_type_nullable t1 " +
-                "right anti join test_all_type_nullable2 t2 " +
-                "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  28 <-> [28: id_tinyint, TINYINT, false]\n" +
-                "  |  cardinality: 0\n" +
-                "  |  \n" +
-                "  3:NESTLOOP JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN\n" +
-                "  |  cardinality: 0");
-
-        // RIGHT ANTI JOIN + AGGREGATE count(column)
-        sql = "select count(a.id_char) " +
-                "from (select t2.id_char, t2.id_varchar " +
-                "from test_all_type_nullable t1 " +
-                "right anti join test_all_type_nullable2 t2 " +
-                "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  34 <-> [34: id_char, CHAR, false]\n" +
-                "  |  cardinality: 0\n" +
-                "  |  \n" +
-                "  3:NESTLOOP JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN\n" +
-                "  |  cardinality: 0");
-
-        // LEFT ANTI JOIN + AGGREGATE
-        sql = "select count(*) from (" +
-                "select id_char, id_varchar " +
-                "from test_all_type_nullable t1 " +
-                "left anti join test_all_type_nullable2 t2 " +
-                "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  8 <-> [8: id_char, CHAR, false]\n" +
-                "  |  cardinality: 0\n" +
-                "  |  \n" +
-                "  3:NESTLOOP JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN\n" +
-                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n");
     }
 
     @Test
