@@ -185,7 +185,6 @@ public class KafkaUtil {
                     return result;
                 }
             } catch (InterruptedException ie) {
-                LOG.warn("got interrupted exception when sending proxy request to " + address);
                 Thread.currentThread().interrupt();
                 throw new LoadException("got interrupted exception when sending proxy request to " + address);
             } catch (Exception e) {
