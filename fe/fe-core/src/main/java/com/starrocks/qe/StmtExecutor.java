@@ -237,7 +237,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-            sb.append(SessionVariable.PIPELINE_SINK_DOP).append("=").append(variables.getPipelineSinkDop()).append(",");
+            sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
+                    .append(variables.getEnableAdaptiveSinkDop())
+                    .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");

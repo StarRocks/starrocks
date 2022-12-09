@@ -163,11 +163,6 @@ public class InsertPlanner {
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
                         insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
                         olapTable.enableReplicatedStorage());
-                // At present, we only support dop=1 for olap table sink.
-                // because tablet writing needs to know the number of senders in advance
-                // and guaranteed order of data writing
-                // It can be parallel only in some scenes, for easy use 1 dop now.
-                execPlan.getFragments().get(0).setPipelineDop(1);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
@@ -183,10 +178,11 @@ public class InsertPlanner {
                     // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
                     sinkFragment.setPipelineDop(1);
                 } else {
-                    if (ConnectContext.get().getSessionVariable().getPipelineSinkDop() <= 0) {
-                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
+                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
                     } else {
-                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getPipelineSinkDop());
+                        sinkFragment
+                                .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                     }
                 }
                 sinkFragment.setHasOlapTableSink();
