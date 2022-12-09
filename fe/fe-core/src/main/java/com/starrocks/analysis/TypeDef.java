@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -102,7 +103,9 @@ public class TypeDef implements ParseNode {
             analyzeArrayType((ArrayType) type);
         } else if (type.isStructType()) {
             analyzeStructType((StructType) type);
-        } else {
+        }  else if (type.isMapType()) {
+            analyzeMapType((MapType) type);
+        }  else {
             throw new AnalysisException("Unsupported data type: " + type.toSql());
         }
     }
@@ -186,6 +189,13 @@ public class TypeDef implements ParseNode {
         for (StructField structField: structFields) {
             analyze(structField.getType());
         }
+    }
+
+    private void analyzeMapType(MapType type) throws AnalysisException {
+        Type keyType = type.getKeyType();
+        analyze(keyType);
+        Type valueType = type.getValueType();
+        analyze(valueType);
     }
 
     public Type getType() {

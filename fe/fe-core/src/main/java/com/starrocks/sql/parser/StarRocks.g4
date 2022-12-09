@@ -2013,10 +2013,15 @@ type
     | decimalType
     | arrayType
     | structType
+    | mapType
     ;
 
 arrayType
     : ARRAY '<' type '>'
+    ;
+
+mapType
+    : MAP '<' type ',' type '>'
     ;
 
 columnNameColonType
