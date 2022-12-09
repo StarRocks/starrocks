@@ -351,6 +351,7 @@ public:
                 result_offset += kBatchNums;
 
             } else {
+                // clang-format off
 #define AVX512_COPY(SHIFT, MASK, WIDTH)                                         \
     {                                                                           \
         auto m = (mask >> SHIFT) & MASK;                                        \
@@ -428,6 +429,7 @@ public:
             f_data += kBatchNums;
         }
 #endif
+            // clang-format on
         for (auto i = start_offset; i < to; ++i) {
             if (filter[i]) {
                 *(data + result_offset) = *(data + i);
