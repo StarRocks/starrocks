@@ -498,7 +498,6 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
             RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
         }
         _stats.delete_file_per_scan += scanner_params.deletes.size();
-        SCOPED_RAW_TIMER(&_stats.delete_build_ns);
     }
 
     return Status::OK();

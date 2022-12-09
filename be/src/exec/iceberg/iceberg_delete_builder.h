@@ -34,7 +34,6 @@
 
 #pragma once
 
-#include "column/column_helper.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
