@@ -35,7 +35,6 @@ public class PipelineParallelismTest extends PlanTestBase {
     private int prevParallelExecInstanceNum = 0;
     private boolean prevEnablePipelineEngine = true;
     private int prevPipelineDop = 0;
-    private int pipelineSinkDop = 8;
 
     @Before
     public void setUp() {
@@ -53,8 +52,7 @@ public class PipelineParallelismTest extends PlanTestBase {
         connectContext.getSessionVariable().setParallelExecInstanceNum(parallelExecInstanceNum);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setPipelineDop(0);
-        connectContext.getSessionVariable().setPipelineSinkDop(pipelineSinkDop);
-
+        connectContext.getSessionVariable().setEnableAdaptiveSinkDop(false);
     }
 
     @After
@@ -111,13 +109,25 @@ public class PipelineParallelismTest extends PlanTestBase {
             Assert.assertEquals(parallelExecInstanceNum, fragment0.getParallelExecNum());
             Assert.assertEquals(1, fragment0.getPipelineDop());
 
+            connectContext.getSessionVariable().setEnableAdaptiveSinkDop(false);
+
             Config.enable_pipeline_load = true;
             plan = getExecPlan("insert into t0 select * from t0");
             fragment0 = plan.getFragments().get(0);
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // ParallelExecNum of fragment not 1. still can not use pipeline
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(pipelineSinkDop, fragment0.getPipelineDop());
+            Assert.assertEquals(parallelExecInstanceNum, fragment0.getPipelineDop());
+
+            connectContext.getSessionVariable().setEnableAdaptiveSinkDop(true);
+
+            Config.enable_pipeline_load = true;
+            plan = getExecPlan("insert into t0 select * from t0");
+            fragment0 = plan.getFragments().get(0);
+            assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
+            // ParallelExecNum of fragment not 1. still can not use pipeline
+            Assert.assertEquals(1, fragment0.getParallelExecNum());
+            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
@@ -137,13 +147,25 @@ public class PipelineParallelismTest extends PlanTestBase {
             Assert.assertEquals(parallelExecInstanceNum, fragment0.getParallelExecNum());
             Assert.assertEquals(1, fragment0.getPipelineDop());
 
+            connectContext.getSessionVariable().setEnableAdaptiveSinkDop(false);
+
             Config.enable_pipeline_load = true;
             plan = getExecPlan("delete from tprimary where pk = 1");
             fragment0 = plan.getFragments().get(0);
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(pipelineSinkDop, fragment0.getPipelineDop());
+            Assert.assertEquals(parallelExecInstanceNum, fragment0.getPipelineDop());
+
+            connectContext.getSessionVariable().setEnableAdaptiveSinkDop(true);
+
+            Config.enable_pipeline_load = true;
+            plan = getExecPlan("delete from tprimary where pk = 1");
+            fragment0 = plan.getFragments().get(0);
+            assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
+            // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
+            Assert.assertEquals(1, fragment0.getParallelExecNum());
+            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
@@ -163,13 +185,25 @@ public class PipelineParallelismTest extends PlanTestBase {
             Assert.assertEquals(parallelExecInstanceNum, fragment0.getParallelExecNum());
             Assert.assertEquals(1, fragment0.getPipelineDop());
 
+            connectContext.getSessionVariable().setEnableAdaptiveSinkDop(false);
+
             Config.enable_pipeline_load = true;
             plan = getExecPlan("update tprimary set v1 = 'aaa' where pk = 1");
             fragment0 = plan.getFragments().get(0);
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
             // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
             Assert.assertEquals(1, fragment0.getParallelExecNum());
-            Assert.assertEquals(pipelineSinkDop, fragment0.getPipelineDop());
+            Assert.assertEquals(parallelExecInstanceNum, fragment0.getPipelineDop());
+
+            connectContext.getSessionVariable().setEnableAdaptiveSinkDop(true);
+
+            Config.enable_pipeline_load = true;
+            plan = getExecPlan("update tprimary set v1 = 'aaa' where pk = 1");
+            fragment0 = plan.getFragments().get(0);
+            assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
+            // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
+            Assert.assertEquals(1, fragment0.getParallelExecNum());
+            Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;
         }
