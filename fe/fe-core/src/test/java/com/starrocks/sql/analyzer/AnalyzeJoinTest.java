@@ -174,7 +174,7 @@ public class AnalyzeJoinTest {
         analyzeSuccess(sql);
 
         sql = "select * from (t0 a, (t1) b)";
-        analyzeFail(sql, "Syntax error");
+        analyzeFail(sql, "the right syntax to use near 'b'");
 
         sql = "select * from (t0 a, t1 a)";
         analyzeFail(sql, "Not unique table/alias: 'a'");
@@ -189,7 +189,7 @@ public class AnalyzeJoinTest {
         analyzeFail(sql, "Not unique table/alias: 't1'");
 
         sql = "select * from (t0 join t1) t,t1";
-        analyzeFail(sql, "Syntax error");
+        analyzeFail(sql, "the right syntax to use near 't'");
 
         sql = "select * from (t0 join t1 t) ,t1";
         analyzeSuccess(sql);
