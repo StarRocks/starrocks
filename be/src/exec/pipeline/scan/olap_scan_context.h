@@ -27,6 +27,7 @@ using namespace vectorized;
 class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node) : _scan_node(scan_node) {}
+    ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
