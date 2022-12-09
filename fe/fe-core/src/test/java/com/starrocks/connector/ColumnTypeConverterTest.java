@@ -324,7 +324,7 @@ public class ColumnTypeConverterTest {
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultString()));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultExternalTableString()));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
@@ -341,7 +341,7 @@ public class ColumnTypeConverterTest {
         Schema structSchema = Schema.createRecord(fields);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
@@ -361,13 +361,13 @@ public class ColumnTypeConverterTest {
         Schema mapSchema = Schema.createMap(structSchema);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
 
-        MapType mapType = new MapType(ScalarType.createDefaultString(), structType);
+        MapType mapType = new MapType(ScalarType.createDefaultExternalTableString(), structType);
 
         Assert.assertEquals(mapType, fromHudiType(mapSchema));
     }
