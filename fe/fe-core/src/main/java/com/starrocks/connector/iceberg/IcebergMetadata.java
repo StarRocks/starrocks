@@ -17,7 +17,6 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.server.GlobalStateMgr;
@@ -115,7 +114,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             } else {
                 return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, catalogName, dbName, tblName);
             }
-        } catch (DdlException e) {
+        } catch (Exception e) {
             LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
             return null;
         }
