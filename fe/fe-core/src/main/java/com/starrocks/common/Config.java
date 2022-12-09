@@ -1480,10 +1480,10 @@ public class Config extends ConfigBase {
     public static boolean vectorized_load_enable = true;
 
     /**
-     * Enable pipeline engine load.
+     * Enable pipeline engine load for insert into.
      */
     @ConfField(mutable = true)
-    public static boolean enable_pipeline_load = false;
+    public static boolean enable_pipeline_load_for_insert = false;
 
     /**
      * Unused config field, leave it here for backward compatibility

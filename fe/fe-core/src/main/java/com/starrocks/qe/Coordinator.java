@@ -276,7 +276,7 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+        this.usePipeline = false;
     }
 
     public long getJobId() {
