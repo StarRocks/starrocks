@@ -170,6 +170,10 @@ public:
             }
         }
 
+        for (int i = 0; i < num_values; i++) {
+            VLOG_FILE << "[XXX] dict = " << _dict[i].to_string();
+        }
+
         return Status::OK();
     }
 

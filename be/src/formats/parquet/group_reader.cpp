@@ -340,6 +340,7 @@ bool GroupReader::_column_all_pages_dict_encoded(const tparquet::ColumnMetaData&
 }
 
 Status GroupReader::_rewrite_dict_column_predicates() {
+    VLOG_FILE << "[XXX] rewrite dict column predicate";
     for (const auto& column : _dict_filter_columns) {
         SlotId slot_id = column.slot_id;
         vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
@@ -358,7 +359,13 @@ Status GroupReader::_rewrite_dict_column_predicates() {
 
         // get dict codes
         std::vector<int32_t> dict_codes;
+        for (const Slice& x : dict_value_column->get_data()) {
+            VLOG_FILE << "[XXX] get dict codes. data = " << x.to_string();
+        }
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_codes(dict_value_column->get_data(), &dict_codes));
+        for (auto x : dict_codes) {
+            VLOG_FILE << "[XXX] get dict codes. code = " << x;
+        }
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
@@ -487,8 +494,8 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
         auto* codes_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(dict_codes);
         auto* codes_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
                 codes_nullable_column->data_column());
+        const std::vector<int32_t> codes = codes_column->get_data();
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
-
         DCHECK_EQ(dict_codes->size(), dict_values->size());
         if (slots[chunk_index]->is_nullable()) {
             auto* nullable_codes = down_cast<vectorized::NullableColumn*>(dict_codes.get());
