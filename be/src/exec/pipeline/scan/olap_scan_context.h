@@ -36,6 +36,7 @@ public:
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
                              BalancedChunkBuffer& chunk_buffer)
             : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan), _scan_dop(dop) {}
+    ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
