@@ -285,7 +285,6 @@ MutableColumnPtr StructColumn::clone_empty() const {
 }
 
 size_t StructColumn::filter_range(const Filter& filter, size_t from, size_t to) {
-    // TODO(SmithCruise) Not tested.
     size_t result_offset = _fields[0]->filter_range(filter, from, to);
     for (size_t i = 1; i < _fields.size(); i++) {
         size_t tmp_offset = _fields[i]->filter_range(filter, from, to);
