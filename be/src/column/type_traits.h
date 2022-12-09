@@ -268,6 +268,10 @@ using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 template <LogicalType Type>
 using RunTimeCppMovableType = std::add_rvalue_reference_t<std::remove_pointer_t<RunTimeCppType<Type>>>;
 
+// Value type instead of pointer type
+template <LogicalType Type>
+using RunTimeCppValueType = std::remove_pointer_t<RunTimeCppType<Type>>;
+
 template <typename T>
 struct ColumnTraits {};
 
