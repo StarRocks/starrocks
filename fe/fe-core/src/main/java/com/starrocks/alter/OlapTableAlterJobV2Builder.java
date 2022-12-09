@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.alter;
 
@@ -45,6 +58,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
         schemaChangeJob.setStorageFormat(newStorageFormat);
+        schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         /*
          * Create schema change job
          * 1. For each index which has been changed, create a SHADOW index, and save the mapping of origin index to SHADOW index.

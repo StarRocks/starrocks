@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/compaction_scheduler.h"
 
 #include <chrono>
@@ -26,12 +26,25 @@
 #include "storage/tablet.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
+#include "util/thread.h"
 
 using namespace std::chrono_literals;
 
 namespace starrocks {
 
-CompactionScheduler::CompactionScheduler() {
+CompactionScheduler::CompactionScheduler() {}
+
+CompactionScheduler::~CompactionScheduler() {
+    _bg_worker_stopped.store(true, std::memory_order_release);
+    if (_scheduler_thread.joinable()) {
+        _scheduler_thread.join();
+    }
+    if (_compaction_pool) {
+        _compaction_pool->shutdown();
+    }
+}
+
+void CompactionScheduler::schedule() {
     auto st = ThreadPoolBuilder("compact_pool")
                       .set_min_threads(1)
                       .set_max_threads(std::max(1, StorageEngine::instance()->compaction_manager()->max_task_num()))
@@ -39,11 +52,14 @@ CompactionScheduler::CompactionScheduler() {
                       .build(&_compaction_pool);
     DCHECK(st.ok());
     StorageEngine::instance()->compaction_manager()->register_scheduler(this);
+
+    _scheduler_thread = std::thread([this] { _schedule(); });
+    Thread::set_thread_name(_scheduler_thread, "compact_sched");
 }
 
-void CompactionScheduler::schedule() {
+void CompactionScheduler::_schedule() {
     LOG(INFO) << "start compaction scheduler";
-    while (true) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         ++_round;
         _wait_to_run();
         std::shared_ptr<CompactionTask> compaction_task = _try_get_next_compaction_task();

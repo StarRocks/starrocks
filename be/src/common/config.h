@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/common/config.h
 
@@ -780,6 +780,8 @@ CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
 CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
 CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
+CONF_Bool(scan_node_always_shared_scan, "false");
+CONF_Bool(connector_scan_node_always_shared_scan, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory

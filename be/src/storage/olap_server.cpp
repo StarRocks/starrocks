@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/olap_server.cpp
 
@@ -174,11 +174,8 @@ Status StorageEngine::start_bg_threads() {
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
-        _compaction_scheduler = std::thread([] {
-            CompactionScheduler compaction_scheduler;
-            compaction_scheduler.schedule();
-        });
-        Thread::set_thread_name(_compaction_scheduler, "compact_sched");
+
+        _compaction_scheduler->schedule();
 
         _compaction_checker_thread = std::thread([this] { compaction_check(); });
         Thread::set_thread_name(_compaction_checker_thread, "compact_check");

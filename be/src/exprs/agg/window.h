@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -128,7 +128,13 @@ public:
 
         InputColumnType* column = down_cast<InputColumnType*>(data_column);
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = value;
+            if constexpr (PT != TYPE_HLL && PT != TYPE_OBJECT) {
+                column->get_data()[i] = value;
+            } else {
+                // For TYPE_HLL(HLL) AND and TYPE_OBJECT(BITMAP),
+                // we can't use get_data to write datas.
+                *column->get_object(i) = *value;
+            }
         }
     }
 };

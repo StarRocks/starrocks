@@ -1,15 +1,31 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -31,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -44,6 +61,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -106,6 +124,22 @@ public class MvUtils {
         } else {
             for (OptExpression child : root.getInputs()) {
                 getAllTables(child, tables);
+            }
+        }
+    }
+
+    public static List<LogicalOlapScanOperator> getOlapScanNode(OptExpression root) {
+        List<LogicalOlapScanOperator> olapScanOperators = Lists.newArrayList();
+        getOlapScanNode(root, olapScanOperators);
+        return olapScanOperators;
+    }
+
+    public static void getOlapScanNode(OptExpression root, List<LogicalOlapScanOperator> olapScanOperators) {
+        if (root.getOp() instanceof LogicalOlapScanOperator) {
+            olapScanOperators.add((LogicalOlapScanOperator) root.getOp());
+        } else {
+            for (OptExpression child : root.getInputs()) {
+                getOlapScanNode(child, olapScanOperators);
             }
         }
     }
@@ -371,5 +405,70 @@ public class MvUtils {
         };
         optExpression.getOp().accept(visitor, optExpression, null);
         return columnRefOperators;
+    }
+
+    public static List<ScalarOperator> convertRanges(
+            ScalarOperator partitionScalar,
+            List<Range<PartitionKey>> partitionRanges) {
+        List<ScalarOperator> rangeParts = Lists.newArrayList();
+        for (Range<PartitionKey> range : partitionRanges) {
+            if (range.isEmpty()) {
+                continue;
+            }
+            // partition range must have lower bound and upper bound
+            Preconditions.checkState(range.hasLowerBound() && range.hasUpperBound());
+            LiteralExpr lowerExpr = range.lowerEndpoint().getKeys().get(0);
+            if (lowerExpr.isMinValue() && range.upperEndpoint().isMaxValue()) {
+                continue;
+            } else if (lowerExpr.isMinValue()) {
+                ConstantOperator upperBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
+                rangeParts.add(upperPredicate);
+            } else if (range.upperEndpoint().isMaxValue()) {
+                ConstantOperator lowerBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
+                rangeParts.add(lowerPredicate);
+            } else {
+                // close, open range
+                ConstantOperator lowerBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
+
+                ConstantOperator upperBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
+
+                CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
+                        CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
+                rangeParts.add(andPredicate);
+            }
+        }
+        return rangeParts;
+    }
+
+    public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
+        List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
+        for (int i = 0; i < ranges.size(); i++) {
+            Range<PartitionKey> currentRange = ranges.get(i);
+            boolean merged = false;
+            for (int j = 0; j < mergedRanges.size(); j++) {
+                // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
+                Range<PartitionKey> resultRange = mergedRanges.get(j);
+                if (currentRange.isConnected(currentRange) && currentRange.gap(resultRange).isEmpty()) {
+                    mergedRanges.set(j, resultRange.span(currentRange));
+                    merged = true;
+                }
+            }
+            if (!merged) {
+                mergedRanges.add(currentRange);
+            }
+        }
+        return mergedRanges;
     }
 }

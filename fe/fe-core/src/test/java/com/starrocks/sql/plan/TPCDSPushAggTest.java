@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -55,14 +68,14 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q01", 4, 4, 6, 4, 6),
                 Arguments.of("Q02", 2, 5, 5, 5, 5),
                 Arguments.of("Q03", 2, 4, 4, 4, 4),
-                Arguments.of("Q04", 6, 10, 12, 10, 12),
+                Arguments.of("Q04", 12, 10, 12, 10, 12),
                 Arguments.of("Q05", 8, 16, 16, 16, 16),
                 Arguments.of("Q06", 5, 5, 5, 5, 5),
                 Arguments.of("Q07", 2, 2, 2, 2, 2),
                 Arguments.of("Q08", 4, 6, 6, 6, 6),
                 Arguments.of("Q09", 30, 30, 30, 30, 30),
                 Arguments.of("Q10", 2, 2, 2, 2, 2),
-                Arguments.of("Q11", 4, 6, 8, 6, 8),
+                Arguments.of("Q11", 8, 6, 8, 6, 8),
                 Arguments.of("Q12", 2, 4, 4, 4, 4),
                 Arguments.of("Q13", 2, 2, 2, 2, 2),
                 Arguments.of("Q14_1", 16, 16, 16, 16, 16),
@@ -129,7 +142,7 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q71", 2, 2, 8, 8, 8),
                 Arguments.of("Q72", 2, 2, 2, 2, 2),
                 Arguments.of("Q73", 2, 2, 2, 2, 2),
-                Arguments.of("Q74", 4, 6, 8, 6, 8),
+                Arguments.of("Q74", 8, 6, 8, 6, 8),
                 Arguments.of("Q75", 4, 4, 16, 4, 4),
                 Arguments.of("Q76", 2, 2, 2, 2, 2),
                 Arguments.of("Q77", 14, 26, 26, 26, 26),

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -326,7 +339,7 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); " +
+                "  |  aggregate: multi_distinct_count[([9: count, VARBINARY, false]); " +
                 "args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         plan = getVerboseExplain(sql);
@@ -360,9 +373,9 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); " +
+                "  |  aggregate: multi_distinct_count[([9: count, VARBINARY, false]); " +
                 "args: INT; result: BIGINT; args nullable: true; result nullable: false], " +
-                "multi_distinct_count[([10: count, VARCHAR, false]); args: INT; result: BIGINT; " +
+                "multi_distinct_count[([10: count, VARBINARY, false]); args: INT; result: BIGINT; " +
                 "args nullable: true; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1118,7 +1131,7 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         sql = "select count(distinct S_ADDRESS), count(distinct S_NAME) as a from supplier_nullable";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("multi_distinct_count[([9: count, VARCHAR, false]);"));
+        Assert.assertTrue(plan.contains("multi_distinct_count[([9: count, VARBINARY, false]);"));
         Assert.assertTrue(plan.contains("multi_distinct_count[([11: S_ADDRESS, INT, true]);"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1155,7 +1168,7 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: multi_distinct_count[([12: S_ADDRESS, INT, true]);"));
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]);"));
+                "  |  aggregate: multi_distinct_count[([9: count, VARBINARY, false]);"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
         connectContext.getSessionVariable().setNewPlanerAggStage(2);

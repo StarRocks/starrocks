@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "column/vectorized_schema.h"
 
 #include <algorithm>
@@ -43,7 +43,21 @@ VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<C
         DCHECK_LT(cids[i], schema->_fields.size());
         _fields[i] = schema->_fields[cids[i]];
     }
-    _sort_key_idxes = schema->sort_key_idxes();
+    auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
+    _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
+    _build_index_map(_fields);
+}
+
+VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<ColumnId>& cids,
+                                   const std::vector<ColumnId>& scids)
+        : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
+    DCHECK(!scids.empty());
+    _fields.resize(cids.size());
+    for (int i = 0; i < cids.size(); i++) {
+        DCHECK_LT(cids[i], schema->_fields.size());
+        _fields[i] = schema->_fields[cids[i]];
+    }
+    _sort_key_idxes = scids;
     auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);

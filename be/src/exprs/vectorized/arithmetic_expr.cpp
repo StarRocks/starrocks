@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exprs/vectorized/arithmetic_expr.h"
 
 #include <optional>
@@ -198,6 +198,19 @@ public:
     }
 };
 
+template <LogicalType Type, typename OP>
+class VectorizedBitShiftArithmeticExpr final : public Expr {
+public:
+    DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        auto l = _children[0]->evaluate(context, ptr);
+        auto r = _children[1]->evaluate(context, ptr);
+
+        using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
+        return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    }
+};
+
 #undef DEFINE_CLASS_CONSTRUCTOR
 
 #define CASE_TYPE(TYPE, OP) \
@@ -285,6 +298,15 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
 #define CASE_FN(TYPE, OP) return new VectorizedBitNotArithmeticExpr<TYPE>(node);
     case TExprOpcode::BITNOT:
         SWITCH_INT_TYPE(TYPE_NULL);
+#undef CASE_FN
+
+#define CASE_FN(TYPE, OP) return new VectorizedBitShiftArithmeticExpr<TYPE, OP>(node);
+    case TExprOpcode::BIT_SHIFT_LEFT:
+        SWITCH_INT_TYPE(BitShiftLeftOp);
+    case TExprOpcode::BIT_SHIFT_RIGHT:
+        SWITCH_INT_TYPE(BitShiftRightOp);
+    case TExprOpcode::BIT_SHIFT_RIGHT_LOGICAL:
+        SWITCH_INT_TYPE(BitShiftRightLogicalOp);
 #undef CASE_FN
 
     default:

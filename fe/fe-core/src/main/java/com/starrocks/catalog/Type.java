@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/Type.java
 
@@ -133,23 +146,31 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_VARCHAR = new ArrayType(Type.VARCHAR);
     public static final Type ARRAY_JSON = new ArrayType(Type.JSON);
 
-    private static final ImmutableList<ScalarType> INTEGER_TYPES =
-            ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
-    private static final ImmutableList<ScalarType> FLOAT_POINT_TYPES =
-            ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128);
+    public static final ImmutableList<ScalarType> INTEGER_TYPES =
+            ImmutableList.of(BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
+
+    // TODO(lism): DOUBLE type should be the first because `registerBuiltinSumAggFunction` replies
+    // the order to implicitly cast.
+    public static final ImmutableList<ScalarType> FLOAT_TYPES =
+            ImmutableList.of(DOUBLE, FLOAT);
+
+    // NOTE: DECIMAL_TYPES not contain DECIMALV2
+    public static final ImmutableList<ScalarType> DECIMAL_TYPES =
+            ImmutableList.of(DECIMAL32, DECIMAL64, DECIMAL128);
     private static final ImmutableList<ScalarType> NUMERIC_TYPES =
             ImmutableList.<ScalarType>builder()
                     .addAll(INTEGER_TYPES)
-                    .addAll(FLOAT_POINT_TYPES)
+                    .addAll(FLOAT_TYPES)
+                    .add(DECIMALV2)
+                    .addAll(DECIMAL_TYPES)
                     .build();
 
     protected static final ImmutableList<Type> SUPPORTED_TYPES =
             ImmutableList.<Type>builder()
                     .add(NULL)
-                    .add(BOOLEAN)
                     .addAll(INTEGER_TYPES)
-                    .add(FLOAT)
-                    .add(DOUBLE)
+                    .addAll(FLOAT_TYPES)
+                    .addAll(DECIMAL_TYPES)
                     .add(VARCHAR)
                     .add(HLL)
                     .add(BITMAP)
@@ -161,9 +182,6 @@ public abstract class Type implements Cloneable {
                     .add(TIME)
                     .add(ANY_ARRAY)
                     .add(ANY_MAP)
-                    .add(DECIMAL32)
-                    .add(DECIMAL64)
-                    .add(DECIMAL128)
                     .add(JSON)
                     .add(FUNCTION)
                     .add(VARBINARY)

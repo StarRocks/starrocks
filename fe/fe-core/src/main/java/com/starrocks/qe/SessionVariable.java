@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/SessionVariable.java
 
@@ -268,6 +281,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
+    public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
@@ -323,6 +337,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add(DISABLE_BUCKET_JOIN)
             .add(CBO_ENABLE_REPLICATED_JOIN)
             .add(FOREIGN_KEY_CHECKS)
+            .add(PIPELINE_SINK_DOP)
             .add("enable_cbo")
             .add("enable_vectorized_engine")
             .add("vectorized_engine_enable")
@@ -691,8 +706,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
     private int hivePartitionStatsSampleSize = 3000;
 
-    @VariableMgr.VarAttr(name = PIPELINE_SINK_DOP)
-    private int pipelineSinkDop = 0;
+    @VariableMgr.VarAttr(name = ENABLE_ADAPTIVE_SINK_DOP)
+    private boolean enableAdaptiveSinkDop = false;
 
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
@@ -858,12 +873,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hivePartitionStatsSampleSize;
     }
 
-    public int getPipelineSinkDop() {
-        return pipelineSinkDop;
+    public boolean getEnableAdaptiveSinkDop() {
+        return enableAdaptiveSinkDop;
     }
 
-    public void setPipelineSinkDop(int dop) {
-        this.pipelineSinkDop = dop;
+    public void setEnableAdaptiveSinkDop(boolean e) {
+        this.enableAdaptiveSinkDop = e;
     }
 
     public long getMaxExecMemByte() {

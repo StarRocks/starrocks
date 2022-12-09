@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/Config.java
 
@@ -547,7 +560,7 @@ public class Config extends ConfigBase {
      * some hang up problems in java.net.SocketInputStream.socketRead0
      */
     @ConfField
-    public static int thrift_client_timeout_ms = 0;
+    public static int thrift_client_timeout_ms = 5000;
 
     /**
      * The backlog_num for thrift server
@@ -670,6 +683,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int thrift_server_max_worker_threads = 4096;
+
+    /**
+     * If there is no thread to handle new request, the request will be pend to a queue,
+     * the pending queue size is thrift_server_queue_size
+     */
+    @ConfField
+    public static int thrift_server_queue_size = 4096;
 
     /**
      * Maximal wait seconds for straggler node in load

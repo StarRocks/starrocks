@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exec/vectorized/connector_scan_node.h"
 
 #include <atomic>
@@ -153,11 +153,11 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
 
-    if (config::connector_dynamic_chunk_buffer_limiter_enable) {
+    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    if (config::connector_dynamic_chunk_buffer_limiter_enable && mem_limit > 0) {
         // port from olap scan node.
         size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
         size_t default_buffer_capacity = max_buffer_capacity;
-        int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
         pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
                 max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
         scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop,
@@ -577,6 +577,10 @@ void ConnectorScanNode::_init_counter() {
 
 int ConnectorScanNode::io_tasks_per_scan_operator() const {
     return config::connector_io_tasks_per_scan_operator;
+}
+
+bool ConnectorScanNode::always_shared_scan() const {
+    return config::connector_scan_node_always_shared_scan;
 }
 
 } // namespace starrocks::vectorized

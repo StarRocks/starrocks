@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -105,6 +118,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_map([1], x -> x)");
         analyzeSuccess("select array_map([1], x -> x + v1) from t0");
         analyzeSuccess("select transform([1], x -> x)");
+        analyzeSuccess("select arr,array_length(arr) from (select array_map(x->x+1, [1,2]) as arr)T");
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.qe;
 
@@ -1255,7 +1268,7 @@ public class CoordinatorPreprocessor {
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
     // FragmentExecParams
-    static class FInstanceExecParam {
+    public static class FInstanceExecParam {
         static final int ABSENT_PIPELINE_DOP = -1;
         static final int ABSENT_DRIVER_SEQUENCE = -1;
 
@@ -1312,6 +1325,10 @@ public class CoordinatorPreprocessor {
 
         public Map<Integer, Map<Integer, List<TScanRangeParams>>> getNodeToPerDriverSeqScanRanges() {
             return nodeToPerDriverSeqScanRanges;
+        }
+
+        public int getBackendNum() {
+            return backendNum;
         }
 
         public TNetworkAddress getHost() {

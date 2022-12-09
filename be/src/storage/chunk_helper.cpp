@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/chunk_helper.h"
 
 #include "column/array_column.h"
@@ -174,6 +174,22 @@ starrocks::vectorized::VectorizedSchema ChunkHelper::get_short_key_schema_with_f
         short_key_cids.push_back(sort_key_idxes[i]);
     }
     return starrocks::vectorized::VectorizedSchema(schema.schema(), short_key_cids);
+}
+
+starrocks::vectorized::VectorizedSchema ChunkHelper::get_sort_key_schema_with_format_v2(
+        const starrocks::TabletSchema& schema) {
+    std::vector<ColumnId> sort_key_iota_idxes(schema.sort_key_idxes().size());
+    std::iota(sort_key_iota_idxes.begin(), sort_key_iota_idxes.end(), 0);
+    return starrocks::vectorized::VectorizedSchema(schema.schema(), schema.sort_key_idxes(), sort_key_iota_idxes);
+}
+
+starrocks::vectorized::VectorizedSchema ChunkHelper::get_sort_key_schema_by_primary_key_format_v2(
+        const starrocks::TabletSchema& tablet_schema) {
+    std::vector<ColumnId> primary_key_iota_idxes(tablet_schema.num_key_columns());
+    std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+    std::vector<ColumnId> all_keys_iota_idxes(tablet_schema.num_columns());
+    std::iota(all_keys_iota_idxes.begin(), all_keys_iota_idxes.end(), 0);
+    return starrocks::vectorized::VectorizedSchema(tablet_schema.schema(), all_keys_iota_idxes, primary_key_iota_idxes);
 }
 
 ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::VectorizedSchema& schema) {

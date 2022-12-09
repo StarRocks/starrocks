@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exprs/vectorized/math_functions.h"
 
 #include <glog/logging.h>
@@ -1290,8 +1290,8 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     columns.emplace_back(tc1);
 
     {
-        std::vector<double> result_expect = {std::sinh(-1), std::sinh(0), std::sinh(1), std::sinh(3.1415926),
-                                             std::sinh(30)};
+        std::vector<double> result_expect =
+            {std::sinh(-1), std::sinh(0), std::sinh(1), std::sinh(3.1415926), std::sinh(30)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::sinh(ctx.get(), columns).value();
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
@@ -1302,8 +1302,8 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     }
 
     {
-        std::vector<double> result_expect = {std::cosh(-1), std::cosh(0), std::cosh(1), std::cosh(3.1415926),
-                                             std::cosh(30)};
+        std::vector<double> result_expect =
+            {std::cosh(-1), std::cosh(0), std::cosh(1), std::cosh(3.1415926), std::cosh(30)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::cosh(ctx.get(), columns).value();
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
@@ -1314,8 +1314,8 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     }
 
     {
-        std::vector<double> result_expect = {std::tanh(-1), std::tanh(0), std::tanh(1), std::tanh(3.1415926),
-                                             std::tanh(30)};
+        std::vector<double> result_expect =
+            {std::tanh(-1), std::tanh(0), std::tanh(1), std::tanh(3.1415926), std::tanh(30)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::tanh(ctx.get(), columns).value();
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);

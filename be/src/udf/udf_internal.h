@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/udf/udf_internal.h
 
@@ -81,15 +81,6 @@ public:
 
     bool closed() const { return _closed; }
 
-    int64_t num_updates() const { return _num_updates; }
-    int64_t num_removes() const { return _num_removes; }
-    void set_num_updates(int64_t n) { _num_updates = n; }
-    void set_num_removes(int64_t n) { _num_removes = n; }
-    void increment_num_updates(int64_t n) { _num_updates += n; }
-    void increment_num_updates() { _num_updates += 1; }
-    void increment_num_removes(int64_t n) { _num_removes += n; }
-    void increment_num_removes() { _num_removes += 1; }
-
     MemPool* mem_pool() { return _mem_pool; }
     size_t mem_usage() { return _mem_usage; }
     void add_mem_usage(size_t size) { _mem_usage += size; }
@@ -104,10 +95,6 @@ public:
 private:
     friend class starrocks_udf::FunctionContext;
     friend class ExprContext;
-
-    // The number of calls to Update()/Remove().
-    int64_t _num_updates;
-    int64_t _num_removes;
 
     // Parent context object. Not owned
     starrocks_udf::FunctionContext* _context;

@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "rowset_update_state.h"
 
 #include "common/tracer.h"
@@ -172,8 +172,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         RETURN_IF_ERROR(_load_upserts(rowset, 0, pk_column.get()));
     }
 
-    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0 ||
-        rowset->rowset_meta()->get_meta_pb().txn_meta().has_merge_condition()) {
+    if (!_check_partial_update(rowset)) {
         return Status::OK();
     }
     return _prepare_partial_update_states(tablet, rowset);
@@ -372,6 +371,15 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     return Status::OK();
 }
 
+bool RowsetUpdateState::_check_partial_update(Rowset* rowset) {
+    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
+        return false;
+    }
+    // Merge condition will also set txn_meta but will not set partial_update_column_ids
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    return !txn_meta.partial_update_column_ids().empty();
+}
+
 Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
                                                       EditVersion latest_applied_version,
                                                       std::vector<uint32_t>& read_column_ids,
@@ -453,8 +461,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
-        rowset_meta_pb.txn_meta().has_merge_condition()) {
+    if (!_check_partial_update(rowset)) {
         return Status::OK();
     }
     // currently assume it's a partial update

@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/persistent_index.h"
 
 #include <cstring>
@@ -1800,18 +1800,23 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
         FileSystem::Default()->delete_file(file_name);
-        phmap::BinaryOutputArchive ar_out(file_name.data());
         std::set<uint32_t> dumped_shard_idxes;
-        if (!dump(ar_out, dumped_shard_idxes)) {
-            std::string err_msg = strings::Substitute("failed to dump snapshot to file $0", file_name);
-            LOG(WARNING) << err_msg;
-            return Status::InternalError(err_msg);
+        {
+            // File is closed when archive object is destroyed and file size will be updated after file is
+            // closed. So the archive object needed to be destroyed before reopen the file and assigned it
+            // to _index_file. Otherwise some data of file maybe overwrite in future append.
+            phmap::BinaryOutputArchive ar_out(file_name.data());
+            if (!dump(ar_out, dumped_shard_idxes)) {
+                std::string err_msg = strings::Substitute("failed to dump snapshot to file $0", file_name);
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            }
         }
         // dump snapshot success, set _index_file to new snapshot file
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
-        size_t snapshot_size = dump_bound();
+        size_t snapshot_size = _index_file->size();
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());

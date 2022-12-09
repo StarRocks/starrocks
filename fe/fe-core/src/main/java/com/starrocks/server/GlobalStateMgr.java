@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/Catalog.java
 
@@ -33,6 +46,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
@@ -78,6 +92,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
@@ -224,6 +239,8 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -1066,8 +1083,23 @@ public class GlobalStateMgr {
             String msg = "leader finished to replay journal, can write now.";
             Util.stdoutWithTime(msg);
             LOG.info(msg);
+
             // for leader, there are some new thread pools need to register metric
             ThreadPoolManager.registerAllThreadPoolMetric();
+
+            if (nodeMgr.isFirstTimeStartUp()) {
+                // When the cluster is initially deployed, we set ENABLE_ADAPTIVE_SINK_DOP so
+                // that the load is automatically configured as the best performance
+                // configuration. If it is upgraded from an old version, the original
+                // configuration is retained to avoid system stability problems caused by
+                // changes in concurrency
+                VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
+                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                        LiteralExpr.create("true", Type.BOOLEAN)),
+                        false);
+            }
+        } catch (UserException e) {
+            LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
             feType = oldType;

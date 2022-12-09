@@ -4,19 +4,20 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exec/vectorized/hdfs_scanner_orc.h"
 
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
@@ -174,13 +175,6 @@ bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
         }
     }
     return false;
-}
-
-// Hive ORC char type will pad trailing spaces.
-// https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
-static inline size_t remove_trailing_spaces(const char* s, size_t size) {
-    while (size > 0 && s[size - 1] == ' ') size--;
-    return size;
 }
 
 bool OrcRowReaderFilter::filterOnPickStringDictionary(

@@ -30,159 +30,63 @@ Syntax:
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 ```
 
-Note:
-
-```Plain%20Text
-col_name：Column name
-col_type：Column type
-
-
-
-Specific column information, such as types and ranges: 
-
-
-
-* TINYINT（1 byte）
-
-Range: -2^7 + 1 ~ 2^7 - 1
-
-
-
-* SMALLINT（2 bytes）
-
-Range: -2^15 + 1 ~ 2^15 - 1
-
-
-
-* INT（4 bytes）
-
-Range: -2^31 + 1 ~ 2^31 - 1
-
-
-
-* BIGINT（8 bytes）
-
-Range: -2^63 + 1 ~ 2^63 - 1
-
-
-
-* LARGEINT（16 bytes）
-
-Range: -2^127 + 1 ~ 2^127 - 1
-
-
-
-* FLOAT（4 bytes）
-
-Support scientific notation 
-
-
-
-* DOUBLE（8 bytes）
-
-Support scientific notation 
-
-
-
-* DECIMAL[(precision, scale)] (16 bytes) 
-
- Default value: DECIMAL(10, 0)
-
- precision: 1 ~ 38
-
- scale: 0 ~ precision
-
-Integer part：precision - scale
-
-Scientific notation is not supported 
-
-
-
-* DATE（3 bytes）
-
-Range: 0000-01-01 ~ 9999-12-31
-
-
-
-* DATETIME（8 bytes ）
-
-Range: 0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
-
-
-
-* CHAR[(length)]
-
-Fixed length string. Range：1 ~ 255. Default value: 1.
-
-
-
-* VARCHAR[(length)]
-
-A variable-length string. The default value is 1. Unit: bytes.
-
-- In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533.
-- [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
-
-
-
-* HLL (1~16385 bytes)
-
-For HLL type, there's no need to specify length or default value. 
-
-The length will be controlled within the system according to data aggregation. 
-
-HLL column can only be queried or used by hll_union_agg、Hll_cardinality、hll_hash.
-
-
-
-* BITMAP
-
- Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
-agg_type：aggregation type. If not specified, this column is key column. 
-
-If specified, it it value column. 
-
-
-
-The aggregation types supported are as follows: 
-
-
-
-* SUM、MAX、MIN、REPLACE
-
-
-
-* HLL_UNION (only for HLL type) 
-
-
-
-* BITMAP_UNION(only for BITMAP) 
-
-
-
-* REPLACE_IF_NOT_NULL：This means the imported data will only be replaced when it is of non-null value. If it is of null value, StarRocks will retain the original value. 
-
-Note: if NOT NULL is specified by REPLACE_IF_NOT_NULL column when the table was created, StarRocks will still convert the data to NULL without sending an error report to the user. With this, the user can import selected columns. 
-
-This aggregation type applies ONLY to the aggregation model whose key_desc type is AGGREGATE KEY. 
-NULL is not allowed by default. NULL value should be represented by /N in the impored data. 
-
-
-
-Note: 
-
-When the column of aggregation type BITMAP_UNION is imported, its original data types must be TINYINT, SMALLINT, 
-```
+**col_name**：Column name.
+
+**col_type**：Column type. Specific column information, such as types and ranges:
+
+- TINYINT（1 byte): Ranges from -2^7 + 1 to 2^7 - 1.
+- SMALLINT (2 bytes): Ranges from -2^15 + 1 to 2^15 - 1.
+- INT（4 bytes): Ranges from -2^31 + 1 to 2^31 - 1.
+- BIGINT（8 bytes): Ranges from -2^63 + 1 to 2^63 - 1.
+- LARGEINT（16 bytes): Ranges from -2^127 + 1 to 2^127 - 1.
+- FLOAT（4 bytes): Supports scientific notation.
+- DOUBLE（8 bytes): Supports scientific notation.
+- DECIMAL[(precision, scale)] (16 bytes)
+
+  - Default value: DECIMAL(10, 0)
+  - precision: 1 ~ 38
+  - scale: 0 ~ precision
+  - Integer part：precision - scale
+
+    Scientific notation is not supported.
+
+- DATE (3 bytes): Ranges from 0000-01-01 to 9999-12-31.
+- DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
+- CHAR[(length)]: Fixed length string. Range：1 ~ 255. Default value: 1.
+- VARCHAR[(length)]: A variable-length string. The default value is 1. Unit: bytes. In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533. [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
+- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value.The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by hll_union_agg、Hll_cardinality、hll_hash.
+- BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
+
+**agg_type**：aggregation type. If not specified, this column is key column.
+If specified, it is value column. The aggregation types supported are as follows:
+
+- SUM、MAX、MIN、REPLACE
+- HLL_UNION (only for HLL type)
+- BITMAP_UNION(only for BITMAP)
+- REPLACE_IF_NOT_NULL：This means the imported data will only be replaced when it is of non-null value. If it is of null value, StarRocks will retain the original value.
+
+> NOTE
+>
+> - When the column of aggregation type BITMAP_UNION is imported, its original data types must be TINYINT, SMALLINT, INT, and BIGINT.
+> - If NOT NULL is specified by REPLACE_IF_NOT_NULL column when the table was created, StarRocks will still convert the data to NULL without sending an error report to the user. With this, the user can import selected columns.
+
+This aggregation type applies ONLY to the aggregation model whose key_desc type is AGGREGATE KEY.
+
+**NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate Key, or Unique Key model. In a table that uses the Primary Key model, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
+
+**DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
+
+- **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
+- **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
+- **DEFAULT (<expr>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
 ### index_definition
 
-Syntax:
+You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
 ```SQL
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
-
-You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
 ### ENGINE type
 
@@ -370,9 +274,11 @@ PROPERTIES (
 )
 ```
 
-storage_medium: SSD or HDD could be specified as the initial storage media. You can specify default initial storage medium by specifying default_storage_medium=xxx through FE configuration file fe.conf. If no medium is specified, the default is HDD.
+storage_medium: SSD or HDD can be specified as the initial storage medium.
 
-**Note**: When FE configuration item enable_strict_storage_medium_check is True and if storage medium is not set in the cluster, the statement for table creating will report an error: Failed to find enough host in all backends with storage medium is SSD|HDD.
+> **Note**
+>
+> When the FE configuration item `enable_strict_storage_medium_check` is `True` and the storage medium is not specified, the statement for creating a table will report an error: Failed to find enough host in all backends with storage medium is SSD|HDD.
 
 storage_cooldown_time: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
 

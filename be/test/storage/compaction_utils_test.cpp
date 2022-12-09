@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/compaction_utils.h"
 
 #include <gtest/gtest.h>
@@ -90,6 +90,15 @@ TEST(CompactionUtilsTest, test_split_column_into_groups) {
     ASSERT_EQ(5, column_groups[1].size());
     ASSERT_EQ(5, column_groups[2].size());
     ASSERT_EQ(4, column_groups[3].size());
+
+    std::vector<std::vector<uint32_t>> column_groups1;
+    CompactionUtils::split_column_into_groups(num_columns, {0}, max_columns_per_group, &column_groups1);
+    ASSERT_EQ(5, column_groups1.size());
+    ASSERT_EQ(1, column_groups1[0].size());
+    ASSERT_EQ(5, column_groups1[1].size());
+    ASSERT_EQ(5, column_groups1[2].size());
+    ASSERT_EQ(5, column_groups1[3].size());
+    ASSERT_EQ(1, column_groups1[4].size());
 }
 
 TEST(CompactionUtilsTest, test_choose_compaction_algorithm) {

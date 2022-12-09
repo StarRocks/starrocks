@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -63,6 +63,7 @@ public:
                 }
             }
             compacted_offset_column->append(offset + max_length_array_size);
+            offset += max_length_array_size;
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
                 Column* column = state->get_columns()[col_idx].get();

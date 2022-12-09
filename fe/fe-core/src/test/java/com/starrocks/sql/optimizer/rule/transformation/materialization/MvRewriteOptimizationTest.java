@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
@@ -176,6 +189,29 @@ public class MvRewriteOptimizationTest {
         cluster.runSql("test", "insert into t0 values(1, 2, 3)");
         cluster.runSql("test", "insert into test_all_type values(" +
                 "\"value1\", 1, 2, 3, 4.0, 5.0, 6, \"2022-11-11 10:00:01\", \"2022-11-11\", 10.12)");
+
+        starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
+                "  `k1` int(11) NULL COMMENT \"\",\n" +
+                "  `v1` int(11) NULL COMMENT \"\",\n" +
+                "  `v2` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(PARTITION p1 VALUES [(\"-2147483648\"), (\"2\")),\n" +
+                "PARTITION p2 VALUES [(\"2\"), (\"3\")),\n" +
+                "PARTITION p3 VALUES [(\"3\"), (\"4\")),\n" +
+                "PARTITION p4 VALUES [(\"4\"), (\"5\")),\n" +
+                "PARTITION p5 VALUES [(\"5\"), (\"6\")),\n" +
+                "PARTITION p6 VALUES [(\"6\"), (\"7\")))\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 6\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3)," +
+                " (1,3,1),(1,3,2),(1,3,3)\n" +
+                " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)\n" +
+                " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
     }
 
     @AfterClass
@@ -771,6 +807,25 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan9, "agg_join_mv_3");
 
         dropMv("test", "agg_join_mv_3");
+
+        createAndRefreshMv("test", "agg_join_mv_4", "create materialized view agg_join_mv_4" +
+                " distributed by hash(`deptno`) as SELECT deptno, count(*) as num from emps group by deptno");
+        String query10 = "select deptno, count(*) from emps group by deptno";
+        String plan10 = getFragmentPlan(query10);
+        PlanTestBase.assertContains(plan10, "agg_join_mv_4");
+
+        String query11 = "select count(*) from emps";
+        String plan11 = getFragmentPlan(query11);
+        PlanTestBase.assertContains(plan11, "agg_join_mv_4");
+        dropMv("test", "agg_join_mv_4");
+
+        createAndRefreshMv("test", "agg_join_mv_5", "create materialized view agg_join_mv_5" +
+                " distributed by hash(`deptno`) as SELECT deptno, count(1) as num from emps group by deptno");
+        String query12 = "select deptno, count(1) from emps group by deptno";
+        String plan12 = getFragmentPlan(query12);
+        PlanTestBase.assertContains(plan12, "agg_join_mv_5");
+
+        dropMv("test", "agg_join_mv_5");
     }
 
     @Test
@@ -877,6 +932,7 @@ public class MvRewriteOptimizationTest {
     @Test
     public void testPartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
 
         cluster.runSql("test", "insert into table_with_partition values(\"varchar1\", '1991-02-01', 1, 1, 1)");
         cluster.runSql("test", "insert into table_with_partition values(\"varchar2\", '1992-02-01', 2, 1, 1)");
@@ -981,7 +1037,7 @@ public class MvRewriteOptimizationTest {
                 " distributed by hash(c1) as" +
                 " select c1, c3, sum(c2) as c2 from test_base_part group by c1, c3;");
         cluster.runSql("test", "alter table test_base_part add partition p6 values less than (\"4000\")");
-        cluster.runSql("test", "insert into test_base_part partition(p4) values (1, 2, 4500, 4)");
+        cluster.runSql("test", "insert into test_base_part partition(p6) values (1, 2, 4500, 4)");
         String query8 = "select sum(c2) from test_base_part";
         String plan8 = getFragmentPlan(query8);
         PlanTestBase.assertContains(plan8, "partial_mv_5");
@@ -992,6 +1048,65 @@ public class MvRewriteOptimizationTest {
         String plan9 = getFragmentPlan(query9);
         PlanTestBase.assertNotContains(plan9, "partial_mv_5");
         dropMv("test", "partial_mv_5");
+
+        // test partition prune
+        createAndRefreshMv("test", "partial_mv_6", "create materialized view partial_mv_6" +
+                " partition by c3" +
+                " distributed by hash(c1) as" +
+                " select c1, c3, c2 from test_base_part where c3 < 2000;");
+
+        String query10 = "select c1, c3, c2 from test_base_part";
+        String plan10 = getFragmentPlan(query10);
+        PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "c3 >= 2000");
+
+        String query12 = "select c1, c3, c2 from test_base_part where c3 < 2000";
+        String plan12 = getFragmentPlan(query12);
+        PlanTestBase.assertContains(plan12, "partial_mv_6");
+
+        String query13 = "select c1, c3, c2 from test_base_part where c3 < 1000";
+        String plan13 = getFragmentPlan(query13);
+        PlanTestBase.assertContains(plan13, "partial_mv_6", "c3 <= 999");
+
+        dropMv("test", "partial_mv_6");
+
+        // test bucket prune
+        createAndRefreshMv("test", "partial_mv_7", "create materialized view partial_mv_7" +
+                " partition by c3" +
+                " distributed by hash(c1) as" +
+                " select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1;");
+        String query11 = "select c1, c3, c2 from test_base_part";
+        String plan11 = getFragmentPlan(query11);
+        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "c3 >= 2000");
+        dropMv("test", "partial_mv_7");
+
+        createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
+                " partition by c3" +
+                " distributed by hash(c1) as" +
+                " select c1, c3, c2 from test_base_part where c3 < 1000;");
+        String query14 = "select c1, c3, c2 from test_base_part where c3 < 1000";
+        String plan14 = getFragmentPlan(query14);
+        PlanTestBase.assertContains(plan14, "partial_mv_8");
+
+        createAndRefreshMv("test", "partial_mv_9", "CREATE MATERIALIZED VIEW partial_mv_9" +
+                " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH MANUAL AS SELECT k1, v1 as k2, v2 as k3 from t1;");
+        // create nested mv based on partial_mv_9
+        createAndRefreshMv("test", "partial_mv_10", "CREATE MATERIALIZED VIEW partial_mv_10" +
+                " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH MANUAL AS SELECT k1, count(k2) as count_k2, sum(k3) as sum_k3 from partial_mv_9 group by k1;");
+        cluster.runSql("test", "insert into t1 values (4,1,1);");
+
+        // first refresh nest mv partial_mv_10, will do nothing
+        refreshMaterializedView("test", "partial_mv_10");
+        // then refresh mv partial_mv_9
+        refreshMaterializedView("test", "partial_mv_9");
+        String query15 = "SELECT k1, count(v1), sum(v2) from t1 group by k1";
+        String plan15 = getFragmentPlan(query15);
+        // it should be union
+        PlanTestBase.assertContains(plan15, "partial_mv_9");
+        PlanTestBase.assertNotContains(plan15, "partial_mv_10");
+        dropMv("test", "partial_mv_9");
+        dropMv("test", "partial_mv_10");
     }
 
     public String getFragmentPlan(String sql) throws Exception {

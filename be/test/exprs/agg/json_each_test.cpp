@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include <gtest/gtest.h>
 
 #include "exprs/table_function/table_function.h"
@@ -62,7 +62,7 @@ public:
         int i = 0;
         for (auto [expect_key, expect_value] : expected) {
             EXPECT_EQ(expect_key, result_key->get(i).get_slice());
-            EXPECT_EQ(JsonValue::parse(expect_value).value(), *result_value->get(i).get_json());
+            EXPECT_EQ(expect_value, result_value->get(i).get_json()->to_string_uncheck());
             i++;
         }
 
@@ -77,7 +77,7 @@ TEST_F(JsonEachTest, json_each_object) {
     std::vector<std::tuple<std::string, std::string>> expect = {
         {"k1", "1"},
         {"k2", "\"str\""},
-        {"k3", "[1,2,3]"},
+        {"k3", "[1, 2, 3]"},
         {"k4", "null"},
         {"k5", "{}"},
     };

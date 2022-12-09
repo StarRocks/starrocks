@@ -34,7 +34,7 @@ column statistics:
 * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
-* sum-->[810.9, 555165.3513421458, 0.0, 16.0, 3736520.0] ESTIMATE
+* sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 
 PLAN FRAGMENT 1(F06)
 
@@ -51,17 +51,17 @@ OutPut Exchange Id: 14
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
-|  * sum-->[810.9, 555165.3513421458, 0.0, 16.0, 3736520.0] ESTIMATE
+|  * sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 12:AGGREGATE (update finalize)
 |  aggregate: sum[([34: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [18: l_orderkey, INT, true], [13: o_orderdate, DATE, true], [16: o_shippriority, INT, true]
-|  cardinality: 19765568
+|  cardinality: 46851716
 |  column statistics:
 |  * o_orderdate-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * o_shippriority-->[0.0, 0.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.1729079702600703E7] ESTIMATE
-|  * sum-->[810.9, 555165.3513421458, 0.0, 16.0, 3736520.0] ESTIMATE
+|  * sum-->[810.9, 1315947.4994776787, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 11:Project
 |  output columns:

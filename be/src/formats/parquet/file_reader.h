@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -101,7 +101,7 @@ private:
 
     // find column meta according column name
     static const tparquet::ColumnMetaData* _get_column_meta(const tparquet::RowGroup& row_group,
-                                                            const std::string& col_name);
+                                                            const std::string& col_name, bool case_sensitive);
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);

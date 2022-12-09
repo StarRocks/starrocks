@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -157,7 +157,7 @@ class Aggregator : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    virtual ~Aggregator() noexcept {
+    virtual ~Aggregator() noexcept override {
         if (_state != nullptr) {
             close(_state);
         }
@@ -362,6 +362,7 @@ protected:
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
+    void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
     void build_hash_set(size_t chunk_size);

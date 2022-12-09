@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/rowset_writer.cpp
 
@@ -167,9 +167,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
+            if (!_context.merge_condition.empty()) {
+                _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
+            }
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
-        }
-        if (!_context.merge_condition.empty() && !_context.partial_update_tablet_schema) {
+        } else if (!_context.merge_condition.empty()) {
             _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }
@@ -555,10 +557,17 @@ Status HorizontalRowsetWriter::_final_merge() {
                                                      config::vertical_compaction_max_columns_per_group,
                                                      segments.size()) == VERTICAL_COMPACTION) {
         std::vector<std::vector<uint32_t>> column_groups;
-        CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
-                                                  _context.tablet_schema->sort_key_idxes(),
-                                                  config::vertical_compaction_max_columns_per_group, &column_groups);
-
+        if (_context.tablet_schema->sort_key_idxes().empty()) {
+            std::vector<ColumnId> primary_key_iota_idxes(_context.tablet_schema->num_key_columns());
+            std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+            CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(), primary_key_iota_idxes,
+                                                      config::vertical_compaction_max_columns_per_group,
+                                                      &column_groups);
+        } else {
+            CompactionUtils::split_column_into_groups(
+                    _context.tablet_schema->num_columns(), _context.tablet_schema->sort_key_idxes(),
+                    config::vertical_compaction_max_columns_per_group, &column_groups);
+        }
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
         if (!_context.merge_condition.empty()) {
             for (int i = _context.tablet_schema->num_key_columns(); i < _context.tablet_schema->num_columns(); ++i) {
@@ -586,7 +595,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
         if (_context.schema_change_sorting) {
-            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
+                _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                        _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
@@ -683,7 +693,8 @@ Status HorizontalRowsetWriter::_final_merge() {
             ChunkIteratorPtr itr;
             // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
             if (_context.schema_change_sorting) {
-                if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+                if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
+                    _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                     itr = new_mask_merge_iterator(seg_iterators, mask_buffer.get());
                 } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                            _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
@@ -753,7 +764,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
         if (_context.schema_change_sorting) {
-            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
+                _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                        _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
