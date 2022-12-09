@@ -41,6 +41,8 @@ void AggregateFuncResolver::register_window() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, WindowDispatcher(), this);
     }
+        type_dispatch_all(TYPE_JSON, WindowDispatcher(), this);
+
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("dense_rank", true,
                                                             AggregateFactory::MakeDenseRankWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("rank", true, AggregateFactory::MakeRankWindowFunction());
