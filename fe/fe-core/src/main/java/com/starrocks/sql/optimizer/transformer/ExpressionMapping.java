@@ -34,7 +34,7 @@ public class ExpressionMapping {
     /**
      * This structure is responsible for the translation map from Expr to operator
      */
-    private final Map<Expr, ColumnRefOperator> expressionToColumns = new HashMap<>();
+    public Map<Expr, ColumnRefOperator> expressionToColumns = new HashMap<>();
 
     /**
      * The purpose of below property is to hold the current plan built so far,
@@ -63,6 +63,9 @@ public class ExpressionMapping {
             this.scope.setParent(outer.getScope());
             fieldsList.addAll(outer.getFieldMappings());
             this.outerScopeRelationId = outer.getScope().getRelationId();
+            if (scope.isLambdaScope()) { // lambda can use outer scope's expression, like agg.
+                this.expressionToColumns = outer.expressionToColumns;
+            }
         }
         this.fieldMappings = new ColumnRefOperator[fieldsList.size()];
         fieldsList.toArray(this.fieldMappings);
