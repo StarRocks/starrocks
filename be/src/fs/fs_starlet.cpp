@@ -270,8 +270,10 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        // TODO: translate WritableFileOptions to fslib::WriteOptions
-        auto file_st = (*fs_st)->create(pair.first, WriteOptions());
+        staros::starlet::fslib::WriteOptions fslib_opts;
+        fslib_opts.create_missing_parent = true;
+        fslib_opts.skip_fill_local_cache = opts.skip_fill_local_cache;
+        auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
