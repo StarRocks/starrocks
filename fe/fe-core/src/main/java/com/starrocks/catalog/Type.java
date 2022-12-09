@@ -157,6 +157,11 @@ public abstract class Type implements Cloneable {
     // NOTE: DECIMAL_TYPES not contain DECIMALV2
     public static final ImmutableList<ScalarType> DECIMAL_TYPES =
             ImmutableList.of(DECIMAL32, DECIMAL64, DECIMAL128);
+
+    public static final ImmutableList<ScalarType> DATE_TYPES =
+            ImmutableList.of(Type.DATE, Type.DATETIME);
+    public static final ImmutableList<ScalarType> STRING_TYPES =
+            ImmutableList.of(Type.CHAR, Type.VARCHAR);
     private static final ImmutableList<ScalarType> NUMERIC_TYPES =
             ImmutableList.<ScalarType>builder()
                     .addAll(INTEGER_TYPES)
