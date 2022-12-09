@@ -487,6 +487,7 @@ void SegmentIterator::_init_column_predicates() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
+    SCOPED_RAW_TIMER(&_opts.stats->sk_filter_timer);
     StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
 
     if (!_opts.short_key_ranges.empty()) {
@@ -495,7 +496,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         RETURN_IF_ERROR(_get_row_ranges_by_key_ranges());
     }
 
-    _opts.stats->rows_key_range_filtered += num_rows() - _scan_range.span_size();
+    _opts.stats->rows_sk_filtered += num_rows() - _scan_range.span_size();
     StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
     return Status::OK();
 }

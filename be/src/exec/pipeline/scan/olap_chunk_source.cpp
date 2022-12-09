@@ -429,7 +429,6 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
     COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
-    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
 
     COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
@@ -442,6 +441,9 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_zm_filtered);
     COUNTER_UPDATE(_zm_filter_timer, _reader->stats().zm_filter_timer);
+
+    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_sk_filtered);
+    COUNTER_UPDATE(_sk_filter_timer, _reader->stats().sk_filter_timer);
 
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 

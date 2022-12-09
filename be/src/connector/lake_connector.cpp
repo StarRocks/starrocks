@@ -119,7 +119,6 @@ private:
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _block_seek_timer = nullptr;
     RuntimeProfile::Counter* _block_seek_counter = nullptr;
     RuntimeProfile::Counter* _block_load_timer = nullptr;
@@ -136,6 +135,9 @@ private:
 
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _zm_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _sk_filter_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
@@ -556,7 +558,6 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
-    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
 
     COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
@@ -569,6 +570,9 @@ void LakeDataSource::update_counter() {
 
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_zm_filtered);
     COUNTER_UPDATE(_zm_filter_timer, _reader->stats().zm_filter_timer);
+
+    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_sk_filtered);
+    COUNTER_UPDATE(_sk_filter_timer, _reader->stats().sk_filter_timer);
 
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 
