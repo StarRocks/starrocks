@@ -560,7 +560,9 @@ public class MaterializedViewRewriter {
                 ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
                 List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
                 ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
-                partitionPredicates.add(partitionPredicate);
+                if (partitionPredicate != null) {
+                    partitionPredicates.add(partitionPredicate);
+                }
             } else {
                 return null;
             }
