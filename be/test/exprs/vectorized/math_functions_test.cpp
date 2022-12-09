@@ -1290,8 +1290,8 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     columns.emplace_back(tc1);
 
     {
-        std::vector<double> result_expect =
-            {std::sinh(-1), std::sinh(0), std::sinh(1), std::sinh(3.1415926), std::sinh(30)};
+        std::vector<double> result_expect = {std::sinh(-1), std::sinh(0), std::sinh(1), std::sinh(3.1415926),
+                                             std::sinh(30)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::sinh(ctx.get(), columns).value();
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
@@ -1302,8 +1302,8 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     }
 
     {
-        std::vector<double> result_expect =
-            {std::cosh(-1), std::cosh(0), std::cosh(1), std::cosh(3.1415926), std::cosh(30)};
+        std::vector<double> result_expect = {std::cosh(-1), std::cosh(0), std::cosh(1), std::cosh(3.1415926),
+                                             std::cosh(30)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::cosh(ctx.get(), columns).value();
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
@@ -1314,8 +1314,8 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     }
 
     {
-        std::vector<double> result_expect =
-            {std::tanh(-1), std::tanh(0), std::tanh(1), std::tanh(3.1415926), std::tanh(30)};
+        std::vector<double> result_expect = {std::tanh(-1), std::tanh(0), std::tanh(1), std::tanh(3.1415926),
+                                             std::tanh(30)};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::tanh(ctx.get(), columns).value();
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
