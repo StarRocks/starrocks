@@ -47,9 +47,7 @@
 namespace starrocks {
 
 FunctionContextImpl::FunctionContextImpl(starrocks_udf::FunctionContext* parent)
-        : _num_updates(0),
-          _num_removes(0),
-          _context(parent),
+        : _context(parent),
           _state(nullptr),
           _debug(false),
           _version(starrocks_udf::FunctionContext::V2_0),

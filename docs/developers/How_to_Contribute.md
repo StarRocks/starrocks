@@ -53,19 +53,19 @@ StarRocks Community Champions are a group of passionate community evangelists an
 
 #### Benefits
 
-##### Product
+Product
 
 - Early access to new products/features.
 
 - Participate in exclusive meetings with the project core team.
 
-##### Community
+Community
 
 - Listed as a StarRocks champion on the website.
 
 - Exclusive prizes and badges.
 
-##### Events
+Events
 
 - Free access to StarRocks' events.
 
@@ -94,7 +94,7 @@ Everyone who contributes can become a StarRocks contributor. The members will pr
 
 - 1 merged PR in any StarRocks' public repos.
 
-#### As a Contributor, we expect you to
+As a Contributor, we expect you to
 
 - Actively participate in StarRocks' project development.
 
@@ -146,7 +146,7 @@ They have the authority to merge PRs into master branches and are responsible fo
 
 - Receive at least two PMC nominations and pass voting.
 
-### Responsibilities and privileges
+#### Responsibilities and privileges
 
 - Mentor and guide other memberships in the community.
 

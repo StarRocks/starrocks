@@ -92,11 +92,6 @@ public class CompoundPredicate extends Predicate {
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.COMPOUND_PRED;
-
-
-
-
-
         msg.setOpcode(op.toThrift());
     }
 

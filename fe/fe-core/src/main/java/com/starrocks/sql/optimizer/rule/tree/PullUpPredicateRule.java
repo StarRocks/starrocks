@@ -192,9 +192,6 @@ public class PullUpPredicateRule implements TreeRewriteRule {
                 context.put(binaryPredicateOperator);
             }
 
-            //context.columnRefToConstant.putAll(leftChildRewriteContext.columnRefToConstant);
-            //context.columnRefToConstant.putAll(rightChildRewriteContext.columnRefToConstant);
-
             return null;
         }
 
@@ -240,12 +237,7 @@ public class PullUpPredicateRule implements TreeRewriteRule {
 
     private static class RewriteContext {
         private final Map<ColumnRefOperator, ConstantOperator> columnRefToConstant = new HashMap<>();
-        public List<BinaryPredicateOperator> operatorSet = new ArrayList<>();
-
-
-        public Map<ColumnRefOperator, ConstantOperator> getColumnRefToConstant() {
-            return columnRefToConstant;
-        }
+        private final List<BinaryPredicateOperator> operatorSet = new ArrayList<>();
 
         void put(BinaryPredicateOperator scalarOperator) {
             operatorSet.add(scalarOperator);

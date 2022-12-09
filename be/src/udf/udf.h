@@ -120,9 +120,6 @@ public:
     // ensure the function return value is null.
     void set_error(const char* error_msg);
 
-    // when you reused this FunctionContext, you maybe need clear the error status and message.
-    void clear_error_msg();
-
     // Adds a warning that is returned to the user. This can include things like
     // overflow or other recoverable error conditions.
     // Warnings are capped at a maximum number. Returns true if the warning was
