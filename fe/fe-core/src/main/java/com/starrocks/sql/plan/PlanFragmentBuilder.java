@@ -869,6 +869,8 @@ public class PlanFragmentBuilder {
 
             fileTableScanNode.setLimit(node.getLimit());
 
+            fileTableScanNode.setupCredential();
+
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(fileTableScanNode);
 

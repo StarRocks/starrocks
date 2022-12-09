@@ -29,6 +29,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.credential.AWSCredential;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -79,10 +80,6 @@ public class FileTable extends Table {
             throw new DdlException("not supported format: " + format);
         }
         copiedProps.remove(JSON_KEY_FORMAT);
-
-        if (!copiedProps.isEmpty()) {
-            throw new DdlException("Unknown table properties: " + copiedProps.toString());
-        }
     }
 
     public String getTableLocation() {
@@ -104,7 +101,13 @@ public class FileTable extends Table {
     }
 
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
-        Configuration configuration = new Configuration();
+        Configuration configuration;
+        AWSCredential awsCredential = AWSCredential.buildS3Credential(fileProperties);
+        if (awsCredential != null) {
+            configuration = awsCredential.generateHadoopConfiguration();
+        } else {
+            configuration = new Configuration();
+        }
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), false, Optional.empty());
         try {
