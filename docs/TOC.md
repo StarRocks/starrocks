@@ -346,7 +346,23 @@
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
     + Math Functions
+<<<<<<< HEAD
       + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
+=======
+      + [acos](./sql-reference/sql-functions/math-functions/acos.md)
+      + [asin](./sql-reference/sql-functions/math-functions/asin.md)
+      + [atan](./sql-reference/sql-functions/math-functions/atan.md)
+      + [cos](./sql-reference/sql-functions/math-functions/cos.md)
+      + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
+      + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
+      + [least](./sql-reference/sql-functions/math-functions/least.md)
+      + [log](./sql-reference/sql-functions/math-functions/log.md)
+      + [log2](./sql-reference/sql-functions/math-functions/log2.md)
+      + [log10](./sql-reference/sql-functions/math-functions/log10.md)
+      + [rand](./sql-reference/sql-functions/math-functions/rand.md)
+      + [sin](./sql-reference/sql-functions/math-functions/sin.md)
+      + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
+>>>>>>> 8a367d36b ([Doc] Add docs for log (#14971))
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
