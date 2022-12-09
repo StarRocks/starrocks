@@ -902,6 +902,7 @@ CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
+<<<<<<< HEAD
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
@@ -915,4 +916,8 @@ CONF_Int32(exception_stack_level, "1");
 CONF_String(exception_stack_white_list, "std::");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
+// Max size of a binlog file. The default is 512MB.
+CONF_Int64(binlog_file_max_size, "536870912");
+// Max size of a binlog page. The default is 1MB.
+CONF_Int32(binlog_page_max_size, "1048576");
 } // namespace starrocks::config

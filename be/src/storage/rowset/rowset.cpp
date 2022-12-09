@@ -231,6 +231,7 @@ Status Rowset::remove() {
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
+
     for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
         std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
         VLOG(1) << "Deleting " << path;

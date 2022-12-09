@@ -266,6 +266,10 @@ public:
 
     Status contains_version(const Version& version);
 
+    std::shared_ptr<BinlogManager> binlog_manager() {
+        return _binlog_manager;
+    }
+
 protected:
     void on_shutdown() override;
 
@@ -347,6 +351,8 @@ private:
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
+
+    std::shared_ptr<BinlogManager> _binlog_manager;
 };
 
 inline bool Tablet::init_succeeded() {

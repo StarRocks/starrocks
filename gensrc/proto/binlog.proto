@@ -1,0 +1,104 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+syntax = "proto2";
+
+package starrocks;
+
+import "olap_file.proto";
+import "types.proto";
+
+message RowsetIdPB {
+  optional int64 hi = 1;
+  optional int64 mi = 2;
+  optional int64 lo = 3;
+}
+
+message FileIdPB {
+  optional RowsetIdPB rowset_id = 1;
+  optional int32 segment_index = 2;
+}
+
+message BinlogFileMetaPB {
+  optional int64 id = 1;
+  optional int64 start_tablet_version = 2;
+  optional int64 start_seq_id = 3;
+  optional int64 start_changelog_id = 4;
+  optional int64 creation_time_in_sec = 8;
+  optional int64 end_tablet_version = 5;
+  optional int64 end_seq_id = 6;
+  optional int64 end_changelog_id = 7;
+  optional int64 end_creation_time_in_sec = 9;
+  optional int64 file_size = 10;
+  repeated RowsetIdPB rowsets = 11;
+}
+
+enum LogEntryTypePB {
+  INSERT_RANGE = 0;
+  UPDATE = 1;
+  DELETE = 2;
+  EMPTY = 3;
+}
+
+message InsertRangeEntryDataPB {
+  optional FileIdPB file_id = 1;
+  optional int32 start_row_id = 2;
+  optional int32 num_rows = 3;
+}
+
+message UpdateEntryDataPB {
+  optional FileIdPB before_file_id = 1;
+  optional int32 before_row_id = 2;
+  optional FileIdPB after_file_id = 3;
+  optional int32 after_row_id = 4;
+}
+
+message DeleteEntryDataPB {
+  optional FileIdPB file_id = 1;
+  optional int32 row_id = 2;
+}
+
+message LogEntryPB {
+  optional LogEntryTypePB entry_type = 1;
+  optional InsertRangeEntryDataPB insert_range_entry_data = 3;
+  optional UpdateEntryDataPB update_entry_data = 4;
+  optional DeleteEntryDataPB delete_entry_data = 5;
+}
+
+message PageContentPB {
+  repeated LogEntryPB entries = 1;
+}
+
+enum PageType {
+  NORMAL = 0;
+}
+
+message PageHeaderPB {
+  // type of page
+  optional PageType page_type = 1;
+  // compress type
+  optional CompressionTypePB compress_type = 2;
+  // size of uncompressed page
+  optional int32 uncompressed_size = 3;
+  // size of compressed page
+  optional int32 compressed_size = 4;
+  // crc for compressed page
+  optional int32 compressed_page_crc = 5;
+  // table version this page belongs to
+  optional int64 tablet_version = 6;
+  // number of log entries
+  optional int32 num_log_entries = 7;
+  // start seq_id in this page
+  optional int64 start_seq_id = 8;
+  // start changelog_id in this page
+  optional int64 start_changelog_id = 9;
+  // end seq_id in this page
+  optional int64 end_seq_id = 10;
+  // end changelog_id in this page
+  optional int64 end_change_log_id = 11;
+  optional int64 creation_time_in_sec = 12;
+  optional bool end_page = 13;
+  repeated RowsetIdPB rowsets = 14;
+}
+
+message BinlogFileHeaderPB {
+  optional int32 format_version = 1;
+}

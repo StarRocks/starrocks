@@ -107,7 +107,9 @@ Status Tablet::_init_once_action() {
         _updates = std::make_unique<TabletUpdates>(*this);
         Status st = _updates->init();
         LOG_IF(WARNING, !st.ok()) << "Fail to init updates: " << st;
-        return st;
+        if (!st.ok()) {
+            return st;
+        }
     }
     for (const auto& rs_meta : _tablet_meta->all_rs_metas()) {
         Version version = rs_meta->version();
@@ -136,7 +138,7 @@ Status Tablet::_init_once_action() {
         _inc_rs_version_map[version] = std::move(rowset);
     }
 
-    return Status::OK();
+    return BinlogManager::create_and_init(*this, &_binlog_manager);
 }
 
 Status Tablet::init() {
@@ -197,13 +199,16 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     for (auto& version : versions_to_delete) {
         auto it = _rs_version_map.find(version);
         DCHECK(it != _rs_version_map.end());
+        it->second->set_seg_ownership_transfer(_binlog_manager);
         StorageEngine::instance()->add_unused_rowset(it->second);
         _rs_version_map.erase(it);
     }
     for (auto& [v, rowset] : _inc_rs_version_map) {
+        it->second->set_seg_ownership_transfer(_binlog_manager);
         StorageEngine::instance()->add_unused_rowset(rowset);
     }
     for (auto& [v, rowset] : _stale_rs_version_map) {
+        it->second->set_seg_ownership_transfer(_binlog_manager);
         StorageEngine::instance()->add_unused_rowset(rowset);
     }
     _inc_rs_version_map.clear();
@@ -370,6 +375,33 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
 
     RETURN_IF_ERROR(_contains_version(rowset->version()));
+
+    // warm-up this rowset
+    st = rowset->load();
+    bool enable_binlog = _tablet_meta->get_binlog_config()->binlog_enable;
+    if (enable_binlog && !st.ok()) {
+        // binlog needs to get segment information such as the number of rows in a segment,
+        // so binlog will fail if loading rowset failed
+        LOG(WARNING) << "Fail to load rowset, tablet:" << tablet_id()
+                     << " rowset:" << rowset->rowset_id() << " " << st;
+        return Status::InternalError("load rowset error " + rowset->rowset_id().to_string());
+    } else if (st.ok()) {
+        LOG(WARNING) << "ignore load rowset error tablet:" << tablet_id()
+                     << " rowset:" << rowset->rowset_id() << " " << st;
+    }
+
+    // generate binlog before add the rowset to _rs_version_map so that publish
+    // can be retried if binlog builds failed, and _contains_version() will not
+    // return Status::AlreadyExist
+    if (enable_binlog) {
+        st = _binlog_manager->add_insert_rowset(rowset);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to generate binlog, tablet: " << tablet_id()
+                                      << " rowset:" << rowset->rowset_id() << " " << st;
+            return Status::InternalError("Fail to generate binlog " + rowset->rowset_id().to_string());
+        }
+    }
+
     RETURN_IF_ERROR(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
     RETURN_IF_ERROR(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
     _rs_version_map[rowset->version()] = rowset;
@@ -381,11 +413,6 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
                 std::static_pointer_cast<Tablet>(shared_from_this()));
     }
 
-    // warm-up this rowset
-    st = rowset->load();
-    // ignore this error, only log load failure
-    LOG_IF(WARNING, !st.ok()) << "ignore load rowset error tablet:" << tablet_id() << " rowset:" << rowset->rowset_id()
-                              << " " << st;
     ++_newly_created_rowset_num;
     return Status::OK();
 }
@@ -434,6 +461,11 @@ void Tablet::delete_expired_inc_rowsets() {
 }
 
 void Tablet::delete_expired_stale_rowset() {
+    // TODO(lipengfei) binlog deletion depends on the period that Tablet::delete_expired_stale_rowset()
+    // is called, so expired binlog maybe delay to delete. Improve it if we need a more accurate
+    // management in the future
+    _binlog_manager->delete_expired_binlog();
+
     int64_t now = UnixSeconds();
     // Compute the end time to delete rowsets, when an expired rowset createtime older then this time, it will be deleted.
     int64_t expired_stale_sweep_endtime = now - config::tablet_rowset_stale_sweep_time_sec;
@@ -501,6 +533,7 @@ void Tablet::delete_expired_stale_rowset() {
     }
 
     for (auto& rowset : stale_rowsets) {
+        rowset->set_seg_ownership_transfer(_binlog_manager);
         StorageEngine::instance()->add_unused_rowset(rowset);
     }
 
@@ -833,6 +866,10 @@ bool Tablet::check_rowset_id(const RowsetId& rowset_id) {
     if (RowsetMetaManager::check_rowset_meta(_data_dir->get_meta(), tablet_uid(), rowset_id)) {
         return true;
     }
+    if (_binlog_manager->is_rowset_used(rowset_id)) {
+        return true;
+    }
+
     return false;
 }
 

@@ -167,4 +167,8 @@ add_library(Storage STATIC
     lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
+    binlog_file_writer.cpp
+    binlog_file_reader.cpp
+    binlog_reader.cpp
+    binlog_manager.cpp
 )
