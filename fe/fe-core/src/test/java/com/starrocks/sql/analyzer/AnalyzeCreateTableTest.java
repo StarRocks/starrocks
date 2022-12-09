@@ -257,4 +257,32 @@ public class AnalyzeCreateTableTest {
         analyzeFail("create external table table1 (col1 char(10) not null) engine=olap duplicate key(col1)",
                 "Create olap table should contain distribution desc");
     }
+
+    @Test
+    public void testComplexType() {
+        analyzeSuccess("create table table1 (col0 int, col1 array<array<int>>) " +
+                "engine=olap distributed by hash(col0) buckets 10");
+        analyzeSuccess("create external table table1 (col0 int, col1 array<array<int>>) " +
+                "engine=hive properties('key' = 'value')");
+
+        analyzeFail("create table table1 (col0 int, col1 array<map<int,int>>) " +
+                "engine=olap distributed by hash(col0) buckets 10");
+        analyzeSuccess("create external table table1 (col0 int, col1 array<map<int,int>>) " +
+                "engine=hive properties('key' = 'value')");
+
+        analyzeFail("create table table1 (col0 int, col1 array<struct<a: int>>) " +
+                "engine=olap distributed by hash(col0) buckets 10");
+        analyzeSuccess("create external table table1 (col0 int, col1 array<struct<a: int>>) " +
+                "engine=hive properties('key' = 'value')");
+
+        analyzeFail("create table table1 (col0 int, col1 map<int,int>) " +
+                "engine=olap distributed by hash(col0) buckets 10");
+        analyzeSuccess("create external table table1 (col0 int, col1 map<int,int>) " +
+                "engine=hive properties('key' = 'value')");
+
+        analyzeFail("create table table1 (col0 int, col1 struct<a: int>) " +
+                "engine=olap distributed by hash(col0) buckets 10");
+        analyzeSuccess("create external table table1 (col0 int, col1 struct<a: int>) " +
+                "engine=hive properties('key' = 'value')");
+    }
 }
