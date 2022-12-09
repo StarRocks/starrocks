@@ -15,6 +15,7 @@ class CrossJoinContext final : public ContextWithDependency {
 public:
     explicit CrossJoinContext(const int32_t num_right_sinkers)
             : _num_right_sinkers(num_right_sinkers), _build_chunks(num_right_sinkers) {}
+    ~CrossJoinContext() override = default;
 
     void close(RuntimeState* state) override { _build_chunks.clear(); }
 
