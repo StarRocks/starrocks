@@ -225,7 +225,7 @@ public class SlotRef extends Expr {
     }
 
     public boolean isFromLambda() {
-        return tblName.getTbl().equals(TableName.LAMBDA_FUNC_TABLE);
+        return tblName != null && tblName.getTbl().equals(TableName.LAMBDA_FUNC_TABLE);
     }
 
     public void setTblName(TableName name) {
