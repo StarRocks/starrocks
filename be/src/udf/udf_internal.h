@@ -61,21 +61,21 @@ using ColumnPtr = std::shared_ptr<Column>;
 class FunctionContextImpl {
 public:
     /// Create a FunctionContext for a UDF. Caller is responsible for deleting it.
-    static starrocks_udf::FunctionContext* create_context(
-            RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
-            const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size,
-            bool debug);
+    static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
+                                           const FunctionContext::TypeDesc& return_type,
+                                           const std::vector<FunctionContext::TypeDesc>& arg_types,
+                                           int varargs_buffer_size, bool debug);
 
     ~FunctionContextImpl();
 
-    FunctionContextImpl(starrocks_udf::FunctionContext* parent);
+    FunctionContextImpl(FunctionContext* parent);
 
     void close();
 
     /// Returns a new FunctionContext with the same constant args, fragment-local state, and
     /// debug flag as this FunctionContext. The caller is responsible for calling delete on
     /// it.
-    starrocks_udf::FunctionContext* clone(MemPool* pool);
+    FunctionContext* clone(MemPool* pool);
 
     void set_constant_columns(std::vector<vectorized::ColumnPtr> columns) { _constant_columns = std::move(columns); }
 
@@ -93,11 +93,11 @@ public:
     vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
 private:
-    friend class starrocks_udf::FunctionContext;
+    friend class FunctionContext;
     friend class ExprContext;
 
     // Parent context object. Not owned
-    starrocks_udf::FunctionContext* _context;
+    FunctionContext* _context;
 
     MemPool* _mem_pool = nullptr;
 
@@ -108,7 +108,7 @@ private:
     // If true, indicates this is a debug context which will do additional validation.
     bool _debug;
 
-    starrocks_udf::FunctionContext::StarRocksVersion _version;
+    FunctionContext::StarRocksVersion _version;
 
     // Empty if there's no error
     std::mutex _error_msg_mutex;
@@ -122,10 +122,10 @@ private:
     void* _fragment_local_fn_state;
 
     // Type descriptor for the return type of the function.
-    starrocks_udf::FunctionContext::TypeDesc _return_type;
+    FunctionContext::TypeDesc _return_type;
 
     // Type descriptors for each argument of the function.
-    std::vector<starrocks_udf::FunctionContext::TypeDesc> _arg_types;
+    std::vector<FunctionContext::TypeDesc> _arg_types;
 
     std::vector<vectorized::ColumnPtr> _constant_columns;
 

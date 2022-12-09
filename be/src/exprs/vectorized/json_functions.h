@@ -88,10 +88,8 @@ struct SimpleJsonPath {
 
 class JsonFunctions {
 public:
-    static Status json_path_prepare(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status json_path_close(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [json_string, tagged_value]
@@ -203,10 +201,8 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_keys);
 
-    static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
-                                           starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status native_json_path_close(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.
@@ -226,7 +222,7 @@ public:
 
 private:
     template <LogicalType ResultType>
-    static StatusOr<ColumnPtr> _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
 
     /**
      * Parse string column as json column

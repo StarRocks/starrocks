@@ -53,7 +53,7 @@ namespace starrocks::vectorized {
 class Column;
 } // namespace starrocks::vectorized
 
-namespace starrocks_udf {
+namespace starrocks {
 
 // The FunctionContext is passed to every UDF/UDA and is the interface for the UDF to the
 // rest of the system. It contains APIs to examine the system state, report errors
@@ -110,9 +110,6 @@ public:
     // Returns the user that is running the query. Returns NULL if it is not
     // available.
     const char* user() const;
-
-    // Returns the query_id for the current query.
-    UniqueId query_id() const;
 
     // Sets an error for this UDF. If this is called, this will trigger the
     // query to fail.
@@ -190,6 +187,4 @@ private:
     // Owned by this object.
     starrocks::FunctionContextImpl* _impl;
 };
-} // namespace starrocks_udf
-
-using starrocks_udf::FunctionContext;
+} // namespace starrocks
