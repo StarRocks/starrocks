@@ -226,8 +226,15 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
 
         mvContext.setNextPartitionStart(nextPartitionStart);
-        LiteralExpr upperExpr = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint().getKeys().get(0);
-        mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperExpr, 1));
+
+        if (endPartitionName != null) {
+            LiteralExpr upperExpr = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint().getKeys().get(0);
+            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperExpr, 1));
+        } else {
+            // partitionNameIter has just been traversed, and endPartitionName is not updated
+            // will cause endPartitionName == null
+            mvContext.setNextPartitionEnd(null);
+        }
     }
 
     private void generateNextTaskRun() {
