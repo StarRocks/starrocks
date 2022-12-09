@@ -176,9 +176,9 @@ public:
 
     void split_record(const Record& record, Fields* fields) const;
 
-    bool isRowDelimiter(bool expandBuffer);
+    bool is_row_delimiter(bool expandBuffer);
 
-    bool isColumnSeparator(bool expandBuffer);
+    bool is_column_separator(bool expandBuffer);
 
     Status readMore(bool expandBuffer);
 
