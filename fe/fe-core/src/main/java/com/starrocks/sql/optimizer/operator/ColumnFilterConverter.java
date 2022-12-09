@@ -59,11 +59,14 @@ public class ColumnFilterConverter {
             return;
         }
 
-        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+        // rewrite invalid date cast expr to NullLiteral
+        ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
+
+        if (rewritePredicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
             return;
         }
 
-        predicate.accept(COLUMN_FILTER_VISITOR, result);
+        rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
     private static boolean checkColumnRefCanPartition(ScalarOperator right) {
@@ -86,6 +89,85 @@ public class ColumnFilterConverter {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    private static boolean checkPartitionExprsContainsOperator(List<Expr> exprList,
+                                                               CallOperator callOperator) {
+        // now expr can only support date_trunc,exprList.size() != 1 will remove in the future
+        if (CollectionUtils.isEmpty(exprList) || exprList.size() != 1) {
+            return false;
+        }
+        Expr expr = exprList.get(0);
+        if (!(expr instanceof FunctionCallExpr)) {
+            return false;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        return checkPartitionExprEqualsOperator(functionCallExpr, callOperator);
+    }
+
+    private static boolean checkPartitionExprEqualsOperator(FunctionCallExpr functionCallExpr,
+                                                            CallOperator callOperator) {
+        String fnName = functionCallExpr.getFnName().getFunction();
+        if (!Objects.equals(fnName, callOperator.getFnName())) {
+            return false;
+        }
+        if (Objects.equals(fnName, FunctionSet.DATE_TRUNC)) {
+            return checkDateTruncEquals(functionCallExpr, callOperator);
+        }
+
+        return false;
+    }
+
+    private static boolean checkDateTruncEquals(FunctionCallExpr functionCallExpr, CallOperator callOperator) {
+        if (callOperator.getChildren().size() != 2 || functionCallExpr.getChildren().size() != 2) {
+            return false;
+        }
+        if (!(functionCallExpr.getChild(0) instanceof StringLiteral &&
+                functionCallExpr.getChild(1) instanceof SlotRef)) {
+            return false;
+        }
+        if (!(callOperator.getChild(0) instanceof ConstantOperator &&
+                callOperator.getChild(1) instanceof ColumnRefOperator)) {
+            return false;
+        }
+
+        String exprTimeArg = ((StringLiteral) (functionCallExpr.getChild(0))).getStringValue();
+        String callTimeArg = callOperator.getChild(0).toString();
+        String exprColumnNameArg = ((SlotRef) (functionCallExpr.getChild(1))).getColumnName();
+        String callColumnNameArg = ((ColumnRefOperator) (callOperator.getChild(1))).getName();
+
+        return Objects.equals(exprColumnNameArg, callColumnNameArg) &&
+                (Objects.equals(exprTimeArg, callTimeArg) ||
+                        (TIME_MAP.containsKey(exprTimeArg) && TIME_MAP.containsKey(callTimeArg) &&
+                                TIME_MAP.get(exprTimeArg) > TIME_MAP.get(callTimeArg)));
+    }
+
+    // only rewrite cast invalid date value to null like cast('abc' as date)
+    private static ScalarOperator rewriteInvalidDateCast(ScalarOperator scalarOperator) {
+        ScalarOperator copy = scalarOperator.clone();
+        List<ScalarOperator> children = copy.getChildren();
+
+        for (int i = 1; i < children.size(); i++) {
+            ScalarOperator child = children.get(i);
+            if (child instanceof CastOperator) {
+                CastOperator cast = (CastOperator) child;
+                Type toType = cast.getType();
+                if (cast.getChildren().size() == 1
+                        && cast.getChildren().get(0).isConstantRef()
+                        && toType.isDateType()) {
+                    ConstantOperator value = (ConstantOperator) cast.getChildren().get(0);
+                    try {
+                        value.castTo(toType);
+                    } catch (Exception e) {
+                        children.set(i, ConstantOperator.createNull(toType));
+                    }
+                }
+            }
+        }
+        return copy;
+    }
+
+>>>>>>> 4b74eaca0 ([Enhancement] treat invalid date as null value in partition prune (#14820))
     private static class ColumnFilterVisitor
             extends ScalarOperatorVisitor<ScalarOperator, Map<String, PartitionColumnFilter>> {
         @Override
