@@ -29,7 +29,6 @@ import com.starrocks.statistic.StatsConstants.ScheduleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
@@ -56,8 +55,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
             return;
         }
 
-        if (!checkoutAnalyzeTime(Instant.ofEpochMilli(System.currentTimeMillis())
-                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalTime())) {
+        if (!checkoutAnalyzeTime(LocalTime.now(TimeUtils.getTimeZone().toZoneId()))) {
             return;
         }
 
