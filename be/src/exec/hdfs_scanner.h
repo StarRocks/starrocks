@@ -46,6 +46,9 @@ struct HdfsScanStats {
     int64_t column_convert_ns = 0;
     int64_t reader_init_ns = 0;
 
+    int64_t delete_build_ns = 0;
+    int64_t delete_file_per_scan = 0;
+
     // parquet only!
     // read & decode
     int64_t request_bytes_read = 0;
