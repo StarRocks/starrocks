@@ -434,6 +434,9 @@
     + Math Functions
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
       + [least](./sql-reference/sql-functions/math-functions/least.md)
+      + [log](./sql-reference/sql-functions/math-functions/log.md)
+      + [log2](./sql-reference/sql-functions/math-functions/log2.md)
+      + [log10](./sql-reference/sql-functions/math-functions/log10.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
