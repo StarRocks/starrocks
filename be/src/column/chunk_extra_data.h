@@ -8,15 +8,15 @@ namespace starrocks::vectorized {
 class ChunkExtraColumnsData;
 using ChunkExtraColumnsDataPtr = std::shared_ptr<ChunkExtraColumnsData>;
 
-class ChunkExtraColumnsData : public ChunkExtraData {
+class ChunkExtraColumnsData final : public ChunkExtraData {
 public:
     ChunkExtraColumnsData(std::vector<ChunkExtraDataMeta> extra_metas, Columns columns)
             : _data_metas(std::move(extra_metas)), _columns(std::move(columns)) {}
-    virtual ~ChunkExtraColumnsData() = default;
+    ~ChunkExtraColumnsData() override = default;
+
+    std::vector<ChunkExtraDataMeta> chunk_data_metas() const override { return _data_metas; }
 
     Columns columns() const { return _columns; }
-
-    virtual std::vector<ChunkExtraDataMeta> chunk_data_metas() const override { return _data_metas; }
 
     void filter(const Buffer<uint8_t>& selection) const override {
         for (auto& col : _columns) {
@@ -59,7 +59,22 @@ public:
         }
     }
 
-    // TODO: only support encode_level=0
+    size_t memory_usage() const override {
+        size_t memory_usage = 0;
+        for (const auto& column : _columns) {
+            memory_usage += column->memory_usage();
+        }
+        return memory_usage;
+    }
+
+    size_t bytes_usage(size_t from, size_t size) const override {
+        size_t bytes_usage = 0;
+        for (const auto& column : _columns) {
+            bytes_usage += column->byte_size(from, size);
+        }
+        return bytes_usage;
+    }
+
     int64_t max_serialized_size(const int encode_level = 0) override {
         DCHECK_EQ(encode_level, 0);
         int64_t serialized_size = 0;

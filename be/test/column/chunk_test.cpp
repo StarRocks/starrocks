@@ -304,16 +304,18 @@ TEST_F(ChunkTest, test_clone_unique) {
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_append_chunk_with_extra_data) {
     auto extra_data1 = make_extra_data(2, 2);
-    // col0: 0, 1, 2, 3
-    // col1: 1, 2, 3, 4
+    // col0: 0, 1
+    // col1: 1, 2
     auto chunk1 = std::make_unique<Chunk>(make_columns(2, 2), make_schema(2), extra_data1);
 
-    // col0: 0, 1, 2, 3
-    // col1: 1, 2, 3, 4
+    // col0: 0, 1
+    // col1: 1, 2
     auto extra_data2 = make_extra_data(2, 2);
     auto chunk2 = std::make_unique<Chunk>(make_columns(2, 2), make_schema(2), extra_data2);
 
     chunk1->append(*chunk2);
+    // col0: 0, 1, 0, 1
+    // col1: 1, 2, 1, 2
 
     Columns columns = chunk1->columns();
     ASSERT_EQ(2, columns.size());
@@ -343,6 +345,8 @@ TEST_F(ChunkTest, test_filter_with_extra_data) {
     auto filtered = chunk1->filter(selection);
     ASSERT_EQ(2, filtered);
     chunk1->check_or_die();
+    // 1, 3
+    // 2, 4
 
     ASSERT_EQ(chunk1->num_rows(), 2);
     check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk1->columns()[0].get()), {1, 3});

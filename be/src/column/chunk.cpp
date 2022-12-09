@@ -331,6 +331,9 @@ size_t Chunk::memory_usage() const {
     for (const auto& column : _columns) {
         memory_usage += column->memory_usage();
     }
+    if (_extra_data) {
+        memory_usage += _extra_data->memory_usage();
+    }
     return memory_usage;
 }
 
@@ -360,6 +363,9 @@ size_t Chunk::bytes_usage(size_t from, size_t size) const {
     size_t bytes_usage = 0;
     for (const auto& column : _columns) {
         bytes_usage += column->byte_size(from, size);
+    }
+    if (_extra_data) {
+        bytes_usage += _extra_data->bytes_usage(from, size);
     }
     return bytes_usage;
 }
