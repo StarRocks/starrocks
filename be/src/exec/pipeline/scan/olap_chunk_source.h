@@ -128,7 +128,6 @@ private:
     RuntimeProfile::Counter* _block_load_timer = nullptr;
     RuntimeProfile::Counter* _block_load_counter = nullptr;
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
-    RuntimeProfile::Counter* _index_load_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
