@@ -319,7 +319,7 @@ public class Alter {
             materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
             isChanged = true;
         }
-        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getId(), materializedView);
+        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
         if (isChanged) {
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
                     materializedView.getId(), propClone);
