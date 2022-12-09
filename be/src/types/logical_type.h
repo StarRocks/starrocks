@@ -102,6 +102,11 @@ inline bool is_string_type(LogicalType type) {
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
 
+constexpr bool is_object_type(LogicalType type) {
+    return type == LogicalType::TYPE_HLL || type == LogicalType::TYPE_OBJECT || type == LogicalType::TYPE_JSON ||
+           type == LogicalType::TYPE_PERCENTILE;
+}
+
 inline bool is_decimalv3_field_type(LogicalType type) {
     return type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128;
 }

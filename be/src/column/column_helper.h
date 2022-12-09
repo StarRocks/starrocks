@@ -351,6 +351,7 @@ public:
                 result_offset += kBatchNums;
 
             } else {
+                // clang-format off
 #define AVX512_COPY(SHIFT, MASK, WIDTH)                                         \
     {                                                                           \
         auto m = (mask >> SHIFT) & MASK;                                        \
@@ -377,8 +378,8 @@ public:
                              "vpcompress" #WIDTHX                 \
                              " %%zmm1, %%zmm0%{%%k1%}%{z%}\n"     \
                              "vmovdqu" #WIDTH " %%zmm0, (%[d])\n" \
-                             : [ s ] "+r"(src), [ d ] "+r"(dst)   \
-                             : [ mask ] "r"(m)                    \
+                             : [s] "+r"(src), [d] "+r"(dst)       \
+                             : [mask] "r"(m)                      \
                              : "zmm0", "zmm1", "memory");         \
             result_offset += __builtin_popcount(m);               \
         }                                                         \
@@ -428,6 +429,7 @@ public:
             f_data += kBatchNums;
         }
 #endif
+        // clang-format on
         for (auto i = start_offset; i < to; ++i) {
             if (filter[i]) {
                 *(data + result_offset) = *(data + i);

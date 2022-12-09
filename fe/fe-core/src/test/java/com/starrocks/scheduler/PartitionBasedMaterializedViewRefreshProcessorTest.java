@@ -16,6 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -840,5 +841,12 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals("2022-03-01", mvContext.getNextPartitionStart());
         Assert.assertEquals("2022-05-02", mvContext.getNextPartitionEnd());
 
+        taskRun.executeTaskRun();
+
+        processor.filterPartitionByRefreshNumber(Sets.newHashSet(), materializedView);
+        mvContext = processor.getMvContext();
+        Assert.assertNull(mvContext.getNextPartitionStart());
+        Assert.assertNull(mvContext.getNextPartitionEnd());
     }
+
 }

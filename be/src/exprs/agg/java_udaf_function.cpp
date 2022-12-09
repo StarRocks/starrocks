@@ -33,7 +33,7 @@ const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
 }
 
 Status init_udaf_context(int64_t id, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         starrocks_udf::FunctionContext* context) {
+                         FunctionContext* context) {
     RETURN_IF_ERROR(detect_java_runtime());
     std::string libpath;
     std::string state = symbol + "$State";

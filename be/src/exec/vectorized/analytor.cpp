@@ -36,7 +36,7 @@
 namespace starrocks {
 namespace vectorized {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, starrocks_udf::FunctionContext* context);
+                               const std::string& symbol, FunctionContext* context);
 } // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,

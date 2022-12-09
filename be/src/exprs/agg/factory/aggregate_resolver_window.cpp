@@ -24,7 +24,7 @@ namespace starrocks::vectorized {
 struct WindowDispatcher {
     template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || pt_is_hll<pt> || pt_is_object<pt>) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || is_object_type(pt)) {
             resolver->add_aggregate_mapping_notnull<pt, pt>("first_value", true,
                                                             AggregateFactory::MakeFirstValueWindowFunction<pt>());
             resolver->add_aggregate_mapping_notnull<pt, pt>("last_value", true,
@@ -41,6 +41,8 @@ void AggregateFuncResolver::register_window() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, WindowDispatcher(), this);
     }
+    type_dispatch_all(TYPE_JSON, WindowDispatcher(), this);
+
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("dense_rank", true,
                                                             AggregateFactory::MakeDenseRankWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("rank", true, AggregateFactory::MakeRankWindowFunction());

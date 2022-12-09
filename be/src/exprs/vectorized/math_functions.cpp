@@ -692,8 +692,7 @@ static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num
     return seed;
 }
 
-Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
         int64_t seed = 0;
         if (context->get_num_args() == 1) {
@@ -721,8 +720,7 @@ Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status MathFunctions::rand_close(starrocks_udf::FunctionContext* context,
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     return Status::OK();
 }
 

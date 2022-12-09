@@ -46,11 +46,11 @@
 
 namespace starrocks {
 
-FunctionContextImpl::FunctionContextImpl(starrocks_udf::FunctionContext* parent)
+FunctionContextImpl::FunctionContextImpl(FunctionContext* parent)
         : _context(parent),
           _state(nullptr),
           _debug(false),
-          _version(starrocks_udf::FunctionContext::V2_0),
+          _version(FunctionContext::V2_0),
           _num_warnings(0),
           _thread_local_fn_state(nullptr),
           _fragment_local_fn_state(nullptr),
@@ -92,10 +92,11 @@ const char* FunctionContextImpl::error_msg() {
     }
 }
 
-starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
-        RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
-        const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
-    auto* ctx = new starrocks_udf::FunctionContext();
+FunctionContext* FunctionContextImpl::create_context(RuntimeState* state, MemPool* pool,
+                                                     const FunctionContext::TypeDesc& return_type,
+                                                     const std::vector<FunctionContext::TypeDesc>& arg_types,
+                                                     int varargs_buffer_size, bool debug) {
+    auto* ctx = new FunctionContext();
     ctx->_impl->_state = state;
     ctx->_impl->_mem_pool = pool;
     ctx->_impl->_return_type = return_type;
@@ -106,7 +107,7 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
 }
 
 FunctionContext* FunctionContextImpl::clone(MemPool* pool) {
-    starrocks_udf::FunctionContext* new_context = create_context(_state, pool, _return_type, _arg_types, 0, _debug);
+    FunctionContext* new_context = create_context(_state, pool, _return_type, _arg_types, 0, _debug);
 
     new_context->_impl->_constant_columns = _constant_columns;
     new_context->_impl->_fragment_local_fn_state = _fragment_local_fn_state;
@@ -115,7 +116,7 @@ FunctionContext* FunctionContextImpl::clone(MemPool* pool) {
 
 } // namespace starrocks
 
-namespace starrocks_udf {
+namespace starrocks {
 static const int MAX_WARNINGS = 1000;
 
 FunctionContext* FunctionContext::create_test_context() {
@@ -148,13 +149,6 @@ const char* FunctionContext::user() const {
     }
 
     return _impl->_state->user().c_str();
-}
-
-FunctionContext::UniqueId FunctionContext::query_id() const {
-    UniqueId id;
-    id.hi = _impl->_state->query_id().hi;
-    id.lo = _impl->_state->query_id().lo;
-    return id;
 }
 
 bool FunctionContext::has_error() const {
@@ -212,4 +206,4 @@ const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) cons
     return &_impl->_arg_types[arg_idx];
 }
 
-} // namespace starrocks_udf
+} // namespace starrocks

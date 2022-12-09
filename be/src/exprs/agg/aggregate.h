@@ -18,11 +18,9 @@
 
 #include "column/column.h"
 
-namespace starrocks_udf {
+namespace starrocks {
 class FunctionContext;
 }
-
-using starrocks_udf::FunctionContext;
 
 namespace starrocks::vectorized {
 

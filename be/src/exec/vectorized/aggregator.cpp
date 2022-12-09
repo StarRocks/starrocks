@@ -33,7 +33,7 @@ namespace starrocks {
 namespace vectorized {
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         starrocks_udf::FunctionContext* context);
+                         FunctionContext* context);
 
 } // namespace vectorized
 Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}

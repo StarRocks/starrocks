@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -390,10 +391,27 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
         for (size_t i = 0; i < _slot_descs.size(); i++) {
             jobject jcolumn = helper.list_get(jchunk, i);
             LOCAL_REF_GUARD_ENV(env, jcolumn);
-            auto result_column = _result_chunk->columns()[i].get();
-            auto st = helper.get_result_from_boxed_array(_result_column_types[i], result_column, jcolumn, num_rows);
+            auto& result_column = _result_chunk->columns()[i];
+            auto st =
+                    helper.get_result_from_boxed_array(_result_column_types[i], result_column.get(), jcolumn, num_rows);
             RETURN_IF_ERROR(st);
-            down_cast<NullableColumn*>(result_column)->update_has_null();
+            // check data's length for varchar type
+            if (_slot_descs[i]->type().type == TYPE_VARCHAR) {
+                int max_len = _slot_descs[i]->type().len;
+                ColumnViewer<TYPE_VARCHAR> viewer(result_column);
+                for (int row = 0; row < viewer.size(); row++) {
+                    if (viewer.is_null(row)) {
+                        continue;
+                    }
+                    auto value = viewer.value(row);
+                    if ((int)value.size > max_len) {
+                        return Status::DataQualityError(fmt::format(
+                                "Value length exceeds limit on column[{}], max length is [{}], value is [{}]",
+                                _slot_descs[i]->col_name(), max_len, value));
+                    }
+                }
+            }
+            down_cast<NullableColumn*>(result_column.get())->update_has_null();
         }
     }
 
