@@ -423,14 +423,14 @@ public class SyncPartitionUtils {
             return;
         }
         long tableId = baseTable.getId();
-        if (expr instanceof FunctionCallExpr) {
-            // This is a bad case for refreshing, and this problem will be optimized later.
-            versionMap.remove(tableId);
-        } else {
+        if (expr instanceof SlotRef) {
             Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
             if (mvTableVersionMap != null) {
                 mvTableVersionMap.remove(basePartitionName);
             }
+        } else {
+            // This is a bad case for refreshing, and this problem will be optimized later.
+            versionMap.remove(tableId);
         }
     }
 }
