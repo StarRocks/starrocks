@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <utility>
-
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "fs/fs.h"

@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "exec/vectorized/iceberg/iceberg_delete_builder.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
@@ -26,7 +27,6 @@
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
-#include "exec/vectorized/iceberg/iceberg_delete_builder.h"
 
 namespace starrocks {
 
