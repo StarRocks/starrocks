@@ -56,7 +56,6 @@ FunctionUtils::FunctionUtils(RuntimeState* state) {
 }
 
 FunctionUtils::~FunctionUtils() {
-    _fn_ctx->close();
     delete _fn_ctx;
     delete _memory_pool;
 }

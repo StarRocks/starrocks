@@ -390,14 +390,6 @@ void Aggregator::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
-        // AggregateFunction::destroy depends FunctionContext.
-        // so we close function context after destroy stage
-        for (auto ctx : _agg_fn_ctxs) {
-            if (ctx != nullptr && ctx) {
-                ctx->close();
-            }
-        }
-
         Expr::close(_group_by_expr_ctxs, state);
         for (const auto& i : _agg_expr_ctxs) {
             Expr::close(i, state);

@@ -318,12 +318,6 @@ void Analytor::close(RuntimeState* state) {
     _is_closed = true;
 
     auto agg_close = [this, state]() {
-        for (auto* ctx : _agg_fn_ctxs) {
-            if (ctx != nullptr && ctx) {
-                ctx->close();
-            }
-        }
-
         // Note: we must free agg_states before _mem_pool free_all;
         _managed_fn_states.clear();
         _managed_fn_states.shrink_to_fit();
