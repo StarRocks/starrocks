@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/anyval_util.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "runtime/types.h"
@@ -34,7 +35,6 @@
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
-#include "exprs/function_context.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {

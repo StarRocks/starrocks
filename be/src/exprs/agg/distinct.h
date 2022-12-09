@@ -28,12 +28,12 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "exprs/function_context.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
@@ -366,8 +366,8 @@ public:
         Slice slice = input_column->get_slice(row_num);
         size_t mem_usage = 0;
         if constexpr (IsSlice<T>) {
-            mem_usage += this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data,
-                                                                 slice.size);
+            mem_usage +=
+                    this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
         } else {
             // slice size larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`, means which is a hash set
             // that's said, size of hash set serialization data should be larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`
@@ -532,8 +532,7 @@ public:
         Slice slice = input_column->get_slice(row_num);
 
         size_t mem_usage = 0;
-        mem_usage += this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data,
-                                                             slice.size);
+        mem_usage += this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
         ctx->add_mem_usage(mem_usage);
 
         agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;

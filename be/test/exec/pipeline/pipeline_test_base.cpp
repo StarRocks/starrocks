@@ -19,10 +19,10 @@
 #include "column/nullable_column.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exprs/function_context.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
-#include "exprs/function_context.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::pipeline {

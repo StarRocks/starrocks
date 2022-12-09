@@ -25,11 +25,11 @@
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
-#include "exprs/function_context.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 

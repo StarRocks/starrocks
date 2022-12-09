@@ -54,8 +54,8 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_args, num_rows, &args);
-        ctx->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end,
-                                                             frame_start, frame_end, num_args, args.data());
+        ctx->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end, frame_start,
+                                                     frame_end, num_args, args.data());
         // release input cols
         for (int i = 0; i < num_args; ++i) {
             env->DeleteLocalRef(args[i]);

@@ -26,13 +26,13 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
-#include "exprs/function_context.h"
 
 namespace starrocks::vectorized {
 

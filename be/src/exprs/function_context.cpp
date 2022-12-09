@@ -49,10 +49,7 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
 }
 
 FunctionContext::FunctionContext()
-        : _state(nullptr),
-          _num_warnings(0),
-          _thread_local_fn_state(nullptr),
-          _fragment_local_fn_state(nullptr) {}
+        : _state(nullptr), _num_warnings(0), _thread_local_fn_state(nullptr), _fragment_local_fn_state(nullptr) {}
 
 FunctionContext::~FunctionContext() = default;
 

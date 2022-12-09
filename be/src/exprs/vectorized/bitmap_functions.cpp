@@ -20,12 +20,12 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "exprs/base64.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "exprs/function_context.h"
 #include "util/phmap/phmap.h"
 #include "util/string_parser.hpp"
 

@@ -22,8 +22,8 @@
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
-#include "types/bitmap_value.h"
 #include "exprs/function_context.h"
+#include "types/bitmap_value.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {

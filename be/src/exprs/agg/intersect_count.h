@@ -21,9 +21,9 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
-#include "exprs/function_context.h"
 #include "util/bitmap_intersect.h"
 
 namespace starrocks::vectorized {

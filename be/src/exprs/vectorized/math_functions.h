@@ -19,11 +19,11 @@
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/decimal_binary_function.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/unary_function.h"
-#include "exprs/function_context.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {

@@ -16,8 +16,8 @@
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
-#include "exprs/vectorized/function_helper.h"
 #include "exprs/function_context.h"
+#include "exprs/vectorized/function_helper.h"
 
 namespace starrocks::vectorized {
 class HashFunctions {

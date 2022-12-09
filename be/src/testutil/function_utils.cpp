@@ -36,8 +36,8 @@
 
 #include <vector>
 
-#include "runtime/mem_pool.h"
 #include "exprs/function_context.h"
+#include "runtime/mem_pool.h"
 
 namespace starrocks {
 

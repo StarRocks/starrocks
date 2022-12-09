@@ -25,12 +25,12 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "exprs/function_context.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 

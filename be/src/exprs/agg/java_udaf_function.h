@@ -26,12 +26,12 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
-#include "exprs/function_context.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
@@ -135,8 +135,8 @@ public:
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
         // 2 batch call update
-        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
-                                  ctx->udaf_ctxs()->update->method.handle(), args.data(), args.size());
+        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->update->method.handle(),
+                                  args.data(), args.size());
         // 3 get serialize size
         auto serialize_szs = (jintArray)helper.int_batch_call(
                 ctx, rets, ctx->udaf_ctxs()->serialize_size->method.handle(), batch_size);
@@ -156,8 +156,8 @@ public:
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {rets, buffer_array};
-        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
-                                  ctx->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
+        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->serialize->method.handle(),
+                                  state_and_buffer, 2);
 
         // 5 ready
         std::vector<Slice> slices(batch_size);
@@ -207,9 +207,8 @@ public:
             auto st =
                     JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
-            helper.batch_update(ctx, ctx->udaf_ctxs()->handle.handle(),
-                                ctx->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
-                                args.size());
+            helper.batch_update(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->update->method.handle(),
+                                states_arr, args.data(), args.size());
         }
     }
 
@@ -294,8 +293,8 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
-            helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
-                                      ctx->udaf_ctxs()->merge->method.handle(), state_and_buffer, 2);
+            helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->merge->method.handle(),
+                                      state_and_buffer, 2);
         };
         _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
     }
@@ -313,8 +312,7 @@ public:
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[] = {buffer_array};
             helper.batch_update_if_not_null(ctx, ctx->udaf_ctxs()->handle.handle(),
-                                            ctx->udaf_ctxs()->merge->method.handle(), state_array,
-                                            state_and_buffer, 1);
+                                            ctx->udaf_ctxs()->merge->method.handle(), state_array, state_and_buffer, 1);
         };
         _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
     }
@@ -331,8 +329,8 @@ public:
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
-            helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
-                                      ctx->udaf_ctxs()->merge->method.handle(), state_and_buffer, 2);
+            helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->merge->method.handle(),
+                                      state_and_buffer, 2);
         };
         _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
     }
@@ -381,8 +379,8 @@ public:
         auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {state_array, buffer_array};
-        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(),
-                                  ctx->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
+        helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->serialize->method.handle(),
+                                  state_and_buffer, 2);
 
         int offsets = 0;
         std::vector<Slice> slices(batch_size);

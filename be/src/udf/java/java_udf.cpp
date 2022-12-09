@@ -300,8 +300,8 @@ void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject
                                      int cols) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     LOCAL_REF_GUARD(input_arr);
-    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update,
-                               ctx->udaf_ctxs()->states->handle(), states, input_arr);
+    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update, ctx->udaf_ctxs()->states->handle(),
+                               states, input_arr);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
