@@ -118,8 +118,6 @@ private:
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
-    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _block_seek_timer = nullptr;
@@ -129,8 +127,16 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
+
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _zm_filter_timer = nullptr;
+
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
@@ -477,12 +483,18 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 
     // SegmentInit
     _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
-    _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", "SegmentInit");
+
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
+    _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", "SegmentInit");
+
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
+    _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", "SegmentInit");
+
+    _zm_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
+    _zm_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", "SegmentInit");
+
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
-    _zm_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
 
     // SegmentRead
@@ -544,15 +556,20 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
-    COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
-    COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
 
     COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
 
-    COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
-    COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bi_filtered);
+    COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bi_filter_timer);
+
+    COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
+    COUNTER_UPDATE(_bf_filter_timer, _reader->stats().bf_filter_timer);
+
+    COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_zm_filtered);
+    COUNTER_UPDATE(_zm_filter_timer, _reader->stats().zm_filter_timer);
+
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
