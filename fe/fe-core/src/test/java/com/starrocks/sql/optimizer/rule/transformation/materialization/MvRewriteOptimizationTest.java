@@ -818,6 +818,7 @@ public class MvRewriteOptimizationTest {
     @Test
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
 
         Table emps = getTable("test", "emps");
         PlanTestBase.setTableStatistics((OlapTable) emps, 1000000);
@@ -1073,6 +1074,7 @@ public class MvRewriteOptimizationTest {
         String query14 = "select c1, c3, c2 from test_base_part where c3 < 1000";
         String plan14 = getFragmentPlan(query14);
         PlanTestBase.assertContains(plan14, "partial_mv_8");
+        dropMv("test", "partial_mv_8");
 
         createAndRefreshMv("test", "partial_mv_9", "CREATE MATERIALIZED VIEW partial_mv_9" +
                 " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
@@ -1094,6 +1096,41 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertNotContains(plan15, "partial_mv_10");
         dropMv("test", "partial_mv_9");
         dropMv("test", "partial_mv_10");
+
+        starRocksAssert.withTable("CREATE TABLE ttl_base_table (\n" +
+                "                            k1 INT,\n" +
+                "                            v1 INT,\n" +
+                "                            v2 INT)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        PARTITION BY RANGE(`k1`)\n" +
+                "                        (\n" +
+                "                        PARTITION `p1` VALUES LESS THAN ('2'),\n" +
+                "                        PARTITION `p2` VALUES LESS THAN ('3'),\n" +
+                "                        PARTITION `p3` VALUES LESS THAN ('4'),\n" +
+                "                        PARTITION `p4` VALUES LESS THAN ('5'),\n" +
+                "                        PARTITION `p5` VALUES LESS THAN ('6'),\n" +
+                "                        PARTITION `p6` VALUES LESS THAN ('7')\n" +
+                "                        )\n" +
+                "                        DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into ttl_base_table values (1,1,1),(1,1,2),(1,2,1),(1,2,2),\n" +
+                "                                              (2,1,1),(2,1,2),(2,2,1),(2,2,2),\n" +
+                "                                              (3,1,1),(3,1,2),(3,2,1),(3,2,2);");
+        createAndRefreshMv("test", "ttl_mv_2", "CREATE MATERIALIZED VIEW ttl_mv_2\n" +
+                "               PARTITION BY k1\n" +
+                "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "               REFRESH ASYNC\n" +
+                "               PROPERTIES(\n" +
+                "               \"partition_ttl_number\"=\"4\"\n" +
+                "               )\n" +
+                "               AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
+        MaterializedView ttlMv2 = getMv("test", "ttl_mv_2");
+        waitTtl(ttlMv2, 4, 100);
+
+        String query16 = "select k1, sum(v1) FROM ttl_base_table where k1=3 group by k1";
+        String plan16 = getFragmentPlan(query16);
+        PlanTestBase.assertContains(plan16, "ttl_mv_2");
+        starRocksAssert.dropTable("ttl_base_table");
+        dropMv("test", "ttl_mv_2");
     }
 
     public String getFragmentPlan(String sql) throws Exception {
