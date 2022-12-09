@@ -184,8 +184,7 @@ public class UtFrameUtils {
             if (errorMessage == null) {
                 throw e;
             } else {
-                // throw new AnalysisException(errorMessage, e);
-                statementBase = parseStmtWithNewParser(originStmt, ctx);
+                throw new AnalysisException(errorMessage, e);
             }
         }
         statementBase.analyze(analyzer);
