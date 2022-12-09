@@ -2,11 +2,14 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Before;
@@ -942,5 +945,13 @@ public class ScalarOperatorFunctionsTest {
         ConstantOperator date =
                 ScalarOperatorFunctions.fromUnixTime(O_INT_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"));
         assertTrue(date.toString().matches("1970-01-01 0.*:00:10"));
+    }
+
+    @Test
+    public void testNonDeterministicFuncComp() {
+        // In logical phash, the new operator cloned from the original one should equal with the original one.
+        CallOperator random = new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList());
+        CallOperator randomCopy = (CallOperator) random.clone();
+        assertEquals(random, randomCopy);
     }
 }

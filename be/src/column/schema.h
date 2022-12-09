@@ -30,6 +30,8 @@ public:
 
     explicit Schema(Schema* schema, const std::vector<ColumnId>& cids);
 
+    explicit Schema(Schema* schema, const std::vector<ColumnId>& cids, const std::vector<ColumnId>& scids);
+
     // if we use this constructor and share the name_to_index with another schema,
     // we must make sure another shema is read only!!!
     Schema(const Schema& schema);

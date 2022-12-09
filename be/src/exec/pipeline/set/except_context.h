@@ -28,6 +28,7 @@ using ExceptPartitionContextFactoryPtr = std::shared_ptr<ExceptPartitionContextF
 class ExceptContext final : public ContextWithDependency {
 public:
     explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
+    ~ExceptContext() override = default;
 
     bool is_ht_empty() const { return _is_hash_set_empty; }
 
