@@ -343,7 +343,8 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     // Find orphan segments
     ASSIGN_OR_RETURN(auto orphan_segments, find_orphan_segments(tablet_mgr, root_location, tablet_metadatas, txn_logs));
     // Write orphan segment list file
-    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    WritableFileOptions opts{
+            .sync_on_close = false, .skip_fill_local_cache = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto orphan_list_file, fs->new_writable_file(opts, join_path(root_location, kGCFileName)));
     RETURN_IF_ERROR(write_orphan_list_file(orphan_segments, orphan_list_file.get()));
     // Delete orphan segment files
