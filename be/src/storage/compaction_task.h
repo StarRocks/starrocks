@@ -28,8 +28,6 @@
 
 namespace starrocks {
 
-class CompactionScheduler;
-
 enum CompactionTaskState { COMPACTION_INIT, COMPACTION_RUNNING, COMPACTION_FAILED, COMPACTION_SUCCESS };
 
 static const char* compaction_state_to_string(CompactionTaskState state) {
@@ -209,8 +207,6 @@ public:
         return _task_info.to_string();
     }
 
-    void set_compaction_scheduler(CompactionScheduler* scheduler) { _scheduler = scheduler; }
-
 protected:
     virtual Status run_impl() = 0;
 
@@ -269,7 +265,6 @@ protected:
     std::unique_lock<std::mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
-    CompactionScheduler* _scheduler = nullptr;
 };
 
 } // namespace starrocks
