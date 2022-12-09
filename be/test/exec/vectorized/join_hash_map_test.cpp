@@ -2377,7 +2377,6 @@ TEST_F(JoinHashMapTest, BuildTupleOutputForTupleExist3) {
 }
 
 // NOLINTNEXTLINE
-<<<<<<< HEAD
 TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
@@ -2416,8 +2415,8 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     ASSERT_EQ(probe_state.probe_match_index[0], build_row_count);
     // value in probe table not hit hash table match all null value rows in build table
     ASSERT_EQ(probe_state.probe_match_index[1], 1);
+}
 
-=======
 TEST_F(JoinHashMapTest, EmptyHashMapTest) {
     check_empty_hash_map(TJoinOp::LEFT_OUTER_JOIN, 5, 5, 6);
     check_empty_hash_map(TJoinOp::FULL_OUTER_JOIN, 5, 5, 6);
@@ -2429,7 +2428,6 @@ TEST_F(JoinHashMapTest, EmptyHashMapTest) {
     check_empty_hash_map(TJoinOp::RIGHT_OUTER_JOIN, 5, 0, 0);
     check_empty_hash_map(TJoinOp::RIGHT_ANTI_JOIN, 5, 0, 0);
     check_empty_hash_map(TJoinOp::CROSS_JOIN, 5, 0, 0);
->>>>>>> 1da0a2f03 (Revert "Revert "[Enhancement] Optimize hash join when hash table is empty" (#9701)" (#9720))
 }
 
 } // namespace starrocks::vectorized

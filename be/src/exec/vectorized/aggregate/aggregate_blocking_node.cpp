@@ -192,19 +192,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     //   - Without group by clause, it can be parallelized and needn't local shuffle.
     //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
     if (agg_node.need_finalize) {
-<<<<<<< HEAD
         if (!has_group_by_keys) {
-=======
-        // If finalize aggregate with group by clause, then it can be parallelized
-        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            if (context->need_local_shuffle(ops_with_sink)) {
-                std::vector<ExprContext*> group_by_expr_ctxs;
-                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-                ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
-                                                                                  group_by_expr_ctxs);
-            }
-        } else {
->>>>>>> 1da0a2f03 (Revert "Revert "[Enhancement] Optimize hash join when hash table is empty" (#9701)" (#9720))
             ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
         } else if (could_local_shuffle) {
             ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);

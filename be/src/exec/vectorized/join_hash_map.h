@@ -489,11 +489,7 @@ private:
                             NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
                     (*chunk)->append_column(std::move(dest_column), slot->id());
                 } else {
-<<<<<<< HEAD
                     // DCHECK_EQ(column->is_nullable(), to_nullable);
-=======
-                    DCHECK_EQ(column->is_nullable(), to_nullable);
->>>>>>> 1da0a2f03 (Revert "Revert "[Enhancement] Optimize hash join when hash table is empty" (#9701)" (#9720))
                     (*chunk)->append_column(std::move(column), slot->id());
                 }
             } else {
