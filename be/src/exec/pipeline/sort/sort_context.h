@@ -35,6 +35,7 @@ public:
         _chunks_sorter_partions.reserve(num_right_sinkers);
         _data_segment_heaps.reserve(num_right_sinkers);
     }
+    ~SortContext() override = default;
 
     void close(RuntimeState* state) override { _chunks_sorter_partions.clear(); }
 

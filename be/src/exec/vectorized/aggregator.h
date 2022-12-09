@@ -59,7 +59,7 @@ class Aggregator final : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    ~Aggregator() {
+    ~Aggregator() noexcept override {
         if (_state != nullptr) {
             close(_state);
         }

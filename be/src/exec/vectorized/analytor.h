@@ -38,7 +38,7 @@ class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
 
 public:
-    ~Analytor() {
+    ~Analytor() override {
         if (_state != nullptr) {
             close(_state);
         }
