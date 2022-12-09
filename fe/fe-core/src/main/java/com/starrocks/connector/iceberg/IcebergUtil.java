@@ -359,7 +359,7 @@ public class IcebergUtil {
                 break;
             case STRING:
             case UUID:
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
