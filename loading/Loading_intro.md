@@ -54,30 +54,51 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 3. 轮询查看导入作业的状态，直到状态变为 **FINISHED** 或 **CANCELLED**。
 
-在异步的导入方式 Broker Load、Routine Load 和 Spark Load 中，一个导入作业的执行流程主要分为 5 个阶段，如下图所示。
+Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
-![异步导入流程图](/assets/4.1-1.png)
+![Broker Load 和 Spark Load 流程图](/assets/4.1-1.png)
 
 每个阶段的描述如下：
 
-1. **PENDING**<br>
+1. **PENDING**
+
    该阶段是指提交导入作业后，等待 FE 调度执行。
 
-2. **ETL**<br>
+2. **ETL**
+
    该阶段执行数据的预处理，包括清洗、分区、排序、聚合等。
 
    > **说明**
    >
    > 如果是 Broker Load 作业，该阶段会直接完成。
 
-3. **LOADING**<br>
+3. **LOADING**
+
    该阶段先对数据进行清洗和转换，然后将数据发送给 BE 处理。当数据全部导入后，进入等待生效过程，此时，导入作业的状态依旧是 **LOADING**。
 
-4. **FINISHED**<br>
+4. **FINISHED**
+
    在导入作业涉及的所有数据均生效后，作业的状态变成 **FINISHED**，此时，导入的数据均可查询。**FINISHED** 是导入作业的最终状态。
 
-5. **CANCELLED**<br>
+5. **CANCELLED**
+
    在导入作业的状态变为 **FINISHED** 之前，您可以随时取消作业。另外，如果导入出现错误，StarRocks 系统也会自动取消导入作业。作业取消后，进入 **CANCELLED** 状态。**CANCELLED** 也是导入作业的一种最终状态。
+
+Routine Load 支持提交一个常驻的导入作业，通过不断地从指定的数据源读取数据，将数据导入到 StarRocks 中。总体流程如下图所示。
+
+![Routine Load 流程图](/assets/4.1-2.png)
+
+每个阶段的描述如下：
+
+1. 用户通过支持 MySQL 协议的客户端向 FE 提交一个导入作业。
+
+2. FE 将该导入作业拆分成若干个任务，每个任务负责导入若干个分区的数据。
+
+3. FE 将各个任务分配到指定的 BE 上执行。
+
+4. BE 完成分配的任务后，向 FE 汇报。
+
+5. FE 根据汇报结果，继续生成后续新的任务，或者对失败的任务进行重试，或者暂停任务的调度。
 
 ## 导入方式
 
@@ -104,7 +125,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
 
-![数据源与导入方式关系图](/assets/4.1.2.png)
+![数据源与导入方式关系图](/assets/4.1-3.png)
 
 ## 内存限制
 
