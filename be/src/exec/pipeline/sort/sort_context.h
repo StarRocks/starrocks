@@ -36,6 +36,7 @@ public:
               _sort_desc(sort_descs) {
         _chunks_sorter_partitions.reserve(num_right_sinkers);
     }
+    ~SortContext() override = default;
 
     void close(RuntimeState* state) override;
 

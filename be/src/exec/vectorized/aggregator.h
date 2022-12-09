@@ -145,7 +145,7 @@ class Aggregator : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    virtual ~Aggregator() {
+    virtual ~Aggregator() noexcept override {
         if (_state != nullptr) {
             close(_state);
         }
