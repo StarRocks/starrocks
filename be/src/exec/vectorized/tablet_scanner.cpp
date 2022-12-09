@@ -354,7 +354,6 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_parent->_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_parent->_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
-    COUNTER_UPDATE(_parent->_index_load_timer, _reader->stats().index_load_ns);
 
     COUNTER_UPDATE(_parent->_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_parent->_cached_pages_num_counter, _reader->stats().cached_pages_num);
