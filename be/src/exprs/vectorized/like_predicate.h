@@ -31,11 +31,9 @@ namespace starrocks::vectorized {
 class LikePredicate {
 public:
     // Like method
-    static Status like_prepare(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status like_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status like_close(starrocks_udf::FunctionContext* context,
-                             starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status like_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * like predicate method interface
@@ -47,11 +45,9 @@ public:
     DEFINE_VECTORIZED_FN(like);
 
     // regex method
-    static Status regex_prepare(starrocks_udf::FunctionContext* context,
-                                starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status regex_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status regex_close(starrocks_udf::FunctionContext* context,
-                              starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status regex_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * regex predicate method interface
@@ -153,7 +149,7 @@ private:
     /// Convert a LIKE pattern (with embedded % and _) into the corresponding
     /// regular expression pattern. Escaped chars are copied verbatim.
     template <bool fullMatch>
-    static std::string convert_like_pattern(starrocks_udf::FunctionContext* context, const Slice& pattern);
+    static std::string convert_like_pattern(FunctionContext* context, const Slice& pattern);
 
     static void remove_escape_character(std::string* search_string);
 
@@ -167,11 +163,11 @@ private:
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
     struct LikePredicateState;
-    static bool hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
+    static bool hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, FunctionContext*,
                                              const Slice& slice);
     template <bool full_match>
     static Status compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
-                                                starrocks_udf::FunctionContext* context, const Slice& slice);
+                                                FunctionContext* context, const Slice& slice);
     struct LikePredicateState {
         char escape_char{'\\'};
 

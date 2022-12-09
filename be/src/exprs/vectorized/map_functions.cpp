@@ -20,7 +20,7 @@
 
 namespace starrocks::vectorized {
 
-StatusOr<ColumnPtr> MapFunctions::map_size(starrocks_udf::FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -46,7 +46,7 @@ StatusOr<ColumnPtr> MapFunctions::map_size(starrocks_udf::FunctionContext* conte
     }
 }
 
-StatusOr<ColumnPtr> MapFunctions::map_keys(starrocks_udf::FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MapFunctions::map_keys(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -63,7 +63,7 @@ StatusOr<ColumnPtr> MapFunctions::map_keys(starrocks_udf::FunctionContext* conte
     }
 }
 
-StatusOr<ColumnPtr> MapFunctions::map_values(starrocks_udf::FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MapFunctions::map_values(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 

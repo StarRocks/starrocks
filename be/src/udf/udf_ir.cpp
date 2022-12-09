@@ -35,7 +35,7 @@
 #include "column/column.h"
 #include "udf/udf_internal.h"
 
-namespace starrocks_udf {
+namespace starrocks {
 
 int FunctionContext::get_num_args() const {
     return _impl->_arg_types.size();
@@ -87,4 +87,4 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     }
 }
 
-} // namespace starrocks_udf
+} // namespace starrocks

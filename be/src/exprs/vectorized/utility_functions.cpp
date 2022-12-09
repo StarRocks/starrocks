@@ -248,7 +248,7 @@ StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, cons
     return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, size);
 }
 
-StatusOr<ColumnPtr> UtilityFunctions::host_name(starrocks_udf::FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::host_name(FunctionContext* context, const Columns& columns) {
     std::string host_name;
     auto status = get_hostname(&host_name);
     if (status.ok()) {

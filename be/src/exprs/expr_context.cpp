@@ -114,9 +114,8 @@ void ExprContext::close(RuntimeState* state) {
     _pool.reset();
 }
 
-int ExprContext::register_func(RuntimeState* state, const starrocks_udf::FunctionContext::TypeDesc& return_type,
-                               const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types,
-                               int varargs_buffer_size) {
+int ExprContext::register_func(RuntimeState* state, const FunctionContext::TypeDesc& return_type,
+                               const std::vector<FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size) {
     _fn_contexts.push_back(FunctionContextImpl::create_context(state, _pool.get(), return_type, arg_types,
                                                                varargs_buffer_size, false));
     _fn_contexts_ptr = &_fn_contexts[0];

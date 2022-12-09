@@ -43,15 +43,15 @@
 namespace starrocks {
 
 FunctionUtils::FunctionUtils() {
-    starrocks_udf::FunctionContext::TypeDesc return_type;
-    std::vector<starrocks_udf::FunctionContext::TypeDesc> arg_types;
+    FunctionContext::TypeDesc return_type;
+    std::vector<FunctionContext::TypeDesc> arg_types;
     _memory_pool = new MemPool();
     _fn_ctx = FunctionContextImpl::create_context(_state, _memory_pool, return_type, arg_types, 0, false);
 }
 FunctionUtils::FunctionUtils(RuntimeState* state) {
     _state = state;
-    starrocks_udf::FunctionContext::TypeDesc return_type;
-    std::vector<starrocks_udf::FunctionContext::TypeDesc> arg_types;
+    FunctionContext::TypeDesc return_type;
+    std::vector<FunctionContext::TypeDesc> arg_types;
     _memory_pool = new MemPool();
     _fn_ctx = FunctionContextImpl::create_context(_state, _memory_pool, return_type, arg_types, 0, false);
 }

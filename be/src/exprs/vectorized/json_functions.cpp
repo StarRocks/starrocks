@@ -76,8 +76,7 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
     return Status::OK();
 }
 
-Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status JsonFunctions::json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -111,8 +110,7 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status JsonFunctions::json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
         if (parsed_paths != nullptr) {
@@ -391,8 +389,7 @@ static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice
     return out;
 }
 
-Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* context,
-                                               starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status JsonFunctions::native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
@@ -408,8 +405,7 @@ Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* c
     return Status::OK();
 }
 
-Status JsonFunctions::native_json_path_close(starrocks_udf::FunctionContext* context,
-                                             starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status JsonFunctions::native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
         delete state;

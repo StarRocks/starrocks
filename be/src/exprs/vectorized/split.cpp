@@ -39,8 +39,7 @@ struct SplitState {
     const void* (*find_delimiter)(const void* big, size_t big_len, const void* little, size_t little_len);
 };
 
-Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::split_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -69,8 +68,7 @@ Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status StringFunctions::split_close(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::split_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<SplitState*>(context->get_function_state(scope));
         delete state;

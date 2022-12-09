@@ -18,7 +18,7 @@
 #include "column/const_column.h"
 #include "column/type_traits.h"
 
-namespace starrocks_udf {
+namespace starrocks {
 class FunctionContext;
 }
 namespace starrocks::vectorized {
@@ -69,12 +69,11 @@ public:
     static ColumnPtr merge_column_and_null_column(ColumnPtr&& column, NullColumnPtr&& null_column);
 };
 
-#define DEFINE_VECTORIZED_FN(NAME) \
-    static StatusOr<ColumnPtr> NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
+#define DEFINE_VECTORIZED_FN(NAME) static StatusOr<ColumnPtr> NAME(FunctionContext* context, const Columns& columns)
 
 #define DEFINE_VECTORIZED_FN_TEMPLATE(NAME) \
     template <LogicalType Type>             \
-    static StatusOr<ColumnPtr> NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
+    static StatusOr<ColumnPtr> NAME(FunctionContext* context, const Columns& columns)
 
 #define VECTORIZED_FN_CTX() context
 #define VECTORIZED_FN_ARGS(IDX) columns[IDX]
