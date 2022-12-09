@@ -181,7 +181,7 @@ public class AWSCredential implements CloudCredential {
         if (!endpoint.isEmpty()) {
             configuration.set("fs.s3a.endpoint", endpoint);
         }
-        if (!endpoint.isEmpty()) {
+        if (!region.isEmpty()) {
             configuration.set("fs.s3a.endpoint.region", region);
         }
         return configuration;
