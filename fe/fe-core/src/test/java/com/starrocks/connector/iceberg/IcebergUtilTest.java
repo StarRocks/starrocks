@@ -79,7 +79,7 @@ public class IcebergUtilTest {
 
     @Test
     public void testString() {
-        Type stringType = ScalarType.createDefaultString();
+        Type stringType = ScalarType.createDefaultExternalTableString();
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = convertColumnType(icebergType);
         Assert.assertEquals(resType, stringType);
@@ -125,7 +125,7 @@ public class IcebergUtilTest {
                 Types.StringType.get(), Types.IntegerType.get());
         Type resType = convertColumnType(icebergType);
         Assert.assertEquals(resType,
-                new MapType(ScalarType.createDefaultString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(ScalarType.createDefaultExternalTableString(), ScalarType.createType(PrimitiveType.INT)));
     }
 
     @Test
