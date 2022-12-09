@@ -35,12 +35,8 @@ class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
                              BalancedChunkBuffer& chunk_buffer)
-<<<<<<< HEAD
             : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan), _scan_dop(dop) {}
-=======
-            : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan) {}
     ~OlapScanContext() override = default;
->>>>>>> 096c0944e ([Refactor] make ~ContextWithDependency virtual (#14924))
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
