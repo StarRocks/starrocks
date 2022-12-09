@@ -151,8 +151,8 @@ public:
 
     T get_repeated_value(size_t count) {
         DCHECK_GE(repeat_count_, count);
-        repeat_count_ -= count;
-        return current_value_;
+        repeat_count_ -= static_cast<uint32_t>(count);
+        return static_cast<T>(current_value_);
     }
 
 private:
@@ -421,7 +421,7 @@ inline size_t RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
             read_this_time = std::min((size_t)repeat_count_, read_this_time);
             std::fill(vals, vals + read_this_time, current_value_);
             vals += read_this_time;
-            repeat_count_ -= read_this_time;
+            repeat_count_ -= static_cast<uint32_t>(read_this_time);
             read_num += read_this_time;
         } else if (literal_count_ > 0) {
             read_this_time = std::min((size_t)literal_count_, read_this_time);
@@ -430,7 +430,7 @@ inline size_t RleDecoder<T>::GetBatch(T* vals, size_t batch_num) {
                 DCHECK(result);
                 vals++;
             }
-            literal_count_ -= read_this_time;
+            literal_count_ -= static_cast<uint32_t>(read_this_time);
             read_num += read_this_time;
         } else {
             if (!ReadHeader()) {

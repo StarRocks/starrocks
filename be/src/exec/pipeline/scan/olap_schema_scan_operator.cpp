@@ -28,7 +28,7 @@ OlapSchemaScanOperatorFactory::OlapSchemaScanOperatorFactory(int32_t id, ScanNod
                                                              const TPlanNode& t_node,
                                                              ChunkBufferLimiterPtr buffer_limiter)
         : ScanOperatorFactory(id, schema_scan_node),
-          _chunk_buffer(BalanceStrategy::kDirect, dop, std::move(buffer_limiter)) {
+          _chunk_buffer(BalanceStrategy::kDirect, static_cast<int>(dop), std::move(buffer_limiter)) {
     _ctx = std::make_shared<OlapSchemaScanContext>(t_node, _chunk_buffer);
 }
 

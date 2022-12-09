@@ -49,16 +49,15 @@ Status ParquetScanner::open() {
         return Status::OK();
     }
     auto range = _scan_range.ranges[0];
-    _num_of_columns_from_file = range.__isset.num_of_columns_from_file
-                                        ? implicit_cast<int>(range.num_of_columns_from_file)
-                                        : implicit_cast<int>(_src_slot_descriptors.size());
+    _num_of_columns_from_file = range.__isset.num_of_columns_from_file ? range.num_of_columns_from_file
+                                                                       : static_cast<int>(_src_slot_descriptors.size());
 
     _conv_funcs.resize(_num_of_columns_from_file, nullptr);
     _cast_exprs.resize(_num_of_columns_from_file, nullptr);
 
     // column from path
     if (range.__isset.num_of_columns_from_file) {
-        int nums = range.columns_from_path.size();
+        auto nums = range.columns_from_path.size();
         for (const auto& rng : _scan_range.ranges) {
             if (nums != rng.columns_from_path.size()) {
                 return Status::InternalError("Different range different columns.");
@@ -72,7 +71,7 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
     _pool.clear();
     (*chunk) = std::make_shared<Chunk>();
-    size_t column_pos = 0;
+    int column_pos = 0;
     _chunk_filter.clear();
     for (auto i = 0; i < _num_of_columns_from_file; ++i) {
         SlotDescriptor* slot_desc = _src_slot_descriptors[i];
@@ -92,7 +91,7 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_counter->fill_ns);
     size_t num_elements =
             std::min<size_t>((_max_chunk_size - _chunk_start_idx), (_batch->num_rows() - _batch_start_idx));
-    size_t column_pos = 0;
+    int column_pos = 0;
     _chunk_filter.resize(_chunk_filter.size() + num_elements, 1);
     for (auto i = 0; i < _num_of_columns_from_file; ++i) {
         SlotDescriptor* slot_desc = _src_slot_descriptors[i];
@@ -140,7 +139,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
         auto range = _scan_range.ranges.at(_next_file - 1);
         if (range.__isset.num_of_columns_from_file) {
             fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
-                                   cast_chunk->num_rows());
+                                   static_cast<int>(cast_chunk->num_rows()));
         }
         if (VLOG_ROW_IS_ON) {
             VLOG_ROW << "after finalize chunk: " << cast_chunk->debug_columns();

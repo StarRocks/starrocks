@@ -14,8 +14,11 @@
 
 #include "common/minidump.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 #include <client/linux/handler/exception_handler.h>
 #include <common/linux/linux_libc_support.h>
+#pragma GCC diagnostic pop
+
 #include <glob.h>
 #include <google_breakpad/common/minidump_format.h>
 
@@ -137,10 +140,10 @@ void Minidump::check_and_rotate_minidumps(int max_minidumps, const std::string& 
 
     // Remove oldest entries until max_minidumps are left.
     if (timestamp_to_path.size() <= max_minidumps) return;
-    int files_to_delete = timestamp_to_path.size() - max_minidumps;
+    auto files_to_delete = timestamp_to_path.size() - max_minidumps;
     DCHECK_GT(files_to_delete, 0);
     auto to_delete = timestamp_to_path.begin();
-    for (int i = 0; i < files_to_delete; ++i, ++to_delete) {
+    for (auto i = 0; i < files_to_delete; ++i, ++to_delete) {
         std::error_code err;
         std::filesystem::remove(to_delete->second, err);
         if (!err) {
@@ -156,10 +159,10 @@ bool Minidump::dump_callback(const google_breakpad::MinidumpDescriptor& descript
     if (succeeded) {
         // Write message to stdout/stderr
         const char msg[] = "Dump path: ";
-        const int msg_len = sizeof(msg) / sizeof(msg[0]) - 1;
+        const auto msg_len = sizeof(msg) / sizeof(msg[0]) - 1;
         const char* path = descriptor.path();
         // We use breakpad's reimplementation of strlen to avoid calling into libc.
-        const int path_len = my_strlen(path);
+        const auto path_len = my_strlen(path);
         // We use the linux syscall support methods from chromium here as per the
         // recommendation of the breakpad docs to avoid calling into other shared libraries.
         sys_write(STDOUT_FILENO, msg, msg_len);

@@ -177,11 +177,11 @@ void Chunk::remove_column_by_index(size_t idx) {
 
 [[maybe_unused]] void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
     DCHECK(std::is_sorted(indexes.begin(), indexes.end()));
-    for (int i = indexes.size(); i > 0; i--) {
+    for (auto i = indexes.size(); i > 0; i--) {
         _columns.erase(_columns.begin() + indexes[i - 1]);
     }
     if (_schema != nullptr && !indexes.empty()) {
-        for (int i = indexes.size(); i > 0; i--) {
+        for (auto i = indexes.size(); i > 0; i--) {
             _schema->remove(indexes[i - 1]);
         }
         rebuild_cid_index();
@@ -259,19 +259,21 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
     return chunk;
 }
 
-void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, size_t from, size_t size) {
     DCHECK_EQ(_columns.size(), src.columns().size());
-    for (size_t i = 0; i < _columns.size(); ++i) {
-        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+    for (auto i = 0; i < _columns.size(); ++i) {
+        _columns[i]->append_selective(*src.columns()[i].get(), indexes, static_cast<uint32_t>(from),
+                                      static_cast<uint32_t>(size));
     }
 }
 
-void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    size_t num_columns = _columns.size();
+void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, size_t from, size_t size) {
+    auto num_columns = _columns.size();
     DCHECK_EQ(num_columns, src.columns().size());
 
-    for (size_t i = 0; i < num_columns; ++i) {
-        _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+    for (auto i = 0; i < num_columns; ++i) {
+        _columns[i]->append_selective(*src.columns()[i].get(), indexes, static_cast<uint32_t>(from),
+                                      static_cast<uint32_t>(size));
         src.columns()[i].reset();
     }
 }
@@ -366,14 +368,17 @@ void Chunk::check_or_die() {
 }
 #endif
 
-std::string Chunk::debug_row(uint32_t index) const {
+std::string Chunk::debug_row(size_t index) const {
     std::stringstream os;
     os << "[";
-    for (size_t col = 0; col < _columns.size() - 1; ++col) {
-        os << _columns[col]->debug_item(index);
+    const auto idx = static_cast<uint32_t>(index);
+    for (auto col = 0; col + 1 < _columns.size(); ++col) {
+        os << _columns[col]->debug_item(idx);
         os << ", ";
     }
-    os << _columns[_columns.size() - 1]->debug_item(index) << "]";
+    if (!_columns.empty()) {
+        os << _columns[_columns.size() - 1]->debug_item(idx) << "]";
+    }
     return os.str();
 }
 

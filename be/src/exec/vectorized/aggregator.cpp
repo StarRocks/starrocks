@@ -69,7 +69,8 @@ Status Aggregator::open(RuntimeState* state) {
     // but prepare is executed in bthread, which will cause the JNI code to crash
 
     if (_group_by_expr_ctxs.empty()) {
-        _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        _single_agg_state =
+                _mem_pool->allocate_aligned(_agg_states_total_size, static_cast<int>(_max_agg_state_align_size));
         RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
         auto call_agg_create = [this]() {
             for (int i = 0; i < _agg_functions.size(); i++) {
@@ -264,7 +265,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _max_agg_state_align_size = std::max(_max_agg_state_align_size, HashTableKeyAllocator::aligned);
     _agg_states_total_size = (_agg_states_total_size + _max_agg_state_align_size - 1) / _max_agg_state_align_size *
                              _max_agg_state_align_size;
-    _state_allocator.aggregate_key_size = _agg_states_total_size;
+    _state_allocator.aggregate_key_size = static_cast<int>(_agg_states_total_size);
     _state_allocator.pool = _mem_pool.get();
 
     _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
@@ -347,7 +348,8 @@ Status Aggregator::_reset_state(RuntimeState* state) {
     _mem_pool->free_all();
 
     if (_group_by_expr_ctxs.empty()) {
-        _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        _single_agg_state =
+                _mem_pool->allocate_aligned(_agg_states_total_size, static_cast<int>(_max_agg_state_align_size));
         for (int i = 0; i < _agg_functions.size(); i++) {
             _agg_functions[i]->create(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
         }
@@ -442,7 +444,7 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size
     // they were not in hash tables.
     const int64_t input_rows = prev_row_returned - input_chunk_size;
     const int64_t aggregated_input_rows = input_rows - _num_rows_returned;
-    double current_reduction = static_cast<double>(aggregated_input_rows) / ht_rows;
+    double current_reduction = static_cast<double>(aggregated_input_rows) / static_cast<double>(ht_rows);
 
     // inaccurate, which could lead to a divide by zero below.
     if (aggregated_input_rows <= 0) {
@@ -922,7 +924,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                                                  : HashVariantType::Type::phase2_slice_fx16;
             }
             if (!has_null_column) {
-                fixed_byte_size = max_size;
+                fixed_byte_size = static_cast<typeof(fixed_byte_size)>(max_size);
             }
         }
     }

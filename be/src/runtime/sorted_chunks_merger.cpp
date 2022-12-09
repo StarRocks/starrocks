@@ -169,7 +169,8 @@ Status SortedChunksMerger::get_next(ChunkPtr* chunk, bool* eos) {
         if (current_chunk == ptr) {
             selective_values.push_back(cursor->get_current_position_in_chunk());
         } else {
-            (*chunk)->append_selective(*current_chunk, selective_values.data(), 0, selective_values.size());
+            (*chunk)->append_selective(*current_chunk, selective_values.data(), 0,
+                                       static_cast<uint32_t>(selective_values.size()));
             current_chunk = ptr;
             selective_values.clear();
             selective_values.push_back(cursor->get_current_position_in_chunk());

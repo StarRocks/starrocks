@@ -332,25 +332,25 @@ bool StrictAutoDigitLessThan(const char* a, int alen, const char* b, int blen);
 
 struct autodigit_less : public binary_function<const string&, const string&, bool> {
     bool operator()(const string& a, const string& b) const {
-        return AutoDigitLessThan(a.data(), a.size(), b.data(), b.size());
+        return AutoDigitLessThan(a.data(), static_cast<int>(a.size()), b.data(), static_cast<int>(b.size()));
     }
 };
 
 struct autodigit_greater : public binary_function<const string&, const string&, bool> {
     bool operator()(const string& a, const string& b) const {
-        return AutoDigitLessThan(b.data(), b.size(), a.data(), a.size());
+        return AutoDigitLessThan(b.data(), static_cast<int>(b.size()), a.data(), static_cast<int>(a.size()));
     }
 };
 
 struct strict_autodigit_less : public binary_function<const string&, const string&, bool> {
     bool operator()(const string& a, const string& b) const {
-        return StrictAutoDigitLessThan(a.data(), a.size(), b.data(), b.size());
+        return StrictAutoDigitLessThan(a.data(), static_cast<int>(a.size()), b.data(), static_cast<int>(b.size()));
     }
 };
 
 struct strict_autodigit_greater : public binary_function<const string&, const string&, bool> {
     bool operator()(const string& a, const string& b) const {
-        return StrictAutoDigitLessThan(b.data(), b.size(), a.data(), a.size());
+        return StrictAutoDigitLessThan(b.data(), static_cast<int>(b.size()), a.data(), static_cast<int>(a.size()));
     }
 };
 

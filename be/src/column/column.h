@@ -203,7 +203,7 @@ public:
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
     void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
-        return append_selective(src, indexes.data(), 0, indexes.size());
+        return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
@@ -331,18 +331,48 @@ public:
     // For non Nullable and non floating point types, nan_direction_hint is ignored.
     virtual int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const = 0;
 
+    template <typename T1, typename T2>
+    using NeitherUint32NorUint32Guard =
+            typename std::enable_if_t<(std::is_integral_v<T1> && !std::is_same_v<T1, uint32_t>) ||
+                                              (std::is_integral_v<T2> && !std::is_same_v<T2, uint32_t>),
+                                      T1>;
+    template <typename T>
+    using NotInt32Guard = typename std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, int32_t>, T>;
+
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+    template <typename F, typename T, typename = NeitherUint32NorUint32Guard<F, T>>
+    void fnv_hash(uint32_t* seed, F from, T to) const {
+        fnv_hash(seed, static_cast<uint32_t>(from), static_cast<uint32_t>(to));
+    }
 
     // used by data loading compute tablet bucket
     virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+    template <typename F, typename T, typename = NeitherUint32NorUint32Guard<F, T>>
+    void crc32_hash(uint32_t* seed, F from, T to) const {
+        crc32_hash(seed, static_cast<uint32_t>(from), static_cast<uint32_t>(to));
+    }
 
     virtual void crc32_hash_at(uint32_t* seed, int32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
 
+    template <typename T, typename = NotInt32Guard<T>>
+    void crc32_hash_at(uint32_t* seed, T idx) const {
+        crc32_hash_at(seed, static_cast<int32_t>(idx));
+    }
+
     virtual void fnv_hash_at(uint32_t* seed, int32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
+    template <typename T, typename = NotInt32Guard<T>>
+    void fnv_hash_at(uint32_t* seed, T idx) const {
+        fnv_hash_at(seed, static_cast<int32_t>(idx));
+    }
 
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
+
+    template <typename F, typename T, typename = NeitherUint32NorUint32Guard<F, T>>
+    int64_t xor_checksum(F from, T to) const {
+        return xor_checksum(static_cast<uint32_t>(from), static_cast<uint32_t>(to));
+    }
 
     // Push one row to MysqlRowBuffer
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;

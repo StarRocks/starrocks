@@ -124,7 +124,7 @@ inline StringValue StringValue::trim() const {
         ++begin;
     }
 
-    int32_t end = len - 1;
+    int32_t end = static_cast<int32_t>(len - 1);
 
     while (end > begin && ptr[end] == ' ') {
         --end;

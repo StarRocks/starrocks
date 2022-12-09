@@ -21,7 +21,7 @@
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-
+#pragma GCC diagnostic ignored "-Wconversion"
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \
     M(TYPE_TINYINT)                \
@@ -60,7 +60,7 @@ void release_jvalue(bool is_box, jvalue val) {
 
 // Used For UDAF
 template <bool handle_null>
-jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num) {
+jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, size_t row_num) {
     DCHECK(handle_null || !col->is_nullable());
     DCHECK(!col->is_constant());
 
@@ -126,9 +126,9 @@ jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int ro
     return v;
 }
 
-template jvalue cast_to_jvalue<true>(LogicalType type, bool is_boxed, const Column* col, int row_num);
+template jvalue cast_to_jvalue<true>(LogicalType type, bool is_boxed, const Column* col, size_t row_num);
 
-template jvalue cast_to_jvalue<false>(LogicalType type, bool is_boxed, const Column* col, int row_num);
+template jvalue cast_to_jvalue<false>(LogicalType type, bool is_boxed, const Column* col, size_t row_num);
 
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val) {
     DCHECK(method_type_desc.is_box);
@@ -239,7 +239,7 @@ Status ConvertDirectBufferVistor::do_visit(const BinaryColumn& column) {
         ctx->set_error(msg);                          \
     }
 
-jobject JavaDataTypeConverter::convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, int num_rows) {
+jobject JavaDataTypeConverter::convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, size_t num_rows) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
     int inputs[num_rows];
@@ -253,7 +253,7 @@ jobject JavaDataTypeConverter::convert_to_states(FunctionContext* ctx, uint8_t**
 }
 
 jobject JavaDataTypeConverter::convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
-                                                             const uint8_t* filter, int num_rows) {
+                                                             const uint8_t* filter, size_t num_rows) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
     int inputs[num_rows];
@@ -271,7 +271,7 @@ jobject JavaDataTypeConverter::convert_to_states_with_filter(FunctionContext* ct
 }
 
 Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                                     const Column** columns, int num_cols, int num_rows,
+                                                     const Column** columns, size_t num_cols, size_t num_rows,
                                                      std::vector<jobject>* res) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
@@ -307,3 +307,4 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::
     return Status::OK();
 }
 } // namespace starrocks
+#pragma GCC diagnostic pop

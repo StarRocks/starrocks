@@ -37,9 +37,9 @@
 #include <cerrno>
 #include <climits>
 #include <ctime>
-
+#pragma GCC diagnostic ignored "-Wconversion"
 #include "gutil/linux_syscall_support.h"
-
+#pragma GCC diagnostic pop
 #define FUTEX_WAIT 0
 #define FUTEX_WAKE 1
 #define FUTEX_PRIVATE_FLAG 128

@@ -196,7 +196,7 @@ public:
     }
 
     void append_default(size_t count) override {
-        _offsets.insert(_offsets.end(), count, _bytes.size());
+        _offsets.insert(_offsets.end(), count, static_cast<Offset>(_bytes.size()));
         _slices_cache = false;
     }
 
@@ -221,7 +221,7 @@ public:
 
     uint32_t serialize_size(size_t idx) const override {
         // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
-        return sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx];
+        return sizeof(uint32_t) + static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
     }
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
@@ -301,13 +301,13 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
-        size_t size = this->size();
+        auto size = static_cast<uint32_t>(this->size());
         if (size == 0) {
             return "[]";
         }
 
         ss << "[";
-        for (size_t i = 0; i < size - 1; i++) {
+        for (auto i = 0; i + 1 < size; i++) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {

@@ -115,7 +115,7 @@ public:
     size_t num_key_columns() const;
     size_t num_rows_per_row_block() const;
     size_t next_unique_id() const;
-    size_t field_index(const string& field_name) const;
+    int field_index(const string& field_name) const;
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
@@ -393,7 +393,7 @@ inline size_t Tablet::next_unique_id() const {
     return _tablet_meta->tablet_schema().next_column_unique_id();
 }
 
-inline size_t Tablet::field_index(const string& field_name) const {
+inline int Tablet::field_index(const string& field_name) const {
     return _tablet_meta->tablet_schema().field_index(field_name);
 }
 

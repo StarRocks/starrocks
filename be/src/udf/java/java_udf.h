@@ -65,49 +65,121 @@ public:
     jstring to_jstring(const std::string& str);
     jmethodID getMethod(jclass clazz, const std::string& method, const std::string& sig);
     jmethodID getStaticMethod(jclass clazz, const std::string& method, const std::string& sig);
+
+    template <typename T>
+    using NotIntGuard = std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, int>, T>;
+    template <typename C, typename R>
+    using NeitherIntNorIntGuard = std::enable_if_t<(std::is_integral_v<C> && !std::is_same_v<C, int>) ||
+                                                           (std::is_integral_v<R> && !std::is_same_v<R, int>),
+                                                   R>;
+
     // create a object array
     jobject create_array(int sz);
+    template <typename T, typename = NotIntGuard<T>>
+    jobject create_array(T sz) {
+        return create_array(static_cast<int>(sz));
+    }
+
     // convert column data to Java Object Array
     jobject create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz);
+
+    template <typename R, typename C, typename = NeitherIntNorIntGuard<R, C>>
+    jobject create_boxed_array(int type, R num_rows, bool nullable, DirectByteBuffer* buffs, C sz) {
+        return create_boxed_array(type, static_cast<int>(num_rows), nullable, buffs, static_cast<int>(sz));
+    }
+
     // create object array with the same elements
     jobject create_object_array(jobject o, int num_rows);
 
+    template <typename T, typename = NotIntGuard<T>>
+    jobject create_object_array(jobject o, T num_rows) {
+        return create_object_array(o, static_cast<int>(num_rows));
+    }
+
     // batch update single
     void batch_update_single(AggBatchCallStub* stub, int state, jobject* input, int cols, int rows);
+    template <typename R, typename C, typename = NeitherIntNorIntGuard<R, C>>
+    void batch_update_single(AggBatchCallStub* stub, int state, jobject* input, C cols, R rows) {
+        batch_update_single(stub, state, input, static_cast<int>(cols), static_cast<int>(rows));
+    }
 
     // batch update input: state col1 col2
     void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject states, jobject* input, int cols);
+    template <typename T, typename = NotIntGuard<T>>
+    void batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject states, jobject* input, T cols) {
+        batch_update(ctx, udaf, update, states, input, static_cast<int>(cols));
+    }
 
     // batch update if state is not null
     // input: state col1 col2
     void batch_update_if_not_null(FunctionContext* ctx, jobject udaf, jobject update, jobject states, jobject* input,
                                   int cols);
+    template <typename C, typename = NotIntGuard<C>>
+    void batch_update_if_not_null(FunctionContext* ctx, jobject udaf, jobject update, jobject states, jobject* input,
+                                  C cols) {
+        batch_update_if_not_null(ctx, udaf, update, states, input, static_cast<int>(cols));
+    }
 
     // only used for AGG streaming
     void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
+    template <typename C, typename = NotIntGuard<C>>
+    void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, C cols) {
+        batch_update_state(ctx, udaf, update, input, static_cast<int>(cols));
+    }
 
     // batch call evalute by callstub
     jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
+    template <typename C, typename R, typename = NeitherIntNorIntGuard<C, R>>
+    jobject batch_call(BatchEvaluateStub* stub, jobject* input, C cols, R rows) {
+        return batch_call(stub, input, static_cast<int>(cols), static_cast<int>(rows));
+    }
+
     // batch call method by reflect
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols, int rows);
+
+    template <typename C, typename R, typename = NeitherIntNorIntGuard<C, R>>
+    jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, C cols, R rows) {
+        return batch_call(ctx, caller, method, input, static_cast<int>(cols), static_cast<int>(rows));
+    }
     // batch call no-args function by reflect
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows);
+    template <typename R, typename = NotIntGuard<R>>
+    jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, R rows) {
+        return batch_call(ctx, caller, method, static_cast<int>(rows));
+    }
     // batch call int()
     // callers should be Object[]
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
 
+    template <typename R, typename = NotIntGuard<R>>
+    jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, R rows) {
+        return int_batch_call(ctx, callers, method, static_cast<int>(rows));
+    }
     // type: LogicalType
     // col: result column
     // jcolumn: Integer[]/String[]
     void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
 
+    template <typename R, typename = NotIntGuard<R>>
+    void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, R rows) {
+        get_result_from_boxed_array(ctx, type, col, jcolumn, static_cast<int>(rows));
+    }
+
     Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
 
+    template <typename R, typename = NotIntGuard<R>>
+    Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, R rows) {
+        return get_result_from_boxed_array(type, col, jcolumn, static_cast<int>(rows));
+    }
     // convert int handle to jobject
     // return a local ref
     jobject convert_handle_to_jobject(FunctionContext* ctx, int state);
 
+    template <typename S, typename = NotIntGuard<S>>
+    jobject convert_handle_to_jobject(FunctionContext* ctx, S state) {
+        return convert_handle_to_jobject(ctx, static_cast<int>(state));
+    }
     // convert handle list to jobject array (Object[])
     jobject convert_handles_to_jobjects(FunctionContext* ctx, jobject state_ids);
 
@@ -347,7 +419,7 @@ public:
             : _ctx(ctx), _caller(caller), _stub_clazz(std::move(clazz)), _stub_method(std::move(method)) {}
 
     FunctionContext* ctx() { return _ctx; }
-    jobject batch_evaluate(int num_rows, jobject* input, int cols);
+    jobject batch_evaluate(size_t num_rows, jobject* input, size_t cols);
 
 private:
     FunctionContext* _ctx;

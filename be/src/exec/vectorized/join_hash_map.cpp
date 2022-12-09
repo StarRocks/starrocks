@@ -65,14 +65,14 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
     uint32_t rem = row_count % state->chunk_size();
 
     if (!null_columns.empty()) {
-        for (size_t i = 0; i < quo; i++) {
+        for (uint32_t i = 0; i < quo; i++) {
             _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * i,
                                     state->chunk_size(), &ptr);
         }
         _build_nullable_columns(table_items, probe_state, data_columns, null_columns, 1 + state->chunk_size() * quo,
                                 rem, &ptr);
     } else {
-        for (size_t i = 0; i < quo; i++) {
+        for (uint32_t i = 0; i < quo; i++) {
             _build_columns(table_items, probe_state, data_columns, 1 + state->chunk_size() * i, state->chunk_size(),
                            &ptr);
         }
@@ -83,14 +83,14 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
 void SerializedJoinBuildFunc::_build_columns(JoinHashTableItems* table_items, HashTableProbeState* probe_state,
                                              const Columns& data_columns, uint32_t start, uint32_t count,
                                              uint8_t** ptr) {
-    for (size_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         table_items->build_slice[start + i] = JoinHashMapHelper::get_hash_key(data_columns, start + i, *ptr);
         probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(table_items->build_slice[start + i],
                                                                             table_items->bucket_size);
         *ptr += table_items->build_slice[start + i].size;
     }
 
-    for (size_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         table_items->next[start + i] = table_items->first[probe_state->buckets[i]];
         table_items->first[probe_state->buckets[i]] = start + i;
     }
@@ -108,7 +108,7 @@ void SerializedJoinBuildFunc::_build_nullable_columns(JoinHashTableItems* table_
         }
     }
 
-    for (size_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         if (probe_state->is_nulls[i] == 0) {
             table_items->build_slice[start + i] = JoinHashMapHelper::get_hash_key(data_columns, start + i, *ptr);
             probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<Slice>(table_items->build_slice[start + i],
@@ -117,7 +117,7 @@ void SerializedJoinBuildFunc::_build_nullable_columns(JoinHashTableItems* table_
         }
     }
 
-    for (size_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         if (probe_state->is_nulls[i] == 0) {
             table_items->next[start + i] = table_items->first[probe_state->buckets[i]];
             table_items->first[probe_state->buckets[i]] = start + i;
@@ -163,7 +163,7 @@ void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items,
 
 void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
                                             const Columns& data_columns, uint8_t* ptr) {
-    uint32_t row_count = probe_state->probe_row_count;
+    auto row_count = probe_state->probe_row_count;
 
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->probe_slice[i] = JoinHashMapHelper::get_hash_key(data_columns, i, ptr);
@@ -180,7 +180,7 @@ void SerializedJoinProbeFunc::_probe_column(const JoinHashTableItems& table_item
 void SerializedJoinProbeFunc::_probe_nullable_column(const JoinHashTableItems& table_items,
                                                      HashTableProbeState* probe_state, const Columns& data_columns,
                                                      const NullColumns& null_columns, uint8_t* ptr) {
-    uint32_t row_count = probe_state->probe_row_count;
+    auto row_count = probe_state->probe_row_count;
 
     for (uint32_t i = 0; i < row_count; i++) {
         probe_state->is_nulls[i] = null_columns[0]->get_data()[i];
@@ -476,7 +476,7 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
         }
     }
 
-    _table_items->row_count += chunk->num_rows();
+    _table_items->row_count += static_cast<uint32_t>(chunk->num_rows());
 }
 
 void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {

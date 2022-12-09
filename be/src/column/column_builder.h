@@ -31,7 +31,7 @@ public:
     using DatumType = RunTimeCppType<Type>;
     using MovableType = RunTimeCppMovableType<Type>;
 
-    ColumnBuilder(int32_t chunk_size) {
+    ColumnBuilder(size_t chunk_size) {
         static_assert(!pt_is_decimal<Type>, "Not support Decimal32/64/128 types");
         _has_null = false;
         _column = RunTimeColumnType<Type>::create();
@@ -39,7 +39,7 @@ public:
         reserve(chunk_size);
     }
 
-    ColumnBuilder(int32_t chunk_size, int precision, int scale) {
+    ColumnBuilder(size_t chunk_size, int precision, int scale) {
         _has_null = false;
         _column = RunTimeColumnType<Type>::create();
         _null_column = NullColumn::create();
@@ -62,6 +62,11 @@ public:
     void append(const DatumType& value) {
         _null_column->append(DATUM_NOT_NULL);
         _column->append(value);
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, DatumType>, T> >
+    void append(const T& value) {
+        append(static_cast<DatumType>(value));
     }
 
     void append(MovableType value) {
@@ -127,6 +132,7 @@ class NullableBinaryColumnBuilder : public ColumnBuilder<TYPE_VARCHAR> {
 public:
     using ColumnType = RunTimeColumnType<TYPE_VARCHAR>;
     using Offsets = ColumnType::Offsets;
+    using Offset = Offsets::value_type;
     NullableBinaryColumnBuilder() : ColumnBuilder(nullptr) {
         _column = ColumnType::create();
         _null_column = NullColumn::create();
@@ -155,21 +161,21 @@ public:
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
         NullColumn::Container& nulls = _null_column->get_data();
-        offsets[i + 1] = bytes.size();
+        offsets[i + 1] = static_cast<Offset>(bytes.size());
         nulls[i] = 1;
     }
 
     void append_empty(size_t i) {
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
-        offsets[i + 1] = bytes.size();
+        offsets[i + 1] = static_cast<Offset>(bytes.size());
     }
 
     void append(uint8_t* begin, uint8_t* end, size_t i) {
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
         bytes.insert(bytes.end(), begin, end);
-        offsets[i + 1] = bytes.size();
+        offsets[i + 1] = static_cast<Offset>(bytes.size());
     }
     // for concat and concat_ws, several columns are concatenated
     // together into a string, so append must be invoked as many times
@@ -191,7 +197,7 @@ public:
     void append_complete(size_t i) {
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
-        offsets[i + 1] = bytes.size();
+        offsets[i + 1] = static_cast<Offset>(bytes.size());
     }
 
     // move current ptr backwards for n bytes, used in concat_ws

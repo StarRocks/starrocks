@@ -81,8 +81,8 @@ protected:
 
     // TODO: remove this to the base ScanContext.
     /// Shared scan
-    virtual void attach_chunk_source(int32_t source_index) = 0;
-    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual void attach_chunk_source(size_t source_index) = 0;
+    virtual void detach_chunk_source(size_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
     virtual ChunkPtr get_chunk_from_buffer() = 0;
     virtual size_t num_buffered_chunks() const = 0;
@@ -99,8 +99,8 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
-    void _close_chunk_source_unlocked(RuntimeState* state, int index);
-    void _close_chunk_source(RuntimeState* state, int index);
+    void _close_chunk_source_unlocked(RuntimeState* state, size_t index);
+    void _close_chunk_source(RuntimeState* state, size_t index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _detach_chunk_sources();

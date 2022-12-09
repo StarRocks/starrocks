@@ -51,16 +51,17 @@ private:
 
 class JavaDataTypeConverter {
 public:
-    static jobject convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, int num_rows);
+    static jobject convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, size_t num_rows);
     static jobject convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
-                                                 const uint8_t* filter, int num_rows);
+                                                 const uint8_t* filter, size_t num_rows);
 
     static Status convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                         const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
+                                         const Column** columns, size_t num_cols, size_t num_rows,
+                                         std::vector<jobject>* res);
 };
 
 template <bool handle_null>
-jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num);
+jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, size_t row_num);
 void release_jvalue(bool is_boxed, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
 } // namespace starrocks

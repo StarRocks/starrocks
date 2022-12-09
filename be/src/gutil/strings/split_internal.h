@@ -33,6 +33,7 @@ using std::vector;
 #include <initializer_list>
 #endif // LANG_CXX11
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace strings {
 
 namespace internal {
@@ -376,3 +377,4 @@ private:
 } // namespace internal
 
 } // namespace strings
+#pragma GCC diagnostic pop

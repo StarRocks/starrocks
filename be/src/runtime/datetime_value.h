@@ -94,7 +94,7 @@ struct TimeInterval {
     }
 };
 
-enum TimeType { TIME_TIME = 1, TIME_DATE = 2, TIME_DATETIME = 3 };
+enum TimeType : uint8_t { TIME_TIME = 1, TIME_DATE = 2, TIME_DATETIME = 3 };
 
 // Used to compute week
 const int WEEK_MONDAY_FIRST = 1;
@@ -117,6 +117,7 @@ const int TIME_MAX_VALUE_SECONDS = 3600 * TIME_MAX_HOUR + 60 * TIME_MAX_MINUTE +
 
 uint8_t mysql_week_mode(uint32_t mode);
 
+#pragma GCC diagnostic ignored "-Wconversion"
 class DateTimeValue {
 public:
     // Constructor
@@ -141,7 +142,6 @@ public:
         _type = TIME_DATETIME;
         uint64_t date = datetime / 1000000;
         uint64_t time = datetime % 1000000;
-
         _year = date / 10000;
         date %= 10000;
         _month = date / 100;
@@ -204,7 +204,7 @@ public:
     // 'YYMMDD', 'YYYYMMDD', 'YYMMDDHHMMSS', 'YYYYMMDDHHMMSS'
     // 'YY-MM-DD', 'YYYY-MM-DD', 'YY-MM-DD HH.MM.SS'
     // 'YYYYMMDDTHHMMSS'
-    bool from_date_str(const char* str, int len);
+    bool from_date_str(const char* str, size_t len);
 
     // Construct Date/Datetime type value from int64_t value.
     // Return true if convert success. Otherwise return false.
@@ -502,6 +502,7 @@ std::ostream& operator<<(std::ostream& os, const DateTimeValue& value);
 
 std::size_t hash_value(DateTimeValue const& value);
 
+#pragma GCC diagnostic pop
 } // namespace starrocks
 
 namespace std {

@@ -122,7 +122,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             if (row_idx_iter == rowIndexes.end()) {
                 return false;
             }
-            const orc::proto::ColumnStatistics& stats = row_idx_iter->second.entry(rowGroupIdx).statistics();
+            const orc::proto::ColumnStatistics& stats =
+                    row_idx_iter->second.entry(static_cast<int>(rowGroupIdx)).statistics();
             ColumnPtr min_col = min_chunk->columns()[i];
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
@@ -134,7 +135,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
         } else {
             // search partition columns.
             int part_idx = 0;
-            const int part_size = _scanner_ctx.partition_columns.size();
+            const auto part_size = _scanner_ctx.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
                 if (_scanner_ctx.partition_columns[part_idx].col_name == slot->col_name()) {
                     break;
@@ -248,15 +249,15 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 size_t old_size = offset_data[i + 1] - offset_data[i];
                 size_t new_size = remove_trailing_spaces(s, old_size);
                 bytes.insert(bytes.end(), s, s + new_size);
-                offsets[i] = total_size;
+                offsets[i] = static_cast<Offsets::value_type>(total_size);
                 total_size += new_size;
             }
-            offsets[dict_size] = total_size;
+            offsets[dict_size] = static_cast<Offsets::value_type>(total_size);
         } else {
             bytes.insert(bytes.end(), start, end);
             // type mismatch, have to use loop to assign.
             for (size_t i = 0; i < offset_size; i++) {
-                offsets[i] = offset_data[i];
+                offsets[i] = static_cast<Offsets::value_type>(offset_data[i]);
             }
         }
 

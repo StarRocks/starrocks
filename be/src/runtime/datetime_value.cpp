@@ -43,6 +43,7 @@
 
 #include "util/timezone_utils.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 const uint64_t log_10_int[] = {1,         10,         100,         1000,         10000UL,       100000UL,
@@ -99,7 +100,7 @@ bool DateTimeValue::check_date() const {
 // The interval format is that with no delimiters
 // YYYY-MM-DD HH-MM-DD.FFFFFF AM in default format
 // 0    1  2  3  4  5  6      7
-bool DateTimeValue::from_date_str(const char* date_str, int len) {
+bool DateTimeValue::from_date_str(const char* date_str, size_t len) {
     const char* ptr = date_str;
     const char* end = date_str + len;
     // ONLY 2, 6 can follow by a sapce
@@ -1636,3 +1637,4 @@ std::size_t hash_value(DateTimeValue const& value) {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

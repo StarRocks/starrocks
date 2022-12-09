@@ -37,6 +37,7 @@
 #include "udf/java/utils.h"
 #include "util/defer_op.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 struct UDFFunctionCallHelper {
@@ -270,3 +271,4 @@ void JavaFunctionCallExpr::_call_udf_close() {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

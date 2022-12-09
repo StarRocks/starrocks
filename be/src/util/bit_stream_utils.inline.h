@@ -40,6 +40,7 @@
 #include "util/bit_packing.inline.h"
 #include "util/bit_stream_utils.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 using starrocks::BitUtil;
 
 namespace starrocks {
@@ -261,3 +262,4 @@ inline int BatchedBitReader::unpack_batch(int bit_width, int num_values, T* v) {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

@@ -76,7 +76,7 @@ inline int64_t MonotonicSeconds() {
 }
 
 inline double GetMonoTimeSecondsAsDouble() {
-    return GetMonoTimeMicros() / static_cast<double>(MICROS_PER_SEC);
+    return static_cast<double>(GetMonoTimeMicros()) / static_cast<double>(MICROS_PER_SEC);
 }
 
 // Returns the time since the Epoch measured in nanoseconds.

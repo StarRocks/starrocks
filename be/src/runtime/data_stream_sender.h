@@ -118,7 +118,7 @@ public:
 
     const std::vector<ExprContext*>& get_partition_exprs() const { return _partition_expr_ctxs; }
 
-    int32_t get_destinations_size() const { return _channels.size(); }
+    size_t get_destinations_size() const { return _channels.size(); }
 
     PlanNodeId get_dest_node_id() const { return _dest_node_id; }
 

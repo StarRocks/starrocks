@@ -32,7 +32,11 @@ public:
         _tdigest.deserialize(src.data + 1);
     }
 
-    void add(float value) { _tdigest.add(value); }
+    void add(Value value) { _tdigest.add(value); }
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, Value>, T>>
+    void add(T value) {
+        add(static_cast<Value>(value));
+    }
 
     void merge(const PercentileValue* other) { _tdigest.merge(&other->_tdigest); }
 
@@ -57,6 +61,10 @@ public:
     }
 
     Value quantile(Value q) { return _tdigest.quantile(q); }
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, Value>, T>>
+    Value quantile(T q) {
+        return quantile(static_cast<Value>(q));
+    }
 
 private:
     enum PercentileDataType { TDIGEST = 0 };

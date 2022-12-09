@@ -46,11 +46,11 @@ Status KafkaDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
     DCHECK(_consumers.size() >= 1);
 
     // divide partitions
-    int consumer_size = _consumers.size();
+    auto consumer_size = _consumers.size();
     std::vector<std::map<int32_t, int64_t>> divide_parts(consumer_size);
     int i = 0;
     for (auto& kv : ctx->kafka_info->begin_offset) {
-        int idx = i % consumer_size;
+        auto idx = i % consumer_size;
         divide_parts[idx].emplace(kv.first, kv.second);
         i++;
     }
@@ -255,7 +255,7 @@ Status PulsarDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) 
     DCHECK(_consumers.size() == ctx->pulsar_info->partitions.size());
 
     // assign partition to consumers
-    int consumer_size = _consumers.size();
+    const auto consumer_size = _consumers.size();
     for (int i = 0; i < consumer_size; ++i) {
         auto iter = ctx->pulsar_info->initial_positions.find(ctx->pulsar_info->partitions[i]);
         if (iter != ctx->pulsar_info->initial_positions.end()) {

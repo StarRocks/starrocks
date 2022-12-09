@@ -279,7 +279,7 @@ Status UserFunctionCache::_load_cache_entry_internal(UserFunctionCacheEntryPtr& 
 
 std::string UserFunctionCache::_make_lib_file(int64_t function_id, const std::string& checksum,
                                               const std::string& shuffix) {
-    int shard = std::abs(function_id % kLibShardNum);
+    auto shard = std::abs(function_id % kLibShardNum);
     return fmt::format("{}/{}/{}.{}{}", _lib_dir, shard, function_id, checksum, shuffix);
 }
 

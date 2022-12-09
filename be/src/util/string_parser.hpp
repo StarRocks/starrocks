@@ -87,7 +87,7 @@ public:
     // In the case of overflow, the max/min value for the data type will be returned.
     // Assumes s represents a decimal number.
     template <typename T>
-    static inline T string_to_int(const char* s, int len, ParseResult* result) {
+    static inline T string_to_int(const char* s, size_t len, ParseResult* result) {
         T ans = string_to_int_internal<T>(s, len, result);
         if (LIKELY(*result == PARSE_SUCCESS)) {
             return ans;
@@ -101,7 +101,7 @@ public:
     // In the case of overflow, the max/min value for the data type will be returned.
     // Assumes s represents a decimal number.
     template <typename T>
-    static inline T string_to_unsigned_int(const char* s, int len, ParseResult* result) {
+    static inline T string_to_unsigned_int(const char* s, size_t len, ParseResult* result) {
         T ans = string_to_unsigned_int_internal<T>(s, len, result);
         if (LIKELY(*result == PARSE_SUCCESS)) {
             return ans;
@@ -113,7 +113,7 @@ public:
 
     // Convert a string s representing a number in given base into a decimal number.
     template <typename T>
-    static inline T string_to_int(const char* s, int len, int base, ParseResult* result) {
+    static inline T string_to_int(const char* s, size_t len, int base, ParseResult* result) {
         T ans = string_to_int_internal<T>(s, len, base, result);
         if (LIKELY(*result == PARSE_SUCCESS)) {
             return ans;
@@ -124,13 +124,13 @@ public:
     }
 
     template <typename T>
-    static inline T string_to_float(const char* s, int len, ParseResult* result) {
+    static inline T string_to_float(const char* s, size_t len, ParseResult* result) {
         T ans = string_to_float_internal<T>(s, len, result);
         return ans;
     }
 
     // Parses a string for 'true' or 'false', case insensitive.
-    static inline bool string_to_bool(const char* s, int len, ParseResult* result) {
+    static inline bool string_to_bool(const char* s, size_t len, ParseResult* result) {
         bool ans = string_to_bool_internal(s, len, result);
         if (LIKELY(*result == PARSE_SUCCESS)) {
             return ans;
@@ -141,7 +141,8 @@ public:
     }
 
     template <typename T = __int128>
-    static inline T string_to_decimal(const char* s, int len, int type_precision, int type_scale, ParseResult* result);
+    static inline T string_to_decimal(const char* s, size_t s_len, int type_precision, int type_scale,
+                                      ParseResult* result);
 
     template <typename T>
     static Status split_string_to_map(const std::string& base, const T element_separator, const T key_value_separator,
@@ -175,35 +176,35 @@ private:
     // Assumes s represents a decimal number.
     // Return PARSE_FAILURE on leading whitespace. Trailing whitespace is allowed.
     template <typename T>
-    static inline T string_to_int_internal(const char* s, int len, ParseResult* result);
+    static inline T string_to_int_internal(const char* s, size_t len, ParseResult* result);
 
     // This is considerably faster than glibc's implementation.
     // In the case of overflow, the max/min value for the data type will be returned.
     // Assumes s represents a decimal number.
     // Return PARSE_FAILURE on leading whitespace. Trailing whitespace is allowed.
     template <typename T>
-    static inline T string_to_unsigned_int_internal(const char* s, int len, ParseResult* result);
+    static inline T string_to_unsigned_int_internal(const char* s, size_t s_len, ParseResult* result);
 
     // Convert a string s representing a number in given base into a decimal number.
     // Return PARSE_FAILURE on leading whitespace. Trailing whitespace is allowed.
     template <typename T>
-    static inline T string_to_int_internal(const char* s, int len, int base, ParseResult* result);
+    static inline T string_to_int_internal(const char* s, size_t s_len, int base, ParseResult* result);
 
     // Converts an ascii string to an integer of type T assuming it cannot overflow
     // and the number is positive.
     // Leading whitespace is not allowed. Trailing whitespace will be skipped.
     template <typename T>
-    static inline T string_to_int_no_overflow(const char* s, int len, ParseResult* result);
+    static inline T string_to_int_no_overflow(const char* s, size_t s_len, ParseResult* result);
 
     template <typename T>
-    static inline T string_to_float_internal(const char* s, int len, ParseResult* result);
+    static inline T string_to_float_internal(const char* s, size_t s_len, ParseResult* result);
 
     // parses a string for 'true' or 'false', case insensitive
     // Return PARSE_FAILURE on leading whitespace. Trailing whitespace is allowed.
-    static inline bool string_to_bool_internal(const char* s, int len, ParseResult* result);
+    static inline bool string_to_bool_internal(const char* s, size_t s_len, ParseResult* result);
 
     // Returns true if s only contains whitespace.
-    static inline bool is_all_whitespace(const char* s, int len) {
+    static inline bool is_all_whitespace(const char* s, size_t len) {
         for (int i = 0; i < len; ++i) {
             if (!LIKELY(is_whitespace(s[i]))) {
                 return false;
@@ -214,7 +215,7 @@ private:
 
 public:
     // Returns the position of the first non-whitespace character in s.
-    static inline int skip_leading_whitespace(const char* s, int len) {
+    static inline int skip_leading_whitespace(const char* s, size_t len) {
         int i = 0;
         while (i < len && is_whitespace(s[i])) {
             ++i;
@@ -230,7 +231,8 @@ public:
 }; // end of class StringParser
 
 template <typename T>
-inline T StringParser::string_to_int_internal(const char* s, int len, ParseResult* result) {
+inline T StringParser::string_to_int_internal(const char* s, size_t s_len, ParseResult* result) {
+    int len = static_cast<int>(s_len);
     if (UNLIKELY(len <= 0)) {
         *result = PARSE_FAILURE;
         return 0;
@@ -238,13 +240,13 @@ inline T StringParser::string_to_int_internal(const char* s, int len, ParseResul
 
     typedef typename std::make_unsigned<T>::type UnsignedT;
     UnsignedT val = 0;
-    UnsignedT max_val = StringParser::numeric_limits<T>(false);
+    auto max_val = static_cast<UnsignedT>(StringParser::numeric_limits<T>(false));
     bool negative = false;
     int i = 0;
     switch (*s) {
     case '-':
         negative = true;
-        max_val = StringParser::numeric_limits<T>(false) + 1;
+        max_val = static_cast<UnsignedT>(StringParser::numeric_limits<T>(false) + 1);
     case '+':
         ++i;
     }
@@ -265,9 +267,9 @@ inline T StringParser::string_to_int_internal(const char* s, int len, ParseResul
             // This is a tricky check to see if adding this digit will cause an overflow.
             if (UNLIKELY(val > (max_div_10 - (digit > max_mod_10)))) {
                 *result = PARSE_OVERFLOW;
-                return negative ? (~max_val + 1) : max_val;
+                return static_cast<UnsignedT>(negative ? (~max_val + 1) : max_val);
             }
-            val = val * 10 + digit;
+            val = static_cast<UnsignedT>(val * 10 + digit);
         } else {
             if ((UNLIKELY(i == first || !is_all_whitespace(s + i, len - i)))) {
                 // Reject the string because either the first char was not a digit,
@@ -285,7 +287,8 @@ inline T StringParser::string_to_int_internal(const char* s, int len, ParseResul
 }
 
 template <typename T>
-inline T StringParser::string_to_unsigned_int_internal(const char* s, int len, ParseResult* result) {
+inline T StringParser::string_to_unsigned_int_internal(const char* s, size_t s_len, ParseResult* result) {
+    auto len = static_cast<int>(s_len);
     if (UNLIKELY(len <= 0)) {
         *result = PARSE_FAILURE;
         return 0;
@@ -332,7 +335,8 @@ inline T StringParser::string_to_unsigned_int_internal(const char* s, int len, P
 }
 
 template <typename T>
-inline T StringParser::string_to_int_internal(const char* s, int len, int base, ParseResult* result) {
+inline T StringParser::string_to_int_internal(const char* s, size_t s_len, int base, ParseResult* result) {
+    int len = static_cast<int>(s_len);
     typedef typename std::make_unsigned<T>::type UnsignedT;
     UnsignedT val = 0;
     UnsignedT max_val = StringParser::numeric_limits<T>(false);
@@ -390,7 +394,8 @@ inline T StringParser::string_to_int_internal(const char* s, int len, int base, 
 }
 
 template <typename T>
-inline T StringParser::string_to_int_no_overflow(const char* s, int len, ParseResult* result) {
+inline T StringParser::string_to_int_no_overflow(const char* s, size_t s_len, ParseResult* result) {
+    auto len = static_cast<int>(s_len);
     T val = 0;
     if (UNLIKELY(len == 0)) {
         *result = PARSE_SUCCESS;
@@ -398,15 +403,15 @@ inline T StringParser::string_to_int_no_overflow(const char* s, int len, ParseRe
     }
     // Factor out the first char for error handling speeds up the loop.
     if (LIKELY(s[0] >= '0' && s[0] <= '9')) {
-        val = s[0] - '0';
+        val = static_cast<T>(s[0] - '0');
     } else {
         *result = PARSE_FAILURE;
         return 0;
     }
     for (int i = 1; i < len; ++i) {
         if (LIKELY(s[i] >= '0' && s[i] <= '9')) {
-            T digit = s[i] - '0';
-            val = val * 10 + digit;
+            T digit = static_cast<T>(s[i] - '0');
+            val = static_cast<T>(val * 10 + digit);
         } else {
             if ((UNLIKELY(!is_all_whitespace(s + i, len - i)))) {
                 *result = PARSE_FAILURE;
@@ -421,7 +426,8 @@ inline T StringParser::string_to_int_no_overflow(const char* s, int len, ParseRe
 }
 
 template <typename T>
-inline T StringParser::string_to_float_internal(const char* s, int len, ParseResult* result) {
+inline T StringParser::string_to_float_internal(const char* s, size_t s_len, ParseResult* result) {
+    auto len = static_cast<int>(s_len);
     if (UNLIKELY(len <= 0)) {
         *result = PARSE_FAILURE;
         return 0;
@@ -530,7 +536,8 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
     return 0;
 }
 
-inline bool StringParser::string_to_bool_internal(const char* s, int len, ParseResult* result) {
+inline bool StringParser::string_to_bool_internal(const char* s, size_t s_len, ParseResult* result) {
+    auto len = static_cast<int>(s_len);
     *result = PARSE_SUCCESS;
 
     if (len == 1) {
@@ -590,8 +597,9 @@ inline int StringParser::StringParseTraits<__int128>::max_ascii_len() {
 }
 
 template <typename T>
-inline T StringParser::string_to_decimal(const char* s, int len, int type_precision, int type_scale,
+inline T StringParser::string_to_decimal(const char* s, size_t s_len, int type_precision, int type_scale,
                                          ParseResult* result) {
+    auto len = static_cast<int>(s_len);
     // Special cases:
     //   1) '' == Fail, an empty string fails to parse.
     //   2) '   #   ' == #, leading and trailing white space is ignored.

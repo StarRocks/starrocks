@@ -63,8 +63,8 @@ public:
     connector::ConnectorType connector_type();
 
     // TODO: refactor it into the base class
-    void attach_chunk_source(int32_t source_index) override;
-    void detach_chunk_source(int32_t source_index) override;
+    void attach_chunk_source(size_t source_index) override;
+    void detach_chunk_source(size_t source_index) override;
     bool has_shared_chunk_source() const override;
     ChunkPtr get_chunk_from_buffer() override;
     size_t num_buffered_chunks() const override;

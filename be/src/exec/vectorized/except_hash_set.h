@@ -46,7 +46,7 @@ struct ExceptSliceFlagHash {
     static const uint32_t CRC_SEED = 0x811C9DC5;
     std::size_t operator()(const ExceptSliceFlag& sliceMayUnneed) const {
         const Slice& slice = sliceMayUnneed.slice;
-        return crc_hash_64(slice.data, slice.size, CRC_SEED);
+        return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_SEED);
     }
 };
 

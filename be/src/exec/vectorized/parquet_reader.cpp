@@ -67,7 +67,7 @@ Status ParquetReaderWrap::next_selected_row_group() {
 
     return Status::EndOfFile("End of row group");
 }
-
+#pragma GCC diagnostic ignored "-Wconversion"
 Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
                                               const std::string& timezone) {
     try {
@@ -148,6 +148,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
         return Status::InternalError(str_error.str());
     }
 }
+#pragma GCC diagnostic pop
 
 void ParquetReaderWrap::close() {
     [[maybe_unused]] auto st = _parquet->Close();
@@ -186,6 +187,7 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
     return Status::OK();
 }
 
+#pragma GCC diagnostic ignored "-Wconversion"
 Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof) {
     if (_current_line_of_group >= _rows_of_group) { // read next row group
         VLOG(7) << "read_record_batch, current group id:" << _current_group
@@ -246,6 +248,8 @@ const std::shared_ptr<arrow::RecordBatch>& ParquetReaderWrap::get_batch() {
     _current_line_of_group += _batch->num_rows();
     return _batch;
 }
+
+#pragma GCC diagnostic pop
 
 // ====================================================================================================================
 ParquetChunkReader::ParquetChunkReader(std::shared_ptr<ParquetReaderWrap>&& parquet_reader,

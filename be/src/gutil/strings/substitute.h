@@ -72,9 +72,9 @@ public:
     // overload const string& as well, since this allows us to avoid a temporary
     // object.
     inline SubstituteArg(const char* value) // NOLINT(runtime/explicit)
-            : text_(value), size_(value == nullptr ? 0 : strlen(text_)) {}
+            : text_(value), size_(static_cast<int>(value == nullptr ? 0 : strlen(text_))) {}
     inline SubstituteArg(const string& value) // NOLINT(runtime/explicit)
-            : text_(value.data()), size_(value.size()) {}
+            : text_(value.data()), size_(static_cast<int>(value.size())) {}
     inline SubstituteArg(const StringPiece& value) // NOLINT(runtime/explicit)
             : text_(value.data()), size_(value.size()) {}
 
@@ -89,37 +89,37 @@ public:
         scratch_[0] = value;
     }
     inline SubstituteArg(short value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastInt32ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastInt32ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(unsigned short value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastUInt32ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastUInt32ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(int value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastInt32ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastInt32ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(unsigned int value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastUInt32ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastUInt32ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(long value) // NOLINT(runtime/explicit)
             : text_(scratch_),
-              size_((sizeof(value) == 4 ? FastInt32ToBufferLeft(value, scratch_)
-                                        : FastInt64ToBufferLeft(value, scratch_)) -
-                    scratch_) {}
+              size_(static_cast<int>((sizeof(value) == 4 ? FastInt32ToBufferLeft(value, scratch_)
+                                                         : FastInt64ToBufferLeft(value, scratch_)) -
+                                     scratch_)) {}
     inline SubstituteArg(unsigned long value) // NOLINT(runtime/explicit)
             : text_(scratch_),
-              size_((sizeof(value) == 4 ? FastUInt32ToBufferLeft(value, scratch_)
-                                        : FastUInt64ToBufferLeft(value, scratch_)) -
-                    scratch_) {}
+              size_(static_cast<int>((sizeof(value) == 4 ? FastUInt32ToBufferLeft(value, scratch_)
+                                                         : FastUInt64ToBufferLeft(value, scratch_)) -
+                                     scratch_)) {}
     inline SubstituteArg(long long value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastInt64ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastInt64ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(unsigned long long value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastUInt64ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastUInt64ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(__int128 value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastInt64ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastInt128ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(unsigned __int128 value) // NOLINT(runtime/explicit)
-            : text_(scratch_), size_(FastUInt64ToBufferLeft(value, scratch_) - scratch_) {}
+            : text_(scratch_), size_(static_cast<int>(FastUInt128ToBufferLeft(value, scratch_) - scratch_)) {}
     inline SubstituteArg(float value) // NOLINT(runtime/explicit)
-            : text_(FloatToBuffer(value, scratch_)), size_(strlen(text_)) {}
+            : text_(FloatToBuffer(value, scratch_)), size_(static_cast<int>(strlen(text_))) {}
     inline SubstituteArg(double value) // NOLINT(runtime/explicit)
-            : text_(DoubleToBuffer(value, scratch_)), size_(strlen(text_)) {}
+            : text_(DoubleToBuffer(value, scratch_)), size_(static_cast<int>(strlen(text_))) {}
     inline SubstituteArg(bool value) // NOLINT(runtime/explicit)
-            : text_(value ? "true" : "false"), size_(strlen(text_)) {}
+            : text_(value ? "true" : "false"), size_(static_cast<int>(strlen(text_))) {}
     // void* values, with the exception of char*, are printed as
     // StringPrintf with format "%p" would ("0x<hex value>"), with the
     // exception of NULL, which is printed as "NULL".

@@ -82,7 +82,7 @@ bool OlapMetaScanner::has_more() {
 
 Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     TTabletId tablet_id = scan_range->tablet_id;
-    SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+    SchemaHash schema_hash = static_cast<SchemaHash>(strtoul(scan_range->schema_hash.c_str(), nullptr, 10));
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;

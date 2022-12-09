@@ -110,7 +110,7 @@ Status LoadPathMgr::allocate_dir(const std::string& db, const std::string& label
             std::lock_guard<std::mutex> l(_lock);
             std::string shard = SHARD_PREFIX + std::to_string(_next_shard++ % MAX_SHARD_NUM);
             path = _path_vec[_idx] + "/" + db + "/" + shard + "/" + label;
-            _idx = (_idx + 1) % size;
+            _idx = static_cast<typeof(_idx)>((_idx + 1) % size);
         }
         status = fs::create_directories(path);
         if (LIKELY(status.ok())) {

@@ -38,7 +38,7 @@ std::ostream& operator<<(std::ostream& os, __int128 const& value) {
             --d;
             *d = '-';
         }
-        int len = std::end(buffer) - d;
+        auto len = static_cast<int>(std::end(buffer) - d);
         if (os.rdbuf()->sputn(d, len) != len) {
             os.setstate(std::ios_base::badbit);
         }

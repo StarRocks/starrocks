@@ -299,8 +299,8 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     if (!http_req->header(HTTP_TIMEOUT).empty()) {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         const auto& timeout = http_req->header(HTTP_TIMEOUT);
-        auto timeout_second =
-                StringParser::string_to_unsigned_int<int32_t>(timeout.c_str(), timeout.length(), &parse_result);
+        auto timeout_second = StringParser::string_to_unsigned_int<int32_t>(
+                timeout.c_str(), static_cast<int>(timeout.length()), &parse_result);
         if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             return Status::InvalidArgument("Invalid timeout format");
         }

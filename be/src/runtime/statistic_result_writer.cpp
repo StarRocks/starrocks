@@ -108,7 +108,7 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     }
 
     // Step 1: compute expr
-    int num_columns = _output_expr_ctxs.size();
+    const auto num_columns = _output_expr_ctxs.size();
 
     Columns result_columns;
     result_columns.reserve(num_columns);
@@ -152,7 +152,7 @@ Status StatisticResultWriter::_fill_dict_statistic_data(int version, const Colum
     auto dictColumnViewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
     std::vector<TStatisticData> data_list;
-    int num_rows = chunk->num_rows();
+    const auto num_rows = chunk->num_rows();
     data_list.resize(num_rows);
 
     for (int i = 0; i < num_rows; ++i) {
@@ -193,7 +193,7 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const Columns
     auto* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
 
     std::vector<TStatisticData> data_list;
-    int num_rows = chunk->num_rows();
+    const auto num_rows = chunk->num_rows();
 
     data_list.resize(num_rows);
     for (int i = 0; i < num_rows; ++i) {
@@ -202,7 +202,7 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const Columns
         data_list[i].__set_tableId(tableIds[i]);
         data_list[i].__set_columnName(nameColumn->get_slice(i).to_string());
         data_list[i].__set_rowCount(rowCounts->get(i).get_int64());
-        data_list[i].__set_dataSize(dataSizes->get(i).get_int64());
+        data_list[i].__set_dataSize(static_cast<double>(dataSizes->get(i).get_int64()));
         data_list[i].__set_countDistinct(countDistincts->get(i).get_int64());
         data_list[i].__set_nullCount(nullCounts->get(i).get_int64());
         data_list[i].__set_max(maxColumn->get_slice(i).to_string());
@@ -230,7 +230,7 @@ Status StatisticResultWriter::_fill_statistic_histogram(int version, const Colum
     auto* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
 
     std::vector<TStatisticData> data_list;
-    int num_rows = chunk->num_rows();
+    const auto num_rows = chunk->num_rows();
 
     data_list.resize(num_rows);
     for (int i = 0; i < num_rows; ++i) {

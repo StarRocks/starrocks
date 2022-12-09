@@ -92,13 +92,13 @@ void ArrayColumn::append_datum(const Datum& datum) {
     for (size_t i = 0; i < array_size; ++i) {
         _elements->append_datum(array[i]);
     }
-    _offsets->append(_offsets->get_data().back() + array_size);
+    _offsets->append(_offsets->get_data().back() + static_cast<Offsets::value_type>(array_size));
 }
 
 void ArrayColumn::append_array_element(const Column& elem, size_t null_elem) {
     _elements->append(elem);
     _elements->append_nulls(null_elem);
-    _offsets->append(_offsets->get_data().back() + elem.size() + null_elem);
+    _offsets->append(_offsets->get_data().back() + static_cast<Offsets::value_type>(elem.size() + null_elem));
 }
 
 void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
@@ -112,7 +112,7 @@ void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
 
     for (size_t i = offset; i < offset + count; i++) {
         size_t l = src_offsets.get_data()[i + 1] - src_offsets.get_data()[i];
-        _offsets->append(_offsets->get_data().back() + l);
+        _offsets->append(_offsets->get_data().back() + static_cast<Offsets::value_type>(l));
     }
 }
 
@@ -138,7 +138,7 @@ void ArrayColumn::append_value_multiple_times(const void* value, size_t count) {
         for (size_t i = 0; i < array_size; ++i) {
             _elements->append_datum(array[i]);
         }
-        _offsets->append(_offsets->get_data().back() + array_size);
+        _offsets->append(_offsets->get_data().back() + static_cast<Offsets::value_type>(array_size));
     }
 }
 
@@ -159,7 +159,7 @@ void ArrayColumn::fill_default(const Filter& filter) {
     std::vector<uint32_t> indexes;
     for (size_t i = 0; i < filter.size(); i++) {
         if (filter[i] == 1 && get_element_size(i) > 0) {
-            indexes.push_back(i);
+            indexes.push_back(static_cast<uint32_t>(i));
         }
     }
     auto default_column = clone_empty();
@@ -200,7 +200,7 @@ Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
             new_array_column->append(src, i, 1);
             idx_begin = indexes[i] + 1;
         }
-        int32_t remain_count = _offsets->size() - idx_begin - 1;
+        auto remain_count = _offsets->size() - idx_begin - 1;
         if (remain_count > 0) {
             new_array_column->append(*this, idx_begin, remain_count);
         }
@@ -219,7 +219,7 @@ uint32_t ArrayColumn::serialize(size_t idx, uint8_t* pos) {
     for (size_t i = 0; i < array_size; ++i) {
         ser_size += _elements->serialize(offset + i, pos + ser_size);
     }
-    return ser_size;
+    return static_cast<uint32_t>(ser_size);
 }
 
 uint32_t ArrayColumn::serialize_default(uint8_t* pos) {
@@ -399,7 +399,7 @@ void ArrayColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
 
     *hash = HashUtil::fnv_hash(&array_size, sizeof(array_size), *hash);
     for (size_t i = 0; i < array_size; ++i) {
-        uint32_t ele_offset = offset + i;
+        auto ele_offset = static_cast<uint32_t>(offset + i);
         _elements->fnv_hash_at(hash, ele_offset);
     }
 }
@@ -411,7 +411,7 @@ void ArrayColumn::crc32_hash_at(uint32_t* hash, int32_t idx) const {
 
     *hash = HashUtil::zlib_crc_hash(&array_size, sizeof(array_size), *hash);
     for (size_t i = 0; i < array_size; ++i) {
-        uint32_t ele_offset = offset + i;
+        auto ele_offset = static_cast<uint32_t>(offset + i);
         _elements->crc32_hash_at(hash, ele_offset);
     }
 }
@@ -525,7 +525,7 @@ std::string ArrayColumn::debug_item(uint32_t idx) const {
         if (i > 0) {
             ss << ",";
         }
-        ss << _elements->debug_item(offset + i);
+        ss << _elements->debug_item(static_cast<uint32_t>(offset + i));
     }
     ss << "]";
     return ss.str();
@@ -533,7 +533,7 @@ std::string ArrayColumn::debug_item(uint32_t idx) const {
 
 std::string ArrayColumn::debug_string() const {
     std::stringstream ss;
-    for (size_t i = 0; i < size(); ++i) {
+    for (uint32_t i = 0; i < size(); ++i) {
         if (i > 0) {
             ss << ", ";
         }

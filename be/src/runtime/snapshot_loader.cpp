@@ -126,7 +126,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
     // we report to frontend for every 10 files, and we will cancel the job if
     // the job has already been cancelled in frontend.
     int report_counter = 0;
-    int total_num = src_to_dest_path.size();
+    int total_num = static_cast<int>(src_to_dest_path.size());
     int finished_num = 0;
     for (const auto& iter : src_to_dest_path) {
         const std::string& src_path = iter.first;
@@ -269,7 +269,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
     // 3. for each src path, download it to local storage
     int report_counter = 0;
-    int total_num = src_to_dest_path.size();
+    int total_num = static_cast<int>(src_to_dest_path.size());
     int finished_num = 0;
     for (const auto& iter : src_to_dest_path) {
         const std::string& remote_path = iter.first;

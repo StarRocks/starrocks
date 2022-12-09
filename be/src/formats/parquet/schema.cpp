@@ -87,7 +87,7 @@ void SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement& t_schema, co
     field->level_info = cur_level_info;
 
     _physical_fields.push_back(field);
-    field->physical_column_index = _physical_fields.size() - 1;
+    field->physical_column_index = static_cast<int>(_physical_fields.size() - 1);
 }
 
 // Special case mentioned in the format spec:

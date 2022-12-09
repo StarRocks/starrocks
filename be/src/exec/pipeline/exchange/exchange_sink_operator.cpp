@@ -374,7 +374,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
             }
         }
     }
-    _num_shuffles = _channels.size() * _num_shuffles_per_channel;
+    _num_shuffles = static_cast<int32_t>(_channels.size() * _num_shuffles_per_channel);
 
     _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
 
@@ -424,7 +424,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
     _channel_indices.resize(_channels.size());
     std::iota(_channel_indices.begin(), _channel_indices.end(), 0);
-    srand(reinterpret_cast<uint64_t>(this));
+    srand(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(this)));
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
@@ -465,7 +465,7 @@ StatusOr<ChunkPtr> ExchangeSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    uint16_t num_rows = chunk->num_rows();
+    auto num_rows = chunk->num_rows();
     if (num_rows == 0) {
         return Status::OK();
     }
@@ -502,8 +502,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             // 1. create a new chunk PB to serialize
             ChunkPB* pchunk = _chunk_request->add_chunks();
             // 2. serialize input chunk to pchunk
-            TRY_CATCH_BAD_ALLOC(
-                    RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size())));
+            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(
+                    serialize_chunk(send_chunk, pchunk, &_is_first_chunk, static_cast<int>(_channels.size()))));
             _current_request_bytes += pchunk->data().size();
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > config::max_transmit_batched_bytes) {
@@ -539,7 +539,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
         bool real_sent = false;
         RETURN_IF_ERROR(channel->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
         if (real_sent) {
-            _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
+            _curr_random_channel_idx = static_cast<int32_t>((_curr_random_channel_idx + 1) % local_channels.size());
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
@@ -602,8 +602,9 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
                     continue;
                 }
 
-                RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(send_chunk, driver_sequence,
-                                                                          _row_indexes.data(), from, size, state));
+                RETURN_IF_ERROR(_channels[channel_id]->add_rows_selective(
+                        send_chunk, driver_sequence, _row_indexes.data(), static_cast<uint32_t>(from),
+                        static_cast<uint32_t>(size), state));
             }
         }
     }
@@ -646,7 +647,8 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
+            _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(
+                    static_cast<int>(src->columns().size()), _encode_level);
             StatusOr<ChunkPB> res = Status::OK();
             TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src, _encode_context));
             RETURN_IF_ERROR(res);
@@ -681,7 +683,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                                       &_compression_scratch));
         } else {
-            int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+            auto max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
             if (_compression_scratch.size() < max_compressed_size) {
                 _compression_scratch.resize(max_compressed_size);
@@ -694,7 +696,8 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             _compression_scratch.resize(compressed_slice.size);
         }
 
-        double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
+        double compress_ratio =
+                static_cast<double>(uncompressed_size) / static_cast<double>(_compression_scratch.size());
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);

@@ -70,7 +70,7 @@ Status MultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_d
     {
         std::unique_lock l(_mutex);
 
-        int32_t closed_source_number = (_consumer_number - _opened_source_number);
+        int32_t closed_source_number = static_cast<int32_t>(_consumer_number - _opened_source_number);
 
         cell->used_count = closed_source_number;
         cell->accumulated_row_size = _current_accumulated_row_size;

@@ -12,7 +12,7 @@ using std::string;
 #include "gutil/integral_types.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/stringpiece.h"
-
+#pragma GCC diagnostic ignored "-Wconversion"
 // The AlphaNum type was designed to be used as the parameter type for StrCat().
 // I suppose that any routine accepting either a string or a number could accept
 // it.  The basic idea is that by accepting a "const AlphaNum &" as an argument
@@ -303,3 +303,4 @@ void StrAppend(string* dest, const AlphaNum& a, const AlphaNum& b, const AlphaNu
 void StrAppend(string* dest, const AlphaNum& a, const AlphaNum& b, const AlphaNum& c, const AlphaNum& d,
                const AlphaNum& e, const AlphaNum& f = gEmptyAlphaNum, const AlphaNum& g = gEmptyAlphaNum,
                const AlphaNum& h = gEmptyAlphaNum, const AlphaNum& i = gEmptyAlphaNum);
+#pragma GCC diagnostic pop

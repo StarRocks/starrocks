@@ -33,6 +33,7 @@
 //
 // base::identity_ is used to make a non-deduced context, which
 // forces all callers to explicitly specify the template argument.
+#pragma GCC diagnostic ignored "-Wconversion"
 template <typename To>
 inline To implicit_cast(typename base::identity_<To>::type to) {
     return to;
@@ -385,3 +386,5 @@ inline Enum tight_enum_cast(int e_val) {
     }
     return static_cast<Enum>(e_val);
 }
+
+#pragma GCC diagnostic pop

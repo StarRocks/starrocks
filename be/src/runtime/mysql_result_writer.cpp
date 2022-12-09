@@ -110,17 +110,17 @@ Status MysqlResultWriter::close() {
 
 StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
-    int num_rows = chunk->num_rows();
+    const auto num_rows = chunk->num_rows();
     auto result = std::make_unique<TFetchDataResult>();
     auto& result_rows = result->result_batch.rows;
     result_rows.resize(num_rows);
 
     Columns result_columns;
     // Step 1: compute expr
-    int num_columns = _output_expr_ctxs.size();
+    const auto num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
-    for (int i = 0; i < num_columns; ++i) {
+    for (auto i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
@@ -132,14 +132,14 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
     {
         _row_buffer->reserve(128);
         SCOPED_TIMER(_convert_tuple_timer);
-        for (int i = 0; i < num_rows; ++i) {
+        for (auto i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
             for (auto& result_column : result_columns) {
                 result_column->put_mysql_row_buffer(_row_buffer, i);
             }
             size_t len = _row_buffer->length();
             _row_buffer->move_content(&result_rows[i]);
-            _row_buffer->reserve(len * 1.1);
+            _row_buffer->reserve(static_cast<size_t>(static_cast<double>(len) * 1.1));
         }
     }
     return result;
@@ -147,15 +147,15 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
 
 StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
-    int num_rows = chunk->num_rows();
+    const auto num_rows = chunk->num_rows();
     std::vector<TFetchDataResultPtr> results;
 
     Columns result_columns;
     // Step 1: compute expr
-    int num_columns = _output_expr_ctxs.size();
+    const auto num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
-    for (int i = 0; i < num_columns; ++i) {
+    for (auto i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
@@ -174,7 +174,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
         auto& result_rows = result->result_batch.rows;
         result_rows.resize(num_rows);
 
-        for (int i = 0; i < num_rows; ++i) {
+        for (auto i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
             for (auto& result_column : result_columns) {
                 result_column->put_mysql_row_buffer(_row_buffer, i);
@@ -193,7 +193,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
                 current_rows = 0;
             }
             _row_buffer->move_content(&result_rows[current_rows]);
-            _row_buffer->reserve(len * 1.1);
+            _row_buffer->reserve(static_cast<size_t>(static_cast<double>(len) * 1.1));
 
             current_bytes += len;
             current_rows += 1;

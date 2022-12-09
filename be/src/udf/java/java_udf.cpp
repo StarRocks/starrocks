@@ -392,9 +392,9 @@ DEFINE_NEW_BOX(double, double, Double, Double);
 
 // TODO:
 jobject JVMFunctionHelper::newString(const char* data, size_t size) {
-    auto bytesArr = _env->NewByteArray(size);
+    auto bytesArr = _env->NewByteArray(static_cast<jsize>(size));
     LOCAL_REF_GUARD(bytesArr);
-    _env->SetByteArrayRegion(bytesArr, 0, size, reinterpret_cast<const jbyte*>(data));
+    _env->SetByteArrayRegion(bytesArr, 0, static_cast<jsize>(size), reinterpret_cast<const jbyte*>(data));
     jobject nstr = _env->NewObject(_string_class, _string_construct_with_bytes, bytesArr, _utf8_charsets);
     return nstr;
 }
@@ -406,7 +406,7 @@ size_t JVMFunctionHelper::string_length(jstring jstr) {
 Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
     size_t length = this->string_length(jstr);
     buffer->resize(length);
-    _env->GetStringUTFRegion(jstr, 0, length, buffer->data());
+    _env->GetStringUTFRegion(jstr, 0, static_cast<jsize>(length), buffer->data());
     return {buffer->data(), buffer->length()};
 }
 
@@ -838,9 +838,9 @@ void AggBatchCallStub::batch_update_single(int num_rows, jobject state, jobject*
     CHECK_UDF_CALL_EXCEPTION(env, this->_ctx);
 }
 
-jobject BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input, int cols) {
+jobject BatchEvaluateStub::batch_evaluate(size_t num_rows, jobject* input, size_t cols) {
     jvalue jni_inputs[2 + cols];
-    jni_inputs[0].i = num_rows;
+    jni_inputs[0].i = static_cast<jint>(num_rows);
     jni_inputs[1].l = _caller;
     for (int i = 0; i < cols; ++i) {
         jni_inputs[2 + i].l = input[i];

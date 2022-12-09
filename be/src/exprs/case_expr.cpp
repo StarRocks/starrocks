@@ -109,7 +109,7 @@ private:
             return else_column->clone();
         }
 
-        int loop_end = _children.size() - 1;
+        int loop_end = static_cast<int>(_children.size() - 1);
 
         Columns when_columns;
         when_columns.reserve(loop_end);
@@ -172,7 +172,7 @@ private:
             }
         } else {
             for (int row = 0; row < size; ++row) {
-                int i = view_size;
+                int i = static_cast<int>(view_size);
                 if (!case_viewer.is_null(row)) {
                     i = 0;
                     while ((i < view_size) &&
@@ -215,7 +215,7 @@ private:
             ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
         }
 
-        int loop_end = _children.size() - 1;
+        int loop_end = static_cast<int>(_children.size() - 1);
 
         Columns when_columns;
         when_columns.reserve(loop_end);
@@ -232,7 +232,7 @@ private:
         for (int i = 0; i < loop_end; i += 2) {
             ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
 
-            size_t trues_count = ColumnHelper::count_true_with_notnull(when_column);
+            auto trues_count = ColumnHelper::count_true_with_notnull(when_column);
 
             // skip if all false or all null
             if (trues_count == 0) {
@@ -281,29 +281,29 @@ private:
                     !when_columns_has_null && when_columns.size() <= max_simd_case_when_size && !then_columns_has_null;
 
             if (check_could_use_multi_simd_selector) {
-                int then_column_size = then_columns.size();
-                int when_column_size = when_columns.size();
+                auto then_column_size = then_columns.size();
+                auto when_column_size = when_columns.size();
                 // TODO: avoid unpack const column
-                for (int i = 0; i < then_column_size; ++i) {
+                for (auto i = 0; i < then_column_size; ++i) {
                     then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
                 }
-                for (int i = 0; i < when_column_size; ++i) {
+                for (auto i = 0; i < when_column_size; ++i) {
                     when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
                 }
-                for (int i = 0; i < when_column_size; ++i) {
+                for (auto i = 0; i < when_column_size; ++i) {
                     ColumnHelper::merge_nullable_filter(when_columns[i].get());
                 }
 
                 using ResultContainer = typename RunTimeColumnType<ResultType>::Container;
 
                 ResultContainer* select_list[then_column_size];
-                for (int i = 0; i < then_column_size; ++i) {
+                for (auto i = 0; i < then_column_size; ++i) {
                     auto* data_column = ColumnHelper::get_data_column(then_columns[i].get());
                     select_list[i] = &down_cast<RunTimeColumnType<ResultType>*>(data_column)->get_data();
                 }
 
                 uint8_t* select_vec[when_column_size];
-                for (int i = 0; i < when_column_size; ++i) {
+                for (auto i = 0; i < when_column_size; ++i) {
                     auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
                     select_vec[i] = down_cast<BooleanColumn*>(data_column)->get_data().data();
                 }
@@ -325,8 +325,8 @@ private:
 
         size_t view_size = when_viewers.size();
         if (!when_columns_has_null) {
-            for (int row = 0; row < size; ++row) {
-                int i = 0;
+            for (auto row = 0; row < size; ++row) {
+                auto i = 0;
                 while (i < view_size && !(when_viewers[i].value(row))) {
                     i += 1;
                 }
@@ -337,8 +337,8 @@ private:
                 }
             }
         } else {
-            for (int row = 0; row < size; ++row) {
-                int i = 0;
+            for (auto row = 0; row < size; ++row) {
+                auto i = 0;
                 while ((i < view_size) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
                     i += 1;
                 }

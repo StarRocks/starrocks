@@ -71,11 +71,32 @@ public:
 
     // construct a JsonValue from single sql type
     static JsonValue from_null();
+
     static JsonValue from_int(int64_t value);
     static JsonValue from_uint(uint64_t value);
     static JsonValue from_bool(bool value);
     static JsonValue from_double(double value);
     static JsonValue from_string(const Slice& value);
+
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, int64_t>, T>>
+    static JsonValue from_int(T value) {
+        return from_int(static_cast<int64_t>(value));
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, uint64_t>, T>>
+    static JsonValue from_uint(T value) {
+        return from_uint(static_cast<uint64_t>(value));
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, bool>, T>>
+    static JsonValue from_bool(T value) {
+        return from_bool(static_cast<bool>(value));
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, double>, T>>
+    static JsonValue from_double(T value) {
+        return from_double(static_cast<double>(value));
+    }
 
     template <class T>
     static StatusOr<JsonValue> from(T value) {

@@ -39,6 +39,7 @@
 #include "util/json.h"
 #include "util/percentile_value.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks::serde {
 namespace {
 constexpr int ENCODE_SIZE_LIMIT = 256;
@@ -73,7 +74,7 @@ const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
 }
 
 inline size_t upper_int32(size_t size) {
-    return (3 + size) / 4.0;
+    return static_cast<size_t>(static_cast<double>(3 + size) / 4.0);
 }
 
 template <bool sorted_32ints>
@@ -713,3 +714,4 @@ const uint8_t* ColumnArraySerde::deserialize(const uint8_t* data, Column* column
 }
 
 } // namespace starrocks::serde
+#pragma GCC diagnostic pop

@@ -234,11 +234,11 @@ StatusOr<ColumnPtr> JsonFunctions::get_native_json_string(FunctionContext* conte
 }
 
 StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
-    int num_rows = columns[0]->size();
+    const auto num_rows = columns[0]->size();
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(num_rows);
 
-    for (int row = 0; row < columns[0]->size(); row++) {
+    for (auto row = 0; row < columns[0]->size(); row++) {
         if (viewer.is_null(row)) {
             result.append_null();
             continue;

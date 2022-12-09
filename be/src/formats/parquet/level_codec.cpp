@@ -21,7 +21,7 @@ namespace starrocks::parquet {
 
 Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level, uint32_t num_levels, Slice* slice) {
     _encoding = encoding;
-    _bit_width = BitUtil::log2(max_level + 1);
+    _bit_width = static_cast<typeof(_bit_width)>(BitUtil::log2(max_level + 1));
     _num_levels = num_levels;
     switch (encoding) {
     case tparquet::Encoding::RLE: {

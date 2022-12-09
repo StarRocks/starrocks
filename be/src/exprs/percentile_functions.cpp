@@ -27,8 +27,8 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* contex
     ColumnViewer<TYPE_DOUBLE> viewer(columns[0]);
 
     auto percentile_column = PercentileColumn::create();
-    size_t size = columns[0]->size();
-    for (int row = 0; row < size; ++row) {
+    const auto size = columns[0]->size();
+    for (auto row = 0; row < size; ++row) {
         PercentileValue value;
         if (!viewer.is_null(row)) {
             value.add(viewer.value(row));
@@ -51,9 +51,9 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_empty(FunctionContext* conte
 StatusOr<ColumnPtr> PercentileFunctions::percentile_approx_raw(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_PERCENTILE> viewer1(columns[0]);
     ColumnViewer<TYPE_DOUBLE> viewer2(columns[1]);
-    size_t size = columns[0]->size();
+    const auto size = columns[0]->size();
     ColumnBuilder<TYPE_DOUBLE> builder(size);
-    for (int row = 0; row < size; ++row) {
+    for (auto row = 0; row < size; ++row) {
         if (viewer1.is_null(row) || viewer2.is_null(row)) {
             builder.append_null();
         } else {

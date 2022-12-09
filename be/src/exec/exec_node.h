@@ -288,7 +288,7 @@ protected:
     // It is used for pipeline to rewrite runtime in filters.
     std::vector<TupleSlotMapping> _tuple_slot_mappings;
 
-    ExecNode* child(int i) { return _children[i]; }
+    ExecNode* child(size_t i) { return _children[i]; }
 
     bool is_closed() const { return _is_closed; }
 

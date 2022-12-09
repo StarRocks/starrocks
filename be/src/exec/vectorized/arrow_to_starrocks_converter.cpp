@@ -185,7 +185,7 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
             // never change following code to
             // base_offsets - arrow_base_offset + arrow_offsets_data[i],
             // that would cause underflow for unsigned int;
-            offsets_data[i] = base_offset + (arrow_offsets_data[i] - arrow_base_offset);
+            offsets_data[i] = static_cast<uint32_t>(base_offset + (arrow_offsets_data[i] - arrow_base_offset));
         }
     }
 }
@@ -234,7 +234,7 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, StringP
                 strings::memcpy_inlined(bytes_start + bytes_off, array_data + i * width, width);
                 bytes_off += width;
             }
-            offsets[offsets_idx] = bytes_off;
+            offsets[offsets_idx] = static_cast<typename ColumnType::Offset>(bytes_off);
         }
         bytes.resize(bytes_off);
     }
@@ -588,9 +588,9 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     }
 
     template <bool no_divide>
-    static Status convert_datetime(CppType* data, const ArrowCppType* arrow_data, int num_elements,
+    static Status convert_datetime(CppType* data, const ArrowCppType* arrow_data, size_t num_elements,
                                    const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data,
-                                   [[maybe_unused]] int divisor) {
+                                   [[maybe_unused]] int64_t divisor) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {

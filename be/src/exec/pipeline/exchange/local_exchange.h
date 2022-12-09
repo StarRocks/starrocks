@@ -67,7 +67,7 @@ public:
 
     int32_t decrement_sink_number() { return _sink_number--; }
 
-    int32_t source_dop() const { return _source->get_sources().size(); }
+    size_t source_dop() const { return _source->get_sources().size(); }
 
 protected:
     const std::string _name;

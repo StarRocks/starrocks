@@ -720,7 +720,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                caches[i].key.u.size = slice_sizes[i];
+                caches[i].key.u.size = static_cast<typeof(caches[0].key.u.size)>(slice_sizes[i]);
             }
         }
         for (size_t i = 0; i < chunk_size; i++) {
@@ -765,7 +765,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         auto* key = reinterpret_cast<FixedSizeSliceKey*>(caches.data());
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                key[i].u.size = slice_sizes[i];
+                key[i].u.size = static_cast<typeof((*key).u.size)>(slice_sizes[i]);
             }
         }
         for (size_t i = 0; i < chunk_size; ++i) {

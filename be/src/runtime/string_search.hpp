@@ -60,6 +60,7 @@
 #include "common/logging.h"
 #include "runtime/string_value.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 // TODO: This can be sped up with SIDD_CMP_EQUAL_ORDERED or at the very least rewritten
@@ -171,3 +172,4 @@ private:
 };
 
 }
+#pragma GCC diagnostic pop

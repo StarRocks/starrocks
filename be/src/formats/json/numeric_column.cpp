@@ -123,7 +123,7 @@ static Status add_column_with_string_value(FixedLengthColumn<T>* column, const T
         return Status::OK();
     } else {
         // Attemp to parse the string as float.
-        auto d = StringParser::string_to_float<double>(sv.data(), sv.length(), &parse_result);
+        auto d = StringParser::string_to_float<double>(sv.data(), static_cast<int>(sv.length()), &parse_result);
         if (parse_result == StringParser::PARSE_SUCCESS) {
             if (!checked_cast(d, &v)) {
                 column->append_numbers(&v, sizeof(v));

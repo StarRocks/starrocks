@@ -20,7 +20,7 @@
 namespace starrocks {
 
 StatusOr<ColumnPtr> ESFunctions::match(FunctionContext* context, const Columns& columns) {
-    auto size = columns[0]->size();
+    const auto size = columns[0]->size();
     ColumnBuilder<TYPE_BOOLEAN> result(size);
     for (int row = 0; row < size; ++row) {
         result.append(true);

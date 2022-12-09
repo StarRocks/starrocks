@@ -42,6 +42,7 @@
 #include "util/sm3.h"
 #include "util/utf8.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)", re2::RE2::Quiet);
@@ -218,12 +219,12 @@ static inline void utf8_substr_from_right_per_slice(Slice* s, int off, int len, 
 }
 
 static inline void binary_column_empty_op(Bytes* bytes, Offsets* offsets, size_t i) {
-    (*offsets)[i + 1] = bytes->size();
+    (*offsets)[i + 1] = static_cast<Offsets::value_type>(bytes->size());
 }
 
 static inline void binary_column_non_empty_op(uint8_t* begin, uint8_t* end, Bytes* bytes, Offsets* offsets, size_t i) {
     bytes->insert(bytes->end(), begin, end);
-    (*offsets)[i + 1] = bytes->size();
+    (*offsets)[i + 1] = static_cast<Offsets::value_type>(bytes->size());
 }
 
 template <bool off_is_negative, bool allow_out_of_left_bound>
@@ -897,7 +898,7 @@ void fast_repeat(uint8_t* dst, const uint8_t* src, size_t src_size, int32_t repe
     strings::memcpy_inlined(dst_curr, src, src_size);
     dst_curr += src_size;
     for (; repeat_times > 0; k += 1, is_odd = repeat_times & 1, repeat_times >>= 1) {
-        int32_t len = src_size * (1 << k);
+        auto len = src_size * (1 << k);
         strings::memcpy_inlined(dst_curr, dst_begin, len);
         dst_curr += len;
         if (is_odd) {
@@ -3115,3 +3116,5 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

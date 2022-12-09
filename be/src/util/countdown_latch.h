@@ -51,6 +51,8 @@ class GenericCountDownLatch {
 public:
     // Initialize the latch with the given initial count.
     explicit GenericCountDownLatch(int count) : count_(count) {}
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, int>, T>>
+    explicit GenericCountDownLatch(T count) : count_(static_cast<int>(count)){};
 
     // REQUIRES: amount >= 0.
     // Decrement the count of this latch by 'amount'.

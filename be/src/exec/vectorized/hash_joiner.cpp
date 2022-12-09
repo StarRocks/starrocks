@@ -359,7 +359,7 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Filt
     }
 
     if (!filter_all) {
-        int zero_count = SIMD::count_zero(filter.data(), filter.size());
+        auto zero_count = SIMD::count_zero(filter.data(), filter.size());
         if (zero_count == 0) {
             hit_all = true;
         }

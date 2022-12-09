@@ -157,7 +157,7 @@ inline int32_t BaseTablet::schema_hash() const {
 }
 
 inline int16_t BaseTablet::shard_id() {
-    return _tablet_meta->shard_id();
+    return static_cast<int16_t>(_tablet_meta->shard_id());
 }
 
 inline const int64_t BaseTablet::creation_time() const {

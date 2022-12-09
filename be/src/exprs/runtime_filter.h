@@ -43,9 +43,9 @@ public:
     void init(size_t nums);
 
     void insert_hash(const uint64_t hash) noexcept {
-        const uint32_t bucket_idx = hash & _directory_mask;
+        const uint32_t bucket_idx = static_cast<uint32_t>(hash & _directory_mask);
 #ifdef __AVX2__
-        const __m256i mask = make_mask(hash >> _log_num_buckets);
+        const __m256i mask = make_mask(static_cast<uint32_t>(hash >> _log_num_buckets));
         __m256i* const bucket = &reinterpret_cast<__m256i*>(_directory)[bucket_idx];
         _mm256_store_si256(bucket, _mm256_or_si256(*bucket, mask));
 #else
@@ -58,9 +58,9 @@ public:
     }
 
     bool test_hash(const uint64_t hash) const noexcept {
-        const uint32_t bucket_idx = hash & _directory_mask;
+        const uint32_t bucket_idx = static_cast<uint32_t>(hash & _directory_mask);
 #ifdef __AVX2__
-        const __m256i mask = make_mask(hash >> _log_num_buckets);
+        const __m256i mask = make_mask(static_cast<uint32_t>(hash >> _log_num_buckets));
         const __m256i bucket = reinterpret_cast<__m256i*>(_directory)[bucket_idx];
         // We should return true if 'bucket' has a one wherever 'mask' does. _mm256_testc_si256
         // takes the negation of its first argument and ands that with its second argument. In
@@ -81,12 +81,12 @@ public:
 
     void insert_hash_in_same_bucket(const uint64_t* hash_values, size_t n) {
         if (n == 0) return;
-        const uint32_t bucket_idx = hash_values[0] & _directory_mask;
+        const uint32_t bucket_idx = static_cast<uint32_t>(hash_values[0] & _directory_mask);
 #ifdef __AVX2__
         auto* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
         __m256i now = _mm256_load_si256(addr);
         for (size_t i = 0; i < n; i++) {
-            const __m256i mask = make_mask(hash_values[i] >> _log_num_buckets);
+            const __m256i mask = make_mask(static_cast<uint32_t>(hash_values[i] >> _log_num_buckets));
             now = _mm256_or_si256(now, mask);
         }
         _mm256_store_si256(addr, now);
@@ -351,15 +351,15 @@ public:
         auto compute_hash = [&columns, &num_rows, &hash_values](HashFuncType hash_func, size_t num_hash_partitions,
                                                                 bool fast_reduce) {
             for (Column* input_column : columns) {
-                (input_column->*hash_func)(hash_values.data(), 0, num_rows);
+                (input_column->*hash_func)(hash_values.data(), 0, static_cast<uint32_t>(num_rows));
             }
             if (fast_reduce) {
                 for (size_t i = 0; i < num_rows; i++) {
-                    hash_values[i] = ReduceOp()(hash_values[i], num_hash_partitions);
+                    hash_values[i] = ReduceOp()(hash_values[i], static_cast<uint32_t>(num_hash_partitions));
                 }
             } else {
                 for (size_t i = 0; i < num_rows; i++) {
-                    hash_values[i] %= num_hash_partitions;
+                    hash_values[i] %= static_cast<uint32_t>(num_hash_partitions);
                 }
             }
         };

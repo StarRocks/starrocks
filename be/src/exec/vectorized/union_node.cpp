@@ -27,7 +27,7 @@
 namespace starrocks {
 UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
-          _first_materialized_child_idx(tnode.union_node.first_materialized_child_idx),
+          _first_materialized_child_idx(static_cast<int>(tnode.union_node.first_materialized_child_idx)),
           _tuple_id(tnode.union_node.tuple_id) {}
 
 UnionNode::~UnionNode() {

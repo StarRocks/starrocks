@@ -177,7 +177,7 @@ bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
                 _reserved_bytes.fetch_sub(size);
                 other_core_alloc_count.increment(1);
                 // reset chunk's core_id to other
-                chunk->core_id = core_id % _arenas.size();
+                chunk->core_id = static_cast<int>(core_id % _arenas.size());
                 ret = true;
                 return ret;
             }

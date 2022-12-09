@@ -40,18 +40,18 @@ public:
 
     explicit CString(std::string_view v) {
         assert(v.size() == ::strnlen(v.data(), v.size()));
-        assign(v.data(), v.size());
+        assign(v.data(), static_cast<uint16_t>(v.size()));
     }
 
     // Copy ctor
-    CString(const CString& rhs) { assign(rhs.data(), rhs.size()); }
+    CString(const CString& rhs) { assign(rhs.data(), static_cast<uint16_t>(rhs.size())); }
 
     // Move ctor
     CString(CString&& rhs) noexcept : _data(rhs._data) { rhs._data = &kStaticStorage; }
 
     // Copy assignment
     CString& operator=(const CString& rhs) {
-        assign(rhs.data(), rhs.size());
+        assign(rhs.data(), static_cast<uint16_t>(rhs.size()));
         return *this;
     }
 
@@ -67,7 +67,7 @@ public:
     // size() may return a value different from |s.size()|.
     CString& assign(std::string_view s) {
         assert(s.size() == ::strnlen(s.data(), s.size()));
-        return assign(s.data(), s.size());
+        return assign(s.data(), static_cast<uint16_t>(s.size()));
     }
 
     // NOTE: it's caller's duty to ensure that the no zero character exist in data[0...len), otherwize

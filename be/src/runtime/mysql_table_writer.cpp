@@ -115,9 +115,9 @@ Status MysqlTableWriter::_build_viewers(Columns& columns) {
     _viewers.clear();
     DCHECK_EQ(columns.size(), _output_expr_ctxs.size());
 
-    int num_cols = columns.size();
+    const auto num_cols = columns.size();
 
-    for (int i = 0; i < num_cols; ++i) {
+    for (auto i = 0; i < num_cols; ++i) {
         auto* ctx = _output_expr_ctxs[i];
         const auto& type = ctx->root()->type();
         if (!is_scalar_primitive_type(type.type)) {
@@ -132,10 +132,10 @@ Status MysqlTableWriter::_build_viewers(Columns& columns) {
 
 Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* sql) {
     _stmt_buffer.clear();
-    int num_cols = _viewers.size();
+    const auto num_cols = _viewers.size();
     fmt::format_to(_stmt_buffer, "INSERT INTO {} VALUES ", _mysql_tbl);
 
-    for (int i = from; i < to; ++i) {
+    for (auto i = from; i < to; ++i) {
         if (i != from) {
             _stmt_buffer.push_back(',');
         }
@@ -169,8 +169,8 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                             auto slice = viewer.value(i);
                             _escape_buffer.resize(slice.size * 2 + 1);
 
-                            int sz = mysql_real_escape_string(_mysql_conn, _escape_buffer.data(), slice.data,
-                                                              slice.size);
+                            auto sz = mysql_real_escape_string(_mysql_conn, _escape_buffer.data(), slice.data,
+                                                               slice.size);
                             _stmt_buffer.push_back('"');
                             _stmt_buffer.append(_escape_buffer.data(), _escape_buffer.data() + sz);
                             _stmt_buffer.push_back('"');
@@ -208,8 +208,8 @@ Status MysqlTableWriter::append(Chunk* chunk) {
 
     RETURN_IF_ERROR(_build_viewers(result_columns));
 
-    int num_rows = chunk->num_rows();
-    int i = 0;
+    const auto num_rows = chunk->num_rows();
+    auto i = 0;
     while (i + _chunk_size < num_rows) {
         std::string_view insert_stmt;
         RETURN_IF_ERROR(_build_insert_sql(i, i + _chunk_size, &insert_stmt));
@@ -221,7 +221,7 @@ Status MysqlTableWriter::append(Chunk* chunk) {
     }
 
     std::string_view insert_stmt;
-    RETURN_IF_ERROR(_build_insert_sql(i, num_rows, &insert_stmt));
+    RETURN_IF_ERROR(_build_insert_sql(i, static_cast<int>(num_rows), &insert_stmt));
 
     if (mysql_real_query(_mysql_conn, insert_stmt.data(), insert_stmt.length())) {
         return Status::InternalError(fmt::format("Insert to mysql server({}) failed, err:{}",

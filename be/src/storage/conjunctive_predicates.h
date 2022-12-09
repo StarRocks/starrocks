@@ -44,9 +44,29 @@ public:
 
     Status evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
+    template <typename F, typename T>
+    using NeitherUInt16NorUInt16Guard =
+            std::enable_if_t<(std::is_integral_v<F> && !std::is_same_v<F, uint16_t>) ||
+                                     (std::is_integral_v<T> && !std::is_same_v<T, uint16_t>),
+                             T>;
+
+    template <typename F, typename T, typename = NeitherUInt16NorUInt16Guard<F, T>>
+    Status evaluate(const Chunk* chunk, uint8_t* selection, F from, T to) const {
+        return evaluate(chunk, selection, static_cast<uint16_t>(from), static_cast<uint16_t>(to));
+    }
+
     Status evaluate_or(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 
+    template <typename F, typename T, typename = NeitherUInt16NorUInt16Guard<F, T>>
+    Status evaluate_or(const Chunk* chunk, uint8_t* selection, F from, T to) const {
+        return evaluate_or(chunk, selection, static_cast<uint16_t>(from), static_cast<uint16_t>(to));
+    }
+
     Status evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
+    template <typename F, typename T, typename = NeitherUInt16NorUInt16Guard<F, T>>
+    Status evaluate_and(const Chunk* chunk, uint8_t* selection, F from, T to) const {
+        return evaluate_and(chunk, selection, static_cast<uint16_t>(from), static_cast<uint16_t>(to));
+    }
 
     // [thread-unsafe]
     // Does NOT take the ownership of |pred|.

@@ -17,6 +17,7 @@
 #include "runtime/time_types.h"
 #include "util/timezone_utils.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 TimestampValue TimestampValue::MAX_TIMESTAMP_VALUE{timestamp::MAX_TIMESTAMP};
 TimestampValue TimestampValue::MIN_TIMESTAMP_VALUE{timestamp::MIN_TIMESTAMP};
@@ -853,3 +854,4 @@ int TimestampValue::to_string(char* s, size_t n) const {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

@@ -133,7 +133,7 @@ Status FileScanner::open() {
 }
 
 void FileScanner::fill_columns_from_path(starrocks::ChunkPtr& chunk, int slot_start,
-                                         const std::vector<std::string>& columns_from_path, int size) {
+                                         const std::vector<std::string>& columns_from_path, size_t size) {
     auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // fill column with partition values.
     for (int i = 0; i < columns_from_path.size(); ++i) {
@@ -158,7 +158,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
     ChunkPtr dest_chunk = std::make_shared<Chunk>();
 
     int ctx_index = 0;
-    int before_rows = cast->num_rows();
+    auto before_rows = static_cast<int>(cast->num_rows());
     Column::Filter filter(cast->num_rows(), 1);
 
     // CREATE ROUTINE LOAD routine_load_job_1

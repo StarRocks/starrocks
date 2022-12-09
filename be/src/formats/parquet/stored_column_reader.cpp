@@ -244,11 +244,11 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
 #ifndef NDEBUG
     std::stringstream ss;
     ss << "rep=[";
-    for (int i = levels_pos; i < _levels_decoded; ++i) {
+    for (auto i = levels_pos; i < _levels_decoded; ++i) {
         ss << ", " << _rep_levels[i];
     }
     ss << "], def=[";
-    for (int i = levels_pos; i < _levels_decoded; ++i) {
+    for (auto i = levels_pos; i < _levels_decoded; ++i) {
         ss << ", " << _def_levels[i];
     }
     ss << "]";
@@ -605,7 +605,7 @@ bool StoredColumnReader::page_selected(size_t num_values) {
         return true;
     }
     size_t start_row = _opts.context->next_row;
-    int end_row = std::min(start_row + num_values, filter->size()) - 1;
+    auto end_row = std::min(start_row + num_values, filter->size()) - 1;
     return SIMD::find_nonzero(*filter, start_row) <= end_row;
 }
 
