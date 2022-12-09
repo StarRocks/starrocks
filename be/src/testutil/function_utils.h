@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-namespace starrocks_udf {
+namespace starrocks {
 class FunctionContext;
 }
 
@@ -47,12 +47,12 @@ public:
     FunctionUtils(RuntimeState* state);
     ~FunctionUtils();
 
-    starrocks_udf::FunctionContext* get_fn_ctx() { return _fn_ctx; }
+    FunctionContext* get_fn_ctx() { return _fn_ctx; }
 
 private:
     RuntimeState* _state = nullptr;
     MemPool* _memory_pool = nullptr;
-    starrocks_udf::FunctionContext* _fn_ctx = nullptr;
+    FunctionContext* _fn_ctx = nullptr;
 };
 
 } // namespace starrocks

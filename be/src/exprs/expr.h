@@ -47,12 +47,6 @@
 #include "runtime/types.h"
 #include "udf/udf.h"
 
-//
-#undef USING_STARROCKS_UDF
-#define USING_STARROCKS_UDF using namespace starrocks_udf
-
-USING_STARROCKS_UDF;
-
 namespace starrocks {
 
 class Expr;

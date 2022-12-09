@@ -377,8 +377,8 @@ public:
                              "vpcompress" #WIDTHX                 \
                              " %%zmm1, %%zmm0%{%%k1%}%{z%}\n"     \
                              "vmovdqu" #WIDTH " %%zmm0, (%[d])\n" \
-                             : [ s ] "+r"(src), [ d ] "+r"(dst)   \
-                             : [ mask ] "r"(m)                    \
+                             : [s] "+r"(src), [d] "+r"(dst)       \
+                             : [mask] "r"(m)                      \
                              : "zmm0", "zmm1", "memory");         \
             result_offset += __builtin_popcount(m);               \
         }                                                         \

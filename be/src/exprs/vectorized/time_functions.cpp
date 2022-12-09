@@ -112,8 +112,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         return date_valid<RESULT_TYPE>(p);                                                                             \
     }
 
-Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::convert_tz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || context->get_num_args() != 3 ||
         context->get_arg_type(1)->type != TYPE_VARCHAR || context->get_arg_type(2)->type != TYPE_VARCHAR ||
         !context->is_constant_column(1) || !context->is_constant_column(2)) {
@@ -153,8 +152,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
     return Status::OK();
 }
 
-Status TimeFunctions::convert_tz_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::convert_tz_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* ctc = reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         if (ctc != nullptr) {
@@ -671,8 +669,7 @@ DEFINE_TIME_ADD_AND_SUB_FN(micros, TimeUnit::MICROSECOND);
 #undef DEFINE_TIME_SUB_FN
 #undef DEFINE_TIME_ADD_AND_SUB_FN
 
-Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -853,8 +850,7 @@ StatusOr<ColumnPtr> TimeFunctions::time_slice(FunctionContext* context, const Co
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::time_slice_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;
@@ -1140,8 +1136,7 @@ std::string TimeFunctions::convert_format(const Slice& format) {
 }
 
 // regex method
-Status TimeFunctions::from_unix_prepare(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1165,8 +1160,7 @@ Status TimeFunctions::from_unix_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status TimeFunctions::from_unix_close(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::from_unix_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(scope));
         delete state;
@@ -1347,8 +1341,7 @@ bool TimeFunctions::is_datetime_format(const Slice& slice, char** start) {
 }
 
 // prepare for string format, if it is "%Y-%m-%d" or "%Y-%m-%d %H:%i:%s"
-Status TimeFunctions::str_to_date_prepare(starrocks_udf::FunctionContext* context,
-                                          starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::str_to_date_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1507,8 +1500,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date(FunctionContext* context, const C
 }
 
 // reclaim memory for str_to_date.
-Status TimeFunctions::str_to_date_close(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::str_to_date_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1530,8 +1522,7 @@ StatusOr<ColumnPtr> TimeFunctions::str2date(FunctionContext* context, const Colu
     return VectorizedStrictUnaryFunction<TimestampToDate>::evaluate<TYPE_DATETIME, TYPE_DATE>(datetime);
 }
 
-Status TimeFunctions::format_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::format_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1578,8 +1569,7 @@ Status TimeFunctions::format_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status TimeFunctions::format_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::format_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1848,8 +1838,7 @@ StatusOr<ColumnPtr> TimeFunctions::date_format(FunctionContext* context, const C
     }
 }
 
-Status TimeFunctions::datetime_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                             starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1951,8 +1940,7 @@ StatusOr<ColumnPtr> TimeFunctions::datetime_trunc(FunctionContext* context, cons
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::datetime_trunc_close(starrocks_udf::FunctionContext* context,
-                                           starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::datetime_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;
@@ -1961,8 +1949,7 @@ Status TimeFunctions::datetime_trunc_close(starrocks_udf::FunctionContext* conte
     return Status::OK();
 }
 
-Status TimeFunctions::date_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -2039,8 +2026,7 @@ StatusOr<ColumnPtr> TimeFunctions::date_trunc(FunctionContext* context, const Co
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::date_trunc_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::date_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;

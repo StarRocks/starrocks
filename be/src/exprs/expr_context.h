@@ -43,11 +43,6 @@
 // Only include column/vectorized_fwd.h in this file, you need include what you need
 // in the source files. Please NOT add unnecessary includes in this file.
 
-#undef USING_STARROCKS_UDF
-#define USING_STARROCKS_UDF using namespace starrocks_udf
-
-USING_STARROCKS_UDF;
-
 namespace starrocks {
 
 namespace vectorized {

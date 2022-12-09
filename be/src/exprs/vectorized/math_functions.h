@@ -284,10 +284,8 @@ public:
     // =====================================
 
     // rand's auxiliary method
-    static Status rand_prepare(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status rand_close(starrocks_udf::FunctionContext* context,
-                             starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status rand_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     /**
      * @param: []
      * @return: DoubleColumn
