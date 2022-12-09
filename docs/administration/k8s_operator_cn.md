@@ -44,7 +44,7 @@ This topic describes how to use StarRocks operator to deploy a CN cluster on Kub
 
 ## Environment preparation
 
-- [Deploy a StarRocks cluster](https://docs.starrocks.com/en-us/latest/quick_start/Deploy).
+- [Deploy a StarRocks cluster](../quick_start/Deploy.md).
 
 - [Install a Kubernetes cluster](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/).
 
