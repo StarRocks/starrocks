@@ -5,94 +5,9 @@ package com.starrocks.sql.plan;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class NestLoopJoinTest extends PlanTestBase {
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        if (starRocksAssert == null) {
-            PlanTestBase.beforeClass();
-        }
-        starRocksAssert.withTable("CREATE TABLE `test_all_type_nullable` (\n" +
-                "  `id_int` int(11) NOT NULL COMMENT \"\",\n" +
-                "  `id_tinyint` tinyint(4) NOT NULL COMMENT \"\",\n" +
-                "  `id_smallint` smallint(6) NOT NULL COMMENT \"\",\n" +
-                "  `id_bigint` bigint(20) NOT NULL COMMENT \"\",\n" +
-                "  `id_largeint` largeint(40) NOT NULL COMMENT \"\",\n" +
-                "  `id_float` float NOT NULL COMMENT \"\",\n" +
-                "  `id_double` double NOT NULL COMMENT \"\",\n" +
-                "  `id_char` char(10) NOT NULL COMMENT \"\",\n" +
-                "  `id_varchar` varchar(100) NOT NULL COMMENT \"\",\n" +
-                "  `id_date` date NOT NULL COMMENT \"\",\n" +
-                "  `id_datetime` datetime NOT NULL COMMENT \"\",\n" +
-                "  `id_decimal` decimal128(27, 9) NOT NULL COMMENT \"\",\n" +
-                "  `id_boolean` boolean NOT NULL COMMENT \"\",\n" +
-                "  `nid_int` int(11) NULL COMMENT \"\",\n" +
-                "  `nid_tinyint` tinyint(4) NULL COMMENT \"\",\n" +
-                "  `nid_smallint` smallint(6) NULL COMMENT \"\",\n" +
-                "  `nid_bigint` bigint(20) NULL COMMENT \"\",\n" +
-                "  `nid_largeint` largeint(40) NULL COMMENT \"\",\n" +
-                "  `nid_float` float NULL COMMENT \"\",\n" +
-                "  `nid_double` double NULL COMMENT \"\",\n" +
-                "  `nid_char` char(10) NULL COMMENT \"\",\n" +
-                "  `nid_varchar` varchar(100) NULL COMMENT \"\",\n" +
-                "  `nid_date` date NULL COMMENT \"\",\n" +
-                "  `nid_datetime` datetime NULL COMMENT \"\",\n" +
-                "  `nid_decimal` decimal128(27, 9) NULL COMMENT \"\",\n" +
-                "  `nid_boolean` boolean NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`id_int`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`id_int`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
-                "\"compression\" = \"LZ4\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE `test_all_type_nullable2` (\n" +
-                "  `id_int` int(11) NOT NULL COMMENT \"\",\n" +
-                "  `id_tinyint` tinyint(4) NOT NULL COMMENT \"\",\n" +
-                "  `id_smallint` smallint(6) NOT NULL COMMENT \"\",\n" +
-                "  `id_bigint` bigint(20) NOT NULL COMMENT \"\",\n" +
-                "  `id_largeint` largeint(40) NOT NULL COMMENT \"\",\n" +
-                "  `id_float` float NOT NULL COMMENT \"\",\n" +
-                "  `id_double` double NOT NULL COMMENT \"\",\n" +
-                "  `id_char` char(10) NOT NULL COMMENT \"\",\n" +
-                "  `id_varchar` varchar(100) NOT NULL COMMENT \"\",\n" +
-                "  `id_date` date NOT NULL COMMENT \"\",\n" +
-                "  `id_datetime` datetime NOT NULL COMMENT \"\",\n" +
-                "  `id_decimal` decimal128(27, 9) NOT NULL COMMENT \"\",\n" +
-                "  `id_boolean` boolean NOT NULL COMMENT \"\",\n" +
-                "  `nid_int` int(11) NULL COMMENT \"\",\n" +
-                "  `nid_tinyint` tinyint(4) NULL COMMENT \"\",\n" +
-                "  `nid_smallint` smallint(6) NULL COMMENT \"\",\n" +
-                "  `nid_bigint` bigint(20) NULL COMMENT \"\",\n" +
-                "  `nid_largeint` largeint(40) NULL COMMENT \"\",\n" +
-                "  `nid_float` float NULL COMMENT \"\",\n" +
-                "  `nid_double` double NULL COMMENT \"\",\n" +
-                "  `nid_char` char(10) NULL COMMENT \"\",\n" +
-                "  `nid_varchar` varchar(100) NULL COMMENT \"\",\n" +
-                "  `nid_date` date NULL COMMENT \"\",\n" +
-                "  `nid_datetime` datetime NULL COMMENT \"\",\n" +
-                "  `nid_decimal` decimal128(27, 9) NULL COMMENT \"\",\n" +
-                "  `nid_boolean` boolean NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`id_int`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`id_int`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
-                "\"compression\" = \"LZ4\"\n" +
-                "); ");
-    }
 
     @Before
     public void before() {
@@ -140,15 +55,14 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "right anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
+        assertVerbosePlanContains(sql, "4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  28 <-> [28: id_tinyint, TINYINT, false]\n" +
-                "  |  cardinality: 1\n" +
+                "  |  cardinality: 0\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
-                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
-                "  |  cardinality: 1");
+                "  |  cardinality: 0");
 
         // RIGHT ANTI JOIN + AGGREGATE count(column)
         sql = "select count(a.id_char) " +
@@ -156,15 +70,14 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "right anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
+        assertVerbosePlanContains(sql, "4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  34 <-> [34: id_char, CHAR, false]\n" +
-                "  |  cardinality: 1\n" +
+                "  |  cardinality: 0\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
-                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
-                "  |  cardinality: 1");
+                "  |  cardinality: 0");
 
         // LEFT ANTI JOIN + AGGREGATE
         sql = "select count(*) from (" +
@@ -175,12 +88,11 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "  4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  8 <-> [8: id_char, CHAR, false]\n" +
-                "  |  cardinality: 1\n" +
+                "  |  cardinality: 0\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
-                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
-                "  |  cardinality: 1");
+                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n");
     }
 
     @Test
