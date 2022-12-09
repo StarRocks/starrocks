@@ -518,9 +518,9 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
                                            std::make_tuple(R"({"k1": {"k2": {"k3": 1}}})", "$.k1.k2.k4", false),
                                            std::make_tuple(R"({"k1": [{"k2": 1}]})", "$.k1[0].k3", false),
 
-                                           // TODO(mofei) nested array not supported
+                                           //  nested array
                                            std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][1]", false),
-                                           std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][0]", false),
+                                           std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][0]", true),
 
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
