@@ -76,7 +76,28 @@ public class JDBCScanner {
         resultNumRows = 0;
         do {
             for (int i = 0; i < columnCount; i++) {
-                resultChunk.get(i)[resultNumRows] = resultSet.getObject(i + 1);
+                Object[] dataColumn = resultChunk.get(i);
+                Object resultObject = resultSet.getObject(i + 1);
+                // in some cases, the real java class type of result is not consistent with the type from
+                // resultSetMetadata,
+                // for example,FLOAT type in oracle gives java.lang.Double type in resultSetMetaData,
+                // but the result type is BigDecimal when we getObject from resultSet.
+                // So we choose to convert the value to the target type here.
+                if (resultObject == null) {
+                    dataColumn[resultNumRows] = null;
+                } else if (dataColumn instanceof Short[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).shortValue();
+                } else if (dataColumn instanceof Integer[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).intValue();
+                } else if (dataColumn instanceof Long[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).longValue();
+                } else if (dataColumn instanceof Float[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
+                } else if (dataColumn instanceof Double[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
+                } else {
+                    dataColumn[resultNumRows] = resultObject;
+                }
             }
             resultNumRows++;
         } while (resultNumRows < chunkSize && resultSet.next());
