@@ -429,7 +429,7 @@ public:
             f_data += kBatchNums;
         }
 #endif
-            // clang-format on
+        // clang-format on
         for (auto i = start_offset; i < to; ++i) {
             if (filter[i]) {
                 *(data + result_offset) = *(data + i);
