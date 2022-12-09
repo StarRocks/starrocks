@@ -810,7 +810,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // For insert into select, in the simplest case like insert into table select * from table2;
         // the desired_tablet_sink_dop set by FE is same as the source_operator_dop.
         // However, if the select statement is complex, like insert into table select * from table2 limit 1,
-        // the desired_tablet_sink_dop set by FE is same as the source_operator_dop, and it needs to
+        // the desired_tablet_sink_dop set by FE is not same as the source_operator_dop, and it needs to
         // add a local passthrough exchange here
         if (desired_tablet_sink_dop != source_operator_dop) {
             std::vector<OpFactories> pred_operators_list;
