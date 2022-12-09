@@ -111,11 +111,13 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _zm_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", "SegmentInit");
 
+    _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
+    _sk_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", "SegmentInit");
+
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
-    _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
 
     // SegmentRead
     _block_load_timer = ADD_TIMER(_runtime_profile, "SegmentRead");
