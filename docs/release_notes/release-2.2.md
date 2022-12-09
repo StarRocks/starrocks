@@ -4,7 +4,7 @@
 
 Release date: December 2, 2022
 
-## Improvements
+### Improvements
 
 - Optimized the error message returned for Routine Load jobs. [#12203](https://github.com/StarRocks/starrocks/pull/12203)
 
@@ -16,7 +16,7 @@ Release date: December 2, 2022
 
 - Supports deleting large volumes of data from primary key tables. [#4772](https://github.com/StarRocks/starrocks/issues/4772)
 
-## Bug Fixes
+### Bug Fixes
 
 The following bugs are fixed:
 
