@@ -5,7 +5,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -68,12 +67,12 @@ public class CastExprPruneTest extends PlanTestBase {
                 " WHERE (((0.00) BETWEEN (CASE WHEN (subt1.c_1_5) BETWEEN (subt1.c_1_5) AND (subt1.c_1_5) THEN CAST(151971657 AS DECIMAL32 ) " +
                 " WHEN false THEN CASE WHEN NULL THEN 0.03 ELSE 0.02 END ELSE 0.04 END) AND (0.04) ) IS NULL)";
         String explain = getFragmentPlan(sql);
-        String snippet = "  1:OlapScanNode\n" +
-                "     TABLE: tab1\n" +
+        String snippet = "1:OlapScanNode\n" +
+                "     TABLE: tab2\n" +
                 "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join\n" +
-                "     PREDICATES: TRUE\n" +
+                "     PREDICATES: 16: c_2_0 = TRUE < (16: c_2_0 = FALSE >= 16: c_2_0) AND (16: c_2_0 = FALSE <= 16: c_2_0)\n" +
                 "     partitions=0/1\n" +
-                "     rollup: tab1\n" +
+                "     rollup: tab2\n" +
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
