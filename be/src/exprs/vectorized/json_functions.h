@@ -22,9 +22,9 @@
 
 #include "column/column_builder.h"
 #include "common/compiler_util.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"
-#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

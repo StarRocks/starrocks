@@ -23,7 +23,6 @@
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
-#include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -272,7 +271,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz(FunctionContext* context, const Co
 }
 
 StatusOr<ColumnPtr> TimeFunctions::utc_timestamp(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, "+00:00")) {
         TimestampValue ts;
@@ -288,7 +287,7 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
 }
 
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone_obj())) {
         TimestampValue ts;
@@ -300,7 +299,7 @@ StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& 
 }
 
 StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
         double seconds = dtv.hour() * 3600 + dtv.minute() * 60 + dtv.second();
@@ -311,7 +310,7 @@ StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Colum
 }
 
 StatusOr<ColumnPtr> TimeFunctions::curdate(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
         DateValue dv;
@@ -975,7 +974,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* contex
         DateTimeValue tv(TIME_DATETIME, year, month, day, hour, minute, second, usec);
 
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->impl()->state()->timezone_obj())) {
+        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
@@ -1010,7 +1009,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date(FunctionContext* context, c
         DateTimeValue tv(TIME_DATE, year, month, day, 0, 0, 0, 0);
 
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->impl()->state()->timezone_obj())) {
+        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
@@ -1049,7 +1048,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionCon
             continue;
         }
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->impl()->state()->timezone_obj())) {
+        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1065,7 +1064,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionCon
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 0);
     auto result = Int32Column::create();
-    result->append(context->impl()->state()->timestamp_ms() / 1000);
+    result->append(context->state()->timestamp_ms() / 1000);
     return ConstColumn::create(result, 1);
 }
 /*
@@ -1097,7 +1096,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* contex
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->impl()->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1192,7 +1191,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_general(FunctionContext
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->impl()->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1238,7 +1237,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& form
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->impl()->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }

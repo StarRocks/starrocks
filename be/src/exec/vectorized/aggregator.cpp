@@ -292,9 +292,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _agg_fn_ctxs[i] = FunctionContextImpl::create_context(
+        _agg_fn_ctxs[i] = FunctionContext::create_context(
                 state, _mem_pool.get(), AnyValUtil::column_type_to_type_desc(_agg_fn_types[i].result_type),
-                _agg_fn_types[i].arg_typedescs, 0, false);
+                _agg_fn_types[i].arg_typedescs);
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 
@@ -388,14 +388,6 @@ void Aggregator::close(RuntimeState* state) {
             }
 
             _mem_pool->free_all();
-        }
-
-        // AggregateFunction::destroy depends FunctionContext.
-        // so we close function context after destroy stage
-        for (auto ctx : _agg_fn_ctxs) {
-            if (ctx != nullptr && ctx->impl()) {
-                ctx->impl()->close();
-            }
         }
 
         Expr::close(_group_by_expr_ctxs, state);
@@ -522,7 +514,7 @@ Status Aggregator::_evaluate_const_columns(int i) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
         const_columns.emplace_back(std::move(col));
     }
-    _agg_fn_ctxs[i]->impl()->set_constant_columns(const_columns);
+    _agg_fn_ctxs[i]->set_constant_columns(const_columns);
     return Status::OK();
 }
 

@@ -38,6 +38,8 @@
 
 #include <random>
 
+#include "common/logging.h"
+
 namespace starrocks {
 
 class TDigestTest : public ::testing::Test {

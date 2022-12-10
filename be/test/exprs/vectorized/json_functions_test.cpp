@@ -119,7 +119,7 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
     columns.emplace_back(strings);
     columns.emplace_back(strings2);
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
@@ -155,7 +155,7 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     columns.emplace_back(strings);
     columns.emplace_back(strings2);
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
@@ -190,7 +190,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(doubles);
         columns.emplace_back(doubles2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
@@ -225,7 +225,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(str_values);
         columns.emplace_back(str_values2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
@@ -260,7 +260,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(ints);
         columns.emplace_back(ints2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
@@ -295,7 +295,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(ints);
         columns.emplace_back(ints2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
@@ -350,7 +350,7 @@ TEST_P(JsonQueryTestFixture, json_query) {
 
     Columns columns{ints, builder.build(true)};
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
     ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
@@ -478,7 +478,7 @@ TEST_P(JsonExistTestFixture, json_exists) {
 
     Columns columns{ints, builder.build(true)};
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     if (!st.ok()) {
         ASSERT_FALSE(param_exist);
@@ -539,7 +539,7 @@ TEST_P(JsonParseTestFixture, json_parse) {
     auto ints = BinaryColumn::create();
     ints->append(param_json);
     Columns columns{ints};
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
 
     ColumnPtr result = JsonFunctions::parse_json(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
@@ -608,7 +608,7 @@ TEST_P(JsonArrayTestFixture, json_array) {
         columns.emplace_back(std::move(column));
     }
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
 
     ColumnPtr result;
     if (param_json.empty()) {
@@ -655,7 +655,7 @@ TEST_P(JsonObjectTestFixture, json_object) {
         columns.emplace_back(std::move(column));
     }
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
 
     ColumnPtr result;
     if (param_json.empty()) {
@@ -745,7 +745,7 @@ TEST_P(JsonLengthTestFixture, json_length_test) {
         columns.push_back(path_column);
     }
 
-    // ctx.get()->impl()->set_constant_columns(columns);
+    // ctx.get()->set_constant_columns(columns);
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     ASSERT_OK(st);
 
@@ -860,7 +860,7 @@ public:
         }
         Columns columns{ints, builder.build(true)};
 
-        _ctx->impl()->set_constant_columns(columns);
+        _ctx->set_constant_columns(columns);
         JsonFunctions::native_json_path_prepare(_ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         return columns;
     }

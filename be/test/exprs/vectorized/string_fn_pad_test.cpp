@@ -240,7 +240,7 @@ void test_const_pad(size_t num_rows, TestCaseType& c) {
     auto state = std::make_unique<PadState>();
     std::shared_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto const_pad_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice{fill.data(), fill.size()}, 1);
-    ctx->impl()->set_constant_columns({nullptr, nullptr, const_pad_col});
+    ctx->set_constant_columns({nullptr, nullptr, const_pad_col});
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
@@ -321,7 +321,7 @@ void test_const_len_and_pad(size_t num_rows, TestCaseType& c) {
     std::shared_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto const_len_col = ColumnHelper::create_const_column<TYPE_INT>(len, 1);
     auto const_pad_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice{fill.data(), fill.size()}, 1);
-    ctx->impl()->set_constant_columns({nullptr, const_len_col, const_pad_col});
+    ctx->set_constant_columns({nullptr, const_len_col, const_pad_col});
     columns[1] = const_len_col;
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
