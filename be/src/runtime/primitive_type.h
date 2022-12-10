@@ -68,7 +68,7 @@ inline bool is_type_compatible(LogicalType lhs, LogicalType rhs) {
     return lhs == rhs;
 }
 
-inline bool is_scalar_primitive_type(LogicalType ptype) {
+constexpr bool is_scalar_primitive_type(LogicalType ptype) {
     switch (ptype) {
     case TYPE_BOOLEAN:  /* 2 */
     case TYPE_TINYINT:  /* 3 */
