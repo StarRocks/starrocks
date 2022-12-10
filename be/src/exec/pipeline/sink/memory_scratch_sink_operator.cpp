@@ -100,8 +100,7 @@ MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, c
                                                                    FragmentContext* const fragment_ctx)
         : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_memory_scratch_sink),
           _row_desc(row_desc),
-          _t_output_expr(std::move(t_output_expr)),
-          _fragment_ctx(fragment_ctx) {}
+          _t_output_expr(std::move(t_output_expr)) {}
 
 Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));

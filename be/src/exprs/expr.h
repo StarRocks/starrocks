@@ -42,10 +42,10 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
-#include "udf/udf.h"
 
 namespace starrocks {
 

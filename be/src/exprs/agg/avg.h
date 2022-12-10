@@ -17,10 +17,10 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
-#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

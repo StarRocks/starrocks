@@ -36,7 +36,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/memory/memory_resource.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 

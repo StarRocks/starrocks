@@ -62,7 +62,7 @@
 #include <queue>
 #include <vector>
 
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 #include "util/slice.h"
 
 namespace starrocks {

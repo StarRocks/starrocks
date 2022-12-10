@@ -33,11 +33,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/version.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
-#include "udf/udf_internal.h"
 #include "util/cidr.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
@@ -76,7 +76,7 @@ StatusOr<ColumnPtr> UtilityFunctions::sleep(FunctionContext* context, const Colu
 }
 
 StatusOr<ColumnPtr> UtilityFunctions::last_query_id(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     const std::string& id = state->last_query_id();
     if (!id.empty()) {
         return ColumnHelper::create_const_column<TYPE_VARCHAR>(id, 1);

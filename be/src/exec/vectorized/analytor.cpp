@@ -25,11 +25,11 @@
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
-#include "udf/udf.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
@@ -164,8 +164,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
             }
 
-            _agg_fn_ctxs[i] = FunctionContextImpl::create_context(state, _mem_pool.get(), return_typedesc,
-                                                                  arg_typedescs, 0, false);
+            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_typedesc, arg_typedescs);
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -319,12 +318,6 @@ void Analytor::close(RuntimeState* state) {
     _is_closed = true;
 
     auto agg_close = [this, state]() {
-        for (auto* ctx : _agg_fn_ctxs) {
-            if (ctx != nullptr && ctx->impl()) {
-                ctx->impl()->close();
-            }
-        }
-
         // Note: we must free agg_states before _mem_pool free_all;
         _managed_fn_states.clear();
         _managed_fn_states.shrink_to_fit();

@@ -19,7 +19,7 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "udf/udf.h"
+#include "exprs/function_context.h"
 
 namespace starrocks::vectorized {
 
