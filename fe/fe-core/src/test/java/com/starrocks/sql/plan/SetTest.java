@@ -475,7 +475,7 @@ public class SetTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: [9: day, TINYINT, true]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  child exprs:\n" +
