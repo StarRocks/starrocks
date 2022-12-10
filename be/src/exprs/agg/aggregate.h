@@ -175,10 +175,6 @@ public:
                                          const Column* column, AggDataPtr* states,
                                          const std::vector<uint8_t>& filter) const = 0;
 
-    // merge result to single state
-    virtual void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                          AggDataPtr __restrict state) const = 0;
-
     // Merge some continuous portion of a chunk to a given state.
     // This will be useful for sorted streaming aggregation.
     // 'start': the start position of the continuous portion
@@ -280,13 +276,6 @@ public:
             if (filter[i] == 0) {
                 static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
             }
-        }
-    }
-
-    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                  AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            static_cast<const Derived*>(this)->merge(ctx, column, state, i);
         }
     }
 

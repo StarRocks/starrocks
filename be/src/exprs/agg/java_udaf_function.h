@@ -253,31 +253,6 @@ public:
         env->PopLocalFrame(nullptr);
     }
 
-    template <class StatesProvider, class MergeCaller>
-    void _merge_batch_process(StatesProvider&& states_provider, MergeCaller&& caller, const Column* column,
-                              int batch_size) const {
-        auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
-        // get state lists
-        auto state_array = states_provider();
-        RETURN_IF_UNLIKELY_NULL(state_array, (void)0);
-        LOCAL_REF_GUARD_ENV(env, state_array);
-
-        // prepare buffer
-        DCHECK(column->is_binary());
-        auto serialized_column =
-                ColumnHelper::get_binary_column(const_cast<Column*>(ColumnHelper::get_data_column(column)));
-
-        auto& serialized_bytes = serialized_column->get_bytes();
-        auto buffer = std::make_unique<DirectByteBuffer>(serialized_bytes.data(), serialized_bytes.size());
-        auto buffer_array = helper.create_object_array(buffer->handle(), batch_size);
-        RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
-        LOCAL_REF_GUARD_ENV(env, buffer_array);
-
-        // batch call merge
-        caller(state_array, buffer_array);
-    }
-
     // This is only used to get portion of the entire binary column
     template <class StatesProvider, class MergeCaller>
     void _merge_batch_process(StatesProvider&& states_provider, MergeCaller&& caller, const Column* column,
@@ -294,14 +269,12 @@ public:
         auto serialized_column =
                 ColumnHelper::get_binary_column(const_cast<Column*>(ColumnHelper::get_data_column(column)));
 
-        char* start_pos = const_cast<char*>(serialized_column->get_slice(start).get_data());
-        size_t bytes_len = 0;
-        if (size > 0) {
-            auto last_slice = serialized_column->get_slice(start + size - 1);
-            bytes_len = last_slice.get_size() + (last_slice.get_data() - start_pos);
-        }
+        auto& serialized_bytes = serialized_column->get_bytes();
+        size_t start_offset = serialized_column->get_offset()[start];
+        size_t end_offset = serialized_column->get_offset()[start + size];
 
-        auto buffer = std::make_unique<DirectByteBuffer>(start_pos, bytes_len);
+        auto buffer =
+                std::make_unique<DirectByteBuffer>(serialized_bytes.data() + start_offset, end_offset - start_offset);
         auto buffer_array = helper.create_object_array(buffer->handle(), size);
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
@@ -328,7 +301,7 @@ public:
             helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->merge->method.handle(),
                                       state_and_buffer, 2);
         };
-        _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
+        _merge_batch_process(std::move(provider), std::move(merger), column, 0, batch_size);
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
@@ -346,25 +319,7 @@ public:
             helper.batch_update_if_not_null(ctx, ctx->udaf_ctxs()->handle.handle(),
                                             ctx->udaf_ctxs()->merge->method.handle(), state_array, state_and_buffer, 1);
         };
-        _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
-    }
-
-    void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
-                                  AggDataPtr __restrict state) const override {
-        auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
-        auto provider = [&]() {
-            auto state_handle = reinterpret_cast<JavaUDAFState*>(state)->handle;
-            auto res = helper.convert_handle_to_jobject(ctx, state_handle);
-            LOCAL_REF_GUARD_ENV(env, res);
-            return helper.create_object_array(res, batch_size);
-        };
-        auto merger = [&](jobject state_array, jobject buffer_array) {
-            jobject state_and_buffer[2] = {state_array, buffer_array};
-            helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->merge->method.handle(),
-                                      state_and_buffer, 2);
-        };
-        _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
+        _merge_batch_process(std::move(provider), std::move(merger), column, 0, batch_size);
     }
 
     void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
