@@ -35,8 +35,8 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                  AggDataPtr __restrict state) const override {
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
+                                  size_t size) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
