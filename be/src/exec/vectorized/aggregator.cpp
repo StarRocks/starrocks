@@ -468,8 +468,8 @@ void Aggregator::compute_single_agg_state(size_t chunk_size) {
                                                          _single_agg_state + _agg_states_offsets[i]);
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_columns[i][0].get(),
-                                                        _single_agg_state + _agg_states_offsets[i]);
+            _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i],
+                                                        _agg_input_columns[i][0].get(), 0, chunk_size);
         }
     }
 }
