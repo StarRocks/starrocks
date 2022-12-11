@@ -18,6 +18,7 @@
 
 #include "column/array_column.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_input_stream.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
