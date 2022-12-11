@@ -30,7 +30,7 @@ bool PredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
     RETURN_IF(predicate->column_id() >= _schema.num_columns(), false);
     const TabletColumn& column = _schema.column(predicate->column_id());
     return _schema.keys_type() == KeysType::PRIMARY_KEYS ||
-           column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
+           column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
 }
 
 bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
@@ -38,7 +38,7 @@ bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
     CHECK(index <= _schema.num_columns());
     const TabletColumn& column = _schema.column(index);
     return _schema.keys_type() == KeysType::PRIMARY_KEYS ||
-           column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
+           column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
 }
 
 ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition) const {

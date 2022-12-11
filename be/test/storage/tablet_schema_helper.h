@@ -100,7 +100,7 @@ inline ColumnPB create_int_value_pb(int32_t id, const std::string& agg_method = 
     return col;
 }
 
-inline TabletColumn create_int_value(int32_t id, FieldAggregationMethod agg_method = OLAP_FIELD_AGGREGATION_SUM,
+inline TabletColumn create_int_value(int32_t id, StorageAggregateType agg_method = STORAGE_AGGREGATE_SUM,
                                      bool is_nullable = true, const std::string default_value = "",
                                      bool is_bf_column = false, bool has_bitmap_index = false) {
     TabletColumn column;
@@ -171,7 +171,7 @@ inline TabletColumn create_with_default_value(std::string default_value) {
     TabletColumn column;
     column.set_type(type);
     column.set_is_nullable(true);
-    column.set_aggregation(OLAP_FIELD_AGGREGATION_NONE);
+    column.set_aggregation(STORAGE_AGGREGATE_NONE);
     column.set_default_value(default_value);
     column.set_length(4);
     return column;
