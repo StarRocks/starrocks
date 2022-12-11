@@ -49,6 +49,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/decimal12.h"
 #include "storage/olap_common.h"
+#include "storage/aggregate_type.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
@@ -137,7 +138,7 @@ protected:
             writer_opts.meta->set_is_nullable(true);
             writer_opts.need_zone_map = true;
 
-            TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, type);
+            TabletColumn column(STORAGE_AGGREGATE_NONE, type);
             if (type == TYPE_VARCHAR) {
                 column = create_varchar_key(1, true, 128);
             } else if (type == TYPE_CHAR) {
@@ -329,7 +330,7 @@ protected:
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
         TabletColumn array_column = create_array(0, true, sizeof(Collection));
-        TabletColumn int_column = create_int_value(0, OLAP_FIELD_AGGREGATION_NONE, true);
+        TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
         array_column.add_sub_column(int_column);
 
         auto src_offsets = vectorized::UInt32Column::create();
@@ -701,7 +702,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         writer_opts.meta->set_is_nullable(true);
         writer_opts.need_zone_map = true;
 
-        TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, TYPE_INT);
+        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_INT);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
         ASSERT_OK(writer->init());
 

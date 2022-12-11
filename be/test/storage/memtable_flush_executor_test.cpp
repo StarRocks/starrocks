@@ -27,6 +27,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/aggregate_type.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
@@ -110,7 +111,7 @@ static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) 
         }
         auto fd = new VectorizedField(cid, name, type, nullable);
         fd->set_is_key(i < nkey);
-        fd->set_aggregate_method(i < nkey ? OLAP_FIELD_AGGREGATION_NONE : OLAP_FIELD_AGGREGATION_REPLACE);
+        fd->set_aggregate_method(i < nkey ? STORAGE_AGGREGATE_NONE : STORAGE_AGGREGATE_REPLACE);
         fields.emplace_back(fd);
     }
     ret = std::make_unique<VectorizedSchema>(std::move(fields));

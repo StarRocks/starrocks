@@ -370,16 +370,16 @@ TARGET_LINK_LIBRARIES(bytes_test
 
 # =================================================
 # test cases must be compiled as a standalone binary
-ADD_BE_TEST(http/metrics_action_test)
-ADD_BE_TEST(http/http_client_test)
-
-ADD_BE_TEST(runtime/routine_load_task_executor_test)
-ADD_BE_TEST(runtime/small_file_mgr_test)
-ADD_BE_TEST(runtime/user_function_cache_test)
-
-ADD_BE_TEST(storage/delete_handler_test)
-ADD_BE_TEST(storage/options_test)
-ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+# ADD_BE_TEST(http/metrics_action_test)
+# ADD_BE_TEST(http/http_client_test)
+# 
+# ADD_BE_TEST(runtime/routine_load_task_executor_test)
+# ADD_BE_TEST(runtime/small_file_mgr_test)
+# ADD_BE_TEST(runtime/user_function_cache_test)
+# 
+# ADD_BE_TEST(storage/delete_handler_test)
+# ADD_BE_TEST(storage/options_test)
+# ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/vectorized/sorting_test)

@@ -35,7 +35,7 @@ static unique_ptr<vectorized::VectorizedSchema> create_key_schema(const vector<L
         string name = StringPrintf("col%d", i);
         auto fd = new vectorized::VectorizedField(i, name, types[i], false);
         fd->set_is_key(true);
-        fd->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
+        fd->set_aggregate_method(STORAGE_AGGREGATE_NONE);
         fields.emplace_back(fd);
         sort_key_idxes[i] = i;
     }
