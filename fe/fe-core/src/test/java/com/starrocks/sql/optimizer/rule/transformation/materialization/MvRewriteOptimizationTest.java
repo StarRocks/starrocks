@@ -933,7 +933,6 @@ public class MvRewriteOptimizationTest {
     @Test
     public void testPartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
 
         cluster.runSql("test", "insert into table_with_partition values(\"varchar1\", '1991-02-01', 1, 1, 1)");
         cluster.runSql("test", "insert into table_with_partition values(\"varchar2\", '1992-02-01', 2, 1, 1)");
@@ -1058,7 +1057,7 @@ public class MvRewriteOptimizationTest {
 
         String query10 = "select c1, c3, c2 from test_base_part";
         String plan10 = getFragmentPlan(query10);
-        PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "c3 >= 2000");
+        PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "c3 > 1999");
 
         String query12 = "select c1, c3, c2 from test_base_part where c3 < 2000";
         String plan12 = getFragmentPlan(query12);
@@ -1077,7 +1076,7 @@ public class MvRewriteOptimizationTest {
                 " select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1;");
         String query11 = "select c1, c3, c2 from test_base_part";
         String plan11 = getFragmentPlan(query11);
-        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "c3 >= 2000");
+        PlanTestBase.assertContains(plan11, "partial_mv_7", "UNION", "c3 > 1999");
         dropMv("test", "partial_mv_7");
 
         createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
@@ -1142,8 +1141,38 @@ public class MvRewriteOptimizationTest {
         String query16 = "select k1, sum(v1) FROM ttl_base_table where k1=3 group by k1";
         String plan16 = getFragmentPlan(query16);
         PlanTestBase.assertContains(plan16, "ttl_mv_2");
-        starRocksAssert.dropTable("ttl_base_table");
         dropMv("test", "ttl_mv_2");
+        starRocksAssert.dropTable("ttl_base_table");
+
+        starRocksAssert.withTable("CREATE TABLE ttl_base_table_2 (\n" +
+                "                            k1 date,\n" +
+                "                            v1 INT,\n" +
+                "                            v2 INT)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        PARTITION BY RANGE(`k1`)\n" +
+                "                        (\n" +
+                "                        PARTITION `p1` VALUES LESS THAN ('2020-01-01'),\n" +
+                "                        PARTITION `p2` VALUES LESS THAN ('2020-02-01'),\n" +
+                "                        PARTITION `p3` VALUES LESS THAN ('2020-03-01'),\n" +
+                "                        PARTITION `p4` VALUES LESS THAN ('2020-04-01'),\n" +
+                "                        PARTITION `p5` VALUES LESS THAN ('2020-05-01'),\n" +
+                "                        PARTITION `p6` VALUES LESS THAN ('2020-06-01')\n" +
+                "                        )\n" +
+                "                        DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into ttl_base_table_2 values " +
+                " (\"2019-01-01\",1,1),(\"2019-01-01\",1,2),(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                " (\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
+                " (\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+        createAndRefreshMv("test", "ttl_mv_3", "CREATE MATERIALIZED VIEW ttl_mv_3\n" +
+                "               PARTITION BY k1\n" +
+                "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "               REFRESH MANUAL\n" +
+                "               AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table_2 group by k1;");
+        String query17 = "select k1, sum(v1) FROM ttl_base_table_2 where k1 = '2020-02-11' group by k1";
+        String plan17 = getFragmentPlan(query17);
+        PlanTestBase.assertContains(plan17, "ttl_mv_3", "k1 = '2020-02-11'");
+        dropMv("test", "ttl_mv_3");
+        starRocksAssert.dropTable("ttl_base_table_2");
     }
 
     public String getFragmentPlan(String sql) throws Exception {
