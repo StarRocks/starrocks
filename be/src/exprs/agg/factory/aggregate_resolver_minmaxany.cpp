@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "boost/exception/exception.hpp"
-#include "exprs/agg/aggregate.h"
-#include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"

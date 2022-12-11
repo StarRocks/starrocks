@@ -66,17 +66,6 @@ template <>
 inline constexpr bool IsDateTime<DateValue> = true;
 
 template <typename T>
-constexpr bool IsObject = false;
-template <>
-inline constexpr bool IsObject<HyperLogLog> = true;
-template <>
-inline constexpr bool IsObject<BitmapValue> = true;
-template <>
-inline constexpr bool IsObject<PercentileValue> = true;
-template <>
-inline constexpr bool IsObject<JsonValue> = true;
-
-template <typename T>
 using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
 
 template <typename T>
@@ -269,8 +258,6 @@ template <LogicalType Type>
 using RunTimeCppMovableType = std::add_rvalue_reference_t<std::remove_pointer_t<RunTimeCppType<Type>>>;
 
 // Value type instead of pointer type
-template <LogicalType Type>
-using RunTimeCppValueType = std::remove_pointer_t<RunTimeCppType<Type>>;
 
 template <typename T>
 struct ColumnTraits {};
@@ -418,4 +405,4 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
 };
 
-} // namespace starrocks::vectorized
+}; // namespace starrocks::vectorized
