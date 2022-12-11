@@ -715,4 +715,20 @@ CONF_Int32(internal_service_async_thread_num, "10");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
+<<<<<<< HEAD
+=======
+
+// exception_stack_level controls when to print exception's stack
+// -1, enable print all exceptions' stack
+// 0, disable print exceptions' stack
+// 1, print exceptions' stack whose prefix is in the white list(default)
+// 2, print exceptions' stack whose prefix is not in the black list
+// other value means the default value
+CONF_Int32(exception_stack_level, "1");
+CONF_String(exception_stack_white_list, "std::");
+CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
+
+CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
+
+>>>>>>> 681c9fe92 ([Feature] Support configure rocksdb meta column family options. (#14398))
 } // namespace starrocks::config

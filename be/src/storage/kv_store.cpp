@@ -26,6 +26,8 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "gutil/strings/substitute.h"
+#include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
@@ -71,12 +73,16 @@ Status KVStore::init(bool read_only) {
     options.create_missing_column_families = true;
     std::string db_path = _root_path + META_POSTFIX;
 
+    ColumnFamilyOptions meta_cf_options;
+    RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
+                                                              &meta_cf_options));
     // The index of each column family must be consistent with the enum `ColumnFamilyIndex`
     // defined in olap_define.h
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
     cf_descs[0].name = DEFAULT_COLUMN_FAMILY;
     cf_descs[1].name = STARROCKS_COLUMN_FAMILY;
     cf_descs[2].name = META_COLUMN_FAMILY;
+    cf_descs[2].options = meta_cf_options;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
