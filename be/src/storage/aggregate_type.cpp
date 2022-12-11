@@ -22,7 +22,7 @@ namespace starrocks {
 
 StorageAggregateType get_aggregation_type_by_string(const std::string& str) {
     std::string upper_str = str;
-    std::transform(str.begin(), str.end(), upper_str.begin(), ::toupper);
+    std::transform(str.begin(), str.end(), upper_str.begin(), ::tolower);
 
     if (upper_str == "none") return STORAGE_AGGREGATE_NONE;
     if (upper_str == "sum") return STORAGE_AGGREGATE_SUM;
@@ -63,11 +63,11 @@ std::string get_string_by_aggregation_type(StorageAggregateType type) {
     return "";
 }
 
-}
+} // namespace starrocks
 
 namespace std {
 ostream& operator<<(ostream& os, starrocks::StorageAggregateType method) {
     os << starrocks::get_string_by_aggregation_type(method);
     return os;
 }
-}
+} // namespace std

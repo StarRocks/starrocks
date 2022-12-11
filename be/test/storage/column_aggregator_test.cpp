@@ -689,8 +689,8 @@ TEST(ColumnAggregator, testArrayReplace) {
 TEST(ColumnAggregator, testNullArrayReplaceIfNotNull2) {
     auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_INT));
     VectorizedFieldPtr field = std::make_shared<VectorizedField>(
-            1, "test_array", array_type_info, StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL, 1,
-            false, true);
+            1, "test_array", array_type_info, StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL, 1, false,
+            true);
     auto agg = NullableColumn::create(
             ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                 UInt32Column::create()),
@@ -766,8 +766,8 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull2) {
 TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
     auto array_type_info = get_array_type_info(get_type_info(LogicalType::TYPE_VARCHAR));
     VectorizedFieldPtr field = std::make_shared<VectorizedField>(
-            1, "test_array", array_type_info, StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL, 1,
-            false, true);
+            1, "test_array", array_type_info, StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL, 1, false,
+            true);
 
     auto agg = NullableColumn::create(
             ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),

@@ -35,7 +35,7 @@ enum StorageAggregateType {
 StorageAggregateType get_aggregation_type_by_string(const std::string& str);
 std::string get_string_by_aggregation_type(StorageAggregateType type);
 
-}
+} // namespace starrocks
 
 namespace std {
 ostream& operator<<(ostream& os, starrocks::StorageAggregateType method);

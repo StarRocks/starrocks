@@ -43,8 +43,8 @@ TEST(VectorizedFieldTest, test_construct0) {
 }
 
 TEST(VectorizedFieldTest, test_construct1) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, false);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, false);
 
     ASSERT_EQ(1, field1->id());
     ASSERT_EQ("c1", field1->name());
@@ -68,8 +68,8 @@ TEST(VectorizedFieldTest, test_construct1) {
 }
 
 TEST(VectorizedFieldTest, test_copy_ctor) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, false);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, false);
     VectorizedFieldPtr field2 = std::make_shared<VectorizedField>(*field1);
 
     ASSERT_EQ(1, field2->id());
@@ -82,8 +82,8 @@ TEST(VectorizedFieldTest, test_copy_ctor) {
 }
 
 TEST(VectorizedFieldTest, test_move_ctor) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, false);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, false);
     VectorizedFieldPtr field2 = std::make_shared<VectorizedField>(std::move(*field1));
 
     ASSERT_EQ(1, field2->id());
@@ -96,8 +96,8 @@ TEST(VectorizedFieldTest, test_move_ctor) {
 }
 
 TEST(VectorizedFieldTest, test_copy_assign) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, false);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, false);
     VectorizedFieldPtr field2 = std::make_shared<VectorizedField>(2, "c2", get_type_info(TYPE_VARCHAR),
                                                                   STORAGE_AGGREGATE_MIN, 100, false, true);
     *field2 = *field1;
@@ -112,8 +112,8 @@ TEST(VectorizedFieldTest, test_copy_assign) {
 }
 
 TEST(VectorizedFieldTest, test_move_assign) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, false);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, false);
     VectorizedFieldPtr field2 = std::make_shared<VectorizedField>(2, "c2", get_type_info(TYPE_VARCHAR),
                                                                   STORAGE_AGGREGATE_MIN, 100, false, true);
     *field2 = std::move(*field1);
@@ -128,8 +128,8 @@ TEST(VectorizedFieldTest, test_move_assign) {
 }
 
 TEST(VectorizedFieldTest, test_with_type) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, false);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, false);
     VectorizedFieldPtr field2 = field1->with_type(get_type_info(TYPE_VARCHAR));
 
     ASSERT_EQ(1, field2->id());
@@ -142,8 +142,8 @@ TEST(VectorizedFieldTest, test_with_type) {
 }
 
 TEST(VectorizedFieldTest, test_with_name) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, false);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, false);
     VectorizedFieldPtr field2 = field1->with_name("c2");
 
     ASSERT_EQ(1, field2->id());
@@ -156,8 +156,8 @@ TEST(VectorizedFieldTest, test_with_name) {
 }
 
 TEST(VectorizedFieldTest, test_with_nullable) {
-    VectorizedFieldPtr field1 = std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT),
-                                                                  STORAGE_AGGREGATE_MAX, 10, true, true);
+    VectorizedFieldPtr field1 =
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(TYPE_INT), STORAGE_AGGREGATE_MAX, 10, true, true);
     VectorizedFieldPtr field2 = field1->with_nullable(false);
 
     ASSERT_EQ(1, field2->id());
