@@ -17,6 +17,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
 import com.starrocks.qe.ConnectContext;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -398,11 +399,13 @@ public class HiveMetaClient {
             throw new DdlException("get partitions from hive metastore failed: " + e.getMessage());
         }
         for (Partition partition : partitions) {
-            String partName = FileUtils.makePartName(partColumnNames, partition.getValues());
-            long rowNumber = Utils.getRowCount(partition.getParameters());
-            partRowNumbers.put(partName, rowNumber);
-            if (rowNumber != -1L) {
-                tableRowNumber += rowNumber;
+            if(CollectionUtils.isNotEmpty(partition.getValues())) {
+                String partName = FileUtils.makePartName(partColumnNames, partition.getValues());
+                long rowNumber = Utils.getRowCount(partition.getParameters());
+                partRowNumbers.put(partName, rowNumber);
+                if (rowNumber != -1L) {
+                    tableRowNumber += rowNumber;
+                }
             }
         }
         // set to zero row number for not exists partition
