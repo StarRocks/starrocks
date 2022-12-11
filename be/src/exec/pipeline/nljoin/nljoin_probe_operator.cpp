@@ -181,12 +181,7 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
         SlotDescriptor* slot = _col_types[i];
         bool is_probe = i < _probe_column_count;
         bool nullable = _col_types[i]->is_nullable();
-        // OUTER JOIN must be nullable
         if ((is_probe && _is_right_join()) || (!is_probe && _is_left_join())) {
-            nullable = true;
-        }
-        // Right side of LEFT SEMI/ANTI JOIN must be nullable
-        if (!is_probe && (_is_left_anti_join() || _is_left_semi_join())) {
             nullable = true;
         }
         if (is_probe && _probe_chunk) {
@@ -398,7 +393,6 @@ void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk
             DCHECK_LT(probe_row_index, src_col->size());
             dst_col->append(*src_col, probe_row_index, probe_rows);
         } else {
-            DCHECK(dst_col->is_nullable());
             dst_col->append_nulls(probe_rows);
         }
     }
