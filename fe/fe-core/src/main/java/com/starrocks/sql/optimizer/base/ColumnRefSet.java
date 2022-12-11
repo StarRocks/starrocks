@@ -148,10 +148,6 @@ public class ColumnRefSet implements Cloneable {
         return rhs.bitSet.stream().allMatch(bit -> bitSet.get(bit));
     }
 
-    public boolean containsAny(ColumnRefSet rhs) {
-        return rhs.bitSet.stream().anyMatch(bit -> bitSet.get(bit));
-    }
-
     public boolean containsAll(List<Integer> rhs) {
         return rhs.stream().allMatch(bit -> bitSet.get(bit));
     }

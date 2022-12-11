@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -19,6 +20,7 @@ import jersey.repackaged.com.google.common.collect.Lists;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PruneProjectRule extends TransformationRule {
     public PruneProjectRule() {
@@ -48,14 +50,12 @@ public class PruneProjectRule extends TransformationRule {
         if (((LogicalProjectOperator) input.getOp()).getColumnRefMap().isEmpty()) {
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
 
-            OptExpression child = input.inputAt(0);
-            LogicalOperator logicalOperator = (LogicalOperator) child.getOp();
+            LogicalOperator logicalOperator = (LogicalOperator) input.inputAt(0).getOp();
 
-            ColumnRefOperator smallestColumn =
-                    logicalOperator.getSmallestColumn(context.getColumnRefFactory(), child);
-            if (smallestColumn != null) {
-                projectMap.put(smallestColumn, smallestColumn);
-            }
+            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(
+                    logicalOperator.getOutputColumns(new ExpressionContext(input.inputAt(0))).getStream().
+                            mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList()));
+            projectMap.put(smallestColumn, smallestColumn);
             return Lists.newArrayList(OptExpression
                     .create(new LogicalProjectOperator(projectMap, logicalOperator.getLimit()), input.getInputs()));
         }
