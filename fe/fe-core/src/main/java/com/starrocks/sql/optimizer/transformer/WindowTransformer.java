@@ -133,7 +133,7 @@ public class WindowTransformer {
                 if (callExpr.getChild(2) instanceof CastExpr) {
                     throw new SemanticException(
                             "The third parameter of `" + callExpr.getFn().getFunctionName().getFunction() +
-                                    "` can't not convert to " + callExpr.getChildren().get(0).getType());
+                                    "` can't convert to " + callExpr.getChildren().get(0).getType());
                 }
 
                 AnalyticExpr.checkDefaultValue(callExpr);
