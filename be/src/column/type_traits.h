@@ -34,20 +34,6 @@ struct cond {
     using type = T;
 };
 
-template <typename Condition, typename... OtherConditions>
-struct type_select {
-    using type = std::conditional_t<Condition::value, typename Condition::type,
-                                    typename type_select<OtherConditions...>::type>;
-};
-
-template <typename Condition>
-struct type_select<Condition> {
-    using type = std::conditional_t<Condition::value, typename Condition::type, void>;
-};
-
-template <typename Condition, typename... OtherConditions>
-using type_select_t = typename type_select<Condition, OtherConditions...>::type;
-
 template <typename T>
 constexpr bool IsInt128 = false;
 template <>
@@ -67,9 +53,6 @@ inline constexpr bool IsDateTime<DateValue> = true;
 
 template <typename T>
 using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
-
-template <typename T>
-using is_sum_bigint = std::integral_constant<bool, std::is_integral_v<T> && !IsInt128<T>>;
 
 // If isArithmeticPT is true, means this type support +,-,*,/
 template <LogicalType primitive_type>
@@ -405,4 +388,4 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
 };
 
-}; // namespace starrocks::vectorized
+}
