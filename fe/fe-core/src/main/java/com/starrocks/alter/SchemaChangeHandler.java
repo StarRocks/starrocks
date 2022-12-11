@@ -647,10 +647,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("PERCENTILE_UNION must be used in AGG_KEYS");
         }
 
-        if (newColumn.getType().isComplexType() && KeysType.DUP_KEYS != olapTable.getKeysType()) {
-            throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
-        }
-
         // check if the new column already exist in base schema.
         // do not support adding new column which already exist in base schema.
         List<Column> baseSchema = olapTable.getBaseSchema();
