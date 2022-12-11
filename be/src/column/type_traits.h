@@ -388,4 +388,4 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
 };
 
-}
+} // namespace starrocks::vectorized
