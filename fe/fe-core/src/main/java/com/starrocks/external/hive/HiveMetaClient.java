@@ -399,7 +399,7 @@ public class HiveMetaClient {
             throw new DdlException("get partitions from hive metastore failed: " + e.getMessage());
         }
         for (Partition partition : partitions) {
-            if(CollectionUtils.isNotEmpty(partition.getValues())) {
+            if (CollectionUtils.isNotEmpty(partition.getValues())) {
                 String partName = FileUtils.makePartName(partColumnNames, partition.getValues());
                 long rowNumber = Utils.getRowCount(partition.getParameters());
                 partRowNumbers.put(partName, rowNumber);
