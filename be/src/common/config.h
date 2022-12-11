@@ -715,4 +715,7 @@ CONF_Int32(internal_service_async_thread_num, "10");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
+
+CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
+
 } // namespace starrocks::config
