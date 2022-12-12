@@ -105,7 +105,7 @@ PROPERTIES
 );
 ~~~
 
-`spark0,spark1,spark2` 为 StarRocks 中配置的 Spark 资源的名字。
+`spark0`、`spark1` 和 `spark2` 为 StarRocks 中配置的 Spark 资源的名字。
 
 PROPERTIES 是 Spark 资源相关参数，如下：
 
