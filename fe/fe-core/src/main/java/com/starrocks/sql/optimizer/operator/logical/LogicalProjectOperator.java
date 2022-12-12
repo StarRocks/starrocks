@@ -56,7 +56,7 @@ public final class LogicalProjectOperator extends LogicalOperator {
             return true;
         }
 
-        return columnRefMap.equals(rhs.columnRefMap);
+        return columnRefMap.keySet().equals(rhs.columnRefMap.keySet());
     }
 
     @Override
