@@ -23,7 +23,6 @@
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
-#include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -112,8 +111,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         return date_valid<RESULT_TYPE>(p);                                                                             \
     }
 
-Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::convert_tz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || context->get_num_args() != 3 ||
         context->get_arg_type(1)->type != TYPE_VARCHAR || context->get_arg_type(2)->type != TYPE_VARCHAR ||
         !context->is_constant_column(1) || !context->is_constant_column(2)) {
@@ -153,8 +151,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
     return Status::OK();
 }
 
-Status TimeFunctions::convert_tz_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::convert_tz_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* ctc = reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         if (ctc != nullptr) {
@@ -274,7 +271,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz(FunctionContext* context, const Co
 }
 
 StatusOr<ColumnPtr> TimeFunctions::utc_timestamp(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, "+00:00")) {
         TimestampValue ts;
@@ -290,7 +287,7 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
 }
 
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone_obj())) {
         TimestampValue ts;
@@ -302,7 +299,7 @@ StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& 
 }
 
 StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
         double seconds = dtv.hour() * 3600 + dtv.minute() * 60 + dtv.second();
@@ -313,7 +310,7 @@ StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Colum
 }
 
 StatusOr<ColumnPtr> TimeFunctions::curdate(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
         DateValue dv;
@@ -671,8 +668,7 @@ DEFINE_TIME_ADD_AND_SUB_FN(micros, TimeUnit::MICROSECOND);
 #undef DEFINE_TIME_SUB_FN
 #undef DEFINE_TIME_ADD_AND_SUB_FN
 
-Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -783,6 +779,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
 #define DEFINE_TIME_SLICE_FN(UNIT)                                                                 \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_start_##UNIT##Impl, v, period) {          \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<false>(period);                                   \
         return result;                                                                             \
     }                                                                                              \
@@ -790,6 +789,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     DEFINE_TIME_CALC_FN(time_slice_datetime_start_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME); \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_end_##UNIT##Impl, v, period) {            \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<true>(period);                                    \
         return result;                                                                             \
     }                                                                                              \
@@ -797,6 +799,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     DEFINE_TIME_CALC_FN(time_slice_datetime_end_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);   \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_start_##UNIT##Impl, v, period) {              \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<false>(period);                                   \
         return result;                                                                             \
     }                                                                                              \
@@ -804,6 +809,9 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     DEFINE_TIME_CALC_FN(time_slice_date_start_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);             \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_end_##UNIT##Impl, v, period) {                \
         TimestampValue result = v;                                                                 \
+        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
+            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
+        }                                                                                          \
         result.template floor_to_##UNIT##_period<true>(period);                                    \
         return result;                                                                             \
     }                                                                                              \
@@ -841,8 +849,7 @@ StatusOr<ColumnPtr> TimeFunctions::time_slice(FunctionContext* context, const Co
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::time_slice_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;
@@ -967,7 +974,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* contex
         DateTimeValue tv(TIME_DATETIME, year, month, day, hour, minute, second, usec);
 
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->impl()->state()->timezone_obj())) {
+        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
@@ -1002,7 +1009,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date(FunctionContext* context, c
         DateTimeValue tv(TIME_DATE, year, month, day, 0, 0, 0, 0);
 
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->impl()->state()->timezone_obj())) {
+        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
@@ -1041,7 +1048,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionCon
             continue;
         }
         int64_t timestamp;
-        if (!tv.unix_timestamp(&timestamp, context->impl()->state()->timezone_obj())) {
+        if (!tv.unix_timestamp(&timestamp, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1057,7 +1064,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionCon
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 0);
     auto result = Int32Column::create();
-    result->append(context->impl()->state()->timestamp_ms() / 1000);
+    result->append(context->state()->timestamp_ms() / 1000);
     return ConstColumn::create(result, 1);
 }
 /*
@@ -1089,7 +1096,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* contex
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->impl()->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1128,8 +1135,7 @@ std::string TimeFunctions::convert_format(const Slice& format) {
 }
 
 // regex method
-Status TimeFunctions::from_unix_prepare(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1153,8 +1159,7 @@ Status TimeFunctions::from_unix_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status TimeFunctions::from_unix_close(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::from_unix_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(scope));
         delete state;
@@ -1186,7 +1191,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_general(FunctionContext
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->impl()->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1232,7 +1237,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& form
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->impl()->state()->timezone_obj())) {
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
             result.append_null();
             continue;
         }
@@ -1335,8 +1340,7 @@ bool TimeFunctions::is_datetime_format(const Slice& slice, char** start) {
 }
 
 // prepare for string format, if it is "%Y-%m-%d" or "%Y-%m-%d %H:%i:%s"
-Status TimeFunctions::str_to_date_prepare(starrocks_udf::FunctionContext* context,
-                                          starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::str_to_date_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1495,8 +1499,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date(FunctionContext* context, const C
 }
 
 // reclaim memory for str_to_date.
-Status TimeFunctions::str_to_date_close(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::str_to_date_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1518,8 +1521,7 @@ StatusOr<ColumnPtr> TimeFunctions::str2date(FunctionContext* context, const Colu
     return VectorizedStrictUnaryFunction<TimestampToDate>::evaluate<TYPE_DATETIME, TYPE_DATE>(datetime);
 }
 
-Status TimeFunctions::format_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::format_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1566,8 +1568,7 @@ Status TimeFunctions::format_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status TimeFunctions::format_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::format_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1836,8 +1837,7 @@ StatusOr<ColumnPtr> TimeFunctions::date_format(FunctionContext* context, const C
     }
 }
 
-Status TimeFunctions::datetime_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                             starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1939,8 +1939,7 @@ StatusOr<ColumnPtr> TimeFunctions::datetime_trunc(FunctionContext* context, cons
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::datetime_trunc_close(starrocks_udf::FunctionContext* context,
-                                           starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::datetime_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;
@@ -1949,8 +1948,7 @@ Status TimeFunctions::datetime_trunc_close(starrocks_udf::FunctionContext* conte
     return Status::OK();
 }
 
-Status TimeFunctions::date_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -2027,8 +2025,7 @@ StatusOr<ColumnPtr> TimeFunctions::date_trunc(FunctionContext* context, const Co
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::date_trunc_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::date_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;
@@ -2037,6 +2034,9 @@ Status TimeFunctions::date_trunc_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
+// used as start point of time_slice.
+TimestampValue TimeFunctions::start_of_time_slice = TimestampValue::create(1, 1, 1, 0, 0, 0);
+std::string TimeFunctions::info_reported_by_time_slice = "time used with time_slice can't before 0001-01-01 00:00:00";
 #undef DEFINE_TIME_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_WITH_IMPL
 #undef DEFINE_TIME_BINARY_FN

@@ -45,7 +45,6 @@
 #include "common/status.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_scheduler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
@@ -174,11 +173,8 @@ Status StorageEngine::start_bg_threads() {
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
-        _compaction_scheduler = std::thread([] {
-            CompactionScheduler compaction_scheduler;
-            compaction_scheduler.schedule();
-        });
-        Thread::set_thread_name(_compaction_scheduler, "compact_sched");
+
+        _compaction_manager->schedule();
 
         _compaction_checker_thread = std::thread([this] { compaction_check(); });
         Thread::set_thread_name(_compaction_checker_thread, "compact_check");

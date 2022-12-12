@@ -102,8 +102,6 @@ private:
 
     BlockQueueSharedPtr _queue;
     std::unordered_map<int64_t, std::string> _id_to_col_name;
-
-    FragmentContext* const _fragment_ctx;
 };
 
 } // namespace pipeline

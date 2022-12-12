@@ -16,7 +16,6 @@
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
-#include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
 

@@ -21,6 +21,7 @@ add_subdirectory(rowset)
 
 add_library(Storage STATIC
     array_type_info.cpp
+    aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
     decimal_type_info.cpp
@@ -145,7 +146,6 @@ add_library(Storage STATIC
     compaction_task.cpp
     compaction_utils.cpp
     compaction_manager.cpp
-    compaction_scheduler.cpp
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
     compaction_task_factory.cpp

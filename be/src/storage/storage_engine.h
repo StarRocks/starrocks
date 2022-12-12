@@ -374,8 +374,6 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-    std::thread _compaction_scheduler; // compaction scheduler should destruct before compaction manager
-
     HeartbeatFlags* _heartbeat_flags = nullptr;
 
     StorageEngine(const StorageEngine&) = delete;

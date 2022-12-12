@@ -172,11 +172,11 @@ void TabletManager::prune_metacache() {
 
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     // generate tablet metadata pb
-    TabletMetadataPB tablet_metadata_pb;
-    tablet_metadata_pb.set_id(req.tablet_id);
-    tablet_metadata_pb.set_version(1);
-    tablet_metadata_pb.set_next_rowset_id(1);
-    tablet_metadata_pb.set_cumulative_point(0);
+    auto tablet_metadata_pb = std::make_shared<TabletMetadataPB>();
+    tablet_metadata_pb->set_id(req.tablet_id);
+    tablet_metadata_pb->set_version(1);
+    tablet_metadata_pb->set_next_rowset_id(1);
+    tablet_metadata_pb->set_cumulative_point(0);
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
@@ -202,7 +202,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             }
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     } else {
         std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
@@ -211,10 +211,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-    return put_tablet_metadata(tablet_metadata_pb);
+    return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {

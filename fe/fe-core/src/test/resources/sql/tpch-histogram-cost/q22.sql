@@ -180,7 +180,7 @@ OutPut Exchange Id: 09
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
 7:AGGREGATE (merge finalize)
-|  aggregate: avg[([19: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: avg[([19: avg, VARBINARY, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
@@ -195,7 +195,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 06
 
 5:AGGREGATE (update serialize)
-|  aggregate: avg[([15: C_ACCTBAL, DOUBLE, false]); args: DOUBLE; result: VARCHAR; args nullable: false; result nullable: true]
+|  aggregate: avg[([15: C_ACCTBAL, DOUBLE, false]); args: DOUBLE; result: VARBINARY; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE

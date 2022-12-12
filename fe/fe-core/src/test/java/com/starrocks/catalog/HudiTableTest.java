@@ -174,7 +174,7 @@ public class HudiTableTest {
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.DOUBLE)),
                 ScalarType.createType(PrimitiveType.DOUBLE));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
-                ScalarType.createDefaultString());
+                ScalarType.createDefaultExternalTableString());
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                 Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
@@ -183,7 +183,7 @@ public class HudiTableTest {
                 ScalarType.createType(PrimitiveType.VARCHAR));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createMap(Schema.create(Schema.Type.INT))),
-                new MapType(ScalarType.createDefaultString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(ScalarType.createDefaultExternalTableString(), ScalarType.createType(PrimitiveType.INT)));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
                 ScalarType.createType(PrimitiveType.INT));

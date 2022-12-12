@@ -17,7 +17,10 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_input_stream.h"
+#include "formats/orc/orc_min_max_decoder.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
@@ -124,7 +127,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
-            Status st = _reader->decode_min_max_value(slot, stats, min_col, max_col, tz_offset_in_seconds);
+            Status st = OrcMinMaxDecoder::decode(slot, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
                 return false;
             }
@@ -174,13 +177,6 @@ bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
         }
     }
     return false;
-}
-
-// Hive ORC char type will pad trailing spaces.
-// https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
-static inline size_t remove_trailing_spaces(const char* s, size_t size) {
-    while (size > 0 && s[size - 1] == ' ') size--;
-    return size;
 }
 
 bool OrcRowReaderFilter::filterOnPickStringDictionary(

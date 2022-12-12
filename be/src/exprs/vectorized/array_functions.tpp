@@ -18,9 +18,9 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/type_traits.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/function_helper.h"
 #include "runtime/primitive_type.h"
-#include "udf/udf.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 

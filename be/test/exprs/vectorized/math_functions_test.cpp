@@ -210,7 +210,7 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         return_type.scale = scale;
     }
     std::unique_ptr<FunctionContext> ctx(
-            FunctionContext::create_test_context(std::vector<starrocks_udf::FunctionContext::TypeDesc>(), return_type));
+            FunctionContext::create_test_context(std::vector<FunctionContext::TypeDesc>(), return_type));
     ColumnPtr res_column;
     bool res_const = false;
     if (type == TYPE_ROUND) {

@@ -18,11 +18,9 @@
 
 #include "column/column.h"
 
-namespace starrocks_udf {
+namespace starrocks {
 class FunctionContext;
 }
-
-using starrocks_udf::FunctionContext;
 
 namespace starrocks::vectorized {
 
@@ -177,9 +175,12 @@ public:
                                          const Column* column, AggDataPtr* states,
                                          const std::vector<uint8_t>& filter) const = 0;
 
-    // merge result to single state
-    virtual void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                          AggDataPtr __restrict state) const = 0;
+    // Merge some continuous portion of a chunk to a given state.
+    // This will be useful for sorted streaming aggregation.
+    // 'start': the start position of the continuous portion
+    // 'size': the length of the continuous portion
+    virtual void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column,
+                                          size_t start, size_t size) const = 0;
 };
 
 template <typename State>
@@ -278,10 +279,10 @@ public:
         }
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                  AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            static_cast<const Derived*>(this)->merge(ctx, column, state, i);
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* input, size_t start,
+                                  size_t size) const override {
+        for (size_t i = start; i < start + size; ++i) {
+            static_cast<const Derived*>(this)->merge(ctx, input, state, i);
         }
     }
 

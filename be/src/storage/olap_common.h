@@ -137,57 +137,6 @@ enum MaterializeType {
     OLAP_MATERIALIZE_TYPE_COUNT = 4
 };
 
-enum FieldAggregationMethod {
-    OLAP_FIELD_AGGREGATION_NONE = 0,
-    OLAP_FIELD_AGGREGATION_SUM = 1,
-    OLAP_FIELD_AGGREGATION_MIN = 2,
-    OLAP_FIELD_AGGREGATION_MAX = 3,
-    OLAP_FIELD_AGGREGATION_REPLACE = 4,
-    OLAP_FIELD_AGGREGATION_HLL_UNION = 5,
-    OLAP_FIELD_AGGREGATION_UNKNOWN = 6,
-    OLAP_FIELD_AGGREGATION_BITMAP_UNION = 7,
-    // Replace if and only if added value is not null
-    OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL = 8,
-    OLAP_FIELD_AGGREGATION_PERCENTILE_UNION = 9
-};
-
-inline const char* aggregation_method_to_string(FieldAggregationMethod method) {
-    switch (method) {
-    case OLAP_FIELD_AGGREGATION_NONE:
-        return "NONE";
-    case OLAP_FIELD_AGGREGATION_SUM:
-        return "SUM";
-    case OLAP_FIELD_AGGREGATION_MIN:
-        return "MIN";
-    case OLAP_FIELD_AGGREGATION_MAX:
-        return "MAX";
-    case OLAP_FIELD_AGGREGATION_REPLACE:
-        return "REPLACE";
-    case OLAP_FIELD_AGGREGATION_HLL_UNION:
-        return "HLL_UNION";
-    case OLAP_FIELD_AGGREGATION_UNKNOWN:
-        return "UNKNOWN";
-    case OLAP_FIELD_AGGREGATION_BITMAP_UNION:
-        return "BITMAP_UNION";
-    case OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL:
-        return "REPLACE_IF_NOT_NULL";
-    case OLAP_FIELD_AGGREGATION_PERCENTILE_UNION:
-        return "PERCENTILE_UNION";
-    }
-    return "";
-}
-
-inline std::ostream& operator<<(std::ostream& os, FieldAggregationMethod method) {
-    os << aggregation_method_to_string(method);
-    return os;
-}
-
-enum OLAPCompressionType {
-    OLAP_COMP_TRANSPORT = 1,
-    OLAP_COMP_STORAGE = 2,
-    OLAP_COMP_LZ4 = 3,
-};
-
 enum PushType {
     PUSH_FOR_DELETE = 2, // for delete
     PUSH_NORMAL_V2 = 4,  // for spark load
@@ -275,7 +224,6 @@ struct OlapReaderStatistics {
     int64_t block_fetch_ns = 0; // time of rowset reader's `next_batch()` call
     int64_t block_seek_num = 0;
     int64_t block_seek_ns = 0;
-    int64_t block_convert_ns = 0;
 
     int64_t decode_dict_ns = 0;
     int64_t late_materialize_ns = 0;
@@ -292,7 +240,6 @@ struct OlapReaderStatistics {
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;
     int64_t segment_init_ns = 0;
-    int64_t segment_create_chunk_ns = 0;
 
     int64_t segment_stats_filtered = 0;
     int64_t rows_key_range_filtered = 0;
@@ -300,8 +247,6 @@ struct OlapReaderStatistics {
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
     int64_t del_filter_ns = 0;
-
-    int64_t index_load_ns = 0;
 
     int64_t total_pages_num = 0;
     int64_t cached_pages_num = 0;

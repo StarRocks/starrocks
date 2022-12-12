@@ -164,7 +164,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case STRING:
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case ARRAY:
                 Type type = fromHudiTypeToArrayType(avroSchema);
                 if (type.isArrayType()) {
@@ -217,7 +217,7 @@ public class ColumnTypeConverter {
 
                 if (!isConvertedFailed) {
                     // Hudi map's key must be string
-                    return new MapType(ScalarType.createDefaultString(), valueType);
+                    return new MapType(ScalarType.createDefaultExternalTableString(), valueType);
                 }
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
@@ -279,7 +279,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case DECIMAL:
                 int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
                 int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();

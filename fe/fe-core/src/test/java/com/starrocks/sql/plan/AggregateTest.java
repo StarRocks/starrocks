@@ -413,12 +413,12 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select count(distinct id_bool) from test_bool";
         String plan = getCostExplain(sql);
         assertContains(plan, "aggregate: multi_distinct_count[([11: id_bool, BOOLEAN, true]); " +
-                "args: BOOLEAN; result: VARCHAR;");
+                "args: BOOLEAN; result: VARBINARY;");
 
         sql = "select sum(distinct id_bool) from test_bool";
         plan = getCostExplain(sql);
         assertContains(plan, "aggregate: multi_distinct_sum[([11: id_bool, BOOLEAN, true]); " +
-                "args: BOOLEAN; result: VARCHAR;");
+                "args: BOOLEAN; result: VARBINARY;");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -428,7 +428,7 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select count(distinct t1e) from test_all_type";
         String plan = getCostExplain(sql);
         assertContains(plan, "aggregate: multi_distinct_count[([5: t1e, FLOAT, true]); " +
-                "args: FLOAT; result: VARCHAR; args nullable: true; result nullable: false");
+                "args: FLOAT; result: VARBINARY; args nullable: true; result nullable: false");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -675,10 +675,10 @@ public class AggregateTest extends PlanTestBase {
                 "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); " +
                 "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); " +
                 "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], " +
-                "avg[([12: avg, VARCHAR, true]); args: INT; result: VARCHAR; args nullable: true; " +
+                "avg[([12: avg, VARBINARY, true]); args: INT; result: VARBINARY; args nullable: true; " +
                 "result nullable: true]");
         assertContains(plan, " 1:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARCHAR; " +
+                "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARBINARY; " +
                 "args nullable: true; result nullable: true]\n" +
                 "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]");
         FeConstants.runningUnitTest = false;

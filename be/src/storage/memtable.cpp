@@ -44,7 +44,7 @@ VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
         // load slots have __op field, so add to _vectorized_schema
         auto op_column = std::make_shared<starrocks::vectorized::VectorizedField>((ColumnId)-1, LOAD_OP_COLUMN,
                                                                                   LogicalType::TYPE_TINYINT, false);
-        op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
+        op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
         schema.append(op_column);
     }
     return schema;
@@ -370,6 +370,11 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
         // no deletes, short path
         *upserts = src;
         return Status::OK();
+    }
+    if (!_merge_condition.empty()) {
+        // Do not support delete with condition now
+        return Status::InternalError(
+                fmt::format("memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
     }
     vector<uint32_t> indexes[2];
     indexes[TOpType::UPSERT].reserve(nupsert);

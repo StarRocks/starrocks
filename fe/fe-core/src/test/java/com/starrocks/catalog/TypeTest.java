@@ -37,6 +37,8 @@ package com.starrocks.catalog;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+
 public class TypeTest {
     @Test
     public void testGetMysqlResultSetMetaData() {
@@ -155,6 +157,22 @@ public class TypeTest {
         // function (an invisible type for users, just used to express the lambda Functions in high-order functions)
         type = Type.FUNCTION;
         Assert.assertEquals(60, type.getMysqlResultSetFieldLength());
+
+        MapType mapType =
+                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.INT));
+        // default 20 * 3
+        Assert.assertEquals(60, mapType.getMysqlResultSetFieldLength());
+        Assert.assertEquals(0, mapType.getMysqlResultSetFieldDecimals());
+        Assert.assertEquals(33, mapType.getMysqlResultSetFieldCharsetIndex());
+
+        StructField structField = new StructField("a", ScalarType.createType(PrimitiveType.INT));
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField);
+        StructType structType = new StructType(structFields);
+        // default 20 * 3
+        Assert.assertEquals(60, structType.getMysqlResultSetFieldLength());
+        Assert.assertEquals(0, structType.getMysqlResultSetFieldDecimals());
+        Assert.assertEquals(33, structType.getMysqlResultSetFieldCharsetIndex());
     }
 
     @Test

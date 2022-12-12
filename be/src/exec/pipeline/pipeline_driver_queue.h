@@ -198,7 +198,8 @@ private:
 
     struct WorkGroupDriverSchedEntityComparator {
         using WorkGroupDriverSchedEntityPtr = workgroup::WorkGroupDriverSchedEntity*;
-        bool operator()(const WorkGroupDriverSchedEntityPtr& lhs, const WorkGroupDriverSchedEntityPtr& rhs) const;
+        bool operator()(const WorkGroupDriverSchedEntityPtr& lhs_ptr,
+                        const WorkGroupDriverSchedEntityPtr& rhs_ptr) const;
     };
     using WorkgroupSet = std::set<workgroup::WorkGroupDriverSchedEntity*, WorkGroupDriverSchedEntityComparator>;
 

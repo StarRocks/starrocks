@@ -78,6 +78,8 @@ private:
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                        const PrimaryIndex& index);
 
+    bool _check_partial_update(Rowset* rowset);
+
     std::once_flag _load_once_flag;
     Status _status;
     // one for each segment file

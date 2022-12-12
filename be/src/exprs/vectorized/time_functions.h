@@ -16,9 +16,9 @@
 
 #include "column/column_builder.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
-#include "udf/udf.h"
 #include "util/timezone_hsscan.h"
 
 namespace starrocks::vectorized {
@@ -223,10 +223,8 @@ public:
     // datetime_trunc for sql.
     DEFINE_VECTORIZED_FN(datetime_trunc);
 
-    static Status datetime_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status datetime_trunc_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status datetime_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /*
      * Called by time_slice
@@ -271,10 +269,8 @@ public:
     // time_slice for sql.
     DEFINE_VECTORIZED_FN(time_slice);
 
-    static Status time_slice_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status time_slice_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status time_slice_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status time_slice_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     /*
      * Called by date_trunc
      * Truncate to the corresponding part
@@ -292,18 +288,14 @@ public:
     // datetime_trunc for sql.
     DEFINE_VECTORIZED_FN(date_trunc);
 
-    static Status date_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status date_trunc_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status date_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status date_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     DEFINE_VECTORIZED_FN(month_name);
     DEFINE_VECTORIZED_FN(day_name);
 
-    static Status convert_tz_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status convert_tz_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status convert_tz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status convert_tz_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     DEFINE_VECTORIZED_FN(convert_tz);
 
@@ -512,16 +504,12 @@ public:
     static bool is_date_format(const Slice& slice, char** start);
     static bool is_datetime_format(const Slice& slice, char** start);
 
-    static Status str_to_date_prepare(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status str_to_date_close(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status str_to_date_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status str_to_date_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status format_prepare(starrocks_udf::FunctionContext* context,
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status format_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status format_close(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status format_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * Format TimestampValue.
@@ -576,11 +564,9 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime);
 
     // from_unix_datetime with format's auxiliary method
-    static Status from_unix_prepare(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status from_unix_close(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status from_unix_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [timestamp, formatstr]
@@ -630,6 +616,9 @@ private:
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
 
 public:
+    static TimestampValue start_of_time_slice;
+    static std::string info_reported_by_time_slice;
+
     enum FormatType {
         yyyyMMdd,
         yyyy_MM_dd,

@@ -28,6 +28,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.RangeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -453,6 +454,7 @@ public class MvUtils {
     }
 
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
+        ranges.sort(RangeUtils.RANGE_COMPARATOR);
         List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
         for (int i = 0; i < ranges.size(); i++) {
             Range<PartitionKey> currentRange = ranges.get(i);
@@ -463,6 +465,7 @@ public class MvUtils {
                 if (currentRange.isConnected(currentRange) && currentRange.gap(resultRange).isEmpty()) {
                     mergedRanges.set(j, resultRange.span(currentRange));
                     merged = true;
+                    break;
                 }
             }
             if (!merged) {

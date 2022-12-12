@@ -451,7 +451,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
-        if (!base.isOlapTable()) {
+        if (!base.isLocalTable()) {
             // TODO(ywb): support external table refresh according to partition later
             return Sets.newHashSet();
         }
@@ -797,7 +797,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (!table.isLocalTable()) {
                     return Sets.newHashSet();
                 }
-                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+                Set<String> partitionNames = getUpdatedPartitionNames(table);
                 if (!partitionNames.isEmpty()) {
                     return getPartitionNames();
                 }
@@ -815,6 +815,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return Sets.newHashSet();
     }
 
+    private Set<String> getUpdatedPartitionNames(Table table) {
+        Set<String> partitionNames;
+        if (table.isMaterializedView()) {
+            MaterializedView mv = (MaterializedView) table;
+            partitionNames = mv.getPartitionNamesToRefreshForMv();
+        } else {
+            partitionNames = getUpdatedPartitionNamesOfTable(table);
+        }
+        return partitionNames;
+    }
+
     private Set<String> getUpdatedPartitionNamesForPartitionBy() {
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
         Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
@@ -828,7 +839,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
             }
-            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+            Set<String> partitionNames = getUpdatedPartitionNames(table);
             if (!partitionNames.isEmpty()) {
                 return getPartitionNames();
             }

@@ -25,4 +25,4 @@ set(UDF_FILES
   java/java_native_method.cpp
 )
 
-add_library(Udf udf.cpp udf_ir.cpp java/utils.cpp ${UDF_FILES})
+add_library(Udf java/utils.cpp ${UDF_FILES})

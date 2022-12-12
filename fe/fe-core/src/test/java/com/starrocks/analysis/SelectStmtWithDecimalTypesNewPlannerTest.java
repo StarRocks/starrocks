@@ -578,16 +578,16 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select sum(distinct col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String expectPhase1Snippet = "multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
-                "args: DECIMAL32; result: VARCHAR";
-        String expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL32; result: VARBINARY";
+        String expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARBINARY, true]); " +
                 "args: DECIMAL32; result: DECIMAL128(38,2)";
         Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
 
         sql = "select sum(distinct col_decimal64p13s0) from db1.decimal_table";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         expectPhase1Snippet = "multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
-                "args: DECIMAL64; result: VARCHAR";
-        expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL64; result: VARBINARY";
+        expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARBINARY, true]); " +
                 "args: DECIMAL64; result: DECIMAL128(38,0)";
         Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
 
@@ -595,8 +595,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         sql = "select sum(distinct col_decimal128p20s3) from db1.decimal_table";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         expectPhase1Snippet = "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
-                "args: DECIMAL128; result: VARCHAR";
-        expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL128; result: VARBINARY";
+        expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARBINARY, true]); " +
                 "args: DECIMAL128; result: DECIMAL128(38,3)";
         Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
 
@@ -612,16 +612,16 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select sum(distinct col_decimal32p9s2), sum(distinct col_decimal64p13s0), " +
                 "sum(distinct col_decimal128p20s3) from db1.decimal_table";
         String expectPhase1Snippet = "multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
-                "args: DECIMAL32; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "args: DECIMAL32; result: VARBINARY; args nullable: false; result nullable: true], " +
                 "multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
-                "args: DECIMAL64; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "args: DECIMAL64; result: VARBINARY; args nullable: false; result nullable: true], " +
                 "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
-                "args: DECIMAL128; result: VARCHAR; args nullable: true; result nullable: true]";
-        String expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL128; result: VARBINARY; args nullable: true; result nullable: true]";
+        String expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARBINARY, true]); " +
                 "args: DECIMAL32; result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
-                "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "multi_distinct_sum[([7: sum, VARBINARY, true]); " +
                 "args: DECIMAL64; result: DECIMAL128(38,0); args nullable: true; result nullable: true], " +
-                "multi_distinct_sum[([8: sum, VARCHAR, true]); " +
+                "multi_distinct_sum[([8: sum, VARBINARY, true]); " +
                 "args: DECIMAL128; result: DECIMAL128(38,3); " +
                 "args nullable: true; result nullable: true]";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
@@ -639,12 +639,12 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "sum(distinct col_decimal128p20s3) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String[] expectSnippets = {
-                "multi_distinct_sum[([9: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: VARCHAR",
-                "multi_distinct_sum[([10: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: VARCHAR",
-                "multi_distinct_sum[([11: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: VARCHAR",
-                "multi_distinct_sum[([6: sum, VARCHAR, true]); args: DECIMAL32; result: DECIMAL128(38,2)",
-                "multi_distinct_sum[([7: sum, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,0)",
-                "multi_distinct_sum[([8: sum, VARCHAR, true]); args: DECIMAL128; result: DECIMAL128(38,3)",
+                "multi_distinct_sum[([9: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: VARBINARY",
+                "multi_distinct_sum[([10: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: VARBINARY",
+                "multi_distinct_sum[([11: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: VARBINARY",
+                "multi_distinct_sum[([6: sum, VARBINARY, true]); args: DECIMAL32; result: DECIMAL128(38,2)",
+                "multi_distinct_sum[([7: sum, VARBINARY, true]); args: DECIMAL64; result: DECIMAL128(38,0)",
+                "multi_distinct_sum[([8: sum, VARBINARY, true]); args: DECIMAL128; result: DECIMAL128(38,3)",
         };
         Assert.assertTrue(Arrays.asList(expectSnippets).stream().allMatch(s -> plan.contains(s)));
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
@@ -690,16 +690,16 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select avg(distinct col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String expectPhase1Snippet = "multi_distinct_sum[([8: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
-                "args: DECIMAL32; result: VARCHAR";
-        String expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "args: DECIMAL32; result: VARBINARY";
+        String expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARBINARY, true]); " +
                 "args: DECIMAL32; result: DECIMAL128(38,2)";
         Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
 
         sql = "select avg(distinct col_decimal64p13s0) from db1.decimal_table";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         expectPhase1Snippet = "multi_distinct_sum[([8: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
-                "args: DECIMAL64; result: VARCHAR";
-        expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "args: DECIMAL64; result: VARBINARY";
+        expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARBINARY, true]); " +
                 "args: DECIMAL64; result: DECIMAL128(38,0)";
         Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
 
@@ -707,8 +707,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         sql = "select avg(distinct col_decimal128p20s3) from db1.decimal_table";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         expectPhase1Snippet = "multi_distinct_sum[([8: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
-                "args: DECIMAL128; result: VARCHAR";
-        expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "args: DECIMAL128; result: VARBINARY";
+        expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARBINARY, true]); " +
                 "args: DECIMAL128; result: DECIMAL128(38,3)";
         Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
@@ -724,30 +724,30 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "avg(distinct col_decimal128p20s3) from db1.decimal_table";
         String expectPhase1Snippet = "aggregate: " +
                 "multi_distinct_count[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
-                "args: DECIMAL32; result: VARCHAR; args nullable: false; result nullable: false], " +
+                "args: DECIMAL32; result: VARBINARY; args nullable: false; result nullable: false], " +
                 "multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
-                "args: DECIMAL32; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "args: DECIMAL32; result: VARBINARY; args nullable: false; result nullable: true], " +
                 "multi_distinct_count[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
-                "args: DECIMAL64; result: VARCHAR; args nullable: false; result nullable: false], " +
+                "args: DECIMAL64; result: VARBINARY; args nullable: false; result nullable: false], " +
                 "multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
-                "args: DECIMAL64; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "args: DECIMAL64; result: VARBINARY; args nullable: false; result nullable: true], " +
                 "multi_distinct_count[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
-                "args: DECIMAL128; result: VARCHAR; args nullable: true; result nullable: false], " +
+                "args: DECIMAL128; result: VARBINARY; args nullable: true; result nullable: false], " +
                 "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
-                "args: DECIMAL128; result: VARCHAR; args nullable: true; result nullable: true]";
+                "args: DECIMAL128; result: VARBINARY; args nullable: true; result nullable: true]";
 
         String expectPhase2Snippet = "aggregate: " +
-                "multi_distinct_count[([9: multi_distinct_count, VARCHAR, false]); " +
+                "multi_distinct_count[([9: multi_distinct_count, VARBINARY, false]); " +
                 "args: DECIMAL32; result: BIGINT; args nullable: true; result nullable: false], " +
-                "multi_distinct_sum[([10: multi_distinct_sum, VARCHAR, true]); " +
+                "multi_distinct_sum[([10: multi_distinct_sum, VARBINARY, true]); " +
                 "args: DECIMAL32; result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
-                "multi_distinct_count[([11: multi_distinct_count, VARCHAR, false]); " +
+                "multi_distinct_count[([11: multi_distinct_count, VARBINARY, false]); " +
                 "args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false], " +
-                "multi_distinct_sum[([12: multi_distinct_sum, VARCHAR, true]); " +
+                "multi_distinct_sum[([12: multi_distinct_sum, VARBINARY, true]); " +
                 "args: DECIMAL64; result: DECIMAL128(38,0); args nullable: true; result nullable: true], " +
-                "multi_distinct_count[([13: multi_distinct_count, VARCHAR, false]); " +
+                "multi_distinct_count[([13: multi_distinct_count, VARBINARY, false]); " +
                 "args: DECIMAL128; result: BIGINT; args nullable: true; result nullable: false], " +
-                "multi_distinct_sum[([14: multi_distinct_sum, VARCHAR, true]); " +
+                "multi_distinct_sum[([14: multi_distinct_sum, VARBINARY, true]); " +
                 "args: DECIMAL128; result: DECIMAL128(38,3); args nullable: true; result nullable: true]";
         String projectOutputColumns = "" +
                 "  |  6 <-> [10: multi_distinct_sum, DECIMAL128(38,2), true] / " +
@@ -783,12 +783,12 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                         "cast([15: count, BIGINT, false] as DECIMAL128(38,0))\n" +
                         "  |  8 <-> [17: sum, DECIMAL128(38,3), true] / " +
                         "cast([19: count, BIGINT, false] as DECIMAL128(38,0))",
-                "multi_distinct_sum[([10: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: VARCHAR",
-                "multi_distinct_sum[([14: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: VARCHAR",
-                "multi_distinct_sum[([18: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: VARCHAR",
-                "multi_distinct_sum[([9: sum, VARCHAR, true]); args: DECIMAL32; result: DECIMAL128(38,2)",
-                "multi_distinct_sum[([13: sum, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,0)",
-                "multi_distinct_sum[([17: sum, VARCHAR, true]); args: DECIMAL128; result: DECIMAL128(38,3)",
+                "multi_distinct_sum[([10: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: VARBINARY",
+                "multi_distinct_sum[([14: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: VARBINARY",
+                "multi_distinct_sum[([18: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: VARBINARY",
+                "multi_distinct_sum[([9: sum, VARBINARY, true]); args: DECIMAL32; result: DECIMAL128(38,2)",
+                "multi_distinct_sum[([13: sum, VARBINARY, true]); args: DECIMAL64; result: DECIMAL128(38,0)",
+                "multi_distinct_sum[([17: sum, VARBINARY, true]); args: DECIMAL128; result: DECIMAL128(38,3)",
         };
         Assert.assertTrue(Arrays.asList(expectSnippets).stream().allMatch(s -> plan.contains(removeSlotIds(s))));
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
@@ -803,14 +803,14 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String[] snippets = new String[]{
                 "cast([multi_distinct_sum, BIGINT, true] as DOUBLE) / " +
                         "cast([multi_distinct_count, BIGINT, false] as DOUBLE)",
-                "multi_distinct_count[([multi_distinct_count, VARCHAR, false]); " +
+                "multi_distinct_count[([multi_distinct_count, VARBINARY, false]); " +
                         "args: INT; result: BIGINT; args nullable: true; result nullable: false]",
-                "multi_distinct_sum[([multi_distinct_sum, VARCHAR, true]); " +
+                "multi_distinct_sum[([multi_distinct_sum, VARBINARY, true]); " +
                         "args: INT; result: BIGINT; args nullable: true; result nullable: true]",
-                "multi_distinct_count[([key0, INT, false]); args: INT; result: VARCHAR; " +
+                "multi_distinct_count[([key0, INT, false]); args: INT; result: VARBINARY; " +
                         "args nullable: false; result nullable: false]",
                 "multi_distinct_sum[([key0, INT, false]); " +
-                        "args: INT; result: VARCHAR; args nullable: false; result nullable: true]",
+                        "args: INT; result: VARBINARY; args nullable: false; result nullable: true]",
         };
 
         ctx.getSessionVariable().setCboCteReuse(false);

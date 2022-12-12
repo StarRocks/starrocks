@@ -43,6 +43,15 @@ public class LambdaFunctionOperator extends ScalarOperator {
         return lambdaExpr;
     }
 
+    // array_map((x,y) -> x, arr1, arr2) can be reduced to arr1
+    public int canReduce() {
+        int res = 0;
+        if (lambdaExpr.getOpType().equals(OperatorType.LAMBDA_ARGUMENT) && refColumns.contains(lambdaExpr)) {
+            return refColumns.indexOf(lambdaExpr) + 1;
+        }
+        return res;
+    }
+
     // only need to concern the lambda expression.
     @Override
     public List<ScalarOperator> getChildren() {

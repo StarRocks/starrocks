@@ -18,8 +18,8 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/string_functions.h"
-#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

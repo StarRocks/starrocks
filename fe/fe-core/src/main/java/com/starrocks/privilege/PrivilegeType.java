@@ -25,7 +25,8 @@ public enum PrivilegeType {
     USER(4, UserAction.actionMap(), "USERS"),
     RESOURCE(5, ResourceAction.actionMap(), "RESOURCES"),
     VIEW(6, ViewAction.actionMap(), "VIEWS"),
-    CATALOG(7, CatalogAction.actionMap(), "CATALOGS");
+    CATALOG(7, CatalogAction.actionMap(), "CATALOGS"),
+    RESOURCE_GROUP(10, ResourceGroupAction.actionMap(), "RESOURCE_GROUPS");
 
     private final int id;
     private final Map<String, Action> actionMap;
@@ -108,7 +109,8 @@ public enum PrivilegeType {
         FILE(5),
         BLACKLIST(6),
         OPERATE(7),
-        CREATE_EXTERNAL_CATALOG(8);  // AND MORE...
+        CREATE_EXTERNAL_CATALOG(8),
+        CREATE_RESOURCE_GROUP(10);
 
         private final int id;
 
@@ -157,6 +159,25 @@ public enum PrivilegeType {
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
             for (ResourceAction action : ResourceAction.values()) {
+                ret.put(action.toString(), new Action((short) action.id, action.toString()));
+            }
+            return ret;
+        }
+    }
+
+    public enum ResourceGroupAction {
+        ALTER(1),
+        DROP(2);
+
+        private final int id;
+
+        ResourceGroupAction(int id) {
+            this.id = id;
+        }
+
+        public static Map<String, Action> actionMap() {
+            Map<String, Action> ret = new HashMap<>();
+            for (ResourceGroupAction action : ResourceGroupAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;

@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "storage/aggregate_type.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
 #include "util/c_string.h"
@@ -30,7 +31,7 @@ class Datum;
 
 class VectorizedField {
 public:
-    VectorizedField(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::FieldAggregationMethod agg,
+    VectorizedField(ColumnId id, std::string_view name, TypeInfoPtr type, starrocks::StorageAggregateType agg,
                     uint16_t short_key_length, bool is_key, bool nullable)
             : _id(id),
               _agg_method(agg),
@@ -42,7 +43,7 @@ public:
 
     // Non-key field of any type except for ARRAY
     VectorizedField(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
-            : VectorizedField(id, name, get_type_info(type, precision, scale), OLAP_FIELD_AGGREGATION_NONE, 0, false,
+            : VectorizedField(id, name, get_type_info(type, precision, scale), STORAGE_AGGREGATE_NONE, 0, false,
                               nullable) {}
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
@@ -56,7 +57,7 @@ public:
 
     // Non-key field of any type
     VectorizedField(ColumnId id, std::string_view name, TypeInfoPtr type, bool nullable = true)
-            : VectorizedField(id, name, std::move(type), OLAP_FIELD_AGGREGATION_NONE, 0, false, nullable) {}
+            : VectorizedField(id, name, std::move(type), STORAGE_AGGREGATE_NONE, 0, false, nullable) {}
 
     ~VectorizedField() { delete _sub_fields; }
 
@@ -144,9 +145,9 @@ public:
 
     // Status decode_ascending(Slice* encoded_key, uint8_t* cell_ptr, MemPool* pool) const;
 
-    void set_aggregate_method(FieldAggregationMethod agg_method) { _agg_method = agg_method; }
+    void set_aggregate_method(StorageAggregateType agg_method) { _agg_method = agg_method; }
 
-    starrocks::FieldAggregationMethod aggregate_method() const { return _agg_method; }
+    starrocks::StorageAggregateType aggregate_method() const { return _agg_method; }
 
     VectorizedFieldPtr convert_to(LogicalType to_type) const;
 
@@ -168,7 +169,7 @@ private:
     constexpr static int kNullableShift = 1;
 
     ColumnId _id = 0;
-    starrocks::FieldAggregationMethod _agg_method;
+    starrocks::StorageAggregateType _agg_method;
     CString _name;
     TypeInfoPtr _type = nullptr;
     std::vector<VectorizedField>* _sub_fields;

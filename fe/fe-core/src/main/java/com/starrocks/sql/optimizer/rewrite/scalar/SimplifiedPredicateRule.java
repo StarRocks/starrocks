@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
@@ -311,8 +312,19 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return ifCall(call);
         } else if (FunctionSet.IFNULL.equalsIgnoreCase(call.getFnName())) {
             return ifNull(call);
+        } else if (FunctionSet.ARRAY_MAP.equals(call.getFnName())) {
+            return arrayMap(call);
         }
+        return call;
+    }
 
+    // Reduce array_map whose lambda functions is trivial
+    // e.g. array_map((x,y)->x, arr1,arr2) is reduced to arr1
+    private static ScalarOperator arrayMap(CallOperator call) {
+        int index = ((LambdaFunctionOperator) call.getChild(0)).canReduce();
+        if (index > 0) {
+            return call.getChild(index);
+        }
         return call;
     }
 

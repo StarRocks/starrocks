@@ -1214,6 +1214,7 @@ privilegeTypeReserved
     | DATABASE
     | CATALOG
     | DATABASES
+    | RESOURCE_GROUP
     ;
 
 privilegeType
@@ -2013,10 +2014,15 @@ type
     | decimalType
     | arrayType
     | structType
+    | mapType
     ;
 
 arrayType
     : ARRAY '<' type '>'
+    ;
+
+mapType
+    : MAP '<' type ',' type '>'
     ;
 
 columnNameColonType

@@ -150,7 +150,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_FALSE(c0.has_default_value());
     ASSERT_EQ(sizeof(int32_t), c0.length());
     ASSERT_EQ(sizeof(int32_t), c0.index_length());
-    ASSERT_EQ(OLAP_FIELD_AGGREGATION_NONE, c0.aggregation());
+    ASSERT_EQ(STORAGE_AGGREGATE_NONE, c0.aggregation());
     ASSERT_EQ(0, c0.subcolumn_count());
 
     // check c1.
@@ -164,7 +164,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_FALSE(c1.has_default_value());
     ASSERT_EQ(24, c1.length());
     ASSERT_EQ(24, c1.index_length());
-    ASSERT_EQ(OLAP_FIELD_AGGREGATION_NONE, c1.aggregation());
+    ASSERT_EQ(STORAGE_AGGREGATE_NONE, c1.aggregation());
     ASSERT_EQ(1, c1.subcolumn_count());
 
     ASSERT_EQ("_c1_1", c1.subcolumn(0).name());
@@ -189,7 +189,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_FALSE(c2.has_default_value());
     ASSERT_EQ(24, c2.length());
     ASSERT_EQ(24, c2.index_length());
-    ASSERT_EQ(OLAP_FIELD_AGGREGATION_NONE, c2.aggregation());
+    ASSERT_EQ(STORAGE_AGGREGATE_NONE, c2.aggregation());
     ASSERT_EQ(1, c2.subcolumn_count());
 
     ASSERT_EQ("_c2_1", c2.subcolumn(0).name());

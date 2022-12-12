@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -38,11 +39,13 @@ public class StructTypeTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("create table test(c0 INT, " +
                 "c1 struct<a:array<struct<b:int>>>," +
                 "c2 struct<a:int,b:double>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

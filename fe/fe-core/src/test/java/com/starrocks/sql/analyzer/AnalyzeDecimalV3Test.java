@@ -262,7 +262,7 @@ public class AnalyzeDecimalV3Test {
                     fn.functionName().equalsIgnoreCase(FunctionSet.SUM_DISTINCT)) {
                 Assert.assertEquals(serdeType, null);
             } else {
-                Assert.assertEquals(serdeType, Type.VARCHAR);
+                Assert.assertEquals(serdeType, Type.VARBINARY);
             }
             Assert.assertEquals(returnType, expectReturnType);
         }
@@ -806,7 +806,7 @@ public class AnalyzeDecimalV3Test {
                 Assert.assertEquals(((FunctionCallExpr) expr).getFn().getArgs()[0], Type.DOUBLE);
                 Assert.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), Type.DOUBLE);
                 Assert.assertEquals(((AggregateFunction) ((FunctionCallExpr) expr).getFn()).getIntermediateType(),
-                        Type.VARCHAR);
+                        Type.VARBINARY);
             }
         }
     }

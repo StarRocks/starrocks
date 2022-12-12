@@ -19,7 +19,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_scheduler.h"
 #include "storage/storage_engine.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -86,10 +85,7 @@ void CompactionTask::run() {
         // compaction context has been updated when commit
         // so do not update context here
         StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
-        // must be put after unregister_task
-        if (_scheduler) {
-            _scheduler->notify();
-        }
+
         TRACE("[Compaction] $0", _task_info.to_string());
     });
     if (should_stop()) {

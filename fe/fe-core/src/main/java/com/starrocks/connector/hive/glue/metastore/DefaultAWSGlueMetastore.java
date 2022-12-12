@@ -73,6 +73,8 @@ import java.util.concurrent.Future;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.starrocks.connector.hive.glue.util.AWSGlueConfig.CUSTOM_EXECUTOR_FACTORY_CONF;
+import static com.starrocks.connector.hive.glue.util.AWSGlueConfig.NUM_PARTITION_SEGMENTS_CONF;
 
 public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
 
@@ -91,8 +93,6 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
      * https://docs.aws.amazon.com/glue/latest/webapi/API_Segment.html
      */
     public static final int MAX_NUM_PARTITION_SEGMENTS = 10;
-    public static final String NUM_PARTITION_SEGMENTS_CONF = "aws.glue.partition.num.segments";
-    public static final String CUSTOM_EXECUTOR_FACTORY_CONF = "hive.metastore.executorservice.factory.class";
 
     private final HiveConf conf;
     private final AWSGlue glueClient;
