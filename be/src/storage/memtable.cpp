@@ -243,8 +243,9 @@ Status MemTable::finalize() {
                     primary_key_idxes[i] = i;
                 }
                 const auto& sort_key_idxes = _vectorized_schema->sort_key_idxes();
-                if (std::mismatch(sort_key_idxes.begin(), sort_key_idxes.end(), primary_key_idxes.begin()).first !=
-                    sort_key_idxes.end()) {
+                if (std::mismatch(sort_key_idxes.begin(), sort_key_idxes.end(), primary_key_idxes.begin(),
+                                  primary_key_idxes.end())
+                            .first != sort_key_idxes.end()) {
                     _chunk = _result_chunk;
                     _sort(true, true);
                 }
