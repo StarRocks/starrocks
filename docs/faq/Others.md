@@ -225,3 +225,11 @@ Run the `show create table xxx` command.
 ## When I create a table, how to specify the default value for the NOW() function?
 
 Only StarRocks 2.1 or later version supports specifying the default value for a function. For versions earlier than StarRocks 2.1, you can only specify a constant for a function.
+
+## How can I release the storage space of BE nodes?
+
+You can remove the directory `trash` using `rm -rf` command. If you have already restored your data from snapshot, you can remove the directory `snapshot`.
+
+## Can add extra disks to BE nodes?
+
+Yes. You can add the disks to the directory specified by the BE configuration item `storage_root_path`.
