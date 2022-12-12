@@ -1366,7 +1366,7 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
@@ -1407,7 +1407,7 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
@@ -1441,7 +1441,7 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 4, keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
@@ -1482,7 +1482,7 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    EXPECT_EQ(N, read_tablet_and_compare(best_tablet, 3, keys));
+    EXPECT_EQ(N, read_tablet_and_compare(best_tablet, 4, keys));
     ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
