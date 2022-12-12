@@ -409,34 +409,18 @@ public class FunctionSet {
 
     private static final Set<Type> STDDEV_ARG_TYPE =
             ImmutableSet.<Type>builder()
-                    .add(Type.TINYINT)
-                    .add(Type.SMALLINT)
-                    .add(Type.INT)
-                    .add(Type.DECIMAL32)
-                    .add(Type.DECIMAL64)
-                    .add(Type.DECIMAL128)
-                    .add(Type.BIGINT)
-                    .add(Type.FLOAT)
-                    .add(Type.DOUBLE)
+                    .addAll(Type.FLOAT_TYPES)
+                    .addAll(Type.INTEGER_TYPES)
+                    .addAll(Type.DECIMAL_TYPES)
                     .build();
 
     private static final Set<Type> HISTOGRAM_TYPE =
             ImmutableSet.<Type>builder()
-                    .add(Type.BOOLEAN)
-                    .add(Type.TINYINT)
-                    .add(Type.SMALLINT)
-                    .add(Type.INT)
-                    .add(Type.BIGINT)
-                    .add(Type.LARGEINT)
-                    .add(Type.FLOAT)
-                    .add(Type.DOUBLE)
-                    .add(Type.DATE)
-                    .add(Type.DATETIME)
-                    .add(Type.DECIMAL32)
-                    .add(Type.DECIMAL64)
-                    .add(Type.DECIMAL128)
-                    .add(Type.CHAR)
-                    .add(Type.VARCHAR)
+                    .addAll(Type.FLOAT_TYPES)
+                    .addAll(Type.INTEGER_TYPES)
+                    .addAll(Type.DECIMAL_TYPES)
+                    .addAll(Type.STRING_TYPES)
+                    .addAll(Type.DATE_TYPES)
                     .build();
 
     private static final Set<Type> MULTI_DISTINCT_COUNT_TYPES =
@@ -444,8 +428,7 @@ public class FunctionSet {
                     .addAll(Type.INTEGER_TYPES)
                     .addAll(Type.FLOAT_TYPES)
                     .addAll(Type.DECIMAL_TYPES)
-                    .add(Type.CHAR)
-                    .add(Type.VARCHAR)
+                    .addAll(Type.STRING_TYPES)
                     .add(Type.DATE)
                     .add(Type.DATETIME)
                     .add(Type.DECIMALV2)
