@@ -156,15 +156,12 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  34 <-> [34: id_char, CHAR, false]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
                 "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  |----2:EXCHANGE\n" +
-                "  |       cardinality: 1");
+                "  |  cardinality: 1");
 
         // RIGHT ANTI JOIN + AGGREGATE count(column)
         sql = "select count(a.id_char) " +
