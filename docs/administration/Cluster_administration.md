@@ -128,8 +128,8 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 
 - Distribute the BE and FE binary files for new versions of BE and FE to the deployment directory of BE and FE.
 
-  - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
-  - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
+  - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
+  - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
 
 ### Upgrade BE
 
@@ -181,6 +181,7 @@ You must upgrade all Follower FE nodes first and then the Leader FE node.
     mv bin bin.bak
     cp -r /tmp/StarRocks-x.x.x/fe/lib  .   
     cp -r /tmp/StarRocks-x.x.x/fe/bin  .
+    cp -r /tmp/StarRocks-x.x.x/fe/spark-dpp  .
     ```
 
 3. Start the FE node.
@@ -247,8 +248,8 @@ All StarRocks versions support rollbacks. You need to first roll back the FEs, t
 
 - Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
 
-  - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
-  - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
+  - For a minor version rollback (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
+  - For a major version rollback (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
 
 ### Roll back FE
 
@@ -268,6 +269,7 @@ You must roll back all Follower FE nodes first and then the Leader FE node.
     mv bin bin.bak
     cp -r /tmp/StarRocks-x.x.x/fe/lib  .   
     cp -r /tmp/StarRocks-x.x.x/fe/bin  .
+    cp -r /tmp/StarRocks-x.x.x/fe/spark-dpp  .
     ```
 
 3. Start the FE node.

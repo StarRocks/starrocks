@@ -16,7 +16,7 @@ Before deploying StarRocks in Docker, make sure the following requirements are s
 
 - **Operating system**
 
-  Your machine MUST be running on Linux. CentOS 7 or later is recommended.
+  Your machine MUST be running on OS with Linux kernel 3.10 or later.
 
 - **Software**
 
@@ -99,7 +99,7 @@ while sleep 60; do
   ps aux | grep starrocks | grep -q -v grep
   PROCESS_STATUS=$?
 
-  if [ PROCESS_STATUS -ne 0 ]; then
+  if [ ${PROCESS_STATUS} -ne 0 ]; then
     echo "one of the starrocks process already exit."
     exit 1;
   fi
