@@ -122,6 +122,8 @@ public class ConnectContext {
     protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
     protected String currentDb = "";
+    // warehouse
+    protected String currentWarehouse;
 
     // username@host of current login user
     protected String qualifiedUser;
@@ -568,6 +570,14 @@ public class ConnectContext {
         this.currentCatalog = currentCatalog;
     }
 
+    public String getCurrentWarehouse() {
+        return currentWarehouse;
+    }
+
+    public void setCurrentWarehouse(String currentWarehouse) {
+        this.currentWarehouse = currentWarehouse;
+    }
+
     // kill operation with no protect.
     public void kill(boolean killConnection) {
         LOG.warn("kill query, {}, kill connection: {}",
@@ -702,6 +712,7 @@ public class ConnectContext {
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             row.add(getMysqlChannel().getRemoteHostPortString());
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentWarehouse);
             // Command
             row.add(command.toString());
             // connection start Time

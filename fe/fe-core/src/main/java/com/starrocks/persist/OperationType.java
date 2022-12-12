@@ -304,4 +304,13 @@ public class OperationType {
     // MaterializedView Maintenance
     public static final short OP_MV_EPOCH_UPDATE = 11030;
     public static final short OP_MV_JOB_STATE = 11031;
+
+    // warehouse
+    public static final short OP_CREATE_WH = 12000;
+    public static final short OP_DROP_WH = 12001;
+    public static final short OP_ALTER_WH_ADD_CLUSTER = 12002;
+    public static final short OP_ALTER_WH_REMOVE_CLUSTER = 12003;
+    public static final short OP_ALTER_WH_MOD_PROP = 12004;
+    public static final short OP_SUSPEND_WH = 12005;
+    public static final short OP_RESUME_WH = 12006;
 }
