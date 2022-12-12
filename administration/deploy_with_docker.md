@@ -7,7 +7,7 @@
 |分类|描述|
 |---------|--------|
 |硬件要求|<ul><li>CPU 需支持 AVX2 指令集</li><li>建议配置 8 核 或以上 CPU，16GB 或以上内存。</li></ul>|
-|操作系统|CentOS（7 或以上）|
+|操作系统|Linux kernel  3.10 以上。|
 |软件要求|<ul><li>Docker</li><li>MySQL 客户端（5.5 或以上）</li></ul>|
 
 ## 创建 Dockerfile
