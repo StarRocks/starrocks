@@ -23,11 +23,11 @@
 namespace starrocks::vectorized {
 
 // Type traits from aggregate functions
-template <LogicalType lt, typename = void>
+template <LogicalType lt, typename = guard::Guard>
 struct AggDataTypeTraits {};
 
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, typename std::enable_if<pt_is_numeric<lt>>> {
+struct AggDataTypeTraits<lt, FixedLengthPTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = RunTimeCppValueType<lt>;
     using RefType = RunTimeCppType<lt>;
@@ -41,12 +41,12 @@ struct AggDataTypeTraits<lt, typename std::enable_if<pt_is_numeric<lt>>> {
 
 // For pointer ref types
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, typename std::enable_if<is_object_type(lt)>> {
+struct AggDataTypeTraits<lt, ObjectFamilyPTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = RunTimeCppValueType<lt>;
     using RefType = RunTimeCppType<lt>;
 
-    static void assign_value(ValueType& value, const RefType ref) { value = *ref; }
+    static void assign_value(ValueType& value, RefType ref) { value = *ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
 
@@ -54,7 +54,7 @@ struct AggDataTypeTraits<lt, typename std::enable_if<is_object_type(lt)>> {
 };
 
 template <LogicalType lt>
-struct AggDataTypeTraits<lt, typename std::enable_if<pt_is_string<lt>>> {
+struct AggDataTypeTraits<lt, StringPTGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
     using ValueType = Buffer<uint8_t>;
     using RefType = Slice;
