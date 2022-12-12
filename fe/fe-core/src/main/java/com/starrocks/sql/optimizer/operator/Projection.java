@@ -143,12 +143,12 @@ public class Projection {
             return false;
         }
         Projection that = (Projection) o;
-        return columnRefMap.keySet().equals(that.columnRefMap.keySet());
+        return columnRefMap.equals(that.columnRefMap);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columnRefMap.keySet());
+        return Objects.hash(columnRefMap);
     }
 
     @Override

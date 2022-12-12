@@ -35,14 +35,13 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----2:EXCHANGE\n"));
 
+        PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
         // Prune should make the HASH JOIN(LEFT ANTI) could output the left table, but not join slot
         sql = "select distinct('const') from t0, t1, " +
                 " (select * from t2 where cast(v7 as string) like 'ss%' ) sub1 " +
                 "left anti join " +
                 " (select * from t3 where cast(v10 as string) like 'ss%' ) sub2" +
                 " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
-
-        PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
         assertPlanContains(sql, " 11:Project\n" +
                 "  |  <slot 14> : 14: substr\n" +
                 "  |  \n" +
@@ -50,6 +49,53 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: substr = 15: substr");
+
+        // RIGHT ANTI JOIN + AGGREGATE count(*)
+        sql = "select count(*) from (select t2.id_char, t2.id_varchar " +
+                "from test_all_type_nullable t1 " +
+                "right anti join test_all_type_nullable2 t2 " +
+                "on t1.id_char = 0) as a;";
+        assertVerbosePlanContains(sql, "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  28 <-> [28: id_tinyint, TINYINT, false]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  3:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN\n" +
+                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
+                "  |  cardinality: 0");
+
+        // RIGHT ANTI JOIN + AGGREGATE count(column)
+        sql = "select count(a.id_char) " +
+                "from (select t2.id_char, t2.id_varchar " +
+                "from test_all_type_nullable t1 " +
+                "right anti join test_all_type_nullable2 t2 " +
+                "on t1.id_char = 0) as a;";
+        assertVerbosePlanContains(sql, "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  34 <-> [34: id_char, CHAR, false]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  3:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN\n" +
+                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
+                "  |  cardinality: 0");
+
+        // LEFT ANTI JOIN + AGGREGATE
+        sql = "select count(*) from (" +
+                "select id_char, id_varchar " +
+                "from test_all_type_nullable t1 " +
+                "left anti join test_all_type_nullable2 t2 " +
+                "on t1.id_char = 0) as a;";
+        assertVerbosePlanContains(sql, "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  8 <-> [8: id_char, CHAR, false]\n" +
+                "  |  cardinality: 0\n" +
+                "  |  \n" +
+                "  3:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN\n" +
+                "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
+                "  |  cardinality: 0");
     }
 
     @Test
@@ -85,14 +131,16 @@ public class NestLoopJoinTest extends PlanTestBase {
     public void testNLJoinExplicit() throws Exception {
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("nestloop");
         assertNestloopJoin("SELECT * from t0 a join t0 b on a.v1 < b.v1", "INNER JOIN", "1: v1 < 4: v1");
-        assertNestloopJoin("SELECT * from t0 a left join [broadcast] t0 b on a.v1 < b.v1", "LEFT OUTER JOIN", "1: v1 < 4: v1");
+        assertNestloopJoin("SELECT * from t0 a left join [broadcast] t0 b on a.v1 < b.v1", "LEFT OUTER JOIN",
+                "1: v1 < 4: v1");
         assertNestloopJoin("SELECT * from t0 a right join t0 b on a.v1 < b.v1", "RIGHT OUTER JOIN", "1: v1 < 4: v1");
         assertNestloopJoin("SELECT * from t0 a full join t0 b on a.v1 < b.v1", "FULL OUTER JOIN", "1: v1 < 4: v1");
 
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("");
         // Non-Equal join could only be implemented by NestLoopJoin
         assertNestloopJoin("SELECT * from t0 a join t0 b on a.v1 < b.v1", "INNER JOIN", "1: v1 < 4: v1");
-        assertNestloopJoin("SELECT * from t0 a left join [broadcast] t0 b on a.v1 < b.v1", "LEFT OUTER JOIN", "1: v1 < 4: v1");
+        assertNestloopJoin("SELECT * from t0 a left join [broadcast] t0 b on a.v1 < b.v1", "LEFT OUTER JOIN",
+                "1: v1 < 4: v1");
         assertNestloopJoin("SELECT * from t0 a right join t0 b on a.v1 < b.v1", "RIGHT OUTER JOIN", "1: v1 < 4: v1");
         assertNestloopJoin("SELECT * from t0 a full join t0 b on a.v1 < b.v1", "FULL OUTER JOIN", "1: v1 < 4: v1");
     }
@@ -132,20 +180,24 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "THEN (NOT (true)) WHEN NULL THEN (DAYOFMONTH('1969-12-30')) IN (154771541, NULL, 91180822) END END));";
         assertPlanContains(sql, "NESTLOOP JOIN");
 
-        assertPlanContains("select * from t0,t1 where 1 in (select 2 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where 1 in (select 2 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
         assertPlanContains("select * from t0,t1 where 1 in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
         assertPlanContains("select * from t0,t1 where v1 in (select 1+2+3 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
-        assertPlanContains("select * from t0,t1 where abs(1) - 1 in (select 'abc' from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+        assertPlanContains(
+                "select * from t0,t1 where abs(1) - 1 in (select 'abc' from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
         assertPlanContains("select * from t0,t1 where 1 not in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
         assertPlanContains("select * from t0,t1 where 1 not in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
-        assertPlanContains("select * from t0,t1 where v1 not in (select 1+2+3 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+        assertPlanContains(
+                "select * from t0,t1 where v1 not in (select 1+2+3 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
-        assertPlanContains("select * from t0,t1 where abs(1) - 1 not in (select v7 + 1 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+        assertPlanContains(
+                "select * from t0,t1 where abs(1) - 1 not in (select v7 + 1 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
         assertPlanContains("select * from t0 left semi join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
         assertPlanContains("select * from t0 left anti join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
