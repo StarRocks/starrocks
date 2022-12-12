@@ -130,7 +130,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
-            SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 7: v6]) Limit 1
+            SCAN (columns[5: v4, 6: v5, 7: v6] predicate[6: v5 = 7: v6]) Limit 1
 [end]
 
 [sql]
@@ -143,10 +143,10 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
-            AGGREGATE ([GLOBAL] aggregate [{}] group by [[7: v6]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[7: v6]] having [null]
                 EXCHANGE SHUFFLE[7]
-                    AGGREGATE ([LOCAL] aggregate [{}] group by [[7: v6]] having [null]
-                        SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 5])
+                    AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[7: v6]] having [null]
+                        SCAN (columns[5: v4, 6: v5, 7: v6] predicate[6: v5 = 5])
 [end]
 
 [sql]
