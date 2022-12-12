@@ -138,6 +138,8 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
         this.state = BackupJobState.PENDING;
+
+        LOG.debug("new commit");
     }
 
     public BackupJobState getState() {
