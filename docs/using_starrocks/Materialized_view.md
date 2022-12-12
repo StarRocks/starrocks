@@ -305,7 +305,7 @@ MySQL > DESC sales_records ALL;
 
 ### Check the refresh tasks of materialized views
 
-You can check the refresh tasks of all single-table sync materialized views in the database.
+A single-table sync materialized view updates simultaneously when data is loaded into its base table. You can check the refresh tasks of all single-table sync materialized views in the database.
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW;
