@@ -54,9 +54,9 @@ The process of asynchronous loading is as follows:
 
 3. Use statements or commands to check the status of the job until the job status shows **FINISHED** or **CANCELLED**.
 
-The workflow of a Broker Load, Routine Load, or Spark Load job consists of five stages, as shown in the following figure.
+The workflow of a Broker Load or Spark Load job consists of five stages, as shown in the following figure.
 
-![Asynchronous loading stages](../assets/4.1-1.png)
+![Broker Load or Spark Load overflow](../assets/4.1-1.png)
 
 The workflow is described as follows:
 
@@ -83,6 +83,18 @@ The workflow is described as follows:
 
    Before the status of the job becomes **FINISHED**, you can cancel the job at any time. Additionally, StarRocks can automatically cancel the job in case of load errors. After the job is canceled, the status of the job becomes **CANCELLED**. **CANCELLED** is also a final job state.
 
+The workflow of a Routine job is described as follows:
+
+1. The job is submitted to an FE from a MySQL client.
+
+2. The FE splits the job into multiple tasks. Each task is engineered to load data from multiple partitions.
+
+3. The FE distributes the tasks to specified BEs.
+
+4. The BEs execute the tasks, and report to the FE after they finish the tasks.
+
+5. The FE generates subsequent tasks, retries failed tasks if there are any, or suspends task scheduling based on the reports from the BEs.
+
 ## Loading methods
 
 StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), [Spark Load](../loading/SparkLoad.md), and [INSERT](../loading/InsertInto.md).
@@ -108,7 +120,7 @@ You can determine the loading method of your choice based on your business scena
 
 The following figure provides an overview of various data sources supported by StarRocks and the loading methods that you can use to load data from these data sources.
 
-![Data loading sources](../assets/4.1-2.png)
+![Data loading sources](../assets/4.1-3.png)
 
 ## Memory limits
 
