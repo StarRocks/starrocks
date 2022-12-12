@@ -21,7 +21,7 @@ Before deploying StarRocks, make sure the following requirements are satisfied.
 > You can run `cat /proc/cpuinfo | grep avx2` in your terminal to check if the CPU supports the AVX2 instruction sets.
 
 - **Software**
-  Your machine MUST be running on Linux. CentOS 7 or later is recommended. In addition, you must have JDK 1.8 or later and MySQL client 5.5 or later installed on your machine.
+  Your machine MUST be running on OS with Linux kernel 3.10 or later. In addition, you must have JDK 1.8 or later and MySQL client 5.5 or later installed on your machine. Please note that JRE is not supported.
 
 - **Environment variable**
   StarRocks relies on system environment variable `JAVA_HOME` to locate the Java dependency on the machine. Set this environment variable as the directory to which Java is installed, for example, `/opt/jdk1.8.0_301**`**.
