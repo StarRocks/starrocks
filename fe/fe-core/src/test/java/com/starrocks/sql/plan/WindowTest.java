@@ -43,7 +43,7 @@ public class WindowTest extends PlanTestBase {
 
         sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("The third parameter of `lag` can't not convert to DATETIME");
+        expectedEx.expectMessage("The third parameter of `lag` can't convert to DATETIME");
         getThriftPlan(sql);
     }
 
@@ -104,10 +104,10 @@ public class WindowTest extends PlanTestBase {
     @Test
     public void testLeadAndLagFunction() {
         String sql = "select LAG(k7, 3, 3) OVER () from baseall";
-        starRocksAssert.query(sql).analysisError("The third parameter of `lag` can't not convert");
+        starRocksAssert.query(sql).analysisError("The third parameter of `lag` can't convert");
 
         sql = "select lead(k7, 3, 3) OVER () from baseall";
-        starRocksAssert.query(sql).analysisError("The third parameter of `lead` can't not convert");
+        starRocksAssert.query(sql).analysisError("The third parameter of `lead` can't convert");
 
         sql = "select lead(k3, 3, 'kks') OVER () from baseall";
         starRocksAssert.query(sql)
