@@ -240,3 +240,7 @@ SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE ta
 ## 磁盘存储空间不足时，如何释放可用空间？
 
 您可以通过 `rm -rf` 命令直接删除 `trash` 目录下的内容。在完成恢复数据备份后，您也可以通过删除 `snapshot` 目录下的内容释放存储空间。
+
+## 磁盘存储空间不足，如何扩展磁盘空间？
+
+如果 BE 节点存储空间不足，您可以在 BE 配置项 `storage_root_path` 所对应目录下直接添加磁盘。
