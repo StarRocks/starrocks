@@ -103,6 +103,11 @@ public class CreateTableAnalyzer {
     }
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
+
+        if (Config.use_staros == true && context.getCurrentWarehouse() == null) {
+            throw new SemanticException("No warehouse selected");
+        }
+
         final TableName tableNameObject = statement.getDbTbl();
         MetaUtils.normalizationTableName(context, tableNameObject);
 

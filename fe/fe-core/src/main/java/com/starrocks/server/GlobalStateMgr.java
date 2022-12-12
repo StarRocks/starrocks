@@ -611,6 +611,10 @@ public class GlobalStateMgr {
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
 
+        if (Config.use_staros) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
         this.stat = new TabletSchedulerStat();
         this.nodeMgr = new NodeMgr(isCkptGlobalState, this);
         this.globalFunctionMgr = new GlobalFunctionMgr();
@@ -645,10 +649,6 @@ public class GlobalStateMgr {
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
-
-        if (Config.use_staros) {
-            this.starOSAgent = new StarOSAgent();
-        }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();

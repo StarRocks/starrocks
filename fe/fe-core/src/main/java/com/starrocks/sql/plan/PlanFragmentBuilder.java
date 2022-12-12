@@ -637,7 +637,7 @@ public class PlanFragmentBuilder {
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
                 // we can remove code when refactor tablet select
                 long localBeId = -1;
-                if (Config.enable_local_replica_selection) {
+                if (!Config.use_staros && Config.enable_local_replica_selection) {
                     localBeId = GlobalStateMgr.getCurrentSystemInfo()
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
@@ -1366,7 +1366,7 @@ public class PlanFragmentBuilder {
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
                     && sessionVariable.isEnablePipelineEngine()
-                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode(0);
             if (!enableLocalShuffleAgg) {
                 return inputFragment;
             }

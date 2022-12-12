@@ -65,8 +65,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -179,22 +177,6 @@ public class PseudoCluster {
             builder.setFsInfo(fsInfo);
             builder.setFullPath("s3://test-bucket/1/");
             return builder.build();
-        }
-
-        @Override
-        public void addWorker(long backendId, String hostAndPort) {
-            workers.add(new Worker(backendId, nextId++, hostAndPort));
-        }
-
-        @Override
-        public void removeWorker(String hostAndPort) throws DdlException {
-            workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
-        }
-
-        @Override
-        public long getWorkerIdByBackendId(long backendId) {
-            Optional<Worker> worker = workers.stream().filter(w -> w.backendId == backendId).findFirst();
-            return worker.map(value -> value.workerId).orElse(-1L);
         }
 
         @Override
@@ -439,8 +421,6 @@ public class PseudoCluster {
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
@@ -464,8 +444,6 @@ public class PseudoCluster {
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
             LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);
         }

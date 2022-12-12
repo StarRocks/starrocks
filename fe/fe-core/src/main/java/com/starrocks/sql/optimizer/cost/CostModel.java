@@ -268,7 +268,7 @@ public class CostModel {
                     // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
                     boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
                             && sessionVariable.isEnablePipelineEngine()
-                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode(0);
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
                     result = CostEstimate.of(outputSize, 0, networkCost);

@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -64,7 +65,7 @@ public class TabletSchedulerTest {
         };
     }
 
-    SystemInfoService systemInfoService = new SystemInfoService();
+    SystemInfoService systemInfoService = new LocalSystemInfoService();
     TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
     TabletSchedulerStat tabletSchedulerStat = new TabletSchedulerStat();
     @Test

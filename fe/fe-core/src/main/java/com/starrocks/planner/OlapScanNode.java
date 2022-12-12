@@ -561,7 +561,7 @@ public class OlapScanNode extends ScanNode {
 
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
-        if (Config.enable_local_replica_selection) {
+        if (!Config.use_staros && Config.enable_local_replica_selection) {
             localBeId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**

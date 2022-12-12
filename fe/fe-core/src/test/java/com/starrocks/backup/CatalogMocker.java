@@ -72,6 +72,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -255,7 +256,7 @@ public class CatalogMocker {
     }
 
     public static SystemInfoService fetchSystemInfoService() {
-        SystemInfoService clusterInfo = new SystemInfoService();
+        SystemInfoService clusterInfo = new LocalSystemInfoService();
         return clusterInfo;
     }
 

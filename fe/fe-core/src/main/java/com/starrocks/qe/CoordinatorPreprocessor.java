@@ -61,7 +61,6 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAdaptiveDopParam;
 import com.starrocks.thrift.TDescriptorTable;
@@ -901,7 +900,8 @@ public class CoordinatorPreprocessor {
         // 1. count each node in one fragment should scan how many tablet, gather them in one list
         Map<TNetworkAddress, List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>>> addressToScanRanges =
                 Maps.newHashMap();
-        for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> bucketSeqAndScanRanges : bucketSeqToScanRange.entrySet()) {
+        for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> bucketSeqAndScanRanges : bucketSeqToScanRange
+                .entrySet()) {
             TNetworkAddress address = bucketSeqToAddress.get(bucketSeqAndScanRanges.getKey());
             addressToScanRanges
                     .computeIfAbsent(address, k -> Lists.newArrayList())
@@ -1148,7 +1148,8 @@ public class CoordinatorPreprocessor {
                         if (driverSeq != null) {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
                             dest.server = toRpcHost(instanceExecParams.host);
-                            dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
+                            dest.setBrpc_server(
+                                    GlobalStateMgr.getCurrentSystemInfo().toBrpcHost(instanceExecParams.host));
                             if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                 dest.setPipeline_driver_sequence(driverSeq);
                             }
@@ -1165,7 +1166,8 @@ public class CoordinatorPreprocessor {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
                     dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
                     dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                    dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
+                    dest.setBrpc_server(GlobalStateMgr.getCurrentSystemInfo()
+                            .toBrpcHost(destParams.instanceExecParams.get(j).host));
                     params.destinations.add(dest);
                 }
             }
@@ -1221,7 +1223,8 @@ public class CoordinatorPreprocessor {
                             if (driverSeq != null) {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
                                 dest.server = toRpcHost(instanceExecParams.host);
-                                dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
+                                dest.setBrpc_server(
+                                        GlobalStateMgr.getCurrentSystemInfo().toBrpcHost(instanceExecParams.host));
                                 if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                     dest.setPipeline_driver_sequence(driverSeq);
                                 }
@@ -1238,7 +1241,8 @@ public class CoordinatorPreprocessor {
                         TPlanFragmentDestination dest = new TPlanFragmentDestination();
                         dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
                         dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                        dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
+                        dest.setBrpc_server(GlobalStateMgr.getCurrentSystemInfo()
+                                .toBrpcHost(destParams.instanceExecParams.get(j).host));
                         multiSink.getDestinations().get(i).add(dest);
                     }
                 }

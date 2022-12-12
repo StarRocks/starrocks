@@ -344,6 +344,9 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
         }
+        if (Config.use_staros == true) {
+            return;
+        }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
         if (replicationNum > backendIds.size()) {
             throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 

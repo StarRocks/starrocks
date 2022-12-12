@@ -79,6 +79,12 @@ public class LakeTablet extends Tablet {
         this.rowCount = rowCount;
     }
 
+    // for debug
+    public long getPrimaryBackendId(long workerGroupId) throws UserException {
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().
+                getPrimaryBackendIdByShard(getShardId(), workerGroupId);
+    }
+
     public long getPrimaryBackendId() throws UserException {
         return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(getShardId());
     }
