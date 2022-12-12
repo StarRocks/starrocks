@@ -44,7 +44,10 @@ class MockCostExpr : public Expr {
 public:
     explicit MockCostExpr(const TExprNode& t) : Expr(t) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { DCHECK(false); }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override {
+        DCHECK(false);
+        __builtin_unreachable();
+    }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockCostExpr(*this)); }
 
     int64_t cost_ns() { return _ns; }
