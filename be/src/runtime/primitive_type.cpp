@@ -21,12 +21,6 @@
 #include "runtime/primitive_type_infra.h"
 
 namespace starrocks {
-//to_tcolumn_type_thrift only test
-TColumnType to_tcolumn_type_thrift(TPrimitiveType::type ttype) {
-    TColumnType t;
-    t.__set_type(ttype);
-    return t;
-}
 
 TExprOpcode::type to_in_opcode(LogicalType t) {
     return TExprOpcode::FILTER_IN;
@@ -109,23 +103,6 @@ std::string type_to_string_v2(LogicalType t) {
     // change OBJECT to BITMAP for better display
     std::string raw_str = type_to_string(t);
     return raw_str == "OBJECT" ? "BITMAP" : raw_str;
-}
-
-std::string type_to_odbc_string(LogicalType t) {
-    // ODBC driver requires types in lower case
-    switch (t) {
-    case TYPE_UNKNOWN:
-        return "invalid";
-
-#define M(ttype)       \
-    case TYPE_##ttype: \
-        return #ttype;
-        APPLY_FOR_SCALAR_THRIFT_TYPE(M)
-#undef M
-
-    default:
-        return "unknown";
-    }
 }
 
 // for test only
