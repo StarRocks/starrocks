@@ -24,7 +24,7 @@ Returns an array.
 
 - `NULL` values are placed at the beginning of the array that is returned.
 
-- If you want to sort the elements of an array in descending order, use the [reverse](https://docs.starrocks.com/zh-cn/2.2/sql-reference/sql-functions/string-functions/reverse) function.
+- If you want to sort the elements of an array in descending order, use the [reverse](./reverse.md) function.
 
 - The elements of the array that is returned are of the same data type as the elements of the array that you specify.
 
