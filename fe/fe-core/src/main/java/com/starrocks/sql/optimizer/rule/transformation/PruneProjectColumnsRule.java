@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
@@ -65,14 +66,12 @@ public class PruneProjectColumnsRule extends TransformationRule {
         if (newMap.isEmpty()) {
             OptExpression child = input.inputAt(0);
             LogicalOperator childOp = (LogicalOperator) child.getOp();
-            ColumnRefOperator smallestColumn = childOp.getSmallestColumn(context.getColumnRefFactory(), child);
-            if (smallestColumn != null) {
-                ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
-                if (expr != null && !smallestColumn.equals(expr) && !expr.isVariable()) {
-                    newMap.put(smallestColumn, expr);
-                    requiredInputColumns.union(smallestColumn);
-                }
-            }
+            ColumnRefSet candidates = new ColumnRefSet(projectOperator.getColumnRefMap().keySet());
+            ColumnRefOperator smallestColumn =
+                    childOp.getSmallestColumn(candidates, context.getColumnRefFactory(), child);
+            Preconditions.checkNotNull(smallestColumn);
+            newMap.put(smallestColumn, projectOperator.getColumnRefMap().get(smallestColumn));
+            requiredInputColumns.union(smallestColumn);
         }
 
         // Change the requiredOutputColumns in context

@@ -86,7 +86,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneJoinColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectEmptyRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneRepeatColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
@@ -340,7 +339,6 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
-                new PruneProjectRule(),
                 new PruneProjectEmptyRule(),
                 new MergeTwoProjectRule(),
                 new PushDownProjectToCTEAnchorRule()

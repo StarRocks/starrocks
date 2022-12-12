@@ -127,7 +127,9 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
-    public ColumnRefOperator getSmallestColumn(ColumnRefFactory columnRefFactory, OptExpression expr) {
+    public ColumnRefOperator getSmallestColumn(ColumnRefSet requiredCandidate,
+                                               ColumnRefFactory columnRefFactory,
+                                               OptExpression expr) {
         ColumnRefSet candidate;
         if (joinType.isLeftSemiAntiJoin()) {
             candidate = expr.getChildOutputColumns(0);
@@ -136,6 +138,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         } else {
             candidate = getOutputColumns(new ExpressionContext(expr));
         }
+        candidate.intersect(requiredCandidate);
         return Utils.findSmallestColumnRef(
                 candidate.getStream().mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
     }
