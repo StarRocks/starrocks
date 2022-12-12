@@ -53,7 +53,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -412,16 +411,6 @@ public class SystemInfoService {
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
-            // remove worker
-            if (Config.integrate_starmgr) {
-                long starletPort = droppedBackend.getStarletPort();
-                // only need to remove worker after be reported its staretPort
-                if (starletPort != 0) {
-                    String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
-                }
-            }
-
             cluster.removeBackend(droppedBackend.getId());
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
@@ -787,6 +776,11 @@ public class SystemInfoService {
         return ImmutableList.copyOf(backends);
     }
 
+    // for debug
+    public List<Backend> getBackends(long workerGroupId) {
+        return new ArrayList<>();
+    }
+
     public long getBackendReportVersion(long backendId) {
         AtomicLong atomicLong;
         if ((atomicLong = idToReportVersionRef.get(backendId)) == null) {
@@ -1003,16 +997,6 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
-            // clear map in starosAgent
-            if (Config.integrate_starmgr) {
-                long starletPort = backend.getStarletPort();
-                if (starletPort == 0) {
-                    return;
-                }
-                String workerAddr = backend.getHost() + ":" + starletPort;
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
-            }
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }

@@ -335,7 +335,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         FE_MODULES="fe-common,spark-dpp"
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="fe-common,spark-dpp,fe-core"
+        FE_MODULES="staros,fe-common,spark-dpp,fe-core"
     fi
 fi
 

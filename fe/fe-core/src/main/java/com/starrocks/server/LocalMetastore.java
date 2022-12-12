@@ -224,6 +224,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -767,7 +768,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // only internal table should check quota and cluster capacity
-        if (!stmt.isExternal()) {
+        if (!stmt.isExternal() && !stmt.isLakeEngine()) {
             // check cluster capacity
             systemInfoService.checkClusterCapacity();
             // check db quota
@@ -1683,9 +1684,13 @@ public class LocalMetastore implements ConnectorMetadata {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
+        if (table.isLakeTable() ||
+                (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500)) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
+            // lake table need to get current warehouse
+            String currentWarehouseName = ConnectContext.get().getCurrentWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWarehouseName);
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends, warehouse);
         } else if (numAliveBackends > 0) {
             buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else {
@@ -1710,7 +1715,7 @@ public class LocalMetastore implements ConnectorMetadata {
         int partitionGroupSize = Math.max(1, numBackends * 200 / Math.max(1, avgReplicasPerPartition));
         for (int i = 0; i < partitions.size(); i += partitionGroupSize) {
             int endIndex = Math.min(partitions.size(), i + partitionGroupSize);
-            List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex));
+            List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex), null);
             int partitionCount = endIndex - i;
             int indexCountPerPartition = partitions.get(i).getVisibleMaterializedIndicesCount();
             int timeout = Config.tablet_create_timeout_second * countMaxTasksPerBackend(tasks);
@@ -1729,8 +1734,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
-                                             int numBackends) throws DdlException {
-        int timeout = numReplicas / numBackends * Config.tablet_create_timeout_second;
+                                             int numBackends, Warehouse warehouse) throws DdlException {
+        int timeout = numReplicas / Math.max(1, numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
@@ -1743,7 +1748,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     if (!countDownLatch.getStatus().ok()) {
                         break;
                     }
-                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
+                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition, warehouse);
                     for (CreateReplicaTask task : tasks) {
                         List<Long> signatures =
                                 taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
@@ -1787,33 +1792,39 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<Partition> partitions)
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
+                                                            List<Partition> partitions, Warehouse warehouse)
             throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (Partition partition : partitions) {
-            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition));
+            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, warehouse));
         }
         return tasks;
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition)
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
+                                                            Partition partition, Warehouse warehouse)
             throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.getReplicaCount());
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index));
+            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index, warehouse));
         }
         return tasks;
     }
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition,
-                                                            MaterializedIndex index) throws DdlException {
+                                                            MaterializedIndex index, Warehouse warehouse) throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isLakeTable()) {
                 long primaryBackendId = -1;
                 try {
-                    primaryBackendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                    com.starrocks.warehouse.Cluster cluster = warehouse.getClusters().values().stream().findFirst().orElseThrow(
+                            () -> new UserException("no cluster exists in this warehouse")
+                    );
+                    long workerGroupId = cluster.getWorkerGroupId();
+                    primaryBackendId = ((LakeTablet) tablet).getPrimaryBackendId(workerGroupId);
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
