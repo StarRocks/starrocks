@@ -127,6 +127,10 @@ public class HeartbeatMgr extends LeaderDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
+        if (nodeMgr.getIdToBackend() == null) {
+            return;
+        }
+
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
         // send backend heartbeat
@@ -184,7 +188,6 @@ public class HeartbeatMgr extends LeaderDaemon {
                 }
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("got exception when doing heartbeat", e);
-                continue;
             }
         } // end for all results
 
