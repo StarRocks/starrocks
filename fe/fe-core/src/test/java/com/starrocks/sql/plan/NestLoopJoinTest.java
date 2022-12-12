@@ -153,10 +153,10 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "right anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
+        assertVerbosePlanContains(sql, "4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  34 <-> [34: id_char, CHAR, false]\n" +
-                "  |  cardinality: 1\n" +
+                "  |  cardinality: 0\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +

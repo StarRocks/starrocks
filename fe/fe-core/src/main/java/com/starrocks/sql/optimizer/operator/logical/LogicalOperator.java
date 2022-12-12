@@ -46,13 +46,13 @@ public abstract class LogicalOperator extends Operator {
 
     public abstract ColumnRefSet getOutputColumns(ExpressionContext expressionContext);
 
-    public ColumnRefOperator getSmallestColumn(ColumnRefSet requiredCandidate, ColumnRefFactory columnRefFactory,
+    public ColumnRefOperator getSmallestColumn(ColumnRefSet requiredCandidates,
+                                               ColumnRefFactory columnRefFactory,
                                                OptExpression opt) {
-        ColumnRefSet outputCandidate = getOutputColumns(new ExpressionContext(opt));
-        outputCandidate.intersect(requiredCandidate);
-
-        return Utils.findSmallestColumnRef(outputCandidate.getStream()
-                .mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
+        ColumnRefSet outputCandidates = getOutputColumns(new ExpressionContext(opt));
+        outputCandidates.intersect(requiredCandidates);
+        return Utils.findSmallestColumnRef(outputCandidates.getStream().
+                mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
     }
 
     // lineage means the merge of operator's column ref map, which is used to track
