@@ -431,8 +431,25 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         }
     } else {
         auto func_name = get_string_by_aggregation_type(method);
-        auto agg_func = vectorized::AggregateFuncResolver::instance()->get_aggregate_info(func_name, type, type, false,
-                                                                                          field->is_nullable());
+        // TODO(alvin): To keep compatible with old code, when type must not be the legacy type,
+        // the following convert can be deleted.
+        auto normalized_tpe = type;
+        switch (type) {
+        case TYPE_DATE_V1:
+            normalized_tpe = TYPE_DATE;
+            break;
+        case TYPE_DATETIME_V1:
+            normalized_tpe = TYPE_DATETIME;
+            break;
+        case TYPE_DECIMAL:
+            normalized_tpe = TYPE_DECIMALV2;
+            break;
+        default:
+            break;
+        }
+
+        auto agg_func = vectorized::AggregateFuncResolver::instance()->get_aggregate_info(
+                func_name, normalized_tpe, normalized_tpe, false, field->is_nullable());
         CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
                                    << ", is_nullable=" << field->is_nullable();
         return std::make_unique<AggFuncBasedValueAggregator>(agg_func);
