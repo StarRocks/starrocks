@@ -21,6 +21,7 @@ namespace starrocks::vectorized {
 class ColumnRef;
 
 #define APPLY_FOR_JOIN_VARIANTS(M) \
+    M(empty)                       \
     M(keyboolean)                  \
     M(key8)                        \
     M(key16)                       \
@@ -705,6 +706,7 @@ private:
     void _remove_duplicate_index_for_right_anti_join(Column::Filter* filter);
     void _remove_duplicate_index_for_full_outer_join(Column::Filter* filter);
 
+    std::unique_ptr<JoinHashMapForEmpty> _empty = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)> _keyboolean = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)> _key8 = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)> _key16 = nullptr;
