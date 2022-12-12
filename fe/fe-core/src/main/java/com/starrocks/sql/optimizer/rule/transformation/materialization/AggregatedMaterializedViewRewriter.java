@@ -62,7 +62,13 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             .put(FunctionSet.COUNT, FunctionSet.SUM)
             .build();
 
-    private static Set<String> UNSUPPORTED_FUNCTIONS = ImmutableSet.<String>builder().add(FunctionSet.AVG).build();
+    private static Set<String> SUPPORTED_ROLLUP_FUNCTIONS = ImmutableSet.<String>builder()
+            .add(FunctionSet.SUM)
+            .add(FunctionSet.COUNT)
+            .add(FunctionSet.MAX)
+            .add(FunctionSet.MIN)
+            .add(FunctionSet.APPROX_COUNT_DISTINCT)
+            .build();
 
     public AggregatedMaterializedViewRewriter(MaterializationContext materializationContext) {
         super(materializationContext);
@@ -487,9 +493,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     // generate new aggregates for rollup
     // eg: count(col) -> sum(col)
     private CallOperator getRollupAggregate(CallOperator aggCall, ColumnRefOperator targetColumn) {
-        if (UNSUPPORTED_FUNCTIONS.contains(aggCall.getFnName())) {
+        if (!SUPPORTED_ROLLUP_FUNCTIONS.contains(aggCall.getFnName())) {
             return null;
-        } else if (ROLLUP_FUNCTION_MAP.containsKey(aggCall.getFnName())) {
+        }
+        if (ROLLUP_FUNCTION_MAP.containsKey(aggCall.getFnName())) {
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 Type[] argTypes = {targetColumn.getType()};
                 Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
