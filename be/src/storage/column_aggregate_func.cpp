@@ -14,10 +14,10 @@
 
 #include "storage/column_aggregate_func.h"
 
-#include "exprs/agg/aggregate.h"
-#include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/agg/aggregate.h"
+#include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "storage/column_aggregator.h"
 #include "util/percentile_value.h"
 
@@ -279,14 +279,10 @@ public:
         reset();
     }
 
-    void append_data(Column* agg) override {
-        _agg_func->finalize_to_column(nullptr, _state, agg);
-    }
+    void append_data(Column* agg) override { _agg_func->finalize_to_column(nullptr, _state, agg); }
 
     // |data| is readonly.
-    void aggregate_impl(int row, const ColumnPtr& data) override {
-        _agg_func->merge(nullptr, data.get(), _state, row);
-    }
+    void aggregate_impl(int row, const ColumnPtr& data) override { _agg_func->merge(nullptr, data.get(), _state, row); }
 
     // |data| is readonly.
     void aggregate_batch_impl(int start, int end, const ColumnPtr& input) override {
@@ -435,8 +431,8 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         }
     } else {
         auto func_name = get_string_by_aggregation_type(method);
-        auto agg_func = vectorized::AggregateFuncResolver::instance()->get_aggregate_info(
-                func_name, type, type, false, field->is_nullable());
+        auto agg_func = vectorized::AggregateFuncResolver::instance()->get_aggregate_info(func_name, type, type, false,
+                                                                                          field->is_nullable());
         CHECK(agg_func != nullptr) << "Unknown aggregate function, name=" << func_name << ", type=" << type
                                    << ", is_nullable=" << field->is_nullable();
         return std::make_unique<AggFuncBasedValueAggregator>(agg_func);

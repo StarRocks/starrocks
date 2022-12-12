@@ -41,9 +41,6 @@ struct MaxAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     raw::RawVector<uint8_t> buffer;
 
-    ~MaxAggregateData() {
-        std::cerr << "calling max deconstructor" << std::endl;
-    }
     bool has_value() const { return buffer.size() > 0; }
 
     Slice slice() const { return {buffer.data(), buffer.size()}; }
