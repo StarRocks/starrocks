@@ -820,10 +820,11 @@ void* metadata_gc_trigger(void* arg) {
                 auto t2 = std::chrono::steady_clock::now();
                 auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
                 if (r.ok()) {
-                    LOG(INFO) << "Finished garbage collection of metadata for directory " << root << ". cost:" << cost;
+                    LOG(INFO) << "Finished garbage collection of metadata for directory " << root << ". cost:" << cost
+                              << "ms";
                 } else {
                     LOG(WARNING) << "Fail to do garbage collection of metadata for directory " << root
-                                 << ". cost:" << cost << " error:" << r;
+                                 << ". cost:" << cost << "ms error:" << r;
                 }
             });
             if (!st.ok()) {
@@ -861,10 +862,11 @@ void* segment_gc_trigger(void* arg) {
                 auto t2 = std::chrono::steady_clock::now();
                 auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
                 if (r.ok()) {
-                    LOG(INFO) << "Finished garbage collection of data for directory " << root << ". cost:" << cost;
+                    LOG(INFO) << "Finished garbage collection of data for directory " << root << ". cost:" << cost
+                              << "ms";
                 } else {
                     LOG(WARNING) << "Fail to do garbage collection of data for directory " << root << ". cost:" << cost
-                                 << " error:" << r;
+                                 << "ms error:" << r;
                 }
             });
             if (!st.ok()) {
