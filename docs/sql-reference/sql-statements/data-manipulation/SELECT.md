@@ -614,7 +614,7 @@ select c1 from t1 where month between 1 and 6;
 
 The comparison operator is used to determine whether columns and columns are equal or to sort them. =,!=, >= All data types are available.
 
-Where <>sign is not equal to meaning, and!= The functions are consistent. The IN and BETWEEN operators provide shorter expressions to describe the comparison of relationships such as equality, less than, size, and so on.
+Where `<>` sign is not equal to meaning, and!= The functions are consistent. The IN and BETWEEN operators provide shorter expressions to describe the comparison of relationships such as equality, less than, size, and so on.
 
 In Operator
 
