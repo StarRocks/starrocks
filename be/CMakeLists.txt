@@ -105,6 +105,8 @@ if(PIC_LIB_PATH)
     set(LIBBZ2 ${PIC_LIB_PATH}/lib/libbz2.a)
     set(LIBZ ${PIC_LIB_PATH}/lib/libz.a)
     set(LIBEVENT ${PIC_LIB_PATH}/lib/libevent.a)
+    # favor cmake FindZLIB() to find the correct location
+    set(ZLIB_ROOT ${PIC_LIB_PATH} CACHE STRING "Root Directory of zlib installation")
 else()
     message(STATUS "undefined PIC_LIB_PATH")
     set(Boost_USE_STATIC_LIBS ON)
@@ -204,6 +206,9 @@ set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/m
 add_library(hdfs STATIC IMPORTED)
 set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
+# Allow FindOpenSSL() to find correct static libraries
+set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
+message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
 add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
