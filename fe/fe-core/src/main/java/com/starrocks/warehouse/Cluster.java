@@ -29,13 +29,24 @@ public class Cluster {
     // sql 排队功能根据 sql 执行情况负责调用这些接口更新 counter
     private AtomicInteger numRunningSqls;
 
-    public Cluster(long id, long workerGroupId) {}
+    public Cluster(long id, long workerGroupId) {
+        this.id = id;
+        this.workerGroupId = workerGroupId;
+    }
 
     // set the associated worker group id when resizing
     public void setWorkerGroupId(long id) {}
-    public long getWorkerGroupId() {}
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
 
-    public int getRunningSqls() {}
-    public int setRunningSqls(int val) {}
-    public int addAndGetRunningSqls(int delta) {}
+    public int getRunningSqls() {
+        return 1;
+    }
+    public int setRunningSqls(int val) {
+        return 1;
+    }
+    public int addAndGetRunningSqls(int delta) {
+        return 1;
+    }
 }

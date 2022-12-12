@@ -72,7 +72,7 @@ public class Warehouse {
     public int getPendingSqls() {
         return 1;
     }
-    
+
     public int setPendingSqls(int val) {
         return 1;
     }

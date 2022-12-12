@@ -260,6 +260,7 @@ showWarehouseStatement
 
 createWarehouseStatement
     : CREATE (WAREHOUSE) (IF NOT EXISTS)? identifier
+            properties?
     ;
 
 dropWarehouseStatement

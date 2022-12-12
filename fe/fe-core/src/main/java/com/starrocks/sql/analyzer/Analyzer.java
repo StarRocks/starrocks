@@ -133,7 +133,7 @@ public class Analyzer {
 
         // ---------------------------------------- Database Statement -----------------------------------------------------
         @Override
-        public void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+        public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
             CreateWarehouseAnalyzer.analyze(statement, context);
             return null;
         }

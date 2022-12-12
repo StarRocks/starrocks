@@ -464,7 +464,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateWarehouseStatement(StarRocksParser.CreateWarehouseStatementContext context) {
         String whName = ((Identifier) visit(context.identifier())).getValue();
-        return new CreateWarehouseStmt(context.IF() != null, whName);
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateWarehouseStmt(context.IF() != null, whName, properties);
     }
 
     @Override
