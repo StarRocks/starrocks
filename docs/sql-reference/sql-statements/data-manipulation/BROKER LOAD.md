@@ -226,6 +226,10 @@ If the source data is stored in an Amazon S3 bucket, provide the following confi
 
 For more information, see AWS documentation [Managing access keys for IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html).
 
+> **NOTE**
+>
+> If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
+
 #### Google CGS
 
 If the source data is stored in a Google CGS bucket, provide the following configurations.
