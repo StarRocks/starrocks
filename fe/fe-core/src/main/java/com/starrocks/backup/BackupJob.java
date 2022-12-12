@@ -129,6 +129,8 @@ public class BackupJob extends AbstractJob {
 
     private AgentBatchTask batchTask;
 
+    private boolean testPrimaryKey = false;
+
     public BackupJob() {
         super(JobType.BACKUP);
     }
@@ -138,6 +140,10 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
         this.state = BackupJobState.PENDING;
+    }
+
+    public void setTestPrimaryKey() {
+        testPrimaryKey = true;
     }
 
     public BackupJobState getState() {
@@ -608,9 +614,14 @@ public class BackupJob extends AbstractJob {
     private void saveMetaInfo() {
         String createTimeStr = TimeUtils.longToTimeString(createTime,
                 new SimpleDateFormat(TIMESTAMP_FORMAT));
-        // local job dir: backup/label__createtime/
-        localJobDirPath = Paths.get(BackupHandler.BACKUP_ROOT_DIR.toString(),
-                label + "__" + UUIDUtil.genUUID().toString()).normalize();
+        if (testPrimaryKey) {
+            localJobDirPath = Paths.get(BackupHandler.TEST_BACKUP_ROOT_DIR.toString(),
+                    label + "__" + UUIDUtil.genUUID().toString()).normalize();
+        } else {
+            // local job dir: backup/label__createtime/
+            localJobDirPath = Paths.get(BackupHandler.BACKUP_ROOT_DIR.toString(),
+                    label + "__" + UUIDUtil.genUUID().toString()).normalize();
+        }
 
         try {
             // 1. create local job dir of this backup job
