@@ -57,6 +57,8 @@ class KeyColumnAggregator final : public ColumnAggregatorBase {
 
 class ValueColumnAggregatorBase : public ColumnAggregatorBase {
 public:
+    ~ValueColumnAggregatorBase() override = default;
+
     virtual void reset() = 0;
 
     virtual void append_data(Column* agg) = 0;
