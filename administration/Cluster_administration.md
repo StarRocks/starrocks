@@ -167,7 +167,8 @@ sh bin/stop_cn.sh
 > |2.0.x|必须从1.19.x升级|升级过程中需要暂时关闭 Clone。|否|
 > |2.1.x|必须从2.0.x 升级|灰度升级前需要修改 <code>vector_chunk_size</code> 和 <code>batch_size</code>。|否|
 > |2.2.x|可以从2.0.x 或 2.1.x 升级|回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。|是|
-> |2.3.x|可以从2.0.x、2.1.x 或 2.2.x 升级|不建议跨版本回滚。回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。||
+> |2.3.x|可以从2.0.x、2.1.x 或 2.2.x 升级|不建议跨版本回滚。回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。|否|
+> |2.4.x|可以从2.0.x、2.1.x、2.2.x 或 2.3.x 升级|不建议跨版本回滚。如果您开启了 [FQDN 访问](../administration/enable_fqdn.md)，需先将集群修改为 IP 地址访问。|否|
 
 ### 下载安装文件
 
