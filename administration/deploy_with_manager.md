@@ -89,7 +89,7 @@ bin/install.sh -h \
 |BE|be_port|9060|FE --> BE|BE 上 thrift server 的端口，<br/>用于接收来自 FE 的请求。|
 |BE|webserver_port|8040|BE <--> BE|BE 上的 http server 的端口。|
 |BE|heartbeat_service_port|9050|FE --> BE|BE 上心跳服务端口（thrift），<br/>用于接收来自 FE 的心跳。|
-|BE|brpc_port|8060|FE <--> BE<br/>BE <--> BE|BE 上的 brpc 端口，<br/>用于 BE 之间通讯。|
+|BE|brpc_port|8060|BE <--> BE|BE 上的 brpc 端口，<br/>用于 BE 之间通讯。|
 |FE|**http_port**|**8030**|FE <--> 用户|FE 上的 http server 端口。|
 |FE|rpc_port|9020|BE --> FE<br/> FE <--> FE|FE 上的 thrift server 端口。|
 |FE|**query_port**|**9030**| FE <--> 用户|FE 上的 mysql server 端口。|
