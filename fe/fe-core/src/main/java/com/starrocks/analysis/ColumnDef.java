@@ -23,6 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -86,6 +87,30 @@ public class ColumnDef {
                 new FunctionCallExpr("now", new ArrayList<>()));
     }
 
+    public static class CheckDesc {
+        public String name;
+        public boolean isAllowNull;
+        public ConstraintType constraintType;
+        public StringLiteral value;
+
+        public static enum ConstraintType {
+            UNKNOWN,
+            EQ,
+            NEQ,
+            LT,
+            LTE,
+            GT,
+            GTE,
+        }
+
+        public CheckDesc(ConstraintType constraintType, boolean isAllowNull, String name, StringLiteral value) {
+            this.constraintType = constraintType;
+            this.isAllowNull = isAllowNull;
+            this.name = name;
+            this.value = value;
+        }
+    }
+
     private final static Set<String> charsetNames;
 
     static {
@@ -95,6 +120,8 @@ public class ColumnDef {
     }
 
     // parameter initialized in constructor
+    private StringLiteral checkValue;
+    private CheckDesc.ConstraintType constraintType;
     private final String name;
     private final TypeDef typeDef;
     private final String DEFAULT_CHARSET = "utf8";
@@ -138,6 +165,9 @@ public class ColumnDef {
         }
         this.defaultValueDef = defaultValueDef;
         this.comment = comment;
+
+        this.constraintType = CheckDesc.ConstraintType.UNKNOWN;
+        this.checkValue = null;
     }
 
     public boolean isAllowNull() {
@@ -146,6 +176,22 @@ public class ColumnDef {
 
     public void setAllowNull(Boolean allowNull) {
         isAllowNull = allowNull;
+    }
+
+    public CheckDesc.ConstraintType constraintType() {
+        return constraintType;
+    }
+
+    public void setConstraintType(CheckDesc.ConstraintType constraintType) {
+        this.constraintType = constraintType;
+    }
+
+    public StringLiteral checkValue() {
+        return checkValue;
+    }
+
+    public void setCheckValue(StringLiteral value) {
+        this.checkValue = value;
     }
 
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
@@ -415,7 +461,10 @@ public class ColumnDef {
     }
 
     public Column toColumn() {
-        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        Column column = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
+        column.setCheckValue(this.checkValue);
+        column.setConstraintType(this.constraintType);
+        return column;
     }
 
     private String toDefaultExpr(Expr expr) {
