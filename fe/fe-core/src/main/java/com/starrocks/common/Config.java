@@ -1327,6 +1327,18 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * The start time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_start_time = "00:00:00";
+
+    /**
+     * The end time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_end_time = "23:59:59";
+
+    /**
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
     @ConfField(mutable = true)
