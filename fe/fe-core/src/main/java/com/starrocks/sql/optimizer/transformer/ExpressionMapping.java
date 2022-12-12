@@ -31,11 +31,11 @@ import java.util.List;
 import java.util.Map;
 
 public class ExpressionMapping {
+
     /**
      * This structure is responsible for the translation map from Expr to operator
      */
-    public Map<Expr, ColumnRefOperator> expressionToColumns = new HashMap<>();
-
+    private Map<Expr, ColumnRefOperator> expressionToColumns = new HashMap<>();
     /**
      * The purpose of below property is to hold the current plan built so far,
      * and the mapping to indicate how the fields (by position) in the relation map to
