@@ -13,6 +13,7 @@
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
@@ -599,6 +600,35 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
     return count;
 }
 
+static Status read_with_cancel(const TabletSharedPtr& tablet, int64_t version) {
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    vectorized::TabletReaderParams params;
+    RuntimeState state;
+    params.runtime_state = &state;
+    RETURN_IF_ERROR(reader.prepare());
+    std::vector<ChunkIteratorPtr> seg_iters;
+    RETURN_IF_ERROR(reader.get_segment_iterators(params, &seg_iters));
+    if (seg_iters.empty()) {
+        return Status::OK();
+    }
+    state.set_is_cancelled(true);
+    auto iter = vectorized::new_union_iterator(seg_iters);
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            chunk->reset();
+        } else {
+            LOG(WARNING) << "read error: " << st.to_string();
+            return st;
+        }
+    }
+    return Status::OK();
+}
+
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
     vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
@@ -748,6 +778,7 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     ASSERT_EQ(N, read_tablet(_tablet, 4));
     ASSERT_EQ(N, read_tablet(_tablet, 3));
     ASSERT_EQ(N, read_tablet(_tablet, 2));
+    ASSERT_TRUE(read_with_cancel(_tablet, 4).is_cancelled());
 }
 
 TEST_F(TabletUpdatesTest, writeread) {

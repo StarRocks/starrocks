@@ -38,7 +38,7 @@ public class RangeUtils {
             Comparator.comparing(o -> o.getValue().lowerEndpoint());
 
     public static final Comparator<Range<PartitionKey>> RANGE_COMPARATOR =
-            Comparator.comparing(o -> o.lowerEndpoint());
+            Comparator.comparing(Range::lowerEndpoint);
 
     public static void checkRangeIntersect(Range<PartitionKey> range1, Range<PartitionKey> range2) throws DdlException {
         if (range2.isConnected(range1)) {

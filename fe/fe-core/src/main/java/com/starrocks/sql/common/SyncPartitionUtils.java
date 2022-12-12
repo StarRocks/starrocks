@@ -8,17 +8,23 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import org.apache.commons.lang3.StringUtils;
@@ -375,5 +381,42 @@ public class SyncPartitionUtils {
         PartitionKey upperBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
                 Collections.singletonList(partitionColumn));
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
+    }
+
+    public static void dropBaseVersionMeta(MaterializedView mv, String basePartitionName) {
+        MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                refreshContext.getBaseTableVisibleVersionMap();
+        if (versionMap == null) {
+            return;
+        }
+        Expr expr = mv.getPartitionRefTableExprs().get(0);
+        SlotRef slotRef;
+        if (expr instanceof SlotRef) {
+            slotRef = (SlotRef) expr;
+        } else {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            expr.collect(SlotRef.class, slotRefs);
+            slotRef = slotRefs.get(0);
+        }
+        TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+        Database baseDb = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+        if (baseDb == null) {
+            return;
+        }
+        Table baseTable = baseDb.getTable(tableName.getTbl());
+        if (baseTable == null) {
+            return;
+        }
+        long tableId = baseTable.getId();
+        if (expr instanceof SlotRef) {
+            Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
+            if (mvTableVersionMap != null) {
+                mvTableVersionMap.remove(basePartitionName);
+            }
+        } else {
+            // This is a bad case for refreshing, and this problem will be optimized later.
+            versionMap.remove(tableId);
+        }
     }
 }
