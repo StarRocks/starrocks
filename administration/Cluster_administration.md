@@ -228,7 +228,7 @@ admin set frontend config ("disable_colocate_balance"="false");
 
     > **注意**
     >
-    > FE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks-fe.jar**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
+    > FE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks-fe.jar**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 FE 节点路径下的 **bin**、**lib** 和 **spark-dpp** 文件夹。
 
     以下示例以大版本升级为例。
 
@@ -237,6 +237,7 @@ admin set frontend config ("disable_colocate_balance"="false");
     mv bin bin.bak
     cp -r /tmp/StarRocks-x.x.x/fe/lib  .   
     cp -r /tmp/StarRocks-x.x.x/fe/bin  .
+    cp -r /tmp/StarRocks-x.x.x/fe/spark-dpp  .
     ```
 
 3. 启动 FE 节点。
@@ -339,7 +340,7 @@ mysql> set global batch_size = 4096;
 > 注意
 >
 > * FE 节点小版本回滚中（例如从 2.0.y 回滚到 2.0.x），您只需回滚 **/lib/starrocks-fe.jar**。
-> * FE 节点大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
+> * FE 节点大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 FE 节点路径下的 **bin**、**lib** 和 **spark-dpp** 文件夹。
 > * 从 2.1.x 回滚至 2.0.x及以前版本需要通过以下命令关闭 pipeline：`set global enable_pipeline_engine = false`。
 
 1. 进入 FE 路径，停止 FE 节点。
@@ -356,6 +357,7 @@ mysql> set global batch_size = 4096;
     mv bin bin.bak
     cp -r /tmp/StarRocks-x.x.x/fe/lib  .   
     cp -r /tmp/StarRocks-x.x.x/fe/bin  .
+    cp -r /tmp/StarRocks-x.x.x/fe/spark-dpp  .
     ```
 
 3. 启动 FE 节点。
