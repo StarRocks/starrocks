@@ -112,6 +112,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
 
 5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU. You can also run the following command to obtain the SMT package.
 
+<<<<<<< HEAD
 For x86:
 
 <<<<<<< HEAD
@@ -119,12 +120,15 @@ For x86:
    wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
    ```
 =======
+=======
+>>>>>>> a4886710d (Modify description for smt (backport #14994) (#15071))
     ```Bash
     ## for Linux x86
     wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
     ## for macOS ARM64
     wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
     ```
+<<<<<<< HEAD
 >>>>>>> 1b39cfcdf (Modify description for smt (#14994))
 
 For M1:
@@ -132,6 +136,8 @@ For M1:
    ```Bash
    wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
    ```
+=======
+>>>>>>> a4886710d (Modify description for smt (backport #14994) (#15071))
 
 ### Enable MySQL binary log
 
