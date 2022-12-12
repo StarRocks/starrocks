@@ -116,6 +116,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case CATALOG:
                 return CatalogPEntryObject.generate(mgr, objectTokens);
 
+            case RESOURCE_GROUP:
+                return ResourceGroupPEntryObject.generate(mgr, objectTokens);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
@@ -153,6 +156,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
             case CATALOG:
                 return CatalogPEntryObject.generate(allTypes, restrictType, restrictName);
+
+            case RESOURCE_GROUP:
+                return ResourceGroupPEntryObject.generate(allTypes, restrictType, restrictName);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
