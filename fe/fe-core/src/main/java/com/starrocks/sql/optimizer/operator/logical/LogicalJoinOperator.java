@@ -124,7 +124,9 @@ public class LogicalJoinOperator extends LogicalOperator {
         } else {
             candidate = getOutputColumns(new ExpressionContext(expr));
         }
-        candidate.intersect(required);
+        if (required != null) {
+            candidate.intersect(required);
+        }
         return Utils.findSmallestColumnRef(
                 candidate.getStream().mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
     }

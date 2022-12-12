@@ -36,7 +36,9 @@ public abstract class LogicalOperator extends Operator {
                                                ColumnRefFactory columnRefFactory,
                                                OptExpression opt) {
         ColumnRefSet outputCandidates = getOutputColumns(new ExpressionContext(opt));
-        outputCandidates.intersect(requiredCandidates);
+        if (requiredCandidates != null) {
+            outputCandidates.intersect(requiredCandidates);
+        }
         return Utils.findSmallestColumnRef(outputCandidates.getStream().
                 mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
     }
