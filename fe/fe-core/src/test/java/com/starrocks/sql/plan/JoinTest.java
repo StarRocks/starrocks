@@ -2034,9 +2034,8 @@ public class JoinTest extends PlanTestBase {
                 "  66 <= unix_timestamp() \n" +
                 "limit \n" +
                 "  155;";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "7:Project\n" +
-                "  |  <slot 2> : 2: v2");
+        assertPlanContains(sql, "6:Project\n" +
+                "  |  <slot 1> : 1: v1");
     }
 
     @Test
