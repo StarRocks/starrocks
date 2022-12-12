@@ -149,10 +149,8 @@ UNION_VALUE_GUARD(LogicalType, AggregatePTGuard, pt_is_aggregate, pt_is_arithmet
 TExprOpcode::type to_in_opcode(LogicalType t);
 LogicalType thrift_to_type(TPrimitiveType::type ttype);
 TPrimitiveType::type to_thrift(LogicalType ptype);
-TColumnType to_tcolumn_type_thrift(TPrimitiveType::type ttype);
 std::string type_to_string(LogicalType t);
 std::string type_to_string_v2(LogicalType t);
-std::string type_to_odbc_string(LogicalType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
 TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type);
