@@ -439,7 +439,7 @@ public class Utils {
         int smallestColumnLength = Integer.MAX_VALUE;
         for (ColumnRefOperator columnRefOperator : columnRefOperatorList) {
             Type columnType = columnRefOperator.getType();
-            if (columnType.isScalarType()) {
+            if (columnType.isScalarType() && !columnType.isUnknown() && !columnType.isInvalid()) {
                 int columnLength = columnType.getTypeSize();
                 if (columnLength < smallestColumnLength) {
                     smallestColumnRef = columnRefOperator;
