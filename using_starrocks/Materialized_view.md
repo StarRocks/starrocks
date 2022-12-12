@@ -297,7 +297,7 @@ MySQL > DESC sales_records ALL;
 
 ### 查看单表同步物化视图刷新任务
 
-您可以通过 SHOW ALTER MATERIALIZED VIEW 命令查看当前数据仓库中所有单表同步物化视图刷新任务。
+单表同步物化视图在导入时与基表同步更新。您可以通过 SHOW ALTER MATERIALIZED VIEW 命令查看当前数据仓库中所有单表同步物化视图刷新任务。
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW;
