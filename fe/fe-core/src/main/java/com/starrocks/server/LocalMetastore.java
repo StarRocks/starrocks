@@ -972,7 +972,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (backendNum <= 3) {
             bucketNum = 2 * backendNum;
         } else if (backendNum <= 6) {
-            bucketNum = backendNum;
+            bucketNum = (int) (1.5 * backendNum);
         } else if (backendNum <= 12) {
             bucketNum = 12;
         } else {
@@ -1046,7 +1046,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } else {
-            distributionInfo = defaultDistributionInfo;
+            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
+                distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
+            } else {
+                distributionInfo = defaultDistributionInfo;
+            }
         }
         return distributionInfo;
     }
