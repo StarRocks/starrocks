@@ -26,7 +26,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 支持同步模式的导入方式有 Stream Load 和 INSERT。
 
-导入过程如下：
+用户操作过程如下：
 
 1. 创建导入作业。
 
@@ -43,7 +43,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 支持异步模式的导入方式有 Broker Load、Routine Load 和 Spark Load。
 
-导入过程如下：
+用户操作过程如下：
 
 1. 创建导入作业。
 
@@ -84,11 +84,7 @@ Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段�
 
    在导入作业的状态变为 **FINISHED** 之前，您可以随时取消作业。另外，如果导入出现错误，StarRocks 系统也会自动取消导入作业。作业取消后，进入 **CANCELLED** 状态。**CANCELLED** 也是导入作业的一种最终状态。
 
-Routine Load 支持提交一个常驻的导入作业，通过不断地从指定的数据源读取数据，将数据导入到 StarRocks 中。总体流程如下图所示。
-
-![Routine Load 流程图](/assets/4.1-2.png)
-
-每个阶段的描述如下：
+Routine Load 导入作业的执行流程描述如下：
 
 1. 用户通过支持 MySQL 协议的客户端向 FE 提交一个导入作业。
 
