@@ -224,6 +224,10 @@ INTO TABLE <table_name>
 
 请参见 AWS 官方文档[访问密钥](https://docs.aws.amazon.com/zh_cn/IAM/latest/UserGuide/id_credentials_access-keys.html)。
 
+> **说明**
+>
+> 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
+
 #### Google CGS
 
 如果数据源为 Google CGS，需要提供如下配置信息。
