@@ -61,7 +61,6 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
-class CompactionScheduler;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -361,8 +360,6 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
-
-    std::unique_ptr<CompactionScheduler> _compaction_scheduler;
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

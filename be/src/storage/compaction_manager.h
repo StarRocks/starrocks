@@ -20,7 +20,6 @@
 
 namespace starrocks {
 
-class CompactionScheduler;
 class StorageEngine;
 
 class CompactionManager {
@@ -45,11 +44,6 @@ public:
     void update_tablet_async(TabletSharedPtr tablet);
 
     void update_tablet(TabletSharedPtr tablet);
-
-    void register_scheduler(CompactionScheduler* scheduler) {
-        std::lock_guard lg(_scheduler_mutex);
-        _schedulers.push_back(scheduler);
-    }
 
     bool register_task(CompactionTask* compaction_task);
 
@@ -89,15 +83,22 @@ public:
 
     uint64_t next_compaction_task_id() { return ++_next_task_id; }
 
+    void schedule();
+
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
     CompactionManager& operator=(const CompactionManager& compaction_manager) = delete;
     CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
 
-    void _notify_schedulers();
     void _dispatch_worker();
     bool _check_precondition(const CompactionCandidate& candidate);
+    void _schedule();
+    void _notify();
+    // wait until current running tasks are below max_concurrent_num
+    void _wait_to_run();
+    bool _can_schedule_next();
+    std::shared_ptr<CompactionTask> _try_get_next_compaction_task();
 
     std::mutex _candidates_mutex;
     // protect by _mutex
@@ -116,10 +117,16 @@ private:
     std::atomic<bool> _stop = false;
     int32_t _max_dispatch_count = 0;
 
-    std::mutex _scheduler_mutex;
-    std::vector<CompactionScheduler*> _schedulers;
     int32_t _max_task_num = 0;
     bool _disable_update_tablet = false;
+
+    std::atomic<bool> _bg_worker_stopped{false};
+    std::mutex _mutex;
+    std::condition_variable _cv;
+    uint64_t _round = 0;
+
+    std::unique_ptr<ThreadPool> _compaction_pool = nullptr;
+    std::thread _scheduler_thread;
 };
 
 } // namespace starrocks
