@@ -253,6 +253,7 @@ public class OptExpressionDuplicator {
         }
 
         private void processCommon(Operator.Builder opBuilder) {
+            // first process predicate, then projection
             ScalarOperator predicate = opBuilder.getPredicate();
             if (predicate != null) {
                 ScalarOperator newPredicate = rewriter.rewrite(predicate);
