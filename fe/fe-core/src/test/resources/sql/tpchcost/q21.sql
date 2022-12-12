@@ -45,7 +45,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-27:MERGING-EXCHANGE
+28:MERGING-EXCHANGE
 limit: 100
 
 PLAN FRAGMENT 1
@@ -53,43 +53,81 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 2: S_NAME
 
 STREAM DATA SINK
-EXCHANGE ID: 27
+EXCHANGE ID: 28
 UNPARTITIONED
 
-26:TOP-N
+27:TOP-N
 |  order by: <slot 77> 77: count DESC, <slot 2> 2: S_NAME ASC
 |  offset: 0
 |  limit: 100
 |
-25:AGGREGATE (update finalize)
-|  output: count(*)
+26:AGGREGATE (merge finalize)
+|  output: count(77: count)
 |  group by: 2: S_NAME
 |
-24:EXCHANGE
+25:EXCHANGE
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 24
+EXCHANGE ID: 25
 HASH_PARTITIONED: 2: S_NAME
 
+24:AGGREGATE (update serialize)
+|  STREAMING
+|  output: count(*)
+|  group by: 2: S_NAME
+|
 23:Project
 |  <slot 2> : 2: S_NAME
 |
 22:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
+|  hash predicates:
+|  colocate: false, reason:
+|  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
+|  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
+|
+|----21:EXCHANGE
+|
+0:OlapScanNode
+TABLE: lineitem
+PREAGGREGATION: ON
+partitions=1/1
+rollup: lineitem
+tabletRatio=20/20
+tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
+cardinality=600000000
+avgRowSize=12.0
+numNodes=0
+
+PLAN FRAGMENT 3
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 21
+BUCKET_SHUFFLE_HASH_PARTITIONED: 9: L_ORDERKEY
+
+20:Project
+|  <slot 2> : 2: S_NAME
+|  <slot 9> : 9: L_ORDERKEY
+|  <slot 11> : 11: L_SUPPKEY
+|
+19:HASH JOIN
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 26: O_ORDERKEY = 9: L_ORDERKEY
 |
-|----21:EXCHANGE
+|----18:EXCHANGE
 |
-1:Project
+2:Project
 |  <slot 26> : 26: O_ORDERKEY
 |
-0:OlapScanNode
+1:OlapScanNode
 TABLE: orders
 PREAGGREGATION: ON
 PREDICATES: 28: O_ORDERSTATUS = 'F'
@@ -99,38 +137,6 @@ tabletRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=50000000
 avgRowSize=9.0
-numNodes=0
-
-PLAN FRAGMENT 3
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 21
-UNPARTITIONED
-
-20:Project
-|  <slot 2> : 2: S_NAME
-|  <slot 9> : 9: L_ORDERKEY
-|
-19:HASH JOIN
-|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
-|  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
-|
-|----18:EXCHANGE
-|
-2:OlapScanNode
-TABLE: lineitem
-PREAGGREGATION: ON
-partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=600000000
-avgRowSize=12.0
 numNodes=0
 
 PLAN FRAGMENT 4

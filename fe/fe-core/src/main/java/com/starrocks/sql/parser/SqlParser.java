@@ -2,11 +2,13 @@
 package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.StatementPlanner;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -15,34 +17,76 @@ import java.io.StringReader;
 import java.util.List;
 
 public class SqlParser {
-    public static List<StatementBase> parse(String originSql, long sqlMode) {
+    public static List<StatementBase> parse(String originSql, SessionVariable sessionVariable) {
         List<String> splitSql = splitSQL(originSql);
         List<StatementBase> statements = Lists.newArrayList();
-
         for (int idx = 0; idx < splitSql.size(); ++idx) {
             String sql = splitSql.get(idx);
+            StatementBase statement = parseSingleSql(sql, sessionVariable);
+            statement.setOrigStmt(new OriginStatement(sql, idx));
+            statements.add(statement);
+        }
+        return statements;
+    }
+
+    public static StatementBase parseSingleSql(String sql, SessionVariable sessionVariable) {
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        setParserProperty(parser, sessionVariable);
+        StatementBase statement;
+        try {
+            StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+            statement = (StatementBase) new AstBuilder(sessionVariable.getSqlMode())
+                    .visitSingleStatement(sqlStatements.singleStatement(0));
+        } catch (ParsingException parsingException) {
             try {
-                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
-                CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-                StarRocksParser parser = new StarRocksParser(tokenStream);
-                StarRocksParser.sqlMode = sqlMode;
-                parser.removeErrorListeners();
-                parser.addErrorListener(new ErrorHandler());
-                StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                StatementBase statement = (StatementBase) new AstBuilder(sqlMode)
-                        .visitSingleStatement(sqlStatements.singleStatement(0));
-                statement.setOrigStmt(new OriginStatement(sql, idx));
-                statements.add(statement);
-            } catch (ParsingException parsingException) {
-                StatementBase statement = parseWithOldParser(sql, sqlMode, 0);
-                if (StatementPlanner.supportedByNewParser(statement)) {
-                    throw parsingException;
-                }
-                statements.add(statement);
+                statement = parseWithOldParser(sql, sessionVariable.getSqlMode(), 0);
+            } catch (Exception e) {
+                // both new and old parser failed. We return new parser error info to client.
+                throw parsingException;
+            }
+            if (StatementPlanner.supportedByNewParser(statement)) {
+                throw parsingException;
             }
         }
+        return statement;
+    }
 
-        return statements;
+    public static void setParserProperty(StarRocksParser parser, SessionVariable sessionVariable) {
+        StarRocksParser.sqlMode = sessionVariable.getSqlMode();
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ErrorHandler());
+    }
+
+
+    /**
+     * We need not only sqlMode but also other parameters to define the property of parser.
+     * Please consider use {@link #parse(String, SessionVariable)}
+     */
+    @Deprecated
+    public static List<StatementBase> parse(String originSql, long sqlMode) {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setSqlMode(sqlMode);
+        return parse(originSql, sessionVariable);
+    }
+
+    /**
+     * parse sql to expression, only supports new parser
+     *
+     * @param expressionSql expression sql
+     * @param sqlMode       sqlMode
+     * @return Expr
+     */
+    public static Expr parseSqlToExpr(String expressionSql, long sqlMode) {
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(expressionSql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        StarRocksParser.sqlMode = sqlMode;
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ErrorHandler());
+        StarRocksParser.ExpressionContext expressionContext = parser.expression();
+        return ((Expr) new AstBuilder(sqlMode).visit(expressionContext));
     }
 
     public static StatementBase parseWithOldParser(String originStmt, long sqlMode, int idx) {
