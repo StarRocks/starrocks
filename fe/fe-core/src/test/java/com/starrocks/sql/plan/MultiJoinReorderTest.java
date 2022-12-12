@@ -444,8 +444,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public void testMultiCrossJoinReorder() throws Exception {
         // check multi cross join reorder without exception
         String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("17:NESTLOOP JOIN"));
+        assertPlanContains(sql, "18:NESTLOOP JOIN");
     }
 
     @Test
