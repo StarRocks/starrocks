@@ -477,6 +477,8 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
+    private WarehouseManager warehouseMgr;
+
     private ConfigRefreshDaemon configRefreshDaemon;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -641,6 +643,7 @@ public class GlobalStateMgr {
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
@@ -858,6 +861,10 @@ public class GlobalStateMgr {
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
         return insertOverwriteJobManager;
+    }
+
+    public WarehouseManager getWarehouseMgr() {
+        return warehouseMgr;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -1340,6 +1347,7 @@ public class GlobalStateMgr {
             checksum = loadStreamLoadManager(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = MVManager.getInstance().reload(dis, checksum);
+            checksum = warehouseMgr.loadWarehouses(dis, checksum);
             remoteChecksum = dis.readLong();
             globalFunctionMgr.loadGlobalFunctions(dis, checksum);
             // TODO put this at the end of the image before 3.0 release
@@ -1654,6 +1662,7 @@ public class GlobalStateMgr {
             checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = MVManager.getInstance().store(dos, checksum);
+            checksum = warehouseMgr.saveWarehouses(dos, checksum);
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release
@@ -3123,6 +3132,14 @@ public class GlobalStateMgr {
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {
         this.alter.getClusterHandler().cancel(stmt);
+    }
+
+    // Change current warehouse of this session.
+    public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws AnalysisException {
+        if (!warehouseMgr.warehouseExists(newWarehouseName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+        }
+        ctx.setCurrentWarehouse(newWarehouseName);
     }
 
     // Change current catalog of this session.

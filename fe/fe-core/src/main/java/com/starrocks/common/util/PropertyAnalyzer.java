@@ -320,7 +320,7 @@ public class PropertyAnalyzer {
             } catch (Exception e) {
                 throw new AnalysisException(e.getMessage());
             }
-            checkAvailableBackendsIsEnough(replicationNum);
+
             properties.remove(PROPERTIES_REPLICATION_NUM);
         }
         return replicationNum;

@@ -105,9 +105,15 @@ public class ConnectProcessor {
         try {
             String[] parts = identifier.trim().split("\\s+");
             if (parts.length == 2) {
-                Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
-                        "You might want to use \"USE 'CATALOG <catalog_name>'\"");
-                ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
+                if (parts[0].equalsIgnoreCase("catalog")) {
+                    Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
+                            "You might want to use \"USE 'CATALOG <catalog_name>'\"");
+                    ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
+                } else if (parts[0].equalsIgnoreCase("warehouse")) {
+                    Preconditions.checkState(parts[0].equalsIgnoreCase("warehouse"),
+                            "You might want to use \"USE 'WAREHOUSE <warehouse_name>'\"");
+                    ctx.getGlobalStateMgr().changeWarehouse(ctx, parts[1]);
+                }
             } else {
                 ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
             }
