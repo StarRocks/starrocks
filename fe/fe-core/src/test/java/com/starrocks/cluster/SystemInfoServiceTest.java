@@ -42,7 +42,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,10 +49,9 @@ import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -126,7 +124,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                systemInfoService = new SystemInfoService();
+                systemInfoService = new LocalSystemInfoService();
                 GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
@@ -272,28 +270,6 @@ public class SystemInfoServiceTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
-
-        // test removeWorker
-        Config.integrate_starmgr = true;
-        StarOSAgent starosAgent = new StarOSAgent();
-        new Expectations(starosAgent) {
-            {
-                try {
-                    starosAgent.removeWorker("192.168.0.1:1235");
-                    minTimes = 0;
-                    result = null;
-                } catch (DdlException e) {
-                    e.printStackTrace();
-                }
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            StarOSAgent getStarOSAgent() {
-                return starosAgent;
-            }
-        };
 
         AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"));
         com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt2), new ConnectContext(null));

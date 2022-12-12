@@ -1547,7 +1547,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             throws Exception {
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode(0);
                 returns(true, true, true, false, true);
             }
 

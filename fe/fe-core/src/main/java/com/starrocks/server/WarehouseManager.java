@@ -72,10 +72,15 @@ public class WarehouseManager implements Writable {
     public WarehouseManager() {
     }
 
+
     public Warehouse getWarehouse(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.get(warehouseName);
         }
+    }
+
+    public Map<String, Warehouse> getAllWarehouses() {
+        return fullNameToWh;
     }
 
     public boolean warehouseExists(String warehouseName) {

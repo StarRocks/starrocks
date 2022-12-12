@@ -62,6 +62,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -388,7 +389,7 @@ public abstract class StarRocksHttpTestCase {
     @Before
     public void setUp() {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
-        SystemInfoService systemInfoService = new SystemInfoService();
+        SystemInfoService systemInfoService = new LocalSystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -422,7 +423,7 @@ public abstract class StarRocksHttpTestCase {
 
     public void setUpWithCatalog() {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
-        SystemInfoService systemInfoService = new SystemInfoService();
+        SystemInfoService systemInfoService = new LocalSystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         new MockUp<GlobalStateMgr>() {
             @Mock

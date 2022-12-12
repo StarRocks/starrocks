@@ -153,99 +153,6 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAddAndRemoveWorker() throws Exception {
-        new Expectations() {
-            {
-                client.addWorker("1", "127.0.0.1:8090");
-                minTimes = 0;
-                result = 10;
-
-                client.removeWorker("1", 10);
-                minTimes = 0;
-                result = null;
-            }
-        };
-
-        String workerHost = "127.0.0.1:8090";
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.addWorker(5, workerHost);
-        Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
-
-        starosAgent.removeWorker(workerHost);
-        Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
-    }
-
-    @Test
-    public void testAddWorkerException() throws Exception {
-        new Expectations() {
-            {
-                client.addWorker("1", "127.0.0.1:8090");
-                minTimes = 0;
-                result = new StarClientException(StatusCode.ALREADY_EXIST, "worker already exists");
-
-                client.getWorkerInfo("1", "127.0.0.1:8090").getWorkerId();
-                minTimes = 0;
-                result = 6;
-            }
-        };
-
-        String workerHost = "127.0.0.1:8090";
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.addWorker(5, workerHost);
-        Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
-        Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
-
-        new Expectations() {
-            {
-                client.addWorker("1", "127.0.0.1:8091");
-                minTimes = 0;
-                result = new StarClientException(StatusCode.ALREADY_EXIST,
-                        "worker already exists");
-
-                client.getWorkerInfo("1", "127.0.0.1:8091").getWorkerId();
-                minTimes = 0;
-                result = new StarClientException(StatusCode.GRPC,
-                        "network error");
-            }
-        };
-        starosAgent.addWorker(10, "127.0.0.1:8091");
-        ExceptionChecker.expectThrows(NullPointerException.class,
-                () -> starosAgent.getWorkerId("127.0.0.1:8091"));
-    }
-
-    @Test
-    public void testRemoveWorkerException() throws Exception {
-        new Expectations() {
-            {
-                client.getWorkerInfo("1", "127.0.0.1:8090").getWorkerId();
-                minTimes = 0;
-                result = new StarClientException(StatusCode.GRPC, "network error");
-            }
-        };
-
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Failed to get worker id from starMgr.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
-
-        new Expectations() {
-            {
-                client.getWorkerInfo("1", "127.0.0.1:8090").getWorkerId();
-                minTimes = 0;
-                result = 10;
-
-                client.removeWorker("1", 10);
-                minTimes = 0;
-                result = new StarClientException(StatusCode.GRPC, "network error");
-            }
-        };
-
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Failed to remove worker.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
-    }
-
-    @Test
     public void testCreateAndListShardGroup() throws StarClientException, DdlException {
         ShardInfo shard1 = ShardInfo.newBuilder().setShardId(10L).build();
         ShardInfo shard2 = ShardInfo.newBuilder().setShardId(11L).build();
@@ -372,18 +279,6 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(10001L, starosAgent.getPrimaryBackendIdByShard(10L));
         Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L), starosAgent.getBackendIdsByShard(10L));
-    }
-
-    @Test
-    public void testRemoveWorkerFromMap() {
-        String workerHost = "127.0.0.1:8090";
-        Map<String, Long> mockWorkerToId = Maps.newHashMap();
-        mockWorkerToId.put(workerHost, 5L);
-        Deencapsulation.setField(starosAgent, "workerToId", mockWorkerToId);
-        Assert.assertEquals(5L, starosAgent.getWorkerId(workerHost));
-
-        starosAgent.removeWorkerFromMap(5L, workerHost);
-        ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
     }
 
 }

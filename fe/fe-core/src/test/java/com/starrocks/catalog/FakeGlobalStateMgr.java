@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
@@ -43,7 +44,7 @@ public class FakeGlobalStateMgr extends MockUp<GlobalStateMgr> {
 
     private static GlobalStateMgr globalStateMgr;
     private static int metaVersion;
-    private static SystemInfoService systemInfo = new SystemInfoService();
+    private static SystemInfoService systemInfo = new LocalSystemInfoService();
 
     public static void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         FakeGlobalStateMgr.globalStateMgr = globalStateMgr;

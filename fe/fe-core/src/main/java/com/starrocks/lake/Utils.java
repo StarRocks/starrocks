@@ -31,6 +31,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,7 +52,14 @@ public class Utils {
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
-            return tablet.getPrimaryBackendId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()
+                    .values().stream().findFirst().orElseThrow(() -> new UserException("no warehouse exists"));
+            com.starrocks.warehouse.Cluster cluster = warehouse.getClusters().values().stream().findFirst().orElseThrow(
+                    () -> new UserException("no cluster exists in this warehouse")
+            );
+
+            long workerGroupId = cluster.getWorkerGroupId();
+            return tablet.getPrimaryBackendId(workerGroupId);
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
         }
