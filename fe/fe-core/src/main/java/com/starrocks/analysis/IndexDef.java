@@ -68,6 +68,22 @@ public class IndexDef {
                 throw new SemanticException("columns of index has duplicated.");
             }
         }
+
+        if (indexType == IndexDef.IndexType.FULLTEXT) {
+            if (columns == null || columns.size() != 1) {
+                throw new SemanticException("fulltext index can only apply to a single column.");
+            }
+
+            if (Strings.isNullOrEmpty(indexName)) {
+                throw new SemanticException("index name cannot be blank.");
+            }
+
+            TreeSet<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            distinct.addAll(columns);
+            if (columns.size() != distinct.size()) {
+                throw new SemanticException("columns of index has duplicated.");
+            }
+        }
     }
 
     public String toSql() {
@@ -136,6 +152,14 @@ public class IndexDef {
                         "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
             }
+        } else if (indexType == IndexType.FULLTEXT) {
+            String indexColName = column.getName();
+            PrimitiveType colType = column.getPrimitiveType();
+
+            if (!colType.isStringType()) {
+                throw new SemanticException(colType + " is not supported in fulltext index. "
+                + "invalid column: " + indexColName);
+            }
         } else {
             throw new SemanticException("Unsupported index type: " + indexType);
         }
@@ -143,5 +167,6 @@ public class IndexDef {
 
     public enum IndexType {
         BITMAP,
+        FULLTEXT,
     }
 }

@@ -386,7 +386,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING BITMAP
+    : USING (BITMAP | FULLTEXT)
     ;
 
 showTableStatement
@@ -1677,7 +1677,7 @@ predicateOperations [ParserRuleContext value]
     : NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
-    | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
+    | NOT? (LIKE | RLIKE | REGEXP | AGAINST) pattern=valueExpression                      #like
     ;
 
 valueExpression
@@ -1720,6 +1720,7 @@ primaryExpression
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
+    | MATCH '(' columnReference ')'                                                       #match
     ;
 
 literalExpression

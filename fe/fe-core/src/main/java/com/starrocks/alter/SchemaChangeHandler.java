@@ -1159,9 +1159,15 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify table properties
                 // do nothing, properties are already in propertyMap
             } else if (alterClause instanceof CreateIndexClause) {
-                processAddIndex((CreateIndexClause) alterClause, olapTable, newIndexes);
+                boolean fullTextMock = processAddIndex((CreateIndexClause) alterClause, olapTable, newIndexes);
+                if (fullTextMock) {
+                    return null;
+                }
             } else if (alterClause instanceof DropIndexClause) {
-                processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
+                boolean fullTextMock = processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
+                if (fullTextMock) {
+                    return null;
+                }
             } else {
                 Preconditions.checkState(false);
             }
@@ -1445,14 +1451,18 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
+    private boolean processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
             throws UserException {
         if (alterClause.getIndex() == null) {
-            return;
+            return false;
         }
 
+        boolean fullTextMock = false;
         List<Index> existedIndexes = olapTable.getIndexes();
         IndexDef indexDef = alterClause.getIndexDef();
+        if (indexDef.getIndexType() == IndexDef.IndexType.FULLTEXT) {
+            fullTextMock = true;
+        }
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
@@ -1472,14 +1482,18 @@ public class SchemaChangeHandler extends AlterHandler {
             if (column != null) {
                 indexDef.checkColumn(column, olapTable.getKeysType());
             } else {
-                throw new DdlException("BITMAP column does not exist in table. invalid column: " + col);
+                throw new DdlException("index column does not exist in table. invalid column: " + col);
             }
         }
 
         newIndexes.add(alterClause.getIndex());
+
+        olapTable.setIndexes(newIndexes);
+
+        return fullTextMock;
     }
 
-    private void processDropIndex(DropIndexClause alterClause, OlapTable olapTable, List<Index> indexes)
+    private boolean processDropIndex(DropIndexClause alterClause, OlapTable olapTable, List<Index> indexes)
             throws DdlException {
         String indexName = alterClause.getIndexName();
         List<Index> existedIndexes = olapTable.getIndexes();
@@ -1495,12 +1509,22 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         Iterator<Index> itr = indexes.iterator();
+        boolean fullTextMock = false;
         while (itr.hasNext()) {
             Index idx = itr.next();
             if (idx.getIndexName().equalsIgnoreCase(alterClause.getIndexName())) {
+                if (idx.getIndexType() == IndexDef.IndexType.FULLTEXT) {
+                    fullTextMock = true;
+                }
                 itr.remove();
                 break;
             }
         }
+
+        if (fullTextMock) {
+            olapTable.setIndexes(indexes);
+        }
+
+        return fullTextMock;
     }
 }

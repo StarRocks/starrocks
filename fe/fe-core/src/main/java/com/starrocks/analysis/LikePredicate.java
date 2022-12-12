@@ -49,7 +49,9 @@ public class LikePredicate extends Predicate {
 
     private final Operator op;
 
-    public LikePredicate(Operator op, Expr e1, Expr e2) {
+    private final boolean isAgainst;
+
+    public LikePredicate(Operator op, Expr e1, Expr e2, boolean isAgainst) {
         super();
         this.op = op;
         Preconditions.checkNotNull(e1);
@@ -58,11 +60,17 @@ public class LikePredicate extends Predicate {
         children.add(e2);
         // TODO: improve with histograms?
         selectivity = 0.1;
+        this.isAgainst = isAgainst;
     }
 
     protected LikePredicate(LikePredicate other) {
         super(other);
         op = other.op;
+        isAgainst = other.isAgainst;
+    }
+
+    public boolean isAgainst() {
+        return isAgainst;
     }
 
     @Override

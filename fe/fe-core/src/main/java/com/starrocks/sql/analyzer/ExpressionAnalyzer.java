@@ -615,6 +615,11 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitLikePredicate(LikePredicate node, Scope scope) {
+            try {
+                int i = 1 / 0;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
             predicateBaseAndCheck(node);
 
             Type type1 = node.getChild(0).getType();

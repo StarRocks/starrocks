@@ -9,8 +9,10 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -19,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
@@ -53,6 +56,8 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,6 +70,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class QueryAnalyzer {
+    private static final Logger LOG = LogManager.getLogger(QueryAnalyzer.class);
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
@@ -170,6 +176,30 @@ public class QueryAnalyzer {
             selectRelation.setRelation(resolvedRelation);
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
+
+            if (resolvedRelation instanceof TableRelation) {
+                LOG.info("resolvedRelation instanceof TableRelation");
+                TableRelation relation = ((TableRelation) resolvedRelation);
+                Table tbl = relation.getTable();
+
+                if (selectRelation.getWhereClause() instanceof LikePredicate && tbl instanceof OlapTable) {
+                    LOG.info("selectRelation.getWhereClause() instanceof LikePredicate");
+                    LikePredicate expr = ((LikePredicate) selectRelation.getWhereClause());
+                    OlapTable olapTbl = ((OlapTable) tbl);
+                    boolean fullText = false;
+
+                    for (Index i : olapTbl.getIndexes()) {
+                        if (i.getIndexType() == IndexDef.IndexType.FULLTEXT) {
+                            fullText = true;
+                            break;
+                        }
+                    }
+
+                    if (!fullText && expr.isAgainst()) {
+                        throw new SemanticException("table : " + tbl.getName() + " has no FULLTEXT index");
+                    }
+                }
+            }
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(

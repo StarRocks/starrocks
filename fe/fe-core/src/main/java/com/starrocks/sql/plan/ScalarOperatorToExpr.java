@@ -346,9 +346,9 @@ public class ScalarOperatorToExpr {
 
             LikePredicate expr;
             if (predicate.isRegexp()) {
-                expr = new LikePredicate(LikePredicate.Operator.REGEXP, child1, child2);
+                expr = new LikePredicate(LikePredicate.Operator.REGEXP, child1, child2, false);
             } else {
-                expr = new LikePredicate(LikePredicate.Operator.LIKE, child1, child2);
+                expr = new LikePredicate(LikePredicate.Operator.LIKE, child1, child2, false);
             }
 
             expr.setFn(Expr.getBuiltinFunction(expr.getOp().name(), new Type[] {child1.getType(), child2.getType()},
