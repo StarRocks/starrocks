@@ -130,6 +130,9 @@ public enum ErrorCode {
             "data cannot be inserted into table with empty partition. " +
                     "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. "),
     ERR_NO_SUCH_PARTITION(1749, new byte[] {'H', 'Y', '0', '0', '0'}, "partition '%s' doesn't exist"),
+
+    ERR_WRONG_WH_NAME(1750, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect warehouse name '%s'"),
+
     // Following is StarRocks's error code, which start from 5000
     ERR_NOT_OLAP_TABLE(5000, new byte[] {'H', 'Y', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
     ERR_WRONG_PROC_PATH(5001, new byte[] {'H', 'Y', '0', '0', '0'}, "Proc path '%s' doesn't exist"),
@@ -308,7 +311,6 @@ public enum ErrorCode {
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
-
 
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {

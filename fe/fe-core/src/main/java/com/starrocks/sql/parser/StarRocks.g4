@@ -32,6 +32,12 @@ statement
     // Query Statement
     : queryStatement
 
+    // Warehouse Statement
+    | useWarehouseStatement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | showWarehouseStatement
+
     // Database Statement
     | useDatabaseStatement
     | useCatalogStatement
@@ -242,6 +248,25 @@ statement
     //Unsupported Statement
     | unsupportedStatement
     ;
+
+// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
+useWarehouseStatement
+    : USE qualifiedName
+    ;
+
+showWarehouseStatement
+    : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+createWarehouseStatement
+    : CREATE (WAREHOUSE) (IF NOT EXISTS)? identifier
+    ;
+
+dropWarehouseStatement
+    : DROP (WAREHOUSE) (IF EXISTS)? identifier FORCE?
+    ;
+
+
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 

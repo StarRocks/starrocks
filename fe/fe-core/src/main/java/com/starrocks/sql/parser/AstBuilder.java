@@ -164,6 +164,7 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -458,6 +459,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     AlterDatabaseQuotaStmt.QuotaType.REPLICA,
                     quotaValue);
         }
+    }
+
+    @Override
+    public ParseNode visitCreateWarehouseStatement(StarRocksParser.CreateWarehouseStatementContext context) {
+        String whName = ((Identifier) visit(context.identifier())).getValue();
+        return new CreateWarehouseStmt(context.IF() != null, whName);
     }
 
     @Override

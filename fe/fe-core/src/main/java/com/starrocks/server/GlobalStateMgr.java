@@ -473,6 +473,8 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
+    private WarehouseManager warehouseManager;
+
     private ConfigRefreshDaemon configRefreshDaemon;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -647,6 +649,7 @@ public class GlobalStateMgr {
         this.compactionManager = new CompactionManager();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.shardDeleter = new ShardDeleter();
+        this.warehouseManager = new WarehouseManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {

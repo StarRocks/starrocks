@@ -66,6 +66,13 @@ public class FeNameFormat {
         }
     }
 
+    public static void checkWhName(String whName) throws AnalysisException {
+        if (Strings.isNullOrEmpty(whName) || !whName.matches(COMMON_NAME_REGEX)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_WH_NAME, whName);
+        }
+    }
+
+
     public static void checkDbName(String dbName) throws AnalysisException {
         if (Strings.isNullOrEmpty(dbName) || !dbName.matches(COMMON_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, dbName);

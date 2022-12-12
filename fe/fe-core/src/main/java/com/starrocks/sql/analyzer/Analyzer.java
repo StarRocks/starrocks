@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -128,6 +129,13 @@ public class Analyzer {
     private static class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
+        }
+
+        // ---------------------------------------- Database Statement -----------------------------------------------------
+        @Override
+        public void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+            CreateWarehouseAnalyzer.analyze(statement, context);
+            return null;
         }
 
         // ---------------------------------------- Database Statement -----------------------------------------------------
