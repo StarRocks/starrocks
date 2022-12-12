@@ -1214,6 +1214,7 @@ privilegeTypeReserved
     | DATABASE
     | CATALOG
     | DATABASES
+    | RESOURCE_GROUP
     ;
 
 privilegeType

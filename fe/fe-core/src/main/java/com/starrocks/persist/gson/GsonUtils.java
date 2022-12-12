@@ -103,6 +103,7 @@ import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
@@ -236,7 +237,9 @@ public class GsonUtils {
                     .registerSubtype(ResourcePEntryObject.class, ResourcePEntryObject.class.getSimpleName())
                     .registerSubtype(ViewPEntryObject.class, ViewPEntryObject.class.getSimpleName())
                     .registerSubtype(CatalogPEntryObject.class,
-                            CatalogPEntryObject.class.getSimpleName());
+                            CatalogPEntryObject.class.getSimpleName())
+                    .registerSubtype(ResourceGroupPEntryObject.class,
+                            ResourceGroupPEntryObject.class.getSimpleName());
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));

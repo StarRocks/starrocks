@@ -258,6 +258,15 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+    public ResourceGroup getResourceGroup(long id) {
+        readLock();
+        try {
+            return id2ResourceGroupMap.getOrDefault(id, null);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
