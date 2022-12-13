@@ -27,7 +27,13 @@
 
 namespace starrocks::vectorized {
 
-// LambdaFunction has various children such as lambda expression, arg_0, arg_1,....
+// The children of lambda function include 3 parts: lambda expr, lambda arguments and optimal common sub expressions,
+// the layout may be:
+// lambda_expr, arg_1, arg_2..., sub_expr_slot_id_1, sub_expr_slot_id_2, ... sub_expr_1, sub_expr_2, ...
+// taking  (x,y) -> x*2 + x*2 + y as example, 3 parts are listed below:
+//      lambda expr      | lambda argument | common sub expression |
+// slot[1] + slot[1] + y |    x, y         |   slot[1], x * 2      |
+// Note the common sub expressions should be evaluated in order before the lambda expr.
 
 class LambdaFunction final : public Expr {
 public:

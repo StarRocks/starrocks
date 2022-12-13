@@ -537,11 +537,12 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void testLambdaReuseSubExpressionWithoutLambdaArguments() throws Exception {
+    public void testLambdaReuseSubExpression() throws Exception {
         starRocksAssert.withTable("create table test_array" +
                 "(c0 INT,c1 int, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+        // without lambda arguments
         String sql = "select b, array_map(x->x+b, arr) from (select array_map(x->x+1, [1,2]) as arr, 3*c1 as b " +
                 "from test_array)T";
         String plan = getFragmentPlan(sql);
@@ -564,11 +565,44 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("common expressions"));
         Assert.assertTrue(plan.contains("array_length(6: array_map)"));
 
-        sql = "select  array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
+        sql = "select array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("common expressions"));
         Assert.assertTrue(plan.contains(
                 "array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) + 7: multiply + 7: multiply"));
+
+        // with lambda arguments
+        sql = "select array_map(x -> x*2 + x*2, [1,3])";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map(<slot 2> -> <slot 7> + <slot 7>[<slot 5> <-> " +
+                "cast([2, TINYINT, true] as SMALLINT)][<slot 6> <-> [5, SMALLINT, true] * 2][<slot 7> <-> " +
+                "cast([6, SMALLINT, true] as INT)], ARRAY<tinyint(4)>[1,3])"));
+
+        sql = "select array_map((x,y) -> x*2 + y  + x*2, [1,3],[4,5])";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map((<slot 2>, <slot 3>) -> CAST(CAST(<slot 7> AS INT) + " +
+                "CAST(<slot 3> AS INT) AS BIGINT) + CAST(<slot 7> AS BIGINT)" +
+                "[<slot 6> <-> cast([2, TINYINT, true] as SMALLINT)][<slot 7> <-> [6, SMALLINT, true] * 2], " +
+                "ARRAY<tinyint(4)>[1,3], ARRAY<tinyint(4)>[4,5])"));
+
+        sql = "select array_map((x,y) -> x*2 + y  + x*2, [1,3],[4,5]) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map((<slot 4>, <slot 5>) -> CAST(CAST(<slot 9> AS INT) + " +
+                "CAST(<slot 5> AS INT) AS BIGINT) + CAST(<slot 9> AS BIGINT)[<slot 8> <-> " +
+                "cast([4, TINYINT, true] as SMALLINT)][<slot 9> <-> [8, SMALLINT, true] * 2], " +
+                "ARRAY<tinyint(4)>[1,3], ARRAY<tinyint(4)>[4,5])"));
+
+        sql = "select array_map(x -> x*2  + abs(c1) + x*2+ abs(c1), c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 9> + 6: abs + <slot 9> + 6: abs[<slot 8> <-> " +
+                "cast([4, INT, true] as BIGINT)][<slot 9> <-> [8, BIGINT, true] * 2],"));
+
+        sql = "select array_map(x -> x*2  + abs(c1) + (x*2+ abs(c1)), c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 10> + <slot 10>[<slot 8> <-> " +
+                "cast([4, INT, true] as BIGINT)][<slot 9> <-> [8, BIGINT, true] * 2][<slot 10> <-> " +
+                "[9, BIGINT, true] + [6: abs, BIGINT, true]]"));
+
     }
 
     @Test

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -35,7 +36,9 @@ public class LambdaFunctionOperator extends ScalarOperator {
         return columnRefMap;
     }
 
-    private Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+    // should be in order.
+    private Map<ColumnRefOperator, ScalarOperator> columnRefMap =
+            Maps.newTreeMap(Comparator.comparing(ColumnRefOperator::getId));
 
     public LambdaFunctionOperator(List<ColumnRefOperator> refColumns, ScalarOperator lambdaExpr, Type retType) {
         super(OperatorType.LAMBDA_FUNCTION, retType);
