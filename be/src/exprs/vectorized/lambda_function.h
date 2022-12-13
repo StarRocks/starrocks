@@ -42,7 +42,7 @@ public:
     // the slot ids of lambda expression may be originally from the arguments of this lambda function
     // or its parent lambda functions, or captured columns, remove the first one.
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
-        slot_ids->assign(_captured_slot_ids.begin(), _captured_slot_ids.end());
+        slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
         return _captured_slot_ids.size();
     }
 
@@ -56,5 +56,8 @@ public:
 private:
     std::vector<SlotId> _captured_slot_ids;
     std::vector<SlotId> _arguments_ids;
+    std::vector<SlotId> _common_sub_expr_ids;
+    std::vector<Expr*> _common_sub_expr;
+    int _common_sub_expr_num;
 };
 } // namespace starrocks::vectorized

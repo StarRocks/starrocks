@@ -15,10 +15,14 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -34,7 +38,11 @@ import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -56,7 +64,7 @@ public class ScalarOperatorsReuse {
                                                         ColumnRefFactory factory) {
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>>
                 commonSubOperatorsByDepth = collectCommonSubScalarOperators(operators,
-                factory);
+                factory, false);
 
         Map<ScalarOperator, ColumnRefOperator> commonSubOperators =
                 commonSubOperatorsByDepth.values().stream()
@@ -83,9 +91,9 @@ public class ScalarOperatorsReuse {
      */
     public static Map<Integer, Map<ScalarOperator, ColumnRefOperator>> collectCommonSubScalarOperators(
             List<ScalarOperator> scalarOperators,
-            ColumnRefFactory columnRefFactory) {
+            ColumnRefFactory columnRefFactory, boolean forLambda) {
         // 1. Recursively collect common sub operators for the input operators
-        CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector();
+        CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector(forLambda);
         scalarOperators.forEach(operator -> operator.accept(operatorCollector, new CollectorContext(false)));
         if (operatorCollector.commonOperatorsByDepth.isEmpty()) {
             return ImmutableMap.of();
@@ -236,6 +244,7 @@ public class ScalarOperatorsReuse {
         }
 
         private final boolean withinLambda;
+
         CollectorContext(boolean withinLambda) {
             this.withinLambda = withinLambda;
         }
@@ -251,6 +260,13 @@ public class ScalarOperatorsReuse {
         // {[1] -> [a + b]}
         private final Map<Integer, Set<ScalarOperator>> operatorsByDepth = new HashMap<>();
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
+
+        private final boolean forLambda;
+
+        private CommonSubScalarOperatorCollector(boolean forLambda) {
+            this.forLambda = forLambda;
+        }
+
 
         private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator, boolean lambda) {
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
@@ -295,7 +311,7 @@ public class ScalarOperatorsReuse {
         // If a scalarOperator contains any non-deterministic function, it cannot be reused
         // because the non-deterministic function results returned each time are inconsistent.
         private boolean isNonDeterministicFuncOrLambdaArgumentExist(ScalarOperator scalarOperator, boolean lambda) {
-            if (lambda && scalarOperator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+            if (!forLambda && lambda && scalarOperator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
                 return true;
             }
 
@@ -314,5 +330,107 @@ public class ScalarOperatorsReuse {
             return false;
         }
 
+    }
+
+
+    public static Projection getNewProjection(Projection projection, ColumnRefFactory columnRefFactory, boolean forLambda) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
+        List<ScalarOperator> scalarOperators = Lists.newArrayList(columnRefMap.values());
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubOperatorsByDepth = ScalarOperatorsReuse
+                .collectCommonSubScalarOperators(scalarOperators,
+                        columnRefFactory, forLambda);
+
+        Map<ScalarOperator, ColumnRefOperator> commonSubOperators =
+                commonSubOperatorsByDepth.values().stream()
+                        .flatMap(m -> m.entrySet().stream())
+                        .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        if (commonSubOperators.isEmpty()) {
+            // no rewrite
+            return projection;
+        }
+
+        boolean hasRewritten = false;
+        for (ScalarOperator operator : columnRefMap.values()) {
+            ScalarOperator rewriteOperator =
+                    ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(operator, commonSubOperators);
+            if (!rewriteOperator.equals(operator)) {
+                hasRewritten = true;
+                break;
+            }
+        }
+
+        /*
+         * 1. Rewrite the operator with the common sub operators
+         * 2. Put the common sub operators to projection, we need to compute
+         * common sub operators firstly in BE
+         */
+        if (hasRewritten) {
+            Map<ColumnRefOperator, ScalarOperator> newMap =
+                    Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
+            // Apply to normalize rule to eliminate invalid ColumnRef usage for in-predicate
+            com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter rewriter =
+                    new com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter();
+            List<ScalarOperatorRewriteRule> rules = Collections.singletonList(new NormalizePredicateRule());
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
+                ScalarOperator rewriteOperator =
+                        ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators);
+                rewriteOperator = rewriter.rewrite(rewriteOperator, rules);
+
+                if (rewriteOperator.isColumnRef() && newMap.containsValue(rewriteOperator)) {
+                    // must avoid multi columnRef: columnRef
+                    //@TODO(hechenfeng): remove it if BE support COW column
+                    newMap.put(kv.getKey(), kv.getValue());
+                } else {
+                    newMap.put(kv.getKey(), rewriteOperator);
+                }
+            }
+
+            Map<ColumnRefOperator, ScalarOperator> newCommonMap =
+                    Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
+            for (Map.Entry<ScalarOperator, ColumnRefOperator> kv : commonSubOperators.entrySet()) {
+                Preconditions.checkState(!newMap.containsKey(kv.getValue()));
+                ScalarOperator rewrittenOperator = rewriter.rewrite(kv.getKey(), rules);
+                newCommonMap.put(kv.getValue(), rewrittenOperator);
+            }
+
+            return new Projection(newMap, newCommonMap);
+        }
+        return projection;
+    }
+
+    public static class LambdaOperatorRewriter extends ScalarOperatorVisitor<Void, Void> {
+
+        private final ColumnRefFactory columnRefFactory;
+
+        public LambdaOperatorRewriter(ColumnRefFactory columnRefFactory) {
+            this.columnRefFactory = columnRefFactory;
+        }
+
+
+        @Override
+        public Void visit(ScalarOperator operator, Void context) {
+            if (!operator.getChildren().isEmpty()) {
+                operator.getChildren().forEach(argument -> argument.accept(this, context));
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
+            operator.getLambdaExpr().accept(this, context);
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap =
+                    Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
+            ColumnRefOperator keyCol = columnRefFactory.create("lambda", operator.getType(),
+                    operator.isNullable(), false);
+            columnRefMap.put(keyCol, operator.getLambdaExpr());
+            Projection projection = getNewProjection(new Projection(columnRefMap), columnRefFactory, true);
+            columnRefMap = projection.getCommonSubOperatorMap();
+            if (!columnRefMap.isEmpty()) {
+                operator.addColumnToExpr(columnRefMap);
+                operator.setChild(0, projection.getColumnRefMap().get(keyCol));
+            }
+            return null;
+        }
     }
 }
