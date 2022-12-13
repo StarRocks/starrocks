@@ -240,6 +240,10 @@ private:
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filter_timer = nullptr;
 
+    RuntimeProfile::Counter* _ordinal_index_load_timer = nullptr;
+    RuntimeProfile::Counter* _ordinal_index_load_count = nullptr;
+    RuntimeProfile::Counter* _dict_load_timer = nullptr;
+
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;

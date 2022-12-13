@@ -63,7 +63,7 @@ public:
     // Seek to the given ordinal entry. Entry 0 is the first entry.
     // Return NotFound if provided seek point is past the end.
     // Return NotSupported for column without ordinal index.
-    Status seek_to_ordinal(ordinal_t idx);
+    Status seek_to_ordinal(ordinal_t idx, int flag=0);
 
     // Seek the index to the given key, or to the index entry immediately
     // before it. Then seek the data block to the value matching value or to
@@ -115,7 +115,7 @@ public:
     IndexedColumnReader(FileSystem* fs, std::string file_name, IndexedColumnMetaPB meta)
             : _fs(fs), _file_name(std::move(file_name)), _meta(std::move(meta)){};
 
-    Status load(bool use_page_cache, bool kept_in_memory);
+    Status load(bool use_page_cache, bool kept_in_memory, int flag=0);
 
     Status new_iterator(std::unique_ptr<IndexedColumnIterator>* iter);
 

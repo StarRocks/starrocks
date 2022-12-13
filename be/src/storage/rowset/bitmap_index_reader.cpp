@@ -83,8 +83,8 @@ Status BitmapIndexReader::_do_load(FileSystem* fs, const std::string& filename, 
     _has_null = meta.has_null();
     _dict_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, dict_meta);
     _bitmap_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, bitmap_meta);
-    RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory));
-    RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory));
+    RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory, 3));
+    RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory, 4));
     return Status::OK();
 }
 

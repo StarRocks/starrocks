@@ -366,6 +366,10 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_sk_filtered_counter, _reader->stats().rows_sk_filtered);
     COUNTER_UPDATE(_parent->_sk_filter_timer, _reader->stats().sk_filter_timer);
 
+    COUNTER_UPDATE(_parent->_ordinal_index_load_timer, _reader->stats().ordinal_index_load_timer);
+    COUNTER_UPDATE(_parent->_ordinal_index_load_count, _reader->stats().ordinal_index_load_count);
+    COUNTER_UPDATE(_parent->_dict_load_timer, _reader->stats().dict_load_timer);
+
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_parent->_rowsets_read_count, _reader->stats().rowsets_read_count);

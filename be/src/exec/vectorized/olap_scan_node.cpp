@@ -512,6 +512,10 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filter_timer = ADD_CHILD_TIMER(_scan_profile, "ShortKeyFilter", "SegmentInit");
 
+    _ordinal_index_load_timer = ADD_CHILD_TIMER(_scan_profile, "OrdinalIndexLoad", "SegmentInit");
+    _ordinal_index_load_count = ADD_CHILD_COUNTER(_scan_profile, "OrdinalIndexLoadCount", TUnit::UNIT, "SegmentInit");
+    _dict_load_timer = ADD_CHILD_TIMER(_scan_profile, "DictLoadTimer", "SegmentInit");
+
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");

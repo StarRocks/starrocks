@@ -48,7 +48,11 @@ ScalarColumnIterator::~ScalarColumnIterator() = default;
 
 Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
-    RETURN_IF_ERROR(_reader->load_ordinal_index());
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->ordinal_index_load_timer);
+        _opts.stats->ordinal_index_load_count++;
+        RETURN_IF_ERROR(_reader->load_ordinal_index());
+    }
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
@@ -64,6 +68,7 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     }
 
     if (opts.check_dict_encoding) {
+        SCOPED_RAW_TIMER(&_opts.stats->dict_load_timer);
         if (_reader->has_all_dict_encoded()) {
             _all_dict_encoded = _reader->all_dict_encoded();
             // if _all_dict_encoded is true, load dictionary page into memory for `dict_lookup`.
@@ -271,6 +276,7 @@ Status ScalarColumnIterator::_do_init_dict_decoder() {
     auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
     if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
         if (_dict_decoder == nullptr) {
+            SCOPED_RAW_TIMER(&_opts.stats->dict_load_timer);
             RETURN_IF_ERROR(_load_dict_page());
         }
         dict_page_decoder->set_dict_decoder(_dict_decoder.get());

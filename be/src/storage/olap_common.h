@@ -260,6 +260,10 @@ struct OlapReaderStatistics {
     int64_t rows_sk_filtered = 0;
     int64_t sk_filter_timer = 0;
 
+    int64_t ordinal_index_load_timer = 0;
+    int64_t ordinal_index_load_count = 0;
+    int64_t dict_load_timer = 0;
+
     int64_t rows_del_vec_filtered = 0;
 
     int64_t rowsets_read_count = 0;
