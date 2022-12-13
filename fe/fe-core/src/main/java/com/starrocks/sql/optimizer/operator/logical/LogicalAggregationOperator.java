@@ -153,10 +153,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
     public Map<ColumnRefOperator, ScalarOperator> getLineage(
             ColumnRefFactory refFactory, ExpressionContext expressionContext) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-        columnRefMap.putAll(getColumnRefMap());
         if (projection != null) {
             columnRefMap.putAll(projection.getColumnRefMap());
         }
+        columnRefMap.putAll(getColumnRefMap());
         return columnRefMap;
     }
 
