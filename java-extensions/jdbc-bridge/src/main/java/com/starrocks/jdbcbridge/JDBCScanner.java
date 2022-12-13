@@ -31,8 +31,8 @@ public class JDBCScanner {
     }
 
     public void open() throws Exception {
-
-        dataSource = DataSourceCache.getInstance().getSource(scanContext.getJdbcURL(), () -> {
+        String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
+        dataSource = DataSourceCache.getInstance().getSource(key, () -> {
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
             config.setJdbcUrl(scanContext.getJdbcURL());
