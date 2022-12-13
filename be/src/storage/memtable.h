@@ -51,6 +51,7 @@ public:
 
     // buffer memory usage for write segment
     size_t write_buffer_size() const;
+    size_t write_buffer_rows() const;
 
     // return true suggests caller should flush this memory table
     bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
@@ -62,6 +63,8 @@ public:
     bool is_full() const;
 
     void set_write_buffer_size(size_t max_buffer_size) { _max_buffer_size = max_buffer_size; }
+
+    void set_write_buffer_row(size_t max_buffer_row) { _max_buffer_row = max_buffer_row; }
 
     static VectorizedSchema convert_schema(const TabletSchema* tablet_schema,
                                            const std::vector<SlotDescriptor*>* slot_descs);
@@ -105,6 +108,10 @@ private:
     std::string _merge_condition;
 
     int64_t _max_buffer_size = config::write_buffer_size;
+    // initial value is max size
+    size_t _max_buffer_row = -1;
+    size_t _total_rows = 0;
+    size_t _merged_rows = 0;
 
     // memory statistic
     MemTracker* _mem_tracker = nullptr;

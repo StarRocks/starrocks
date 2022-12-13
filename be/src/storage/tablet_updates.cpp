@@ -2158,6 +2158,18 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     info->__set_data_size(total_size);
 }
 
+int64_t TabletUpdates::get_average_row_size() {
+    TTabletInfo info;
+    get_tablet_info_extra(&info);
+    int64_t total_row = info.row_count;
+    int64_t total_size = info.data_size;
+    if (total_row != 0) {
+        return total_size / total_row;
+    } else {
+        return 0;
+    }
+}
+
 std::string TabletUpdates::RowsetStats::to_string() const {
     return strings::Substitute("[seg:$0 row:$1 del:$2 bytes:$3 compaction:$4]", num_segments, num_rows, num_dels,
                                byte_size, compaction_score);

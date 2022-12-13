@@ -156,6 +156,9 @@ public:
     // get info's version, version_count, row_count, data_size
     void get_tablet_info_extra(TTabletInfo* info);
 
+    // get average row size
+    int64_t get_average_row_size();
+
     std::string debug_string() const;
 
     // Return nullptr if the delta rowset does not exist.
