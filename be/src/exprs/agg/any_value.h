@@ -63,7 +63,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(!columns[0]->is_nullable() && !columns[0]->is_binary());
+        DCHECK(!columns[0]->is_nullable());
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         OP()(this->data(state), AggDataTypeTraits<PT>::get_row_ref(column, row_num));
     }
@@ -74,13 +74,13 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(!column->is_nullable() && !column->is_binary());
+        DCHECK(!column->is_nullable());
         const auto& input_column = down_cast<const InputColumnType&>(*column);
         OP()(this->data(state), AggDataTypeTraits<PT>::get_row_ref(input_column, row_num));
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(!to->is_nullable() && !to->is_binary());
+        DCHECK(!to->is_nullable());
         AggDataTypeTraits<PT>::append_value(down_cast<InputColumnType*>(to), this->data(state).result);
     }
 
@@ -90,7 +90,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(!to->is_nullable() && !to->is_binary());
+        DCHECK(!to->is_nullable());
         AggDataTypeTraits<PT>::append_value(down_cast<InputColumnType*>(to), this->data(state).result);
     }
 
