@@ -171,9 +171,7 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
 }
 
 // Cast string to array<ANY>
-template <bool throw_exception_if_err>
-StatusOr<ColumnPtr> CastStringToArray<throw_exception_if_err>::evaluate_checked(ExprContext* context,
-                                                                                vectorized::Chunk* input_chunk) {
+StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -201,7 +199,7 @@ StatusOr<ColumnPtr> CastStringToArray<throw_exception_if_err>::evaluate_checked(
 
         // return null if not valid array
         if (!is_valid_array(str, stack)) {
-            if constexpr (throw_exception_if_err) {
+            if (_throw_exception_if_err) {
                 return Status::InternalError(fmt::format("invalid array input: {}", str));
             } else {
                 has_null = true;
@@ -254,8 +252,7 @@ StatusOr<ColumnPtr> CastStringToArray<throw_exception_if_err>::evaluate_checked(
     return res;
 }
 
-template <bool throw_exception_if_err>
-Slice CastStringToArray<throw_exception_if_err>::_trim(Slice slice) const {
+Slice CastStringToArray::_trim(Slice slice) const {
     while (slice.starts_with(" ")) {
         slice.remove_prefix(1);
     }
@@ -265,8 +262,7 @@ Slice CastStringToArray<throw_exception_if_err>::_trim(Slice slice) const {
     return slice;
 }
 
-template <bool throw_exception_if_err>
-Slice CastStringToArray<throw_exception_if_err>::_unquote(Slice slice) const {
+Slice CastStringToArray::_unquote(Slice slice) const {
     slice = _trim(slice);
 
     if ((slice.starts_with("\"") && slice.ends_with("\"")) || (slice.starts_with("'") && slice.ends_with("'"))) {
@@ -275,9 +271,6 @@ Slice CastStringToArray<throw_exception_if_err>::_unquote(Slice slice) const {
     }
     return slice;
 }
-
-template class CastStringToArray<true>;
-template class CastStringToArray<false>;
 
 StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
