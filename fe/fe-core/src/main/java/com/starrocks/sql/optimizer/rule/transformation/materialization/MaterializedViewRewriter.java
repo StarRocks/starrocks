@@ -815,11 +815,9 @@ public class MaterializedViewRewriter {
             compensationPr = ConstantOperator.createBoolean(true);
         } else if (srcPr == null && targetPr != null) {
             return null;
-        } else if (srcPr != null && targetPr == null) {
-            compensationPr = srcPr;
         } else {
             ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(srcPr.clone());
-            ScalarOperator canonizedTargetPr = MvUtils.canonizePredicateForRewrite(targetPr.clone());
+            ScalarOperator canonizedTargetPr = targetPr == null ? null : MvUtils.canonizePredicateForRewrite(targetPr.clone());
 
             // swap column by query EC
             ScalarOperator swappedSrcPr;
