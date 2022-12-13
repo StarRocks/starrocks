@@ -338,13 +338,7 @@ public class MaterializedViewRewriter {
                 normalizeAndReverseProjection(exprMap, rewriteContext, false, false) :
                 normalizeAndReverseProjection(exprMap, rewriteContext, true, false);
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        // swapped by query based view ec
-        List<ScalarOperator> swappedConjuncts = conjuncts.stream().map(conjunct -> {
-            ColumnRewriter rewriter = new ColumnRewriter(rewriteContext);
-            return isEqual ? rewriter.rewriteViewToQueryWithQueryEc(conjunct) :
-                    rewriter.rewriteViewToQueryWithViewEc(conjunct);
-        }).collect(Collectors.toList());
-        List<ScalarOperator> rewrittens = rewriteScalarOpToTarget(swappedConjuncts, normalizedMap,
+        List<ScalarOperator> rewrittens = rewriteScalarOpToTarget(conjuncts, normalizedMap,
                 null, originalRefSet);
         if (rewrittens == null || rewrittens.isEmpty()) {
             return null;

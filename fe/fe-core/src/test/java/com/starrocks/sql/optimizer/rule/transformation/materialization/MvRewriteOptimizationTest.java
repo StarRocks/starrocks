@@ -989,7 +989,7 @@ public class MvRewriteOptimizationTest {
                 "GROUP BY `test_base_part`.`c1`, `test_base_part`.`c3`;");
         MaterializedView ttlMv1 = getMv("test", "ttl_union_mv_1");
         Assert.assertNotNull(ttlMv1);
-        waitTtl(ttlMv1, 3, 100);
+        waitTtl(ttlMv1, 3, 200);
         String query4 = "select sum(c2) from test_base_part";
         String plan4 = getFragmentPlan(query4);
         PlanTestBase.assertContains(plan4, "ttl_union_mv_1", "UNION", "test_base_part");
