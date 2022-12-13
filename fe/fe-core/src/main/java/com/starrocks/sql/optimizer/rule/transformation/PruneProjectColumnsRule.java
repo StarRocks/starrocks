@@ -63,15 +63,14 @@ public class PruneProjectColumnsRule extends TransformationRule {
         }));
 
         if (newMap.isEmpty()) {
-            OptExpression child = input.inputAt(0);
-            LogicalOperator childOp = (LogicalOperator) child.getOp();
-            ColumnRefOperator smallestColumn = childOp.getSmallestColumn(context.getColumnRefFactory(), child);
+            ColumnRefSet candidates = new ColumnRefSet(projectOperator.getColumnRefMap().keySet());
+            ColumnRefOperator smallestColumn =
+                    ((LogicalOperator) input.inputAt(0).getOp())
+                            .getSmallestColumn(candidates, context.getColumnRefFactory(), input.inputAt(0));
             if (smallestColumn != null) {
                 ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
-                if (expr != null && !smallestColumn.equals(expr) && !expr.isVariable()) {
-                    newMap.put(smallestColumn, expr);
-                    requiredInputColumns.union(smallestColumn);
-                }
+                newMap.put(smallestColumn, expr);
+                requiredInputColumns.union(smallestColumn);
             }
         }
 
