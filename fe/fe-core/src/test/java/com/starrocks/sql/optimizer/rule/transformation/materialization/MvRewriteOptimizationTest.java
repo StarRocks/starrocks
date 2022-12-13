@@ -814,6 +814,8 @@ public class MvRewriteOptimizationTest {
 
     @Test
     public void testAggregateMvRewrite() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(300000000);
+
         createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
                 " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -1040,6 +1042,77 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan26, "agg_mv_10");
         dropMv("test", "agg_mv_10");
         starRocksAssert.dropTable("test_table_1");
+
+        // test aggregate with projection
+        createAndRefreshMv("test", "agg_mv_6", "create materialized view agg_mv_6" +
+                " distributed by hash(`empid`) as select empid, abs(empid) as abs_empid, avg(salary) as total" +
+                " from emps group by empid");
+
+        String query13 = "select empid, abs(empid), avg(salary) from emps group by empid";
+        String plan13 = getFragmentPlan(query13);
+        PlanTestBase.assertContains(plan13, "agg_mv_6");
+
+        String query14 = "select empid, avg(salary) from emps group by empid";
+        String plan14 = getFragmentPlan(query14);
+        PlanTestBase.assertContains(plan14, "agg_mv_6");
+
+        String query15 = "select abs(empid), avg(salary) from emps group by empid";
+        String plan15 = getFragmentPlan(query15);
+        PlanTestBase.assertContains(plan15, "agg_mv_6");
+
+        // avg can not be rolled up
+        String query16 = "select avg(salary) from emps";
+        String plan16 = getFragmentPlan(query16);
+        PlanTestBase.assertNotContains(plan16, "agg_mv_6");
+        dropMv("test", "agg_mv_6");
+
+        createAndRefreshMv("test", "agg_mv_7", "create materialized view agg_mv_7" +
+                " distributed by hash(`empid`) as select empid, abs(empid) as abs_empid," +
+                " sum(salary) as total, count(salary) as cnt" +
+                " from emps group by empid");
+
+        String query17 = "select empid, abs(empid), sum(salary), count(salary) from emps group by empid";
+        String plan17 = getFragmentPlan(query17);
+        PlanTestBase.assertContains(plan17, "agg_mv_7");
+
+        String query18 = "select empid, sum(salary), count(salary) from emps group by empid";
+        String plan18 = getFragmentPlan(query18);
+        PlanTestBase.assertContains(plan18, "agg_mv_7");
+
+        String query19 = "select abs(empid), sum(salary), count(salary) from emps group by empid";
+        String plan19 = getFragmentPlan(query19);
+        PlanTestBase.assertContains(plan19, "agg_mv_7");
+
+        String query20 = "select sum(salary), count(salary) from emps";
+        String plan20 = getFragmentPlan(query20);
+        PlanTestBase.assertContains(plan20, "agg_mv_7");
+
+        dropMv("test", "agg_mv_7");
+
+        createAndRefreshMv("test", "agg_mv_8", "create materialized view agg_mv_8" +
+                " distributed by hash(`empid`) as select empid, deptno," +
+                " sum(salary) as total, count(salary) + 1 as cnt" +
+                " from emps group by empid, deptno");
+
+        // abs(empid) can not be rewritten
+        String query21 = "select abs(empid), sum(salary) from emps group by empid";
+        String plan21 = getFragmentPlan(query21);
+        PlanTestBase.assertNotContains(plan21, "agg_mv_8");
+
+        // count(salary) + 1 cannot be rewritten
+        String query22 = "select sum(salary), count(salary) + 1 from emps";
+        String plan22 = getFragmentPlan(query22);
+        PlanTestBase.assertNotContains(plan22, "agg_mv_8");
+
+        String query23 = "select sum(salary) from emps";
+        String plan23 = getFragmentPlan(query23);
+        PlanTestBase.assertContains(plan23, "agg_mv_8");
+
+        String query24 = "select empid, sum(salary) from emps group by empid";
+        String plan24 = getFragmentPlan(query24);
+        PlanTestBase.assertContains(plan24, "agg_mv_8");
+
+        dropMv("test", "agg_mv_8");
     }
 
     @Test
