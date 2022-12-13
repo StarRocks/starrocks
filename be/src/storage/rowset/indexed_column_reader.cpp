@@ -62,7 +62,6 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory, int f
         if (_meta.ordinal_index_meta().is_root_data_page()) {
             _sole_data_page = PagePointer(_meta.ordinal_index_meta().root_page());
         } else {
-            std::cout<<"FLAG:"<<flag<<":"<<_meta.ordinal_index_meta().root_page().size()<<std::endl;
             RETURN_IF_ERROR(load_index_page(read_file.get(), _meta.ordinal_index_meta().root_page(),
                                             &_ordinal_index_page_handle, &_ordinal_index_reader));
             _has_index_page = true;
@@ -74,7 +73,6 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory, int f
         if (_meta.value_index_meta().is_root_data_page()) {
             _sole_data_page = PagePointer(_meta.value_index_meta().root_page());
         } else {
-            std::cout<<"FLAG:"<<flag<<":"<<_meta.value_index_meta().root_page().size()<<std::endl;
             RETURN_IF_ERROR(load_index_page(read_file.get(), _meta.value_index_meta().root_page(),
                                             &_value_index_page_handle, &_value_index_reader));
             _has_index_page = true;
@@ -155,7 +153,6 @@ Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx, int flag) {
             RETURN_IF_ERROR(_read_data_page(_ordinal_iter.current_page_pointer()));
             _current_iter = &_ordinal_iter;
         } else {
-            std::cout<<"FLAG:"<<flag<<":"<<_reader->_sole_data_page.size<<std::endl;
             RETURN_IF_ERROR(_read_data_page(_reader->_sole_data_page));
         }
     }

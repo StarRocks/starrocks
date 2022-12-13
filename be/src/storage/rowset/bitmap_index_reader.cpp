@@ -107,7 +107,7 @@ Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     DCHECK(0 <= ordinal && ordinal < _reader->bitmap_nums());
 
     auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-    RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal));
+    RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal, 6));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;
     RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, column.get()));

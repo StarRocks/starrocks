@@ -288,7 +288,7 @@ Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename,
     auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
-        RETURN_IF_ERROR(iter->seek_to_ordinal(i));
+        RETURN_IF_ERROR(iter->seek_to_ordinal(i, 5));
         size_t num_to_read = 1;
         size_t num_read = num_to_read;
         RETURN_IF_ERROR(iter->next_batch(&num_read, column.get()));
