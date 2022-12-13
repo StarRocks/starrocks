@@ -27,6 +27,12 @@ using StreamRowOps = std::vector<StreamRowOp>;
 using StreamChunk = Chunk;
 using StreamChunkPtr = std::shared_ptr<StreamChunk>;
 
+/**
+ * `StreamChunk` is used in Incremental MV which contains a hidden `ops` column, the `ops` column indicates
+ * the row's operation kind, eg: INSERT/DELETE/UPDATE_BEFORE/UPDATE_AFTER.
+ * 
+ * `StreamChunkConverter` is used as a converter between the common `Chunk` and the `StreamChunk`.
+ */
 class StreamChunkConverter {
 public:
     static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, Int8ColumnPtr ops) {

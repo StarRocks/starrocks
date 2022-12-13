@@ -25,6 +25,11 @@ namespace starrocks::stream {
 using ChunkIteratorPtrOr = StatusOr<vectorized::ChunkIteratorPtr>;
 using ChunkPtrOr = StatusOr<vectorized::ChunkPtr>;
 
+/**
+ * `StateTable` is used in Incremental MV, statefull operators will use`StateTable` to keep its
+ * intermediate state, eg `StreamAgg` use `StateTable` to keep its agg state which can be used later.
+ * `StateTable` offers seek/flush apis to interact with the `StateTable` behind.
+ */
 class StateTable {
 public:
     virtual ~StateTable() = default;
