@@ -568,7 +568,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             List<Partition> selectedPartitions;
             if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
                     node.getOpType() == OperatorType.PHYSICAL_STREAM_SCAN) {
-                selectedPartitions = new ArrayList<>(olapTable.getAllPartitions());
+                return 1;
             } else if (node.isLogical()) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
