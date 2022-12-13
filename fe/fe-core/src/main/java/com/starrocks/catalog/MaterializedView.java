@@ -532,28 +532,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 return;
             }
         }
-        // register materialized view to base tables
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            if (!isInternalCatalog(baseTableInfo.catalogName)) {
-                // External catalogs have not finished load from image when loading mv, do not check the table exists
-                continue;
-            }
-            Table table = baseTableInfo.getTable();
-            if (table == null) {
-                LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
-                        baseTableInfo.tableName, id);
-                active = false;
-                continue;
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).active) {
-                LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
-                        baseTableInfo.tableName, id);
-                active = false;
-                continue;
-            }
-            MvId mvId = new MvId(db.getId(), id);
-            table.addRelatedMaterializedView(mvId);
-        }
+        // do not check the state of the base table, it would be checked in MVActiveChecker
+        analyzePartitionInfo();
+    }
+
+    private void analyzePartitionInfo() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
         }
