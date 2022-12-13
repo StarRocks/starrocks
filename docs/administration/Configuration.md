@@ -14,7 +14,7 @@ Whether a parameter is a dynamic parameter is indicated by the `IsMutable` colum
 
 Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
 
-### Check the configurations of FE parameters
+### View FE configuration items
 
 After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on your MySQL client to check the parameter configurations. If you want to query the configuration of a specific parameter, run the following command:
 
@@ -28,7 +28,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 >
 > You must have administrator's privilege to run cluster administration-related commands.
 
-### FE dynamic parameters
+### Configure FE dynamic parameters
 
 You can configure or modify the settings of FE dynamic parameters by running the following command:
 
@@ -36,7 +36,7 @@ You can configure or modify the settings of FE dynamic parameters by running the
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
 
-#### Log
+#### Logging
 
 | Parameter      | Unit | Default | Description                                                  |
 | -------------- | ---- | ------- | ------------------------------------------------------------ |
@@ -147,7 +147,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_sched_min_clone_task_timeout_sec       | s    | 3 \* 60                | The minimum timeout duration for cloning a tablet, in seconds. |
 | tablet_sched_max_clone_task_timeout_sec       | s    | 2 \* 60 \* 60          | The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`. |
 
-#### Other dynamic parameters
+#### Other FE dynamic parameters
 
 | Parameter                                | Unit | Default     | Description                                                  |
 | ---------------------------------------- | ---- | ----------- | ------------------------------------------------------------ |
@@ -165,9 +165,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | authentication_ldap_simple_server_port   |  -  | 389     | The port of the LDAP server.                                       |
 | authentication_ldap_simple_user_search_attr|  -  | uid     | The name of the attribute that identifies users in LDAP objects.|
 
-### FE static parameters
+### Configure FE static parameters
 
-This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE to make the new parameter settings take effect.
+This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
 
 #### Logging
 
@@ -267,7 +267,7 @@ This section provides an overview of the static parameters that you can configur
 | tablet_sched_storage_cooldown_second | -1              | The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`. |
 | tablet_stat_update_interval_second   | 300             | The time interval at which the FE retrieves tablet statistics from each BE. Unit: second. |
 
-#### Other
+#### Other FE static parameters
 
 | Parameter                          | Default                                         | Description                                                  |
 | ---------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
@@ -299,13 +299,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### Configure BE dynamic parameters
 
-You can configure a dynamic parameter of a BE node by using `curl` command.
+You can configure a dynamic parameter of a BE node by using the `curl` command.
 
 ```Shell
 curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<value>
 ```
 
-BE dynamic parameters are as follows:
+BE dynamic parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | ------------------ | ------- | ---- | ----------- |
@@ -374,9 +374,9 @@ BE dynamic parameters are as follows:
 
 ### Configure BE static parameters
 
-You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
+You can only set the static parameters of a BE by changing them in the corresponding configuration file **be.conf**, and restart the BE to allow the changes to take effect.
 
-BE static parameters are as follows:
+BE static parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | -------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
