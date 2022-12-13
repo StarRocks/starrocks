@@ -368,6 +368,7 @@ public class DateLiteral extends LiteralExpr {
         } else if (Type.isImplicitlyCastable(this.type, targetType, true)) {
             return new CastExpr(targetType, this);
         }
+        Preconditions.checkState(false);
         return this;
     }
 
