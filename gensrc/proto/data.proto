@@ -62,7 +62,7 @@ message PRowBatch {
     required bool is_compressed = 5;
 };
 
-message ChunkExtraDataMetaPB {
+message ChunkExtraColumnsMetaPB {
     optional PTypeDesc type_desc = 1;
     optional bool is_null = 2;
     optional bool is_const = 3;
@@ -84,7 +84,7 @@ message ChunkPB {
     // we may estimate larger serialized_size but actually don't use that much space.
     optional int64 serialized_size  = 9; // how many bytes are really written into data.
     repeated int32 encode_level = 10; // the encode level for data columns, during upgrade, this must be 0.
-    repeated ChunkExtraDataMetaPB extra_data_metas = 11; // chunk's extra data meta.
+    repeated ChunkExtraColumnsMetaPB extra_data_metas = 11; // chunk's extra data meta.
 };
 
 message SegmentPB {

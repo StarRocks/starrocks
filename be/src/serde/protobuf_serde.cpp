@@ -135,17 +135,17 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
     DCHECK_EQ(columns.size(), tuple_id_to_index.size() + slot_id_to_index.size());
 
     // serialize extra meta
-    if (chunk.has_extra_data()) {
-        auto chunk_extra_data = chunk.get_extra_data();
-        if (typeid(*chunk_extra_data) == typeid(vectorized::ChunkExtraColumnsData)) {
-            auto extra_data_metas = chunk_extra_data->chunk_data_metas();
-            res->mutable_extra_data_metas()->Reserve(extra_data_metas.size());
-            for (auto& data_meta : extra_data_metas) {
-                auto* extra_data_meta_pb = res->add_extra_data_metas();
-                *(extra_data_meta_pb->mutable_type_desc()) = data_meta.type.to_protobuf();
-                extra_data_meta_pb->set_is_const(data_meta.is_const);
-                extra_data_meta_pb->set_is_null(data_meta.is_null);
-            }
+    auto* chunk_extra_data = chunk.get_extra_data()
+                                     ? dynamic_cast<vectorized::ChunkExtraColumnsData*>(chunk.get_extra_data().get())
+                                     : nullptr;
+    if (chunk_extra_data) {
+        auto extra_data_metas = chunk_extra_data->chunk_data_metas();
+        res->mutable_extra_data_metas()->Reserve(extra_data_metas.size());
+        for (auto& data_meta : extra_data_metas) {
+            auto* extra_data_meta_pb = res->add_extra_data_metas();
+            *(extra_data_meta_pb->mutable_type_desc()) = data_meta.type.to_protobuf();
+            extra_data_meta_pb->set_is_const(data_meta.is_const);
+            extra_data_meta_pb->set_is_null(data_meta.is_null);
         }
     }
     return res;
@@ -158,7 +158,9 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
 
     std::string* serialized_data = chunk_pb.mutable_data();
     auto max_serialized_size = ProtobufChunkSerde::max_serialized_size(chunk, context);
-    auto chunk_extra_data = chunk.get_extra_data();
+    auto* chunk_extra_data = chunk.get_extra_data()
+                                     ? dynamic_cast<vectorized::ChunkExtraColumnsData*>(chunk.get_extra_data().get())
+                                     : nullptr;
     if (chunk_extra_data) {
         max_serialized_size += chunk_extra_data->max_serialized_size(0);
     }

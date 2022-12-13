@@ -99,8 +99,8 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
     auto chunk = std::make_unique<vectorized::Chunk>(make_columns(2), make_schema(2));
-    auto extra_data_meta = std::vector<vectorized::ChunkExtraDataMeta>{
-            vectorized::ChunkExtraDataMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
+    auto extra_data_meta = std::vector<vectorized::ChunkExtraColumnsMeta>{
+            vectorized::ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
     auto extra_data_cols = std::vector<vectorized::ColumnPtr>{make_columns(2)};
     auto extra_data =
             std::make_shared<vectorized::ChunkExtraColumnsData>(std::move(extra_data_meta), std::move(extra_data_cols));
@@ -118,8 +118,8 @@ PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
     meta.types.resize(2);
     meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
     meta.types[1] = TypeDescriptor(LogicalType::TYPE_INT);
-    meta.extra_data_metas = std::vector<vectorized::ChunkExtraDataMeta>{
-            vectorized::ChunkExtraDataMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
+    meta.extra_data_metas = std::vector<vectorized::ChunkExtraColumnsMeta>{
+            vectorized::ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
 
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);

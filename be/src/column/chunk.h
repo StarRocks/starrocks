@@ -39,37 +39,14 @@ using ChunkExtraDataPtr = std::shared_ptr<ChunkExtraData>;
  * attach extra infos beside the schema. eg, In Stream MV scenes, 
  * the hidden `_op_` column can be added in the ChunkExtraData.
  *
- * NOTE: `ChunkExtraColumnsData` is a specific implementation which includes extra 
- * columns besides the schema, and it supports common methods like Chunk.
- *
- * TODO: Optimize old variables use this extendable method, eg owner_info.
+ * NOTE: Chunk only offers the set/get methods for ChunkExtraData, extra data
+ * callers need implement the Chunk's specific methods , eg, handle `filter` method 
+ * for the extra data.
  */
-struct ChunkExtraDataMeta {
-    TypeDescriptor type;
-    bool is_null;
-    bool is_const;
-};
 class ChunkExtraData {
 public:
     ChunkExtraData() = default;
     virtual ~ChunkExtraData() = default;
-
-    virtual std::vector<ChunkExtraDataMeta> chunk_data_metas() const = 0;
-
-    virtual void filter(const Buffer<uint8_t>& selection) const = 0;
-    virtual void filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) const = 0;
-    virtual ChunkExtraDataPtr clone_empty(size_t size) const = 0;
-    virtual void append(const ChunkExtraDataPtr& src, size_t offset, size_t count) = 0;
-    virtual void append_selective(const ChunkExtraDataPtr& src, const uint32_t* indexes, uint32_t from,
-                                  uint32_t size) = 0;
-    virtual size_t memory_usage() const = 0;
-    virtual size_t bytes_usage(size_t from, size_t size) const = 0;
-
-    // serialize/deserialize to exchange, now only supports encode_level = 0
-    // TODO: support encode_level configuration.
-    virtual int64_t max_serialized_size(const int encode_level = 0) = 0;
-    virtual uint8_t* serialize(uint8_t* buff, bool sorted = false, const int encode_level = 0) = 0;
-    virtual const uint8_t* deserialize(const uint8_t* buff, bool sorted = false, const int encode_level = 0) = 0;
 };
 
 class Chunk {

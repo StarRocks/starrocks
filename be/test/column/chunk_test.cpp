@@ -78,9 +78,9 @@ public:
 
     ChunkExtraColumnsDataPtr make_extra_data(size_t num_cols, size_t size = 100) {
         auto chunk = std::make_unique<vectorized::Chunk>(make_columns(num_cols, size), make_schema(num_cols));
-        std::vector<vectorized::ChunkExtraDataMeta> extra_data_metas;
+        std::vector<vectorized::ChunkExtraColumnsMeta> extra_data_metas;
         for (size_t i = 0; i < num_cols; i++) {
-            extra_data_metas.push_back(vectorized::ChunkExtraDataMeta{
+            extra_data_metas.push_back(vectorized::ChunkExtraColumnsMeta{
                     .type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false});
         }
         auto extra_data_cols = std::vector<vectorized::ColumnPtr>{make_columns(num_cols, size)};
@@ -325,9 +325,13 @@ TEST_F(ChunkTest, test_append_chunk_with_extra_data) {
     check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(columns[1].get()), {1, 2, 1, 2});
 
     ASSERT_TRUE(chunk1->has_extra_data());
-    auto* extra_data = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
-    ASSERT_TRUE(extra_data);
-    auto extra_data_columns = extra_data->columns();
+    ASSERT_TRUE(chunk2->has_extra_data());
+    auto* chunk_extra_data1 = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
+    auto* chunk_extra_data2 = dynamic_cast<ChunkExtraColumnsData*>(chunk2->get_extra_data().get());
+    ASSERT_TRUE(chunk_extra_data1);
+    ASSERT_TRUE(chunk_extra_data2);
+    chunk_extra_data1->append(*chunk_extra_data2, 0, chunk_extra_data2->num_rows());
+    auto extra_data_columns = chunk_extra_data1->columns();
     ASSERT_EQ(2, extra_data_columns.size());
     check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(extra_data_columns[0].get()), {0, 1, 0, 1});
     check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(extra_data_columns[1].get()), {1, 2, 1, 2});
@@ -351,24 +355,27 @@ TEST_F(ChunkTest, test_filter_with_extra_data) {
     ASSERT_EQ(chunk1->num_rows(), 2);
     check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk1->columns()[0].get()), {1, 3});
     check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk1->columns()[1].get()), {2, 4});
+
     ASSERT_TRUE(chunk1->has_extra_data());
-    auto* extra_data = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
-    ASSERT_TRUE(extra_data);
-    ASSERT_EQ(extra_data->columns().size(), 2);
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(extra_data->columns()[0].get()), {1, 3});
-    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(extra_data->columns()[1].get()), {2, 4});
+    auto* chunk_extra_data1 = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
+    ASSERT_TRUE(chunk_extra_data1);
+    chunk_extra_data1->filter(selection);
+    ASSERT_EQ(chunk_extra_data1->columns().size(), 2);
+    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk_extra_data1->columns()[0].get()), {1, 3});
+    check_column(reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk_extra_data1->columns()[1].get()), {2, 4});
 }
 
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_clone_empty_with_extra_data) {
     auto extra_data1 = make_extra_data(2);
     auto chunk1 = std::make_unique<Chunk>(make_columns(2), make_schema(2), extra_data1);
-
+    auto* extra_data = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
     auto copy = chunk1->clone_empty();
     copy->check_or_die();
     ASSERT_EQ(copy->num_rows(), 0);
-    ASSERT_TRUE(copy->has_extra_data());
-    auto* extra_data = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
+    ASSERT_TRUE(!copy->has_extra_data());
+
+    copy->set_extra_data(extra_data->clone_empty(copy->num_rows()));
     auto* copy_extra_data = dynamic_cast<ChunkExtraColumnsData*>(copy->get_extra_data().get());
     ASSERT_TRUE(copy_extra_data);
     ASSERT_EQ(copy_extra_data->columns().size(), extra_data->columns().size());
@@ -384,11 +391,13 @@ TEST_F(ChunkTest, test_clone_unique_with_extra_data) {
     auto copy = chunk1->clone_unique();
     copy->check_or_die();
     ASSERT_EQ(copy->num_rows(), chunk1->num_rows());
+
     ASSERT_TRUE(copy->has_extra_data());
-    auto* extra_data = dynamic_cast<ChunkExtraColumnsData*>(chunk1->get_extra_data().get());
+
+    auto expect_extra_data = make_extra_data(2);
     auto* copy_extra_data = dynamic_cast<ChunkExtraColumnsData*>(copy->get_extra_data().get());
-    ASSERT_EQ(copy_extra_data->columns().size(), extra_data->columns().size());
-    ASSERT_EQ(copy_extra_data->columns()[0]->size(), extra_data->columns()[0]->size());
+    ASSERT_EQ(copy_extra_data->columns().size(), expect_extra_data->columns().size());
+    ASSERT_EQ(copy_extra_data->columns()[0]->size(), expect_extra_data->columns()[0]->size());
 }
 
 // NOLINTNEXTLINE

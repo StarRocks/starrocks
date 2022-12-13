@@ -218,12 +218,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_slot(size_t size) const {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }
-    // with extra data
-    ChunkExtraDataPtr extra_data;
-    if (_extra_data) {
-        extra_data = _extra_data->clone_empty(size);
-    }
-    return std::make_unique<Chunk>(columns, _slot_id_to_index, extra_data);
+    return std::make_unique<Chunk>(columns, _slot_id_to_index);
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_schema() const {
@@ -236,12 +231,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }
-    // with extra data
-    ChunkExtraDataPtr extra_data;
-    if (_extra_data) {
-        extra_data = _extra_data->clone_empty(size);
-    }
-    return std::make_unique<Chunk>(columns, _schema, extra_data);
+    return std::make_unique<Chunk>(columns, _schema);
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple() const {
@@ -254,12 +244,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_tuple(size_t size) const {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }
-    // with extra data
-    ChunkExtraDataPtr extra_data;
-    if (_extra_data) {
-        extra_data = _extra_data->clone_empty(size);
-    }
-    return std::make_unique<Chunk>(columns, _slot_id_to_index, _tuple_id_to_index, extra_data);
+    return std::make_unique<Chunk>(columns, _slot_id_to_index, _tuple_id_to_index);
 }
 
 std::unique_ptr<Chunk> Chunk::clone_unique() const {
@@ -269,7 +254,7 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
         chunk->_columns[idx] = std::move(column);
     }
     chunk->_owner_info = _owner_info;
-    chunk->_extra_data = _extra_data;
+    chunk->_extra_data = std::move(_extra_data);
     chunk->check_or_die();
     return chunk;
 }
@@ -278,9 +263,6 @@ void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t
     DCHECK_EQ(_columns.size(), src.columns().size());
     for (size_t i = 0; i < _columns.size(); ++i) {
         _columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
-    }
-    if (_extra_data) {
-        _extra_data->append_selective(src.get_extra_data(), indexes, from, size);
     }
 }
 
@@ -301,18 +283,12 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
     for (auto& column : _columns) {
         column->filter(selection);
     }
-    if (_extra_data) {
-        _extra_data->filter(selection);
-    }
     return num_rows();
 }
 
 size_t Chunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& column : _columns) {
         column->filter_range(selection, from, to);
-    }
-    if (_extra_data) {
-        _extra_data->filter_range(selection, from, to);
     }
     return num_rows();
 }
@@ -330,9 +306,6 @@ size_t Chunk::memory_usage() const {
     size_t memory_usage = 0;
     for (const auto& column : _columns) {
         memory_usage += column->memory_usage();
-    }
-    if (_extra_data) {
-        memory_usage += _extra_data->memory_usage();
     }
     return memory_usage;
 }
@@ -363,9 +336,6 @@ size_t Chunk::bytes_usage(size_t from, size_t size) const {
     size_t bytes_usage = 0;
     for (const auto& column : _columns) {
         bytes_usage += column->byte_size(from, size);
-    }
-    if (_extra_data) {
-        bytes_usage += _extra_data->bytes_usage(from, size);
     }
     return bytes_usage;
 }
@@ -441,9 +411,6 @@ void Chunk::append(const Chunk& src, size_t offset, size_t count) {
         ColumnPtr& c = get_column_by_index(i);
         c->append(*src.get_column_by_index(i), offset, count);
     }
-    if (_extra_data) {
-        _extra_data->append(src.get_extra_data(), offset, count);
-    }
 }
 
 void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
@@ -456,10 +423,6 @@ void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
         if (c->size() == cur_rows) {
             c->append(*src.get_column_by_index(i), offset, count);
         }
-    }
-
-    if (_extra_data && src.get_extra_data()) {
-        _extra_data->append(src.get_extra_data(), offset, count);
     }
 }
 

@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/chunk_extra_data.h"
 #include "common/statusor.h"
 #include "gen_cpp/data.pb.h" // ChunkPB
 
@@ -111,7 +112,7 @@ struct ProtobufChunkMeta {
     vectorized::Chunk::SlotHashMap slot_id_to_index;
     vectorized::Chunk::TupleHashMap tuple_id_to_index;
     // extra data meta
-    std::vector<vectorized::ChunkExtraDataMeta> extra_data_metas;
+    std::vector<vectorized::ChunkExtraColumnsMeta> extra_data_metas;
 };
 
 class ProtobufChunkDeserializer {
