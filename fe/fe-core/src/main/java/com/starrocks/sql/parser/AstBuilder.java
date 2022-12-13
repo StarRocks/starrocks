@@ -21,6 +21,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.ColumnDef.CheckDesc;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CompoundPredicate;
@@ -504,11 +505,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties.put(property.getKey(), property.getValue());
             }
         }
+        List<ColumnDef> columnDefs = context.columnDesc() == null ? null : getColumnDefs(context.columnDesc());
+        if (columnDefs != null) {
+            List<CheckDesc> checkdescs = getCheckDescs(context.checkDesc());
+            if (checkdescs != null) {
+                resetColumnDefByCheckDesc(checkdescs, columnDefs);
+            }
+        }
         return new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
-                context.columnDesc() == null ? null : getColumnDefs(context.columnDesc()),
+                columnDefs,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 context.engineDesc() == null ? "olap" :
                         ((Identifier) visit(context.engineDesc().identifier())).getValue(),
@@ -586,6 +594,50 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
         return new KeysDesc(keysType, columnList.stream().map(Identifier::getValue).collect(toList()));
+    }
+
+    private List<CheckDesc> getCheckDescs(List<StarRocksParser.CheckDescContext> checkDescs) {
+        List<CheckDesc> checkDescList = new ArrayList<>();
+        for (StarRocksParser.CheckDescContext context : checkDescs) {
+            String columnName = ((Identifier) visit(context.identifier())).getValue();
+            if (context.NOT() != null && context.NULL() != null) {
+                checkDescList.add(new CheckDesc(CheckDesc.ConstraintType.UNKNOWN, false, columnName, null));
+                continue;
+            }
+
+            StringLiteral value = (StringLiteral) visit(context.string());
+            if (context.EQ() != null) {
+                checkDescList.add(new CheckDesc(CheckDesc.ConstraintType.EQ, false, columnName, value));
+            } else if (context.NEQ() != null) {
+                checkDescList.add(new CheckDesc(CheckDesc.ConstraintType.NEQ, false, columnName, value));
+            } else if (context.LT() != null) {
+                checkDescList.add(new CheckDesc(CheckDesc.ConstraintType.LT, false, columnName, value));
+            } else if (context.LTE() != null) {
+                checkDescList.add(new CheckDesc(CheckDesc.ConstraintType.LTE, false, columnName, value));
+            } else if (context.GT() != null) {
+                checkDescList.add(new CheckDesc(CheckDesc.ConstraintType.GT, false, columnName, value));
+            } else {
+                checkDescList.add(new CheckDesc(CheckDesc.ConstraintType.GTE, false, columnName, value));
+            }
+        }
+
+        return checkDescList.size() == 0 ? null : checkDescList;
+    }
+
+    private void resetColumnDefByCheckDesc(List<CheckDesc> checkDescs, List<ColumnDef> columnDefs) {
+        for (ColumnDef coldef : columnDefs) {
+            for (CheckDesc check : checkDescs) {
+                String colName = coldef.getName();
+                if (colName.equals(check.name)) {
+                    if (check.constraintType == CheckDesc.ConstraintType.UNKNOWN) {
+                        coldef.setAllowNull(check.isAllowNull);
+                    } else {
+                        coldef.setConstraintType(check.constraintType);
+                        coldef.setCheckValue(check.value);
+                    }
+                }
+            }
+        }
     }
 
     private List<IndexDef> getIndexDefs(List<StarRocksParser.IndexDescContext> indexDesc) {

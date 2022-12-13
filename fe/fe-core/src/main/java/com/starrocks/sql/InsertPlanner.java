@@ -5,8 +5,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.analysis.ColumnDef.CheckDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -220,6 +222,20 @@ public class InsertPlanner {
                         row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                     }
                     row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
+                    if (targetColumn.checkValue() != null) {
+                        LiteralExpr e1 = null;
+                        LiteralExpr e2 = null;
+                        try {
+                            e1 = (LiteralExpr) row.get(columnIdx);
+                            e2 = (LiteralExpr) targetColumn.checkValue();
+                        } catch (Exception e) {
+                            throw new SemanticException("unsupport column type for numerical CHECK");
+                        }
+                        CheckDesc.ConstraintType constraintType = targetColumn.constraintType();
+                        if (!checkConstraint(e1, e2, constraintType)) {
+                            throw new SemanticException("check constraint failed");
+                        }
+                    }
                 }
                 fields.getFieldByIndex(columnIdx).setType(targetColumn.getType());
             } else {
@@ -230,9 +246,61 @@ public class InsertPlanner {
                             row.set(idx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
+                        if (targetColumn.checkValue() != null) {
+                            LiteralExpr e1 = null;
+                            LiteralExpr e2 = null;
+                            try {
+                                e1 = (LiteralExpr) row.get(columnIdx);
+                                e2 = (LiteralExpr) targetColumn.checkValue();
+                            } catch (Exception e) {
+                                throw new SemanticException("unsupport column type for numerical CHECK");
+                            }
+                            CheckDesc.ConstraintType constraintType = targetColumn.constraintType();
+                            if (!checkConstraint(e1, e2, constraintType)) {
+                                throw new SemanticException("check constraint failed");
+                            }
+                        }
                     }
                     fields.getFieldByIndex(idx).setType(targetColumn.getType());
                 }
+            }
+        }
+    }
+
+    private boolean checkConstraint(LiteralExpr e1, LiteralExpr e2, CheckDesc.ConstraintType constraintType) {
+        if (constraintType == CheckDesc.ConstraintType.UNKNOWN) {
+            return true;
+        }
+
+        int res = e1.compareLiteral(e2);
+
+        if (res == 0) {
+            if (constraintType == CheckDesc.ConstraintType.EQ ||
+                    constraintType == CheckDesc.ConstraintType.LTE ||
+                     constraintType == CheckDesc.ConstraintType.GTE) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        if (constraintType == CheckDesc.ConstraintType.NEQ) {
+            return true;
+        }
+
+        if (res == 1) {
+            if (constraintType == CheckDesc.ConstraintType.LT ||
+                    constraintType == CheckDesc.ConstraintType.LTE) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            if (constraintType == CheckDesc.ConstraintType.GT ||
+                    constraintType == CheckDesc.ConstraintType.GTE) {
+                return true;
+            } else {
+                return false;
             }
         }
     }

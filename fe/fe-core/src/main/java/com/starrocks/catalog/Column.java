@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.ColumnDef.CheckDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
@@ -93,6 +94,10 @@ public class Column implements Writable {
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
 
+    private StringLiteral checkValue;
+
+    private CheckDesc.ConstraintType constraintType;
+
     public Column() {
         this.name = "";
         this.type = Type.NULL;
@@ -153,6 +158,8 @@ public class Column implements Writable {
         }
         this.comment = comment;
         this.stats = new ColumnStats();
+        this.checkValue = null;
+        this.constraintType = CheckDesc.ConstraintType.UNKNOWN;
     }
 
     public Column(Column column) {
@@ -169,6 +176,22 @@ public class Column implements Writable {
         this.defaultExpr = column.defaultExpr;
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
+    }
+
+    public CheckDesc.ConstraintType constraintType() {
+        return constraintType;
+    }
+
+    public void setConstraintType(CheckDesc.ConstraintType constraintType) {
+        this.constraintType = constraintType;
+    }
+
+    public StringLiteral checkValue() {
+        return checkValue;
+    }
+
+    public void setCheckValue(StringLiteral value) {
+        this.checkValue = value;
     }
 
     public void setName(String newName) {
