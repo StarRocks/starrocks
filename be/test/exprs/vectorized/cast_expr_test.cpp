@@ -1904,6 +1904,8 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     // test invalid input
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[[1,2,3]"));
     EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[]]"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[\"\']"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"'"])"));
 
     // test cast to string array
     EXPECT_EQ(R"(['1', '2', '3'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(1,2,3)"));
@@ -1913,6 +1915,10 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
     EXPECT_EQ(R"(['a', ' b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
     EXPECT_EQ(R"(['1', '2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
+    EXPECT_EQ(R"(['['])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['['])"));
+    EXPECT_EQ(R"(['"'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"'])"));
+    EXPECT_EQ(R"(['"xxx'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"xxx'])"));
+    EXPECT_EQ(R"(['"', ','])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(['"', ','])"));
 
     // test child type
     {

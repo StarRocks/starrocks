@@ -61,6 +61,7 @@ private:
 };
 
 // Cast string to array<ANY>
+template <bool throw_exception_if_err>
 class CastStringToArray final : public Expr {
 public:
     CastStringToArray(const TExprNode& node, Expr* cast_element, TypeDescriptor type_desc)
@@ -70,8 +71,8 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
 
 private:
-    Slice _unquote(Slice slice);
-    Slice _trim(Slice slice);
+    Slice _unquote(Slice slice) const;
+    Slice _trim(Slice slice) const;
 
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;

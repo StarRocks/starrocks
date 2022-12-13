@@ -77,22 +77,30 @@ StatusOr<ColumnPtr> VectorizedCastArrayExpr::evaluate_checked(ExprContext* conte
     return cast_column;
 };
 
+inline bool is_quote(char c) {
+    return c == '\'' || c == '"';
+}
+
 bool is_valid_array(const Slice& src, std::vector<char>& container) {
     size_t length = src.get_size();
     container.clear();
 
     for (size_t i = 0; i < length; ++i) {
-        if (src[i] == '[') {
-            container.push_back(src[i]);
+        // process string literal
+        if (!container.empty() && is_quote(container.back())) {
+            if (container.back() != src[i]) {
+                continue;
+            }
         }
-        if ((src[i] == '\'' || src[i] == '"')) {
+        if (is_quote(src[i])) {
             if (!container.empty() && container.back() == src[i]) {
                 container.pop_back();
             } else {
                 container.push_back(src[i]);
             }
-        }
-        if (src[i] == ']') {
+        } else if (src[i] == '[') {
+            container.push_back(src[i]);
+        } else if (src[i] == ']') {
             if (!container.empty() && container.back() == '[') {
                 container.pop_back();
             } else {
@@ -104,6 +112,9 @@ bool is_valid_array(const Slice& src, std::vector<char>& container) {
     return container.empty();
 }
 
+// [[],[]] -> [],[]
+// [],[] -> [],[]
+// [[]] -> []
 Slice strip_array_wrapper(const Slice& src) {
     size_t length = src.get_size();
     if (length < 2) {
@@ -158,7 +169,9 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
 }
 
 // Cast string to array<ANY>
-StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
+template <bool throw_exception_if_err>
+StatusOr<ColumnPtr> CastStringToArray<throw_exception_if_err>::evaluate_checked(ExprContext* context,
+                                                                                vectorized::Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -185,10 +198,13 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, ve
         Slice str = src.value(i);
 
         // return null if not valid array
-        // TODO: throw exception
         if (!is_valid_array(str, stack)) {
-            has_null = true;
-            null_column->append(1);
+            if constexpr (throw_exception_if_err) {
+                return Status::InternalError(fmt::format("invalid array input: {}", str));
+            } else {
+                has_null = true;
+                null_column->append(1);
+            }
             continue;
         }
         null_column->append(0);
@@ -236,7 +252,8 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, ve
     return res;
 }
 
-Slice CastStringToArray::_trim(Slice slice) {
+template <bool throw_exception_if_err>
+Slice CastStringToArray<throw_exception_if_err>::_trim(Slice slice) const {
     while (slice.starts_with(" ")) {
         slice.remove_prefix(1);
     }
@@ -246,7 +263,8 @@ Slice CastStringToArray::_trim(Slice slice) {
     return slice;
 }
 
-Slice CastStringToArray::_unquote(Slice slice) {
+template <bool throw_exception_if_err>
+Slice CastStringToArray<throw_exception_if_err>::_unquote(Slice slice) const {
     slice = _trim(slice);
 
     if ((slice.starts_with("\"") && slice.ends_with("\"")) || (slice.starts_with("'") && slice.ends_with("'"))) {
@@ -255,6 +273,9 @@ Slice CastStringToArray::_unquote(Slice slice) {
     }
     return slice;
 }
+
+template class CastStringToArray<true>;
+template class CastStringToArray<false>;
 
 StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
