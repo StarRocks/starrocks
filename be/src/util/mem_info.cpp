@@ -21,20 +21,34 @@
 
 #include "util/mem_info.h"
 
+#include <linux/magic.h>
+#include <sys/vfs.h>
+
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
+#include "util/errno.h"
 #include "util/pretty_printer.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
 
+// CGROUP2_SUPER_MAGIC is the indication for cgroup v2
+// It is defined in kernel 4.5+
+// I copy the defintion from linux/magic.h in higher kernel
+#ifndef CGROUP2_SUPER_MAGIC
+#define CGROUP2_SUPER_MAGIC 0x63677270
+#endif
+
 bool MemInfo::_s_initialized = false;
 int64_t MemInfo::_s_physical_mem = -1;
 
 void MemInfo::init() {
+    set_memlimit_if_container();
+
     // Read from /proc/meminfo
     std::ifstream meminfo("/proc/meminfo", std::ios::in);
     std::string line;
@@ -81,6 +95,49 @@ std::string MemInfo::debug_string() {
     std::stringstream stream;
     stream << "Mem Info: " << PrettyPrinter::print(_s_physical_mem, TUnit::BYTES) << std::endl;
     return stream.str();
+}
+
+void MemInfo::set_memlimit_if_container() {
+    // check if application is in docker container or not via /.dockerenv file
+    bool running_in_docker = fs::path_exist("/.dockerenv");
+    if (running_in_docker) {
+        struct statfs fs;
+        int err = statfs("/sys/fs/cgroup", &fs);
+        if (err < 0) {
+            LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(err);
+            return;
+        }
+
+        std::ifstream memoryLimit;
+        std::string line;
+        StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
+        if (fs.f_type == TMPFS_MAGIC) {
+            // cgroup v1
+            // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
+            memoryLimit.open("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+            getline(memoryLimit, line);
+            _s_physical_mem = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
+        } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
+            // cgroup v2
+            // Read from /sys/fs/cgroup/memory/memory.max
+            memoryLimit.open("/sys/fs/cgroup/memory.max");
+            getline(memoryLimit, line);
+
+            if (line == "max") {
+                _s_physical_mem = std::numeric_limits<int64_t>::max();
+            } else {
+                _s_physical_mem = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
+            }
+        }
+
+        if (result != StringParser::PARSE_SUCCESS) {
+            _s_physical_mem = std::numeric_limits<int64_t>::max();
+        }
+
+        if (memoryLimit.is_open()) {
+            memoryLimit.close();
+        }
+    }
 }
 
 } // namespace starrocks
