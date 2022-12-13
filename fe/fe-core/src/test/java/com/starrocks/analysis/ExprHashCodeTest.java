@@ -37,7 +37,7 @@ class ExprHashCodeTest {
         DateLiteral dateLiteral = new DateLiteral(2000L, 10L, 10L);
         DecimalLiteral decimalLiteral = new DecimalLiteral(new BigDecimal(100));
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("abs", ImmutableList.of(intLiteral));
-        LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.LIKE, stringLiteral, stringLiteral);
+        LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.LIKE, stringLiteral, stringLiteral, false);
         SelectRelation selectRelation = new SelectRelation(new SelectList(),
                 null, null, null, null);
         ExistsPredicate existsPredicate = new ExistsPredicate(new Subquery(new QueryStatement(selectRelation)), false);

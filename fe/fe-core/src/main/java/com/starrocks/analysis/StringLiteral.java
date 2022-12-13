@@ -61,6 +61,10 @@ public class StringLiteral extends LiteralExpr {
         return new StringLiteral(this);
     }
 
+    public void setValue(String value) {
+        this.value = value;
+    }
+
     @Override
     public int compareLiteral(LiteralExpr expr) {
         if (expr instanceof NullLiteral) {

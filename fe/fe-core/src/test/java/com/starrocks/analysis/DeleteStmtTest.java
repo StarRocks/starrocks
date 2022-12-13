@@ -71,7 +71,7 @@ public class DeleteStmtTest {
         // case 1
         LikePredicate likePredicate = new LikePredicate(com.starrocks.analysis.LikePredicate.Operator.LIKE,
                 new SlotRef(null, "k1"),
-                new StringLiteral("abc"));
+                new StringLiteral("abc"), false);
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("testDb", "testTbl"),
                 new PartitionNames(false, Lists.newArrayList("partition")), likePredicate);
         try {

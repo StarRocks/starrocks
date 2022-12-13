@@ -86,9 +86,9 @@ public class QueryConverterTest {
         StringLiteral nameLiteral1 = new StringLiteral("%1%");
         StringLiteral nameLiteral2 = new StringLiteral("*1*");
         StringLiteral nameLiteral3 = new StringLiteral("1_2");
-        LikePredicate likePredicate1 = new LikePredicate(LikePredicate.Operator.LIKE, name, nameLiteral1);
-        LikePredicate regexPredicate = new LikePredicate(LikePredicate.Operator.REGEXP, name, nameLiteral2);
-        LikePredicate likePredicate2 = new LikePredicate(LikePredicate.Operator.LIKE, name, nameLiteral3);
+        LikePredicate likePredicate1 = new LikePredicate(LikePredicate.Operator.LIKE, name, nameLiteral1, false);
+        LikePredicate regexPredicate = new LikePredicate(LikePredicate.Operator.REGEXP, name, nameLiteral2, false);
+        LikePredicate likePredicate2 = new LikePredicate(LikePredicate.Operator.LIKE, name, nameLiteral3, false);
 
         Assert.assertEquals("{\"wildcard\":{\"name\":\"*1*\"}}", queryConverter.convert(likePredicate1).toString());
         Assert.assertEquals("{\"wildcard\":{\"name\":\"*1*\"}}", queryConverter.convert(regexPredicate).toString());
