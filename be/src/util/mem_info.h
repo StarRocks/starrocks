@@ -45,6 +45,8 @@ public:
     static std::string debug_string();
 
 private:
+    static void set_memlimit_if_container();
+
     static bool _s_initialized;
     static int64_t _s_physical_mem;
 };
