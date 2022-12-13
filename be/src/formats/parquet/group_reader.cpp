@@ -3,6 +3,8 @@
 
 #include "formats/parquet/group_reader.h"
 
+#include <regex>
+
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
@@ -29,6 +31,12 @@ Status GroupReader::init() {
     RETURN_IF_ERROR(_rewrite_dict_column_predicates());
     _init_read_chunk();
     return Status::OK();
+}
+
+static std::string debug_string(vectorized::Column* c) {
+    std::string s = c->debug_string();
+    s = std::regex_replace(s, std::regex("NULL"), "");    
+    return s;
 }
 
 Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
@@ -60,6 +68,14 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
         _column_reader_opts.context->rows_to_skip = rows_to_skip;
     }
 
+    for (int col_idx : _active_column_indices) {
+        auto& column = _param.read_cols[col_idx];
+        SlotId slot_id = column.slot_id;
+        SlotDescriptor* slot = _param.tuple_desc->slots()[column.col_idx_in_chunk];
+        VLOG_FILE << "[XXX] active chunk. init stage. column data. name = " << slot->col_name()
+                  << ", data = " << debug_string(active_chunk->get_column_by_slot_id(slot_id).get());
+    }
+
     bool has_filter = false;
     int chunk_size = -1;
     vectorized::Filter chunk_filter(count, 1);
@@ -89,6 +105,14 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
         active_chunk->check_or_die();
     }
 
+    for (int col_idx : _active_column_indices) {
+        auto& column = _param.read_cols[col_idx];
+        SlotId slot_id = column.slot_id;
+        SlotDescriptor* slot = _param.tuple_desc->slots()[column.col_idx_in_chunk];
+        VLOG_FILE << "[XXX] active chunk. after filter. column data. name = " << slot->col_name()
+                  << ", data = " << debug_string(active_chunk->get_column_by_slot_id(slot_id).get());
+    }
+
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
         vectorized::ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
@@ -114,6 +138,14 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
         _column_reader_opts.context->rows_to_skip += count;
         *row_count = 0;
         return status;
+    }
+
+    for (int col_idx : _active_column_indices) {
+        auto& column = _param.read_cols[col_idx];
+        SlotId slot_id = column.slot_id;
+        SlotDescriptor* slot = _param.tuple_desc->slots()[column.col_idx_in_chunk];
+        VLOG_FILE << "[XXX] active chunk. lazy eval. column data. name = " << slot->col_name()
+                  << ", data = " << debug_string(active_chunk->get_column_by_slot_id(slot_id).get());
     }
 
     // We don't care about the column order as they will be reordered in HiveDataSource
@@ -486,6 +518,7 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
     for (const auto& column : _dict_filter_columns) {
         int chunk_index = column.col_idx_in_chunk;
         SlotId slot_id = column.slot_id;
+        SlotDescriptor* slot = _param.tuple_desc->slots()[chunk_index];
 
         vectorized::ColumnPtr& dict_codes = _read_chunk->get_column_by_slot_id(slot_id);
         vectorized::ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
@@ -494,6 +527,10 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
         auto* codes_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(dict_codes);
         auto* codes_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
                 codes_nullable_column->data_column());
+
+        VLOG_FILE << "[XXX] dict decode. column data. name = " << slot->col_name()
+                  << ", data = " << dict_codes->debug_string();
+
         const std::vector<int32_t> codes = codes_column->get_data();
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
         DCHECK_EQ(dict_codes->size(), dict_values->size());
