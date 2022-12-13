@@ -55,6 +55,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.InternalServiceVersion;
@@ -175,7 +176,7 @@ public class CoordinatorPreprocessor {
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
         this.scanNodes = scanNodes;
-        this.connectContext = ConnectContext.buildDefault();
+        this.connectContext = StatisticUtils.buildConnectContext();
         this.queryId = connectContext.getExecutionId();
         this.queryGlobals =
                 genQueryGlobals(System.currentTimeMillis(), connectContext.getSessionVariable().getTimeZone());

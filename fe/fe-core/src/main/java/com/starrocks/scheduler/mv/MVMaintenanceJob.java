@@ -32,6 +32,7 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TDescriptorTable;
@@ -69,6 +70,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class MVMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
+    private static final int MV_QUERY_TIMEOUT = 120;
 
     // Persisted state
     @SerializedName("jobId")
@@ -190,8 +192,9 @@ public class MVMaintenanceJob implements Writable {
             // TODO(murphy) fill current user
             // Build connection context
             Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
-            this.connectContext = ConnectContext.buildDefault();
+            this.connectContext = StatisticUtils.buildConnectContext();
             this.connectContext.setDatabase(db.getFullName());
+            this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
             TUniqueId queryId = connectContext.getExecutionId();
 
             // Build  query coordinator
