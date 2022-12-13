@@ -107,9 +107,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
-    auto task = [=]() {
-        this->_transmit_chunk(cntl_base, request, response, done);
-    };
+    auto task = [=]() { this->_transmit_chunk(cntl_base, request, response, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_chunk task failed").to_protobuf(response->mutable_status());
@@ -160,9 +158,7 @@ void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcC
                                                           const PTransmitRuntimeFilterParams* request,
                                                           PTransmitRuntimeFilterResult* response,
                                                           google::protobuf::Closure* done) {
-    auto task = [=]() {
-        this->_transmit_runtime_filter(cntl_base, request, response, done);
-    };
+    auto task = [=]() { this->_transmit_runtime_filter(cntl_base, request, response, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_runtime_filter task failed")
@@ -197,9 +193,7 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      const PExecPlanFragmentRequest* request,
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
-    auto task = [=]() {
-        this->_exec_plan_fragment(cntl_base, request, response, done);
-    };
+    auto task = [=]() { this->_exec_plan_fragment(cntl_base, request, response, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_plan_fragment task failed").to_protobuf(response->mutable_status());
@@ -231,9 +225,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             const PExecBatchPlanFragmentsRequest* request,
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
-    auto task = [=]() {
-        this->_exec_batch_plan_fragments(cntl_base, request, response, done);
-    };
+    auto task = [=]() { this->_exec_batch_plan_fragments(cntl_base, request, response, done); };
     if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
@@ -242,9 +234,9 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
 
 template <typename T>
 void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::RpcController* cntl_base,
-                                                                   const PExecBatchPlanFragmentsRequest* request,
-                                                                   PExecBatchPlanFragmentsResult* response,
-                                                                   google::protobuf::Closure* done) {
+                                                             const PExecBatchPlanFragmentsRequest* request,
+                                                             PExecBatchPlanFragmentsResult* response,
+                                                             google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto ser_request = cntl->request_attachment().to_string();
@@ -370,9 +362,7 @@ void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcCont
                                                        const PCancelPlanFragmentRequest* request,
                                                        PCancelPlanFragmentResult* result,
                                                        google::protobuf::Closure* done) {
-    auto task = [=]() {
-        this->_cancel_plan_fragment(cntl_base, request, result, done);
-    };
+    auto task = [=]() { this->_cancel_plan_fragment(cntl_base, request, result, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit cancel_plan_fragment task failed").to_protobuf(result->mutable_status());
