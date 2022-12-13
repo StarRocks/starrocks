@@ -87,7 +87,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
     VLOG_ROW << "looking up fragment_instance_id=" << fragment_instance_id << ", node=" << node_id;
     uint32_t bucket = get_bucket(fragment_instance_id);
     auto& receiver_map = _receiver_map[bucket];
-    std::lock_guard<Mutex> l(_lock[bucket]);
+    std::shared_lock l(_lock[bucket]);
 
     auto iter = receiver_map.find(fragment_instance_id);
     if (iter != receiver_map.end()) {
