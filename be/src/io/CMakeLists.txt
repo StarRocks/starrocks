@@ -23,6 +23,7 @@ add_library(IO STATIC
         fd_output_stream.cpp
         fd_input_stream.cpp
         io_profiler.cpp
+        jindo_input_stream.cpp
         seekable_input_stream.cpp
         readable.cpp
         s3_input_stream.cpp

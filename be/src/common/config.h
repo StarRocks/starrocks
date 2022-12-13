@@ -948,7 +948,7 @@ CONF_Int64(object_storage_max_retries, "10");
 CONF_Int64(object_storage_retry_scale_factor, "25");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
-CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
+CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, cos://, cosn://, obs://, ks3://, tos://");
 CONF_mBool(s3_use_list_objects_v1, "false");
 
 // Lake

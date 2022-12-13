@@ -530,7 +530,7 @@ under the License.
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
         </dependency>
-
+        
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>

@@ -158,7 +158,8 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 
 
 # ================= native section =====================
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jindosdk:$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+export_cachelib_lib_path
 
 
 # ====== handle meta_tool sub command before any modification change

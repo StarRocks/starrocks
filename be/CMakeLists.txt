@@ -259,6 +259,9 @@ set(Poco_ROOT_DIR ${THIRDPARTY_DIR})
 find_package(Poco REQUIRED COMPONENTS Net NetSSL)
 include_directories(${Poco_INCLUDE_DIRS})
 
+add_library(jindo-sdk SHARED IMPORTED)
+set_target_properties(jindo-sdk PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/jindosdk/libjindo-csdk.so)
+
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
 
@@ -902,6 +905,9 @@ if (STARROCKS_JIT_ENABLE)
         ${WL_END_GROUP}
     )
 endif()
+set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+    jindo-sdk
+)
 
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
