@@ -167,19 +167,6 @@ public class TabletScheduler extends LeaderDaemon {
         LIMIT_EXCEED // number of pending tablets exceed the limit
     }
 
-    public enum TabletBalancerStrategy {
-        DISK_AND_TABLET,
-        BE_LOAD_SCORE;
-
-        public static boolean isTabletAndDiskStrategy(String strategy) {
-            return DISK_AND_TABLET.toString().equalsIgnoreCase(strategy);
-        }
-
-        public static boolean isBELoadScoreStrategy(String strategy) {
-            return BE_LOAD_SCORE.toString().equalsIgnoreCase(strategy);
-        }
-    }
-
     public TabletScheduler(GlobalStateMgr globalStateMgr, SystemInfoService infoService,
                            TabletInvertedIndex invertedIndex,
                            TabletSchedulerStat stat) {
@@ -189,16 +176,7 @@ public class TabletScheduler extends LeaderDaemon {
         this.invertedIndex = invertedIndex;
         this.colocateTableIndex = globalStateMgr.getColocateTableIndex();
         this.stat = stat;
-
-        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)) {
-            this.rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
-        } else if (TabletBalancerStrategy.isBELoadScoreStrategy(Config.tablet_sched_balancer_strategy)) {
-            this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
-        } else {
-            LOG.warn("invalid value of Config.tablet_balancer_strategy {}, use be_load_score strategy",
-                    Config.tablet_sched_balancer_strategy);
-            this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
-        }
+        this.rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
     }
 
     public TabletSchedulerStat getStat() {
@@ -378,25 +356,15 @@ public class TabletScheduler extends LeaderDaemon {
 
         handleRunningTablets();
 
-        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)) {
-            // selectTabletsForBalance should depend on latest load statistics
-            // do not select others balance task when there is running or pending balance tasks
-            // to avoid generating repeated task
-            if (loadStatUpdated && getBalanceTabletsNumber() <= 0) {
-                long startTS = System.currentTimeMillis();
-                selectTabletsForBalance();
-                long usedTS = System.currentTimeMillis() - startTS;
-                if (usedTS > 1000L) {
-                    LOG.warn("select balance tablets cost too much time: {} seconds", usedTS / 1000L);
-                }
-            }
-        } else {
-            long numOfBalancingTablets = getBalanceTabletsNumber();
-            if (numOfBalancingTablets < Config.tablet_sched_max_balancing_tablets) {
-                selectTabletsForBalance();
-            } else {
-                LOG.info("number of balancing tablets {} exceed limit: {}, skip selecting tablets for balance",
-                        numOfBalancingTablets, Config.tablet_sched_max_balancing_tablets);
+        // selectTabletsForBalance should depend on latest load statistics
+        // do not select others balance task when there is running or pending balance tasks
+        // to avoid generating repeated task
+        if (loadStatUpdated && getBalanceTabletsNumber() <= 0) {
+            long startTS = System.currentTimeMillis();
+            selectTabletsForBalance();
+            long usedTS = System.currentTimeMillis() - startTS;
+            if (usedTS > 1000L) {
+                LOG.warn("select balance tablets cost too much time: {} seconds", usedTS / 1000L);
             }
         }
 
@@ -1729,27 +1697,6 @@ public class TabletScheduler extends LeaderDaemon {
             return total;
         }
 
-        /**
-         * get path whose balance slot num is larger than 0
-         */
-        public synchronized Set<Long> getAvailPathsForBalance() {
-            Set<Long> pathHashs = Sets.newHashSet();
-            for (Map.Entry<Long, Slot> entry : pathSlots.entrySet()) {
-                if (entry.getValue().balanceSlot > 0) {
-                    pathHashs.add(entry.getKey());
-                }
-            }
-            return pathHashs;
-        }
-
-        public synchronized int getAvailBalanceSlotNum() {
-            int num = 0;
-            for (Map.Entry<Long, Slot> entry : pathSlots.entrySet()) {
-                num += entry.getValue().balanceSlot;
-            }
-            return num;
-        }
-
         public synchronized List<List<String>> getSlotInfo(long beId) {
             List<List<String>> results = Lists.newArrayList();
             pathSlots.forEach((key, value) -> {
@@ -1759,46 +1706,10 @@ public class TabletScheduler extends LeaderDaemon {
                 result.add(String.valueOf(key));
                 result.add(String.valueOf(value.available));
                 result.add(String.valueOf(value.total));
-                result.add(String.valueOf(value.balanceSlot));
                 result.add(String.valueOf(value.getAvgRate()));
                 results.add(result);
             });
             return results;
-        }
-
-        public synchronized long takeBalanceSlot(long pathHash) {
-            Slot slot = pathSlots.get(pathHash);
-            if (slot == null) {
-                return -1;
-            }
-            if (slot.balanceSlot > 0) {
-                slot.balanceSlot--;
-                return pathHash;
-            }
-            return -1;
-        }
-
-        public synchronized long takeAnAvailBalanceSlotFrom(Set<Long> pathHashs) {
-            for (Long pathHash : pathHashs) {
-                Slot slot = pathSlots.get(pathHash);
-                if (slot == null) {
-                    continue;
-                }
-                if (slot.balanceSlot > 0) {
-                    slot.balanceSlot--;
-                    return pathHash;
-                }
-            }
-            return -1;
-        }
-
-        public synchronized void freeBalanceSlot(long pathHash) {
-            Slot slot = pathSlots.get(pathHash);
-            if (slot == null) {
-                return;
-            }
-            slot.balanceSlot++;
-            slot.rectify();
         }
     }
 
@@ -1814,8 +1725,6 @@ public class TabletScheduler extends LeaderDaemon {
     public static class Slot {
         public int total;
         public int available;
-        // slot reserved for balance
-        public int balanceSlot;
 
         public long totalCopySize = 0;
         public long totalCopyTimeMs = 0;
@@ -1823,7 +1732,6 @@ public class TabletScheduler extends LeaderDaemon {
         public Slot(int total) {
             this.total = total;
             this.available = total;
-            this.balanceSlot = BALANCE_SLOT_NUM_FOR_PATH;
         }
 
         public void rectify() {
@@ -1832,10 +1740,6 @@ public class TabletScheduler extends LeaderDaemon {
             }
             if (available > total) {
                 available = total;
-            }
-
-            if (balanceSlot > BALANCE_SLOT_NUM_FOR_PATH) {
-                balanceSlot = BALANCE_SLOT_NUM_FOR_PATH;
             }
         }
 
