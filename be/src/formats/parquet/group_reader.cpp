@@ -34,9 +34,12 @@ Status GroupReader::init() {
 }
 
 static std::string debug_string(vectorized::Column* c) {
+    std::stringstream ss;
+    ss << "(size = " << c->size() << ", content = ";
     std::string s = c->debug_string();
-    s = std::regex_replace(s, std::regex("NULL"), "");    
-    return s;
+    s = std::regex_replace(s, std::regex("NULL"), "");
+    ss << s << ")";
+    return ss.str();
 }
 
 Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {

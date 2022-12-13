@@ -81,6 +81,9 @@ Status FileReader::_parse_footer() {
         }
     }
 
+    _footer_data.resize(to_read);
+    memcpy(_footer_data.data(), footer_buf, to_read);
+
     tparquet::FileMetaData t_metadata;
     // deserialize footer
     RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, TProtocolType::COMPACT,

@@ -110,6 +110,8 @@ private:
     vectorized::HdfsScannerContext* _scanner_ctx = nullptr;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
+
+    std::vector<uint8_t> _footer_data;
 };
 
 } // namespace starrocks::parquet
