@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/stream/state/mem_state_table.h"
 
@@ -14,20 +26,22 @@ namespace starrocks::stream {
 class MemStateTableTest : public StreamTestBase {
 public:
     MemStateTableTest() = default;
+    ~MemStateTableTest() = default;
 
     void SetUp() override {
+        _runtime_state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        _runtime_profile = _runtime_state->runtime_profile();
+        _mem_tracker = std::make_unique<MemTracker>();
         std::vector<SlotTypeInfo> src_slots = std::vector<SlotTypeInfo>{
                 {"col1", TYPE_INT, false},
                 {"col2", TYPE_INT, false},
                 {"col3", TYPE_INT, false},
                 {"agg1", TYPE_INT, false},
-                //                {"op", TYPE_BOOLEAN, false}
         };
         auto slot_type_info_arrays = vectorized::DescTblHelper::create_slot_type_desc_info_arrays({src_slots});
-        _tbl = vectorized::DescTblHelper::generate_desc_tbl(_state, _obj_pool, slot_type_info_arrays);
-        _state->set_desc_tbl(_tbl);
+        _tbl = vectorized::DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, slot_type_info_arrays);
+        _runtime_state->set_desc_tbl(_tbl);
     }
-
     void TearDown() override {}
 
 protected:
@@ -44,7 +58,7 @@ protected:
 
     void CheckSeekKey(StateTable* state_table, const std::vector<int32_t>& keys, const std::vector<int32_t>& ans) {
         auto row = MakeDatumRow(keys);
-        auto chunk_or = state_table->seek_key(row);
+        auto chunk_or = state_table->seek(row);
         DCHECK(chunk_or.ok());
         auto chunk = chunk_or.value();
         DCHECK_EQ(chunk->num_rows(), 1);
@@ -54,7 +68,7 @@ protected:
     void CheckPrefixScan(StateTable* state_table, const std::vector<int32_t>& keys,
                          const std::vector<std::vector<int32_t>>& expect_rows) {
         auto row = MakeDatumRow(keys);
-        auto chunk_iter_or = state_table->prefix_scan_key(row);
+        auto chunk_iter_or = state_table->prefix_scan(row);
         DCHECK(chunk_iter_or.ok());
         auto chunk_iter = chunk_iter_or.value();
 
@@ -75,14 +89,14 @@ protected:
 
     void CheckSeekKeyError(StateTable* state_table, const std::vector<int32_t>& keys, const Status& expect_status) {
         auto row = MakeDatumRow(keys);
-        auto chunk_or = state_table->seek_key(row);
+        auto chunk_or = state_table->seek(row);
         DCHECK(!chunk_or.ok());
         DCHECK(chunk_or.status().code() == expect_status.code());
     }
 
     void CheckPrefixScanError(StateTable* state_table, const std::vector<int32_t>& keys, const Status& expect_status) {
         auto row = MakeDatumRow(keys);
-        auto iter_or = state_table->prefix_scan_key(row);
+        auto iter_or = state_table->prefix_scan(row);
         DCHECK(!iter_or.ok());
         DCHECK(iter_or.status().code() == expect_status.code());
     }
@@ -95,6 +109,13 @@ protected:
             DCHECK_EQ((col->get(row_idx)).get_int32(), ans[i]);
         }
     }
+
+protected:
+    RuntimeState* _runtime_state;
+    ObjectPool _obj_pool;
+    DescriptorTbl* _tbl;
+    RuntimeProfile* _runtime_profile;
+    std::unique_ptr<MemTracker> _mem_tracker;
 };
 
 TEST_F(MemStateTableTest, TestSeekKey) {
@@ -105,7 +126,7 @@ TEST_F(MemStateTableTest, TestSeekKey) {
 
     auto chunk_ptr = MakeStreamChunk<int32_t>({{1, 2, 3}, {1, 2, 3}, {1, 2, 3}, {11, 12, 13}}, {0, 0, 0});
     // write table
-    state_table->flush(_state, chunk_ptr.get());
+    state_table->flush(_runtime_state, chunk_ptr.get());
     // read table
     CheckSeekKey(state_table.get(), {1}, {1, 1, 11});
     CheckSeekKey(state_table.get(), {2}, {2, 2, 12});
@@ -114,7 +135,7 @@ TEST_F(MemStateTableTest, TestSeekKey) {
     // UPDATE keys
     auto chunk_ptr2 = MakeStreamChunk<int32_t>({{1, 2, 3}, {1, 2, 3}, {1, 2, 3}, {21, 22, 23}}, {0, 0, 0});
     // write table
-    state_table->flush(_state, chunk_ptr2.get());
+    state_table->flush(_runtime_state, chunk_ptr2.get());
     // read table
     CheckSeekKey(state_table.get(), {1}, {1, 1, 21});
     CheckSeekKey(state_table.get(), {2}, {2, 2, 22});
@@ -129,7 +150,7 @@ TEST_F(MemStateTableTest, TestPrefixSeek) {
     CheckPrefixScanError(state_table.get(), {1, 1}, Status::EndOfFile(""));
 
     // write table
-    state_table->flush(_state, chunk_ptr.get());
+    state_table->flush(_runtime_state, chunk_ptr.get());
     // read table
     CheckPrefixScan(state_table.get(), {1, 1},
                     {
@@ -141,7 +162,7 @@ TEST_F(MemStateTableTest, TestPrefixSeek) {
     // UPDATE keys
     auto chunk_ptr2 = MakeStreamChunk<int32_t>({{1, 1, 1}, {1, 1, 1}, {1, 2, 3}, {21, 22, 23}}, {0, 0, 0});
     // write table
-    state_table->flush(_state, chunk_ptr2.get());
+    state_table->flush(_runtime_state, chunk_ptr2.get());
     // read table
     CheckPrefixScan(state_table.get(), {1, 1},
                     {

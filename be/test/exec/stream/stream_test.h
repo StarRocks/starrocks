@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -14,32 +26,72 @@ namespace starrocks::stream {
 using SlotTypeInfo = vectorized::SlotTypeInfo;
 using ExprsTestHelper = vectorized::ExprsTestHelper;
 using StreamRowOp = vectorized::StreamRowOp;
+using GroupByKeyInfo = SlotId;
 using AggInfo = std::tuple<SlotId, std::string, LogicalType, LogicalType>;
 
 class StreamTestBase : public testing::Test {
 public:
-    StreamTestBase() {
-        _state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
-        _runtime_profile = _state->runtime_profile();
-        _mem_tracker = std::make_unique<MemTracker>();
-    }
+    StreamTestBase() = default;
+    ~StreamTestBase() = default;
 
 protected:
+    void SetUp() override {}
+    void TearDown() override {}
+
+protected:
+    DescriptorTbl* GenerateDescTbl(RuntimeState* state, ObjectPool& obj_pool,
+                                   const std::vector<std::vector<SlotTypeInfo>>& slot_info_arrays) {
+        return vectorized::DescTblHelper::generate_desc_tbl(
+                state, obj_pool, vectorized::DescTblHelper::create_slot_type_desc_info_arrays(slot_info_arrays));
+    }
+
+    std::vector<TExpr> _create_group_by_exprs(std::vector<SlotTypeInfo> slot_infos, std::vector<GroupByKeyInfo> infos) {
+        std::vector<TExpr> exprs;
+        for (auto& slot_id : infos) {
+            auto info = slot_infos[slot_id];
+            auto type = ExprsTestHelper::create_scalar_type_desc(to_thrift(std::get<1>(info)));
+            auto t_expr_node = ExprsTestHelper::create_slot_expr_node(0, slot_id, type, false);
+            exprs.emplace_back(ExprsTestHelper::create_slot_expr(t_expr_node));
+        }
+        return exprs;
+    }
+    std::vector<TExpr> _create_agg_exprs(std::vector<SlotTypeInfo> slot_infos, std::vector<AggInfo> infos) {
+        std::vector<TExpr> exprs;
+        for (auto& agg_info : infos) {
+            auto slot_id = std::get<0>(agg_info);
+            auto agg_name = std::get<1>(agg_info);
+            auto slot_info = slot_infos[slot_id];
+            // agg input type
+            auto t_type = ExprsTestHelper::create_scalar_type_desc(to_thrift(std::get<1>(slot_info)));
+            // agg intermediate type
+            auto intermediate_type = ExprsTestHelper::create_scalar_type_desc(to_thrift(std::get<2>(agg_info)));
+            // agg result type
+            auto ret_type = ExprsTestHelper::create_scalar_type_desc(to_thrift(std::get<3>(agg_info)));
+
+            auto child_node = ExprsTestHelper::create_slot_expr_node(0, slot_id, t_type, false);
+
+            auto f_fn = ExprsTestHelper::create_builtin_function(agg_name, {t_type}, intermediate_type, ret_type);
+            auto agg_expr = ExprsTestHelper::create_aggregate_expr(f_fn, {child_node});
+            exprs.emplace_back(agg_expr);
+        }
+        return exprs;
+    }
+
     template <typename T>
-    StreamChunkPtr MakeStreamChunk(const std::vector<std::vector<T>>& cols, const std::vector<uint8_t>& ops) {
+    StreamChunkPtr MakeStreamChunk(const std::vector<std::vector<T>>& cols, const std::vector<int8_t>& ops) {
         auto chunk_ptr = std::make_shared<Chunk>();
         for (size_t i = 0; i < cols.size(); i++) {
             auto col = vectorized::ColumnTestHelper::build_column<T>(cols[i]);
             chunk_ptr->append_column(std::move(col), i);
         }
-        vectorized::UInt8ColumnPtr ops_col = vectorized::UInt8Column::create();
-        ops_col->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
-        return std::make_shared<StreamChunk>(std::move(chunk_ptr), std::move(ops_col));
+        vectorized::Int8ColumnPtr ops_col = vectorized::Int8Column::create();
+        ops_col->append_numbers(ops.data(), ops.size() * sizeof(int8_t));
+        return StreamChunkConverter::make_stream_chunk(std::move(chunk_ptr), std::move(ops_col));
     }
 
     template <class T>
     void CheckChunk(ChunkPtr chunk, std::vector<LogicalType> types, std::vector<std::vector<T>> ans,
-                    std::vector<uint8_t> ops) {
+                    std::vector<int8_t> ops) {
         auto chunk_size = chunk->num_rows();
         auto num_col = chunk->num_columns();
         DCHECK_EQ(types.size(), num_col);
@@ -55,8 +107,8 @@ protected:
         if (ops.size() > 0) {
             DCHECK_EQ(chunk_size, ops.size());
             StreamChunk* stream_chunk = dynamic_cast<StreamChunk*>(chunk.get());
-            auto col = stream_chunk->ops_col();
-            CheckColumn<uint8_t>(col, ops);
+            auto col = StreamChunkConverter::ops(stream_chunk);
+            CheckColumn(col, ops);
         }
     }
 
@@ -70,7 +122,7 @@ protected:
         }
     }
 
-    void CheckColumn(const StreamRowOp* ops, std::vector<uint8_t> exp_col) {
+    void CheckColumn(const StreamRowOp* ops, std::vector<int8_t> exp_col) {
         for (size_t i = 0; i < exp_col.size(); i++) {
             DCHECK_EQ(ops[i], exp_col[i]);
         }
@@ -80,12 +132,5 @@ protected:
     void CheckDatum(Datum datum, T data) {
         DCHECK_EQ(datum.get<T>(), data);
     }
-
-protected:
-    RuntimeState* _state;
-    ObjectPool _obj_pool;
-    DescriptorTbl* _tbl;
-    RuntimeProfile* _runtime_profile;
-    std::unique_ptr<MemTracker> _mem_tracker;
 };
 } // namespace starrocks::stream
