@@ -247,6 +247,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
+                PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
@@ -274,6 +275,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
+                PushDownPredicateScanRule.BINLOG_SCAN,
                 // Commented out because of UTs in `ExternalTableTest.java`
                 // PushDownPredicateScanRule.MYSQL_SCAN,
                 // PushDownPredicateScanRule.JDBC_SCAN,

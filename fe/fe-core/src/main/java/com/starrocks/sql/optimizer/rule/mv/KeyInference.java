@@ -65,7 +65,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
 
     @Override
     public KeyPropertySet visitPhysicalFilter(OptExpression optExpression, Void ctx) {
-        return visit(optExpression.inputAt(0), ctx);
+        return infer(optExpression.inputAt(0), ctx);
     }
 
     @Override
