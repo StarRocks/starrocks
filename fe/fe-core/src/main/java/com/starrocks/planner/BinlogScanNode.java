@@ -124,6 +124,7 @@ public class BinlogScanNode extends ScanNode {
         return sb.toString();
     }
 
+    // TODO: support partition prune and bucket prune
     public void computeScanRanges() throws UserException {
         scanRanges = new ArrayList<>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
