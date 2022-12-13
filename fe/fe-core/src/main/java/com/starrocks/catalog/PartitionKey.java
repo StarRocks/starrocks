@@ -235,7 +235,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 if (type == PrimitiveType.DATE) {
                     dateLiteral = new DateLiteral(year, mon, day);
                 } else {
-                    dateLiteral = new DateLiteral(year, mon, day, hour, min, sec);
+                    dateLiteral = new DateLiteral(year, mon, day, hour, min, sec, 0);
                 }
                 key.pushColumn(dateLiteral, type);
                 return key;

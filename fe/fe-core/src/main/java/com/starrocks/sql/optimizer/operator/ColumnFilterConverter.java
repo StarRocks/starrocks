@@ -378,7 +378,7 @@ public class ColumnFilterConverter {
             case DATETIME:
                 LocalDateTime datetime = operator.getDate();
                 literalExpr = new DateLiteral(datetime.getYear(), datetime.getMonthValue(), datetime.getDayOfMonth(),
-                        datetime.getHour(), datetime.getMinute(), datetime.getSecond());
+                        datetime.getHour(), datetime.getMinute(), datetime.getSecond(), datetime.getNano() / 1000);
                 break;
             default:
                 throw new AnalysisException("Type[" + operator.getType().toSql() + "] not supported.");
