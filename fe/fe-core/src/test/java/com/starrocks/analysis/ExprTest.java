@@ -45,7 +45,7 @@ public class ExprTest {
         // uncheckedCastTo should return new object
 
         // date
-        DateLiteral dateLiteral = new DateLiteral(2020, 4, 5, 12, 0, 5);
+        DateLiteral dateLiteral = new DateLiteral(2020, 4, 5, 12, 0, 5, 0);
         Assert.assertTrue(dateLiteral.getType().isDatetime());
         DateLiteral castLiteral = (DateLiteral) dateLiteral.uncheckedCastTo(Type.DATE);
         Assert.assertFalse(dateLiteral == castLiteral);
