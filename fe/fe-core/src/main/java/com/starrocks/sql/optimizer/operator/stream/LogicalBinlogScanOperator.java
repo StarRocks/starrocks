@@ -61,7 +61,8 @@ public class LogicalBinlogScanOperator extends LogicalScanOperator {
 
         @Override
         public LogicalBinlogScanOperator build() {
-            return new LogicalBinlogScanOperator(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit);
+            return new LogicalBinlogScanOperator(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
+                    projection);
         }
 
         @Override

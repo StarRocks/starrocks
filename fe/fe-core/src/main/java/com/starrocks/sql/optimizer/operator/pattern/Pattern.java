@@ -40,6 +40,7 @@ public class Pattern {
             .add(OperatorType.LOGICAL_ES_SCAN)
             .add(OperatorType.LOGICAL_META_SCAN)
             .add(OperatorType.LOGICAL_JDBC_SCAN)
+            .add(OperatorType.LOGICAL_BINLOG_SCAN)
             .build();
 
     protected Pattern(OperatorType opType) {
