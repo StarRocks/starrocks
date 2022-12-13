@@ -84,10 +84,10 @@ public class FragmentNormalizerTest {
     @Test
     public void testToClosedAndOpenRangeForDatetime() throws AnalysisException {
         Column partitionColumn = new Column("ts", Type.fromPrimitiveType(PrimitiveType.DATETIME));
-        LiteralExpr lower = new DateLiteral(2022, 1, 1, 11, 23, 59);
-        LiteralExpr lowerSucc = new DateLiteral(2022, 1, 1, 11, 24, 0);
-        LiteralExpr upper = new DateLiteral(2022, 1, 10, 23, 59, 59);
-        LiteralExpr upperSucc = new DateLiteral(2022, 1, 11, 0, 0, 0);
+        LiteralExpr lower = new DateLiteral(2022, 1, 1, 11, 23, 59, 0);
+        LiteralExpr lowerSucc = new DateLiteral(2022, 1, 1, 11, 24, 0, 0);
+        LiteralExpr upper = new DateLiteral(2022, 1, 10, 23, 59, 59, 0);
+        LiteralExpr upperSucc = new DateLiteral(2022, 1, 11, 0, 0, 0, 0);
         testHelper(partitionColumn, lower, lowerSucc, upper, upperSucc);
 
     }
