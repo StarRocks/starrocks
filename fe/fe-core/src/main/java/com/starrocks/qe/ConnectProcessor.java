@@ -138,12 +138,12 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
-    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
+    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics, boolean securityWarning) {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
 
-        ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
+        ctx.getAuditEventBuilder().setEventType(securityWarning ? EventType.SECURITY_WARN : EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
                 .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
                 .setScanRows(statistics == null ? 0 : statistics.scanRows)
@@ -190,6 +190,10 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
             ctx.getAuditEventBuilder().setStmt(origStmt.replace("\n", " "));
+        }
+
+        if (securityWarning) {
+            GlobalStateMgr.getCurrentState().addSecurityWarnCount();
         }
 
         GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
@@ -351,10 +355,10 @@ public class ConnectProcessor {
         // TODO(cmy): when user send multi-statement, the executor is the last statement's executor.
         // We may need to find some way to resolve this.
         if (executor != null) {
-            auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(), ctx.securityWarning());
         } else {
             // executor can be null if we encounter analysis error.
-            auditAfterExec(originStmt, null, null);
+            auditAfterExec(originStmt, null, null, ctx.securityWarning());
         }
 
         addFinishedQueryDetail();

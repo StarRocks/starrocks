@@ -18,6 +18,6 @@ public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
         String origStmt = context.getDefinition();
         ConnectContext ctx = context.getCtx();
         ConnectProcessor processor = new ConnectProcessor(ctx);
-        processor.auditAfterExec(origStmt, parsedStmt, statistics);
+        processor.auditAfterExec(origStmt, parsedStmt, statistics, false);
     }
 }

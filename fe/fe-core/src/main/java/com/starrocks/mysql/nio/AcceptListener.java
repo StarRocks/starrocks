@@ -69,6 +69,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         context.setConnectScheduler(connectScheduler);
                         // authenticate check failed.
                         if (!MysqlProto.negotiate(context)) {
+                            ConnectProcessor processor = new ConnectProcessor(context);
+                            processor.auditAfterExec("login", null, null, true);
                             throw new AfterConnectedException("mysql negotiate failed");
                         }
                         if (connectScheduler.registerConnection(context)) {
@@ -82,6 +84,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         }
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);
+                        processor.auditAfterExec("login", null, null, false);
                         context.startAcceptQuery(processor);
                     } catch (AfterConnectedException e) {
                         // do not need to print log for this kind of exception.

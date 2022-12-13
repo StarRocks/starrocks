@@ -23,10 +23,12 @@ package com.starrocks.common;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 // Used to report error happened when execute SQL of user
 public class ErrorReport {
-
+    private static final Logger LOG = LogManager.getLogger(ErrorReport.class);
     private static String reportCommon(String pattern, ErrorCode errorCode, Object... objs) {
         String errMsg;
         if (pattern == null) {
@@ -38,6 +40,16 @@ public class ErrorReport {
         if (ctx != null) {
             ctx.getState().setError(errMsg);
         }
+        if (errorCode == ErrorCode.ERR_CATALOG_ACCESS_DENIED ||
+                errorCode == ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR ||
+                errorCode == ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR ||
+                errorCode == ErrorCode.ERR_TABLEACCESS_DENIED_ERROR ||
+                errorCode == ErrorCode.ERR_ACCESS_DENIED_ERROR ||
+                errorCode == ErrorCode.ERR_DB_ACCESS_DENIED) {
+            ctx.setSecurityWarning();
+        }
+
+        LOG.warn(errMsg);
         // TODO(zc): think about LOG to file
         return errMsg;
     }

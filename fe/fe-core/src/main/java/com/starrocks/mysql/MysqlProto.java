@@ -36,12 +36,15 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
 
 // MySQL protocol util
 public class MysqlProto {
     private static final Logger LOG = LogManager.getLogger(MysqlProto.class);
+
+    private static AtomicInteger checkPassWordFailCount = new AtomicInteger(0);
 
     // scramble: data receive from server.
     // randomString: data send by server in plug-in data field
@@ -61,9 +64,12 @@ public class MysqlProto {
                 UserIdentity currentUser = context.getGlobalStateMgr().getAuthenticationManager().checkPassword(
                         user, remoteIp, scramble, randomString);
                 if (currentUser == null) {
+                    checkPassWordFailCount.incrementAndGet();
+                    LOG.warn("{} consecutive failed logins", checkPassWordFailCount.intValue());
                     ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
                     return false;
                 }
+                checkPassWordFailCount.set(0);
                 context.setAuthDataSalt(randomString);
                 context.setCurrentUserIdentity(currentUser);
                 context.setQualifiedUser(user);
@@ -73,9 +79,12 @@ public class MysqlProto {
         List<UserIdentity> currentUserIdentity = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(user, remoteIp,
                 scramble, randomString, currentUserIdentity)) {
+            checkPassWordFailCount.incrementAndGet();
+            LOG.warn("{} consecutive failed logins", checkPassWordFailCount.intValue());
             ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
             return false;
         }
+        checkPassWordFailCount.set(0);
         context.setAuthDataSalt(randomString);
         if (Config.enable_auth_check) {
             context.setCurrentUserIdentity(currentUserIdentity.get(0));

@@ -56,7 +56,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
 
     @Override
     public boolean eventFilter(EventType type) {
-        return type == EventType.AFTER_QUERY;
+        return (type == EventType.AFTER_QUERY || type == EventType.SECURITY_WARN);
     }
 
     @Override
