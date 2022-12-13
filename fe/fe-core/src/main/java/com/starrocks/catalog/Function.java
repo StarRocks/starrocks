@@ -595,7 +595,8 @@ public class Function implements Writable {
         ORIGIN(0),
         SCALAR(1),
         AGGREGATE(2),
-        TABLE(3);
+        TABLE(3),
+        UNSUPPORTED(-1);
 
         private int code;
 
@@ -607,7 +608,7 @@ public class Function implements Writable {
             return code;
         }
 
-        public static FunctionType fromCode(int code) throws IOException {
+        public static FunctionType fromCode(int code) {
             switch (code) {
                 case 0:
                     return ORIGIN;
@@ -618,7 +619,7 @@ public class Function implements Writable {
                 case 3:
                     return TABLE;
                 default:
-                    throw new IOException("invalid function type code:" + code);
+                    return UNSUPPORTED;
             }
         }
 
@@ -683,9 +684,6 @@ public class Function implements Writable {
     public static Function read(DataInput input) throws IOException {
         Function function;
         FunctionType functionType = FunctionType.read(input);
-        if (functionType == null) {
-            throw new Error("Function type is null.");
-        }
         switch (functionType) {
             case SCALAR:
                 function = new ScalarFunction();
