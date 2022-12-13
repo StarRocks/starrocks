@@ -903,6 +903,48 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "ttl_union_mv_1");
     }
 
+    @Test
+    public void testNestedMv() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE nest_base_table_1 (\n" +
+                "    k1 INT,\n" +
+                "    v1 INT,\n" +
+                "    v2 INT)\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(\n" +
+                "PARTITION `p1` VALUES LESS THAN ('2'),\n" +
+                "PARTITION `p2` VALUES LESS THAN ('3'),\n" +
+                "PARTITION `p3` VALUES LESS THAN ('4'),\n" +
+                "PARTITION `p4` VALUES LESS THAN ('5'),\n" +
+                "PARTITION `p5` VALUES LESS THAN ('6'),\n" +
+                "PARTITION `p6` VALUES LESS THAN ('7')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1);");
+        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3)," +
+                " (1,3,1),(1,3,2),(1,3,3)\n" +
+                " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)\n" +
+                " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3);");
+        createAndRefreshMv("test", "nested_mv_1", "CREATE MATERIALIZED VIEW nested_mv_1" +
+                " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH MANUAL AS SELECT k1, v1 as k2, v2 as k3 from t1;");
+        createAndRefreshMv("test", "nested_mv_1", "CREATE MATERIALIZED VIEW nested_mv_2 " +
+                "PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH MANUAL AS SELECT k1, count(k2) as count_k2, sum(k3) as sum_k3 from nested_mv_1 group by k1;");
+        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW nested_mv_3 DISTRIBUTED BY HASH(k1)\n" +
+                "REFRESH MANUAL AS SELECT k1, count_k2, sum_k3 from nested_mv_2 where k1 >1;");
+        cluster.runSql("test", "insert into t1 values (4,1,1);");
+        refreshMaterializedView("test", "nested_mv_1");
+        refreshMaterializedView("test", "nested_mv_2");
+        String query1 = "SELECT k1, count(v1), sum(v2) from t1 where k1 >1 group by k1";
+        String plan1 = getFragmentPlan(query1);
+        PlanTestBase.assertNotContains(plan1, "nested_mv_3");
+
+        dropMv("test", "nested_mv_1");
+        dropMv("test", "nested_mv_2");
+        dropMv("test", "nested_mv_3");
+        starRocksAssert.dropTable("nest_base_table_1");
+    }
+
     private void waitTtl(MaterializedView mv, int number, int maxRound) throws InterruptedException, TimeoutException {
         int round = 0;
         while (true) {
