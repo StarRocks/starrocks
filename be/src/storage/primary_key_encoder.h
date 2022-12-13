@@ -51,6 +51,9 @@ public:
 
     static void encode(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
+    static void encode_sort_key(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len,
+                                Column* dest);
+
     static void encode_selective(const VectorizedSchema& schema, const Chunk& chunk, const uint32_t* indexes,
                                  size_t len, Column* dest);
 
