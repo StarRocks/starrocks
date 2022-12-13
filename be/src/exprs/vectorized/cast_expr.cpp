@@ -1540,7 +1540,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         }
 
         if (from_type == TYPE_VARCHAR) {
-            return dispatch_throw_exception<CastStringToArray>(allow_throw_exception, node, cast_element_expr, cast_to);
+            return new CastStringToArray(node, cast_element_expr, cast_to, allow_throw_exception);
         } else {
             return new CastJsonToArray(node, cast_element_expr, cast_to);
         }
