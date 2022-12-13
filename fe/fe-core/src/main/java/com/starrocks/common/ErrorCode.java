@@ -132,6 +132,7 @@ public enum ErrorCode {
     ERR_NO_SUCH_PARTITION(1749, new byte[] {'H', 'Y', '0', '0', '0'}, "partition '%s' doesn't exist"),
 
     ERR_WRONG_WH_NAME(1750, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect warehouse name '%s'"),
+    ERR_WH_CREATE_EXISTS(1751, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create warehouse '%s'; warehouse exists"),
 
     // Following is StarRocks's error code, which start from 5000
     ERR_NOT_OLAP_TABLE(5000, new byte[] {'H', 'Y', '0', '0', '0'}, "Table '%s' is not a OLAP table"),

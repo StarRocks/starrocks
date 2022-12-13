@@ -101,6 +101,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1037,6 +1038,10 @@ public class EditLog {
 
     public void logSaveTransactionId(long transactionId) {
         logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
+    }
+
+    public void logCreateWh(Warehouse wh) {
+        logEdit(OperationType.OP_CREATE_WH, wh);
     }
 
     public void logCreateDb(Database db) {

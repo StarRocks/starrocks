@@ -121,6 +121,10 @@ public interface ConnectorMetadata {
     default void refreshTable(String srDbName, Table table, List<String> partitionNames) {
     }
 
+    default void createWarehouse(String whName) throws DdlException, AlreadyExistsException {
+
+    }
+
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {
     }
 

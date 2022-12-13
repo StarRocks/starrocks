@@ -69,6 +69,7 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -145,6 +146,25 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitNode(ParseNode node, ConnectContext context) {
             throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
+        }
+
+
+        @Override
+        public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
+            String fullWhName = stmt.getFullWhName();
+            boolean isSetIfNotExists = stmt.isSetIfNotExists();
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getMetadata().createWarehouse(fullWhName);
+                } catch (AlreadyExistsException e) {
+                    if (isSetIfNotExists) {
+                        LOG.info("create warehouse[{}] which already exists", fullWhName);
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_WH_CREATE_EXISTS, fullWhName);
+                    }
+                }
+            });
+            return null;
         }
 
         @Override
