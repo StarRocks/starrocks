@@ -483,6 +483,9 @@ public class MaterializedViewRewriter {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
             ScalarOperator rewritten = replaceExprWithTarget(entry.getValue(),
                     normalizedViewMap, rewriteContext.getOutputMapping());
+            if (rewritten == null) {
+                return null;
+            }
             if (!isAllExprReplaced(rewritten, rewriteContext.getQueryColumnSet())) {
                 // it means there is some column that can not be rewritten by outputs of mv
                 return null;
