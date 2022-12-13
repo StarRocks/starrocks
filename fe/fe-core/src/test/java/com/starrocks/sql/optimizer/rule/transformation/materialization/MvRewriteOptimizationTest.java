@@ -910,6 +910,7 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.setTableStatistics((OlapTable) emps, 1000000);
         Table depts = getTable("test", "depts");
         PlanTestBase.setTableStatistics((OlapTable) depts, 1000000);
+
         // single table union
         createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
                 " distributed by hash(empid)  as select empid, deptno, name, salary from emps where empid < 3");
@@ -967,6 +968,12 @@ public class MvRewriteOptimizationTest {
         getFragmentPlan(query3);
         dropMv("test", "join_agg_union_mv_1");
 
+        cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
+        cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
+        cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
+        cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
+        cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
+        cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
         createAndRefreshMv("test", "ttl_union_mv_1", "CREATE MATERIALIZED VIEW `ttl_union_mv_1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`c3`)\n" +
@@ -982,11 +989,45 @@ public class MvRewriteOptimizationTest {
                 "GROUP BY `test_base_part`.`c1`, `test_base_part`.`c3`;");
         MaterializedView ttlMv1 = getMv("test", "ttl_union_mv_1");
         Assert.assertNotNull(ttlMv1);
-        waitTtl(ttlMv1, 3, 100);
+        waitTtl(ttlMv1, 3, 200);
         String query4 = "select sum(c2) from test_base_part";
         String plan4 = getFragmentPlan(query4);
         PlanTestBase.assertContains(plan4, "ttl_union_mv_1", "UNION", "test_base_part");
         dropMv("test", "ttl_union_mv_1");
+
+        starRocksAssert.withTable("CREATE TABLE multi_mv_table (\n" +
+                "                    k1 INT,\n" +
+                "                    v1 INT,\n" +
+                "                    v2 INT)\n" +
+                "                DUPLICATE KEY(k1)\n" +
+                "                PARTITION BY RANGE(`k1`)\n" +
+                "                (\n" +
+                "                PARTITION `p1` VALUES LESS THAN ('3'),\n" +
+                "                PARTITION `p2` VALUES LESS THAN ('6'),\n" +
+                "                PARTITION `p3` VALUES LESS THAN ('9'),\n" +
+                "                PARTITION `p4` VALUES LESS THAN ('12'),\n" +
+                "                PARTITION `p5` VALUES LESS THAN ('15'),\n" +
+                "                PARTITION `p6` VALUES LESS THAN ('18')\n" +
+                "                )\n" +
+                "                DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
+                "                                      (4,1,1),(5,1,1),(6,1,1),\n" +
+                "                                      (7,1,1),(8,1,1),(9,1,1),\n" +
+                "                                      (10,1,1),(11,1,1);");
+        createAndRefreshMv("test", "multi_mv_1", "CREATE MATERIALIZED VIEW multi_mv_1" +
+                " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_table where k1>1;");
+        createAndRefreshMv("test", "multi_mv_2", "CREATE MATERIALIZED VIEW multi_mv_2" +
+                " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_1 where k1>2;");
+        createAndRefreshMv("test", "multi_mv_3", "CREATE MATERIALIZED VIEW multi_mv_3" +
+                " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_2 where k1>3;");
+
+        String query5 = "select * from multi_mv_1";
+        String plan5 = getFragmentPlan(query5);
+        PlanTestBase.assertContains(plan5, "multi_mv_1", "multi_mv_2", "multi_mv_3", "UNION");
+        dropMv("test", "multi_mv_1");
+        dropMv("test", "multi_mv_2");
+        dropMv("test", "multi_mv_3");
+        starRocksAssert.dropTable("multi_mv_table");
     }
 
     @Test
