@@ -124,8 +124,9 @@ Slice strip_array_wrapper(const Slice& src) {
     size_t stack_size = src[0] == '[';
 
     for (size_t i = 1; i < length - 1; ++i) {
-        if (src[i] == '[') stack_size++;
-        if (src[i] == ']') stack_size--;
+        stack_size += src[i] == '[';
+        stack_size -= src[i] == ']';
+
         if (stack_size == 0) {
             return src;
         }
@@ -144,7 +145,7 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
     size_t stack_size = 0;
 
     for (size_t i = 0; i < length; ++i) {
-        if (src[i] == '\'' || src[i] == '"') {
+        if (is_quote(src[i])) {
             if (!stack.empty() && src[i] == stack.back()) {
                 stack.pop_back();
             } else {
@@ -160,8 +161,9 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
             res.emplace_back(raw_data + begin, i - begin);
             begin = i + 1;
         }
-        if (src[i] == '[') stack_size++;
-        if (src[i] == ']') stack_size--;
+
+        stack_size += src[i] == '[';
+        stack_size -= src[i] == ']';
     }
     if (begin <= length && stack_size == 0) {
         res.emplace_back(raw_data + begin, length - begin);
