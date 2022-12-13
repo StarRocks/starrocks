@@ -288,7 +288,7 @@ public class MVMaintenanceJob implements Writable {
         Exception ex = null;
         for (Future<PMVMaintenanceTaskResult> future : results) {
             try {
-                future.wait();
+                future.get();
             } catch (InterruptedException e) {
                 if (ex == null) {
                     ex = e;
@@ -328,7 +328,7 @@ public class MVMaintenanceJob implements Writable {
         Exception ex = null;
         for (Future<PMVMaintenanceTaskResult> future : results) {
             try {
-                future.wait();
+                future.get();
             } catch (InterruptedException e) {
                 if (ex == null) {
                     ex = e;

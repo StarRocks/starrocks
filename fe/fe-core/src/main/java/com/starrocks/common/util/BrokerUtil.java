@@ -569,8 +569,10 @@ public class BrokerUtil {
                     }
                 }
                 if (tOperationStatus == null || tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
+                    String errMsg = (tOperationStatus == null) ?
+                            "encounter exception when closing writer" : tOperationStatus.getMessage();
                     LOG.warn("Broker close writer failed. filePath={}, address={}, error={}", brokerFilePath,
-                            address, tOperationStatus.getMessage());
+                            address, errMsg);
                 } else {
                     failed = false;
                 }
