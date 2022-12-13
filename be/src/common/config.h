@@ -868,6 +868,8 @@ CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+CONF_Int32(internal_service_query_rpc_thread_num, "-1");
+
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
  * to inject error through return random status(except ok).

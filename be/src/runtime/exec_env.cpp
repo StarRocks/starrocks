@@ -177,6 +177,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _pipeline_sink_io_pool =
             new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
 
+    int query_rpc_threads = config::internal_service_query_rpc_thread_num;
+    if (query_rpc_threads <= 0) {
+        query_rpc_threads = std::thread::hardware_concurrency();
+    }
+    _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
+
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = std::thread::hardware_concurrency();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
@@ -465,6 +471,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
+    SAFE_DELETE(_query_rpc_pool);
     SAFE_DELETE(_scan_executor_without_workgroup);
     SAFE_DELETE(_scan_executor_with_workgroup);
     SAFE_DELETE(_connector_scan_executor_without_workgroup);
