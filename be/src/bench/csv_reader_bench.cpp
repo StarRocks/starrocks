@@ -18,7 +18,8 @@ public:
     BenchCSVReader(std::shared_ptr<SequentialFile> file, const std::string& record_delimiter,
                    const std::string& field_delimiter, bool trim_space, char escape, char enclose,
                    const size_t bufferSize)
-            : CSVReader(record_delimiter, field_delimiter, trim_space, escape, enclose, bufferSize) {
+            : CSVReader(CSVParseOptions(record_delimiter, field_delimiter, 0, trim_space, escape, enclose),
+                        bufferSize) {
         _file = std::move(file);
     }
 
@@ -48,10 +49,11 @@ Status BenchCSVReader::_fill_buffer() {
         if (n == 0) {
             // Has reached the end of file and the buffer is empty.
             return Status::EndOfFile(_file->filename());
-        } else if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        } else if (n < _row_delimiter_length ||
+                   _buff.find(_parse_options.row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
             // is valid, according the RFC, add the record delimiter ourself.
-            for (char ch : _row_delimiter) {
+            for (char ch : _parse_options.row_delimiter) {
                 _buff.append(ch);
             }
         }
