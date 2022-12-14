@@ -25,6 +25,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -157,8 +159,17 @@ public class ResourceGroupMgr implements Writable {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // TODO(yiming) will support RBAC later
-            return null;
+            try {
+                List<String> roleNameList = ctx.getGlobalStateMgr().getPrivilegeManager()
+                        .getRoleNamesByUser(ctx.getCurrentUserIdentity());
+                if (roleNameList.isEmpty()) {
+                    return null;
+                } else {
+                    return roleNameList.get(0);
+                }
+            } catch (PrivilegeException e) {
+                LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
+            }
         }
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
