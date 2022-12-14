@@ -48,7 +48,7 @@ PROPERTIES(
 
 - `dynamic_partition.prefix`: the prefix added to the names of dynamic partitions. The default value is `p`.
 
-- `dynamic_partition.buckets`: the number of buckets per dynamic partition. The default value is the same as the default number of buckets determined by the reserved word BUCKETS, which is `10`.
+- `dynamic_partition.buckets`: the number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word BUCKETS or automatically set by StarRocks.
 
 **FE configuration:**
 
