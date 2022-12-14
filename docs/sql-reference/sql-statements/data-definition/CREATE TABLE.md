@@ -327,7 +327,7 @@ dynamic_partition.prefix: It is used to specify the prefix of the created partit
 
 dynamic_partition.buckets: It is used to specify the number of buckets automatically created in partitions.
 
-- You can set a data compression algorithm when creating a table.
+- [Preview] You can set a data compression algorithm when creating a table.
 
 You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
 
@@ -340,7 +340,7 @@ The valid values of `compression` are:
 
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 
-- You can set write quorum for data loading.
+- [Preview] You can set write quorum for data loading.
 
 If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you create a table.
 
