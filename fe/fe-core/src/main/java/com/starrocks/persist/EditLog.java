@@ -91,6 +91,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
@@ -147,6 +148,11 @@ public class EditLog {
                             .initTransactionId(id + 1);
                     break;
                 }
+                case OperationType.OP_CREATE_WH:
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseManager();
+                    warehouseMgr.replayCreateWarehouse(wh);
+                    break;
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();

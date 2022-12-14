@@ -76,6 +76,10 @@ public class Warehouse implements Writable {
         this.rwLock = new QueryableReentrantReadWriteLock(true);
     }
 
+    public Warehouse() {
+        this(0, null);
+    }
+
     public long getId() {
         return id;
     }
@@ -159,4 +163,5 @@ public class Warehouse implements Writable {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Warehouse.class);
     }
+
 }

@@ -24,9 +24,11 @@ public class Cluster {
     @SerializedName(value = "wgid")
     private long workerGroupId;
 
-    // 注：Warehouse 和 Cluster 对象只记录了running 和 pending sql 的数量,
     // 我们假设 sql 排队功能 和 Cluster 类完全解耦，Cluster 类提供接口,
     // sql 排队功能根据 sql 执行情况负责调用这些接口更新 counter
+    // Node: we only record running sqls number and pending sqls in Warehouse and Cluster
+    // We suppose that sql queue tool has nothing to do with  Cluster,
+    // Cluster offers related interfaces and sql queue tool will update counter according to the implementation of sqls.
     private AtomicInteger numRunningSqls;
 
     public Cluster(long id, long workerGroupId) {

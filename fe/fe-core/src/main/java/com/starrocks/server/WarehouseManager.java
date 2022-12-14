@@ -15,26 +15,36 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class WarehouseManager implements ConnectorMetadata {
+public class WarehouseManager implements Writable, ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
     private final GlobalStateMgr stateMgr;
     private EditLog editLog;
 
+    @SerializedName(value = "idToWh")
     private final ConcurrentHashMap<Long, Warehouse> idToWh = new ConcurrentHashMap<>();
+    @SerializedName(value = "fullNameToWh")
     private final ConcurrentHashMap<String, Warehouse> fullNameToWh = new ConcurrentHashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
@@ -98,14 +108,35 @@ public class WarehouseManager implements ConnectorMetadata {
 
     public void dropWarehouse(String name) {}
     public void alterWarehouse(String name) {}
-    public void showWarehouses(String pattern) {}
 
     // warehouse meta persistence api
-    public void loadWarehouses() {}
-    public void saveWarehouses() {}
-    public void replayCreateWarehouse() {}
+    public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
+        write(out);
+        return checksum;
+    }
+
+    public void replayCreateWarehouse(Warehouse wh) {
+        tryLock(true);
+        try {
+            unprotectCreateWarehouse(wh);
+            LOG.info("finish replay create warehouse, name: {}, id: {}", wh.getFullName(), wh.getId());
+        } finally {
+            unlock();
+        }
+    }
+
     public void replayDropWarehouse() {}
     public void replayAlterWarehouse() {}
 
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
+    }
+
+    public static WarehouseManager read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, WarehouseManager.class);
+    }
 
 }
