@@ -84,7 +84,7 @@ public class ColumnRefSet implements Cloneable {
     }
 
     // The meaning is same with SQL Except Operation
-    public void except(List<ColumnRefOperator> refs) {
+    public void except(Collection<ColumnRefOperator> refs) {
         except(new ColumnRefSet(refs));
     }
 

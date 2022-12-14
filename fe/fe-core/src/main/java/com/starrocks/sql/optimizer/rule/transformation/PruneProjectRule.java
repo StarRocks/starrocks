@@ -47,17 +47,17 @@ public class PruneProjectRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         if (((LogicalProjectOperator) input.getOp()).getColumnRefMap().isEmpty()) {
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-
-            OptExpression child = input.inputAt(0);
-            LogicalOperator logicalOperator = (LogicalOperator) child.getOp();
+            LogicalOperator logicalOperator = (LogicalOperator) input.inputAt(0).getOp();
 
             ColumnRefOperator smallestColumn =
-                    logicalOperator.getSmallestColumn(context.getColumnRefFactory(), child);
+                    logicalOperator.getSmallestColumn(null, context.getColumnRefFactory(), input.inputAt(0));
             if (smallestColumn != null) {
                 projectMap.put(smallestColumn, smallestColumn);
+                LogicalProjectOperator newProject = new LogicalProjectOperator(projectMap, logicalOperator.getLimit());
+                if (!newProject.equals(input.getOp())) {
+                    return Lists.newArrayList(OptExpression.create(newProject, input.getInputs()));
+                }
             }
-            return Lists.newArrayList(OptExpression
-                    .create(new LogicalProjectOperator(projectMap, logicalOperator.getLimit()), input.getInputs()));
         }
 
         return Collections.emptyList();
