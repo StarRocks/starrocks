@@ -155,9 +155,6 @@ public:
 
     Status append(const vectorized::Column& column) override;
 
-    // Write offset data, it's only used in ArrayColumn
-    Status append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
-
     // Write offset column, it's only used in ArrayColumn
     Status append_array_offsets(const vectorized::Column& column);
 

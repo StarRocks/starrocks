@@ -606,32 +606,6 @@ Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count,
-                                                bool has_null) {
-    const size_t field_size = type_info()->size();
-    size_t remaining = count;
-    size_t offset_ordinal = 0;
-    while (remaining > 0) {
-        bool page_full = false;
-        size_t num_written = 0;
-        num_written = _page_builder->add(data, remaining);
-        page_full = num_written < remaining;
-        _next_rowid += num_written;
-        if (page_full) {
-            RETURN_IF_ERROR(finish_current_page());
-            _element_ordinal = _previous_ordinal;
-        }
-        const uint32_t* array_size = reinterpret_cast<const uint32_t*>(data) + offset_ordinal;
-        for (size_t i = 0; i < num_written; ++i) {
-            _previous_ordinal += *(array_size + i);
-        }
-        offset_ordinal += num_written;
-        data += field_size * num_written;
-        remaining -= num_written;
-    }
-    return Status::OK();
-}
-
 Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
     const size_t field_size = type_info()->size();
     size_t remaining = count;
