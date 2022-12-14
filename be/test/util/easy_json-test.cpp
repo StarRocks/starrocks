@@ -95,7 +95,7 @@ TEST_F(EasyJsonTest, TestComplexInitializer) {
 }
 
 TEST_F(EasyJsonTest, TestAllocatorLifetime) {
-    EasyJson* root = new EasyJson;
+    auto* root = new EasyJson;
     EasyJson child = (*root)["child"];
     delete root;
 

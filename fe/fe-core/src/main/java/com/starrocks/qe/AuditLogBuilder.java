@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/AuditLogBuilder.java
 
@@ -42,7 +55,7 @@ import java.lang.reflect.Field;
 public class AuditLogBuilder extends Plugin implements AuditPlugin {
     private static final Logger LOG = LogManager.getLogger(AuditLogBuilder.class);
 
-    private PluginInfo pluginInfo;
+    private final PluginInfo pluginInfo;
 
     public AuditLogBuilder() {
         pluginInfo = new PluginInfo(PluginMgr.BUILTIN_PLUGIN_PREFIX + "AuditLogBuilder", PluginType.AUDIT,
@@ -77,10 +90,39 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     continue;
                 }
 
+                // fields related to big queries are not written into audit log by default,
+                // they will be written into big query log.
+                if (af.value().equals("BigQueryLogCPUSecondThreshold") ||
+                        af.value().equals("BigQueryLogScanBytesThreshold") ||
+                        af.value().equals("BigQueryLogScanRowsThreshold")) {
+                    continue;
+                }
+
                 if (af.value().equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
-                sb.append("|").append(af.value()).append("=").append(String.valueOf(f.get(event)));
+
+                // Ignore -1 by default, ignore 0 if annotated with ignore_zero
+                Object value = f.get(event);
+                if (value instanceof Long) {
+                    long longValue = (Long) value;
+                    if (longValue == -1 || (longValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
+                }
+                if (value instanceof Integer) {
+                    int intValue = (Integer) value;
+                    if (intValue == -1 || (intValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
+                }
+                if (value instanceof Double) {
+                    double doubleValue = (Double) value;
+                    if (doubleValue == -1 || (doubleValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
+                }
+                sb.append("|").append(af.value()).append("=").append(value);
             }
 
             String auditLog = sb.toString();
@@ -89,8 +131,27 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             if (queryTime > Config.qe_slow_log_ms) {
                 AuditLog.getSlowAudit().log(auditLog);
             }
+
+            if (isBigQuery(event)) {
+                sb.append("|bigQueryLogCPUSecondThreshold=").append(event.bigQueryLogCPUSecondThreshold);
+                sb.append("|bigQueryLogScanBytesThreshold=").append(event.bigQueryLogScanBytesThreshold);
+                sb.append("|bigQueryLogScanRowsThreshold=").append(event.bigQueryLogScanRowsThreshold);
+                String bigQueryLog = sb.toString();
+                AuditLog.getBigQueryAudit().log(bigQueryLog);
+            }
         } catch (Exception e) {
             LOG.debug("failed to process audit event", e);
         }
+    }
+
+    private boolean isBigQuery(AuditEvent event) {
+        if (event.bigQueryLogCPUSecondThreshold >= 0 &&
+                event.cpuCostNs > event.bigQueryLogCPUSecondThreshold * 1000000000L) {
+            return true;
+        }
+        if (event.bigQueryLogScanBytesThreshold >= 0 && event.scanBytes > event.bigQueryLogScanBytesThreshold) {
+            return true;
+        }
+        return event.bigQueryLogScanRowsThreshold >= 0 && event.scanRows > event.bigQueryLogScanRowsThreshold;
     }
 }

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -13,6 +25,10 @@
 namespace starrocks {
 
 class ScanNode;
+class Tablet;
+using TabletSharedPtr = std::shared_ptr<Tablet>;
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
 
 namespace vectorized {
 class RuntimeFilterProbeCollector;
@@ -32,6 +48,7 @@ public:
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
                              BalancedChunkBuffer& chunk_buffer)
             : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan) {}
+    ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
@@ -56,6 +73,10 @@ public:
     bool has_active_input() const;
     BalancedChunkBuffer& get_shared_buffer();
 
+    Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
+    const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
+    const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
+
 private:
     vectorized::OlapScanNode* _scan_node;
 
@@ -77,6 +98,13 @@ private:
     bool _shared_scan;                  // Enable shared_scan
 
     std::atomic<bool> _is_prepare_finished{false};
+
+    // The row sets of tablets will become stale and be deleted, if compaction occurs
+    // and these row sets aren't referenced, which will typically happen when the tablets
+    // of the left table are compacted at building the right hash table. Therefore, reference
+    // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
+    std::vector<TabletSharedPtr> _tablets;
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/TypeDef.java
 
@@ -22,10 +35,16 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
+
+import java.util.List;
 
 /**
  * Represents an anonymous type definition, e.g., used in DDL and CASTs.
@@ -75,6 +94,17 @@ public class TypeDef implements ParseNode {
         isAnalyzed = true;
     }
 
+    public void analyze(boolean isOlap) throws AnalysisException {
+        if (isOlap && (!FeConstants.runningUnitTest)) {
+            // we haven't support create table with map or struct type column in native table
+            Type innerType = Type.getInnermostType(parsedType);
+            if (innerType.isMapType() || innerType.isStructType()) {
+                throw new AnalysisException("Unsupported data type: " + parsedType.toSql());
+            }
+        }
+        analyze();
+    }
+
     private void analyze(Type type) throws AnalysisException {
         if (!type.isSupported()) {
             throw new AnalysisException("Unsupported data type: " + type.toSql());
@@ -83,6 +113,10 @@ public class TypeDef implements ParseNode {
             analyzeScalarType((ScalarType) type);
         } else if (type.isArrayType()) {
             analyzeArrayType((ArrayType) type);
+        } else if (type.isStructType()) {
+            analyzeStructType((StructType) type);
+        } else if (type.isMapType()) {
+            analyzeMapType((MapType) type);
         } else {
             throw new AnalysisException("Unsupported data type: " + type.toSql());
         }
@@ -109,6 +143,17 @@ public class TypeDef implements ParseNode {
                 if (len <= 0) {
                     throw new AnalysisException(name + " size must be > 0: " + len);
                 }
+                if (scalarType.getLength() > maxLen) {
+                    throw new AnalysisException(
+                            name + " size must be <= " + maxLen + ": " + len);
+                }
+                break;
+            }
+            case VARBINARY: {
+                String name = "VARBINARY";
+                int maxLen = ScalarType.MAX_VARCHAR_LENGTH;
+                int len = scalarType.getLength();
+                // len is decided by child, when it is -1.
                 if (scalarType.getLength() > maxLen) {
                     throw new AnalysisException(
                             name + " size must be <= " + maxLen + ": " + len);
@@ -149,6 +194,20 @@ public class TypeDef implements ParseNode {
         if (baseType.isHllType() || baseType.isBitmapType() || baseType.isPseudoType() || baseType.isPercentile()) {
             throw new AnalysisException("Invalid data type: " + type.toSql());
         }
+    }
+
+    private void analyzeStructType(StructType type) throws AnalysisException {
+        List<StructField> structFields = type.getFields();
+        for (StructField structField: structFields) {
+            analyze(structField.getType());
+        }
+    }
+
+    private void analyzeMapType(MapType type) throws AnalysisException {
+        Type keyType = type.getKeyType();
+        analyze(keyType);
+        Type valueType = type.getValueType();
+        analyze(valueType);
     }
 
     public Type getType() {

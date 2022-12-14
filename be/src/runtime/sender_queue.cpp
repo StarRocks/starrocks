@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "runtime/sender_queue.h"
 
@@ -57,12 +69,25 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         }
     }
     for (const auto& kv : _chunk_meta.tuple_id_to_index) {
-        _chunk_meta.types[kv.second] = TypeDescriptor(PrimitiveType::TYPE_BOOLEAN);
+        _chunk_meta.types[kv.second] = TypeDescriptor(LogicalType::TYPE_BOOLEAN);
         ++column_index;
     }
 
     if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
         return Status::InternalError("build chunk meta error");
+    }
+
+    // decode extra chunk meta
+    if (!pb_chunk.extra_data_metas().empty()) {
+        int extra_meta_size = pb_chunk.extra_data_metas().size();
+        _chunk_meta.extra_data_metas.resize(extra_meta_size);
+        for (int i = 0; i < extra_meta_size; i++) {
+            auto extra_meta_pb = pb_chunk.extra_data_metas()[i];
+            auto& extra_meta = _chunk_meta.extra_data_metas[i];
+            extra_meta.type = TypeDescriptor::from_protobuf(extra_meta_pb.type_desc());
+            extra_meta.is_null = extra_meta_pb.is_null();
+            extra_meta.is_const = extra_meta_pb.is_const();
+        }
     }
     return Status::OK();
 }
@@ -414,6 +439,19 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         VLOG_ROW << "DataStreamRecvr no new data, stop unpluging";
         return Status::OK();
     }
+    DeferOp defer_op([&]() {
+        auto* closure = item.closure;
+        if (closure != nullptr) {
+#ifndef BE_TEST
+            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+#endif
+            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+            closure->Run();
+            chunk_queue_state.blocked_closure_num--;
+        }
+    });
+
     if (item.chunk_ptr == nullptr) {
         ChunkUniquePtr chunk_ptr = std::make_unique<vectorized::Chunk>();
         faststring uncompressed_buffer;
@@ -422,17 +460,8 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
     } else {
         *chunk = item.chunk_ptr.release();
     }
-    auto* closure = item.closure;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
-    if (closure != nullptr) {
-#ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
-        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-#endif
-        _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
-        closure->Run();
-        chunk_queue_state.blocked_closure_num--;
-    }
+
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
     return Status::OK();
@@ -491,6 +520,9 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
         _sender_eos_set.insert(be_number);
     }
     _num_remaining_senders--;
+    VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
+              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
+              << " be_number=" << be_number;
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
@@ -631,6 +663,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
 
+        if (_is_cancelled) {
+            LOG(ERROR) << "Cancelled receiver cannot add_chunk for keep order!";
+            return Status::OK();
+        }
+
         _max_processed_sequences.lazy_emplace(be_number, [be_number](const auto& ctor) { ctor(be_number, -1); });
 
         _buffered_chunk_queues.lazy_emplace(be_number, [be_number](const auto& ctor) {
@@ -678,6 +715,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
+
+        if (_is_cancelled) {
+            LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
+            return Status::OK();
+        }
 
         for (auto iter = chunks.begin(); iter != chunks.end();) {
             if (_is_pipeline_level_shuffle && _chunk_queue_states[iter->driver_sequence].is_short_circuited) {

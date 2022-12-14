@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/rle_page.h
 
@@ -56,23 +69,21 @@ enum { RLE_PAGE_HEADER_SIZE = 4 };
 // for these case.
 //
 // TODO(hkp): optimize rle algorithm
-template <FieldType Type>
+template <LogicalType Type>
 class RlePageBuilder final : public PageBuilder {
 public:
     explicit RlePageBuilder(const PageBuilderOptions& options)
             : _options(options),
-              _count(0),
-              _finished(false),
-              _bit_width(0),
+
               _rle_encoder(nullptr),
               _first_value(0),
               _last_value(0) {
-        _bit_width = (Type == OLAP_FIELD_TYPE_BOOL) ? 1 : SIZE_OF_TYPE * 8;
+        _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_encoder = std::make_unique<RleEncoder<CppType>>(&_buf, _bit_width);
         reset();
     }
 
-    ~RlePageBuilder() override {}
+    ~RlePageBuilder() override = default;
 
     bool is_page_full() override { return _rle_encoder->len() >= _options.data_page_size; }
 
@@ -138,20 +149,19 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 
     PageBuilderOptions _options;
-    uint32_t _count;
-    bool _finished;
-    int _bit_width;
+    uint32_t _count{0};
+    bool _finished{false};
+    int _bit_width{0};
     std::unique_ptr<RleEncoder<CppType>> _rle_encoder;
     faststring _buf;
     CppType _first_value;
     CppType _last_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class RlePageDecoder final : public PageDecoder {
 public:
-    RlePageDecoder(Slice slice, const PageDecoderOptions& options)
-            : _data(slice), _options(options), _parsed(false), _num_elements(0), _cur_index(0), _bit_width(0) {}
+    RlePageDecoder(Slice slice, const PageDecoderOptions& options) : _data(slice), _options(options) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -161,7 +171,7 @@ public:
         }
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _parsed = true;
-        _bit_width = (Type == OLAP_FIELD_TYPE_BOOL) ? 1 : SIZE_OF_TYPE * 8;
+        _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
                                            _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
         seek_to_position_in_page(0);
@@ -188,28 +198,6 @@ public:
             _rle_decoder.Skip(pos);
         }
         _cur_index = pos;
-        return Status::OK();
-    }
-
-    Status next_batch(size_t* n, ColumnBlockView* dst) override {
-        DCHECK(_parsed);
-        if (PREDICT_FALSE(*n == 0 || _cur_index >= _num_elements)) {
-            *n = 0;
-            return Status::OK();
-        }
-
-        size_t to_fetch = std::min(*n, static_cast<size_t>(_num_elements - _cur_index));
-        size_t remaining = to_fetch;
-        uint8_t* data_ptr = dst->data();
-        while (remaining > 0) {
-            bool result = _rle_decoder.Get(reinterpret_cast<CppType*>(data_ptr));
-            DCHECK(result);
-            remaining--;
-            data_ptr += SIZE_OF_TYPE;
-        }
-
-        _cur_index += to_fetch;
-        *n = to_fetch;
         return Status::OK();
     }
 
@@ -260,10 +248,10 @@ private:
 
     Slice _data;
     PageDecoderOptions _options;
-    bool _parsed;
-    uint32_t _num_elements;
-    uint32_t _cur_index;
-    int _bit_width;
+    bool _parsed{false};
+    uint32_t _num_elements{0};
+    uint32_t _cur_index{0};
+    int _bit_width{0};
     RleDecoder<CppType> _rle_decoder;
 };
 

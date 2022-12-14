@@ -415,10 +415,10 @@ bool EmplaceOrUpdate(Collection* const collection, const typename Collection::ke
     typedef typename Collection::mapped_type mapped_type;
     auto it = collection->find(key);
     if (it == collection->end()) {
-        collection->emplace(key, std::forward<mapped_type>(value));
+        collection->emplace(key, std::move(value));
         return true;
     }
-    it->second = std::forward<mapped_type>(value);
+    it->second = std::move(value);
     return false;
 }
 

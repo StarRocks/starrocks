@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/planner/SortNode.java
 
@@ -34,6 +47,9 @@ import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSortInfo;
+import com.starrocks.thrift.TNormalSortNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TSortInfo;
@@ -266,5 +282,32 @@ public class SortNode extends PlanNode {
     @Override
     public boolean canPushDownRuntimeFilter() {
         return !useTopN;
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalSortNode sortNode = new TNormalSortNode();
+        TNormalSortInfo sortInfo = new TNormalSortInfo();
+        sortInfo.setOrdering_exprs(normalizer.normalizeOrderedExprs(info.getOrderingExprs()));
+        sortInfo.setIs_asc_order(info.getIsAscOrder());
+        sortInfo.setNulls_first(info.getNullsFirst());
+        if (info.getSortTupleSlotExprs() != null) {
+            sortInfo.setSort_tuple_slot_exprs(normalizer.normalizeOrderedExprs(info.getSortTupleSlotExprs()));
+        }
+        sortNode.setSort_info(sortInfo);
+        sortNode.setUse_top_n(useTopN);
+        sortNode.setOffset(offset);
+        if (info.getPartitionExprs() != null) {
+            sortNode.setPartition_exprs(normalizer.normalizeOrderedExprs(info.getPartitionExprs()));
+            sortNode.setPartition_limit(info.getPartitionLimit());
+        }
+        sortNode.setTopn_type(topNType.toThrift());
+        if (analyticPartitionExprs != null) {
+            sortNode.setAnalytic_partition_exprs(normalizer.normalizeOrderedExprs(analyticPartitionExprs));
+        }
+        sortNode.setHas_outer_join_child(hasNullableGenerateChild);
+        planNode.setSort_node(sortNode);
+        planNode.setNode_type(TPlanNodeType.SORT_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }

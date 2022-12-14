@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.privilege;
 
@@ -29,11 +42,11 @@ public class PrivilegeCollectionTest {
         Assert.assertTrue(collection.check(system, admin, null));
 
         // grant select on object1
-        Assert.assertFalse(collection.checkAnyAction(table, table1));
+        Assert.assertFalse(collection.searchObject(table, table1));
         Assert.assertFalse(collection.check(table, select, table1));
         collection.grant(table, new ActionSet(Arrays.asList(select)), Arrays.asList(table1), false);
         Assert.assertTrue(collection.check(table, select, table1));
-        Assert.assertTrue(collection.checkAnyAction(table, table1));
+        Assert.assertTrue(collection.searchObject(table, table1));
 
         // grant select, insert on object1
         Assert.assertFalse(collection.check(table, insert, table1));
@@ -64,12 +77,12 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.allowGrant(table, new ActionSet(Arrays.asList(insert)), Arrays.asList(table1)));
 
         // revoke insert,delete
-        Assert.assertTrue(collection.checkAnyAction(table, table1));
+        Assert.assertTrue(collection.searchObject(table, table1));
         collection.revoke(table, new ActionSet(Arrays.asList(insert, delete)), Arrays.asList(table1), false);
         Assert.assertFalse(collection.check(table, insert, table1));
         Assert.assertFalse(collection.allowGrant(table, new ActionSet(Arrays.asList(delete, insert)), Arrays.asList(table1)));
         Assert.assertFalse(collection.check(table, delete, table1));
-        Assert.assertFalse(collection.checkAnyAction(table, table1));
+        Assert.assertFalse(collection.searchObject(table, table1));
 
         // revoke system
         collection.revoke(system, new ActionSet(Arrays.asList(admin)), null, false);

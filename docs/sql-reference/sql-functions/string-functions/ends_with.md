@@ -1,16 +1,16 @@
 # ends_with
 
-## description
+## Description
 
-### Syntax
+This function returns true when a string ends with a specified suffix. Otherwise, it returns false. When the argument is NULL, the result is NULL.
+
+## Syntax
 
 ```Haskell
 BOOLEAN ENDS_WITH (VARCHAR str, VARCHAR suffix)
 ```
 
-This function returns true when a string ends with a specified suffix. Otherwise, it returns false. When the argument is NULL, the result is NULL.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select ends_with("Hello starrocks", "starrocks");

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.iceberg;
 
@@ -25,6 +38,7 @@ import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergCustomCatalog;
 import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergGlueCatalog;
 import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergHiveCatalog;
+import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergRESTCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -54,6 +68,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else if (IcebergCatalogType.GLUE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
             catalogType = properties.get(ICEBERG_CATALOG_TYPE);
             icebergCatalog = getIcebergGlueCatalog(catalogName, properties);
+        } else if (IcebergCatalogType.REST_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
+            catalogType = properties.get(ICEBERG_CATALOG_TYPE);
+            icebergCatalog = getIcebergRESTCatalog(properties);
         } else {
             throw new RuntimeException(String.format("Property %s is missing or not supported now.",
                     ICEBERG_CATALOG_TYPE));
@@ -93,6 +110,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                         tblName, customProperties);
             } else if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.GLUE_CATALOG)) {
                 return IcebergUtil.convertGlueCatalogToSRTable(icebergTable, catalogName, dbName, tblName);
+            } else if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.REST_CATALOG)) {
+                return IcebergUtil.convertRESTCatalogToSRTable(icebergTable, catalogName, dbName, tblName);
             } else {
                 return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, catalogName, dbName, tblName);
             }
@@ -106,7 +125,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String dbName, String tblName) {
         org.apache.iceberg.Table icebergTable
                 = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)) {
+        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)
+                && !IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.REST_CATALOG)) {
             throw new StarRocksIcebergException(
                     "Do not support get partitions from catalog type: " + catalogType);
         }

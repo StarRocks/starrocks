@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/bitmap_index_writer.cpp
 
@@ -125,7 +138,7 @@ struct BitmapIndexTraits<Slice> {
 //   bitmap for ID 1 : [1 1 1 0 0 0 1 0 0 0]
 //   the n-th bit is set to 1 if the n-th row equals to the corresponding value.
 //
-template <FieldType field_type>
+template <LogicalType field_type>
 class BitmapIndexWriterImpl : public BitmapIndexWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
@@ -203,7 +216,7 @@ public:
                 bitmap_sizes.push_back(bitmap_size);
             }
 
-            TypeInfoPtr bitmap_typeinfo = get_type_info(OLAP_FIELD_TYPE_OBJECT);
+            TypeInfoPtr bitmap_typeinfo = get_type_info(TYPE_OBJECT);
 
             IndexedColumnWriterOptions options;
             options.write_ordinal_index = true;
@@ -253,20 +266,20 @@ private:
 
     // roaring bitmap size
     mutable uint64_t _reverted_index_size = 0;
-    mutable vector<BitmapUpdateContext*> _late_update_context_vector;
+    mutable std::vector<BitmapUpdateContext*> _late_update_context_vector;
 };
 
 } // namespace
 
 struct BitmapIndexWriterBuilder {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     std::unique_ptr<BitmapIndexWriter> operator()(const TypeInfoPtr& typeinfo) {
         return std::make_unique<BitmapIndexWriterImpl<ftype>>(typeinfo);
     }
 };
 
 Status BitmapIndexWriter::create(const TypeInfoPtr& typeinfo, std::unique_ptr<BitmapIndexWriter>* res) {
-    FieldType type = typeinfo->type();
+    LogicalType type = typeinfo->type();
     *res = field_type_dispatch_bitmap_index(type, BitmapIndexWriterBuilder(), typeinfo);
 
     return Status::OK();

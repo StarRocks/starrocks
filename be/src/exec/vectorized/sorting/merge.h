@@ -1,8 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <deque>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/datum.h"
@@ -23,10 +36,11 @@ struct SortedRun {
     SortedRun(const SortedRun& rhs) = default;
     SortedRun& operator=(const SortedRun& rhs) = default;
 
-    SortedRun(ChunkPtr ichunk, const Columns& columns)
-            : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
+    SortedRun(const ChunkPtr& ichunk, Columns columns)
+            : chunk(ichunk), orderby(std::move(columns)), range(0, ichunk->num_rows()) {}
 
-    SortedRun(SortedRun rhs, size_t start, size_t end) : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {
+    SortedRun(const SortedRun& rhs, size_t start, size_t end)
+            : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {
         DCHECK_LE(start, end);
         DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
     }
@@ -68,7 +82,7 @@ struct SortedRuns {
 
     SortedRuns() = default;
     ~SortedRuns() = default;
-    SortedRuns(SortedRun run) : chunks{run} {}
+    SortedRuns(const SortedRun& run) : chunks{run} {}
 
     SortedRun& get_run(int i) { return chunks[i]; }
     ChunkPtr get_chunk(int i) const { return chunks[i].chunk; }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exec/sort_exec_exprs.cpp
 
@@ -25,15 +38,15 @@
 
 namespace starrocks {
 
-Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool) {
+Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool, RuntimeState* state) {
     return init(sort_info.ordering_exprs,
-                sort_info.__isset.sort_tuple_slot_exprs ? &sort_info.sort_tuple_slot_exprs : nullptr, pool);
+                sort_info.__isset.sort_tuple_slot_exprs ? &sort_info.sort_tuple_slot_exprs : nullptr, pool, state);
 }
 
 Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::vector<TExpr>* sort_tuple_slot_exprs,
-                           ObjectPool* pool) {
+                           ObjectPool* pool, RuntimeState* state) {
     _pool = pool;
-    RETURN_IF_ERROR(Expr::create_expr_trees(pool, ordering_exprs, &_lhs_ordering_expr_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(pool, ordering_exprs, &_lhs_ordering_expr_ctxs, state));
     for (auto& expr : _lhs_ordering_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_orderby()) {
@@ -43,7 +56,7 @@ Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::
 
     if (sort_tuple_slot_exprs != nullptr) {
         _materialize_tuple = true;
-        RETURN_IF_ERROR(Expr::create_expr_trees(pool, *sort_tuple_slot_exprs, &_sort_tuple_slot_expr_ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(pool, *sort_tuple_slot_exprs, &_sort_tuple_slot_expr_ctxs, state));
     } else {
         _materialize_tuple = false;
     }

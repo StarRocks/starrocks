@@ -44,7 +44,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count=count(), 34: sum=sum(6: C_ACCTBAL)}] group by [[32: substring]] having [null]
             EXCHANGE SHUFFLE[32]
                 LEFT ANTI JOIN (join-predicate [1: C_CUSTKEY = 22: O_CUSTKEY] post-join-predicate [null])
-                    CROSS JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
+                    INNER JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
                         SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                         EXCHANGE BROADCAST
                             ASSERT LE 1
@@ -61,7 +61,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count=count(), 34: sum=sum(6: C_ACCTBAL)}] group by [[32: substring]] having [null]
             EXCHANGE SHUFFLE[32]
                 LEFT ANTI JOIN (join-predicate [1: C_CUSTKEY = 22: O_CUSTKEY] post-join-predicate [null])
-                    CROSS JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
+                    INNER JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
                         SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                         EXCHANGE BROADCAST
                             ASSERT LE 1
@@ -83,7 +83,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
                         EXCHANGE SHUFFLE[1]
-                            CROSS JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
+                            INNER JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
                                 SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                                 EXCHANGE BROADCAST
                                     ASSERT LE 1
@@ -101,7 +101,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
                         EXCHANGE SHUFFLE[1]
-                            CROSS JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
+                            INNER JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
                                 SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                                 EXCHANGE BROADCAST
                                     ASSERT LE 1

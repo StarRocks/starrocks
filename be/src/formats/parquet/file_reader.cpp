@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/file_reader.h"
 
@@ -44,8 +56,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
 
 Status FileReader::_parse_footer() {
     // try with buffer on stack
-    constexpr uint64_t footer_buf_size = 16 * 1024;
-    uint8_t local_buf[footer_buf_size];
+    uint8_t local_buf[FOOTER_BUFFER_SIZE];
     uint8_t* footer_buf = local_buf;
     // we may allocate on heap if local_buf is not large enough.
     DeferOp deferop([&] {
@@ -54,7 +65,7 @@ Status FileReader::_parse_footer() {
         }
     });
 
-    uint64_t to_read = std::min(_file_size, footer_buf_size);
+    uint64_t to_read = std::min(_file_size, FOOTER_BUFFER_SIZE);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
@@ -80,19 +91,20 @@ Status FileReader::_parse_footer() {
         }
     }
 
+    _scanner_ctx->stats->request_bytes_read += footer_size + 8;
+
     tparquet::FileMetaData t_metadata;
     // deserialize footer
     RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, TProtocolType::COMPACT,
                                            &t_metadata));
     _file_metadata.reset(new FileMetaData());
-    RETURN_IF_ERROR(_file_metadata->init(t_metadata));
+    RETURN_IF_ERROR(_file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
 
     return Status::OK();
 }
 
 Status FileReader::_check_magic(const uint8_t* file_magic) {
-    static const char* s_magic = "PAR1";
-    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, s_magic, 4)) {
+    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, PARQUET_MAGIC_NUMBER, 4)) {
         return Status::Corruption("Parquet file magic not match");
     }
     return Status::OK();
@@ -123,10 +135,13 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
         for (auto& min_max_conjunct_ctx : _scanner_ctx->min_max_conjunct_ctxs) {
             ASSIGN_OR_RETURN(auto min_column, min_max_conjunct_ctx->evaluate(min_chunk.get()));
             ASSIGN_OR_RETURN(auto max_column, min_max_conjunct_ctx->evaluate(max_chunk.get()));
-
-            auto min = min_column->get(0).get_int8();
-            auto max = max_column->get(0).get_int8();
-
+            auto f = [&](vectorized::Column* c) {
+                // is_null(0) only when something unexpected happens
+                if (c->is_null(0)) return (int8_t)0;
+                return c->get(0).get_int8();
+            };
+            auto min = f(min_column.get());
+            auto max = f(max_column.get());
             if (min == 0 && max == 0) {
                 return true;
             }
@@ -177,7 +192,7 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
     const vectorized::HdfsScannerContext& ctx = *_scanner_ctx;
     for (size_t i = 0; i < slots.size(); i++) {
         const SlotDescriptor* slot = slots[i];
-        const auto* column_meta = _get_column_meta(row_group, slot->col_name());
+        const auto* column_meta = _get_column_meta(row_group, slot->col_name(), _scanner_ctx->case_sensitive);
         if (column_meta == nullptr) {
             int col_idx = _get_partition_column_idx(slot->col_name());
             if (col_idx < 0) {
@@ -188,7 +203,6 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
                 // is partition column
                 auto* const_column =
                         vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(ctx.partition_values[col_idx]);
-
                 (*min_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
                 (*max_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
             }
@@ -234,7 +248,6 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
                                           const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
                                           vectorized::ColumnPtr* max_column, bool* decode_ok) {
     *decode_ok = true;
-
     if (!_can_use_min_max_stats(column_meta, column_order)) {
         *decode_ok = false;
         return Status::OK();
@@ -300,6 +313,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
     case tparquet::Type::type::BYTE_ARRAY: {
         Slice min_slice;
         Slice max_slice;
+
         if (column_meta.statistics.__isset.min_value) {
             RETURN_IF_ERROR(PlainDecoder<Slice>::decode(column_meta.statistics.min_value, &min_slice));
             RETURN_IF_ERROR(PlainDecoder<Slice>::decode(column_meta.statistics.max_value, &max_slice));
@@ -370,7 +384,7 @@ bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
 void FileReader::_prepare_read_columns() {
     const vectorized::HdfsScannerContext& param = *_scanner_ctx;
     for (auto& materialized_column : param.materialized_columns) {
-        int field_index = _file_metadata->schema().get_column_index(materialized_column.col_name, param.case_sensitive);
+        int field_index = _file_metadata->schema().get_column_index(materialized_column.col_name);
         if (field_index < 0) continue;
 
         auto parquet_type = _file_metadata->schema().get_stored_column_by_idx(field_index)->physical_type;
@@ -453,7 +467,6 @@ Status FileReader::_init_group_readers() {
             r->set_end_offset(end_offset);
         }
         _sb_stream->set_io_ranges(ranges);
-        _sb_stream->set_enable_block_cache(fd_scanner_ctx.enable_block_cache);
         param.shared_buffered_stream = _sb_stream.get();
     }
 
@@ -508,11 +521,17 @@ Status FileReader::_exec_only_partition_scan(vectorized::ChunkPtr* chunk) {
 }
 
 const tparquet::ColumnMetaData* FileReader::_get_column_meta(const tparquet::RowGroup& row_group,
-                                                             const std::string& col_name) {
+                                                             const std::string& col_name, bool case_sensitive) {
     for (const auto& column : row_group.columns) {
-        // TODO: support not scalar type
-        if (column.meta_data.path_in_schema[0] == col_name) {
-            return &column.meta_data;
+        // TODO: support non-scalar type
+        if (case_sensitive) {
+            if (column.meta_data.path_in_schema[0] == col_name) {
+                return &column.meta_data;
+            }
+        } else {
+            if (boost::algorithm::to_lower_copy(column.meta_data.path_in_schema[0]) == col_name) {
+                return &column.meta_data;
+            }
         }
     }
     return nullptr;

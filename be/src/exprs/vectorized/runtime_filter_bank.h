@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -37,18 +49,22 @@ public:
     static size_t max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf);
     static size_t serialize_runtime_filter(const JoinRuntimeFilter* rf, uint8_t* data);
     static void deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
-    static JoinRuntimeFilter* create_join_runtime_filter(ObjectPool* pool, PrimitiveType type);
+    static JoinRuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
 
     // ====================================
-    static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, PrimitiveType type);
-    static Status fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type, JoinRuntimeFilter* filter,
+    static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type);
+    static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, JoinRuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
 
     static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
                                                                             Chunk* chunk);
 
-    static bool filter_zonemap_with_min_max(PrimitiveType type, const JoinRuntimeFilter* filter,
-                                            const Column* min_column, const Column* max_column);
+    static bool filter_zonemap_with_min_max(LogicalType type, const JoinRuntimeFilter* filter, const Column* min_column,
+                                            const Column* max_column);
+
+    // create min/max predicate from filter.
+    static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
+                                               const JoinRuntimeFilter* filter, Expr** min_max_predicate);
 };
 
 // how to generate & publish this runtime filter
@@ -56,10 +72,10 @@ public:
 class RuntimeFilterBuildDescriptor {
 public:
     RuntimeFilterBuildDescriptor() = default;
-    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc);
+    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, RuntimeState* state);
     int32_t filter_id() const { return _filter_id; }
     ExprContext* build_expr_ctx() { return _build_expr_ctx; }
-    PrimitiveType build_expr_type() const { return _build_expr_ctx->root()->type().type; }
+    LogicalType build_expr_type() const { return _build_expr_ctx->root()->type().type; }
     int build_expr_order() const { return _build_expr_order; }
     const TUniqueId& sender_finst_id() const { return _sender_finst_id; }
     const std::unordered_set<TUniqueId>& broadcast_grf_senders() const { return _broadcast_grf_senders; }
@@ -96,7 +112,7 @@ private:
 class RuntimeFilterProbeDescriptor {
 public:
     RuntimeFilterProbeDescriptor() = default;
-    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id);
+    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id, RuntimeState* state);
     // for testing.
     Status init(int32_t filter_id, ExprContext* probe_expr_ctx);
     Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p);
@@ -117,11 +133,11 @@ public:
     bool is_probe_slot_ref(SlotId* slot_id) const {
         Expr* probe_expr = _probe_expr_ctx->root();
         if (!probe_expr->is_slotref()) return false;
-        ColumnRef* slot_ref = down_cast<ColumnRef*>(probe_expr);
+        auto* slot_ref = down_cast<ColumnRef*>(probe_expr);
         *slot_id = slot_ref->slot_id();
         return true;
     }
-    PrimitiveType probe_expr_type() const { return _probe_expr_ctx->root()->type().type; }
+    LogicalType probe_expr_type() const { return _probe_expr_ctx->root()->type().type; }
     void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* new_probe_expr_ctx);
     std::string debug_string() const;
     JoinRuntimeFilter::RunningContext* runtime_filter_ctx() { return &_runtime_filter_ctx; }

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -827,6 +840,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         {
             String unionPlan = plans.get(0);
             assertContains(unionPlan, "  0:UNION\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
@@ -855,10 +870,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // === check except plan ===
         {
             String exceptPlan = plans.get(1);
-            Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
+            assertContains(exceptPlan, "  0:EXCEPT\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n");
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
@@ -867,10 +884,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // === check intersect plan ====
         {
             String intersectPlan = plans.get(2);
-            Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
+            assertContains(intersectPlan, "  0:INTERSECT\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n");
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +

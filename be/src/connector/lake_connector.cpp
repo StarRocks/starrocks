@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "connector/lake_connector.h"
 
@@ -95,7 +107,6 @@ private:
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
-    RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
@@ -116,7 +127,6 @@ private:
     RuntimeProfile::Counter* _block_load_timer = nullptr;
     RuntimeProfile::Counter* _block_load_counter = nullptr;
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
-    RuntimeProfile::Counter* _index_load_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
@@ -219,7 +229,6 @@ Status LakeDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
     chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
     auto* chunk_ptr = chunk->get();
 
-    SCOPED_TIMER(_scan_timer);
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
@@ -405,7 +414,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
-    starrocks::vectorized::Schema child_schema =
+    starrocks::vectorized::VectorizedSchema child_schema =
             ChunkHelper::convert_schema_to_format_v2(*_tablet_schema, reader_columns);
 
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_scan_range.tablet_id));
@@ -413,7 +422,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::vectorized::Schema output_schema =
+        starrocks::vectorized::VectorizedSchema output_schema =
                 ChunkHelper::convert_schema_to_format_v2(*_tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
@@ -435,6 +444,7 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
+    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state));
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();
@@ -452,7 +462,6 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
 }
 
 void LakeDataSource::init_counter(RuntimeState* state) {
-    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
@@ -464,7 +473,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _read_pages_num_counter = ADD_COUNTER(_runtime_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_runtime_profile, "CachedPagesNum", TUnit::UNIT);
-    _pushdown_predicates_counter = ADD_COUNTER(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
+    _pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
 
     // SegmentInit
     _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
@@ -487,7 +496,6 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, "SegmentRead");
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", "SegmentRead");
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", "SegmentRead");
-    _index_load_timer = ADD_CHILD_TIMER(_runtime_profile, "IndexLoad", "SegmentRead");
     _rowsets_read_count = ADD_CHILD_COUNTER(_runtime_profile, "RowsetsReadCount", TUnit::UNIT, "SegmentRead");
     _segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "SegmentsReadCount", TUnit::UNIT, "SegmentRead");
     _total_columns_data_page_count =
@@ -539,7 +547,6 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
-    COUNTER_UPDATE(_index_load_timer, _reader->stats().index_load_ns);
 
     COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);

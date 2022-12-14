@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer;
 
@@ -11,6 +24,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -49,6 +63,11 @@ public class JoinHelper {
             type = phjo.getJoinType();
             onPredicate = phjo.getOnPredicate();
             hint = phjo.getJoinHint();
+        } else if (join instanceof PhysicalStreamJoinOperator) {
+            PhysicalStreamJoinOperator operator = (PhysicalStreamJoinOperator) join;
+            type = operator.getJoinType();
+            onPredicate = operator.getOnPredicate();
+            hint = operator.getJoinHint();
         } else {
             type = null;
             onPredicate = null;

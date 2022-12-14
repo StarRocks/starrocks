@@ -75,6 +75,8 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
 option(WITH_BLOCK_CACHE "Build binary with block cache feature" OFF)
 
+option(WITH_BENCH "Build binary with bench" OFF)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 # Check gcc
@@ -136,9 +138,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread program_options)
+    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread program_options)
+    find_package(Boost 1.75.0 COMPONENTS thread regex program_options)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -202,6 +204,9 @@ set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/m
 add_library(hdfs STATIC IMPORTED)
 set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
 
+# Allow FindOpenSSL() to find correct static libraries
+set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
+message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
 add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
@@ -695,7 +700,7 @@ else()
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    -lrt -lbfd -liberty -lc -lm -ldl -rdynamic -pthread
+    -lrt -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
 )
 
 # link gcov if WITH_GCOV is on
@@ -743,32 +748,28 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 ENDFUNCTION()
 
 # Add a benchmark to BE
-FUNCTION(ADD_BE_BENCH TEST_NAME)
-
-    if (WITH_BENCH STREQUAL "OFF")
-        return()
-    endif()
-
+FUNCTION(ADD_BE_BENCH BENCH_NAME)
+    message(STATUS "Add Be Bench")
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
     # This gets the directory where the test is from (e.g. 'exprs' or 'runtime')
     get_filename_component(DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
-    get_filename_component(TEST_DIR_NAME ${TEST_NAME} PATH)
-    get_filename_component(TEST_FILE_NAME ${TEST_NAME} NAME)
-
+    get_filename_component(BENCH_DIR_NAME ${BENCH_NAME} PATH)
+    set(BENCH_OUTPUT_DIR_NAME "output")
+    get_filename_component(BENCH_FILE_NAME ${BENCH_NAME} NAME)
+    
     find_package(benchmark REQUIRED)
-    ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
+    ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
 
-    SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
-    SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
-    if (NOT "${TEST_DIR_NAME}" STREQUAL "")
-        SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
+    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
+    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
+    if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
+        SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_OUTPUT_DIR_NAME}")
     endif()
-    ADD_TEST(${TEST_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_NAME}")
+    ADD_TEST(${BENCH_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_NAME}")
 ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
-add_subdirectory(${SRC_DIR}/bench)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
@@ -791,6 +792,11 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+
+if (WITH_BENCH STREQUAL "ON")
+     message(STATUS "Build binary with bench")
+    add_subdirectory(${SRC_DIR}/bench)
+endif()
 
 if (${WITH_BLOCK_CACHE} STREQUAL "ON")
     add_subdirectory(${SRC_DIR}/block_cache)
@@ -825,6 +831,12 @@ install(FILES
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j.properties
     DESTINATION ${OUTPUT_DIR}/conf)
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
+install(FILES
+    ${BASE_DIR}/../conf/asan_suppressions.conf
+    DESTINATION ${OUTPUT_DIR}/conf)
+endif()
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

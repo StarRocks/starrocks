@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/load/routineload/KafkaProgress.java
 
@@ -124,21 +137,8 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     // modify the partition offset of this progress.
-    // throw exception is the specified partition does not exist in progress.
-    //
-    // `kafkaPartitionOffsets`, the parameter of this function, CAN BE MODIFIED to fit the actual value so that when
-    // all operations end, it will represent the actual offset of this job and will be persisted to the journal.
-    // All follower will replay this journal and load the actual offset of this job as well.
-    // For example:
-    //   if current offset is {0:11, 1:22, 2:33, 3:55}, the parameter `kafkaPartitionOffsets` is {0: 22, 2:44}
-    //   in this function, current offset is modified as {0: 22, 1: 22, 2:44, 3:55}
-    //   so is the parameter `kafkaPartitionOffsets`.
+    // all partitions are validated by the caller
     public void modifyOffset(List<Pair<Integer, Long>> kafkaPartitionOffsets) throws DdlException {
-        for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
-            if (!partitionIdToOffset.containsKey(pair.first)) {
-                throw new DdlException("The specified partition " + pair.first + " is not in the consumed partitions");
-            }
-        }
         for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
             partitionIdToOffset.put(pair.first, pair.second);
         }

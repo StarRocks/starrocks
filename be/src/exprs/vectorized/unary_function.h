@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -16,8 +28,7 @@
 #include "function_helper.h"
 #include "simd/simd.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class NopCheck {
     template <typename Type, typename ResultType>
@@ -29,7 +40,7 @@ class NopCheck {
 template <typename OP, typename INPUT_NULL_OP = NopCheck, typename OUTPUT_NULL_OP = NopCheck>
 class ProduceNullUnaryFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
         auto* r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data().data();
 
@@ -74,12 +85,12 @@ template <typename OP>
 class UnaryFunction {
 public:
     /**
-   * The Type, ResultType is PrimitiveType which can return actual CppType and ColumnType
+   * The Type, ResultType is LogicalType which can return actual CppType and ColumnType
    * through RuntimeTypeTraits.
    *
    * The method declaration like: ResultType::CppType apply(Type::CppType l)
    */
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
         auto* r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data().data();
 
@@ -103,7 +114,7 @@ public:
 template <typename OP>
 struct StringUnaryFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
         auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data();
 
@@ -131,7 +142,7 @@ public:
 template <typename FN>
 class UnpackConstColumnUnaryFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
         if (v1->is_constant()) {
             auto eva1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
@@ -152,7 +163,7 @@ public:
 template <typename FN>
 class DealNullableColumnUnaryFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
         if (v1->only_null()) {
             return v1;
@@ -206,7 +217,7 @@ public:
         }
     }
 
-    template <PrimitiveType Type, typename... Args>
+    template <LogicalType Type, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
         return evaluate<Type, Type, Args...>(v1, std::forward<Args>(args)...);
     }
@@ -303,5 +314,4 @@ using VectorizedOutputCheckUnaryFunction = DealNullableColumnUnaryFunction<
     template <typename Type, typename ResultType>           \
     std::string NAME::apply(const Type& VALUE)
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

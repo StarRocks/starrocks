@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "fs/fs_broker.h"
 
@@ -261,7 +273,8 @@ private:
     int _timeout_ms = DEFAULT_TIMEOUT_MS;
 };
 
-StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                                const std::string& path) {
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -284,10 +297,6 @@ StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(
     ASSIGN_OR_RETURN(const uint64_t file_size, get_file_size(path));
     auto stream = std::make_shared<BrokerInputStream>(_broker_addr, response.fd, file_size);
     return std::make_unique<SequentialFile>(std::move(stream), path);
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(const std::string& path) {
-    return new_random_access_file(RandomAccessFileOptions(), path);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exec/query_cache/cache_manager.h"
 
 #include "util/defer_op.h"
@@ -14,9 +27,6 @@ Status CacheManager::populate(const std::string& key, const CacheValue& value) {
     auto* cache_value = new CacheValue(value);
     auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
     DeferOp defer([this, handle]() { _cache.release(handle); });
-    if (_cache.get_memory_usage() > _cache.get_capacity()) {
-        _cache.prune();
-    }
     return handle != nullptr ? Status::OK() : Status::InternalError("Insert failure");
 }
 

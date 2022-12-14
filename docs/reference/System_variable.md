@@ -44,7 +44,7 @@ Variables that can be set both globally or partially effective include:
 * disable_streaming_preaggregations
 * exec_mem_limit
 * force_streaming_aggregate
-* is_report_success
+* enable_profile
 * hash_join_push_down_right_table
 * parallel_fragment_exec_instance_num
 * parallel_exchange_instance_num
@@ -188,13 +188,21 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
-* is_report_success
+* enable_materialized_view_union_rewrite
+
+Boolean value to control if to enable materialized view Union query rewrite. Default: `true`.
+
+* enable_rule_based_materialized_view_rewrite
+
+Boolean value to control if to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
+
+* enable_profile
 
 Used to set whether the profile of the query needs to be viewed. The default is false, meaning no profile is required.
 
 By default, a profile will only be sent to the FE when a query error occurs in the BEt. Profile sending causes network overhead and therefore affects high concurrency.
 
-When there is a need to analyze the profile of a query, users can set this variable to true and send a query to deep dive. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the last 100 queries with `is_report_success` turned on.
+When there is a need to analyze the profile of a query, users can set this variable to true and send a query to deep dive. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the last 100 queries with `enable_profile` turned on.
 
 * language
 
@@ -223,6 +231,10 @@ Used for compatibility with the JDBC connection pool C3P0. No practical usage.
 * max_pushdown_conditions_per_column
 
 This variable is set to `-1` by default, indicating that the value configured in `be.conf` is used. If this variable is set to be greater than 0, queries in the current session will use this value and ignore the configured value in `be.conf`.
+
+* nested_mv_rewrite_max_level
+
+The maximum levels of nested materialized views that can be used for query rewrite. Type: INT. Range: [1, +∞). The value of `1` indicates that only materialized views created on base tables can be used for query rewrite. Default: `3`.
 
 * net_buffer_length
 
@@ -270,6 +282,38 @@ Used for MySQL client compatibility. No practical use.
 * query_cache_type
 
 Used for compatibility with JDBC connection pool C3P0. No practical use.
+
+* query_queue_concurrency_limit
+
+The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Default: `0`.
+
+* query_queue_cpu_used_permille_limit
+
+The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Default: `0`. Range: [0, 1000]
+
+* query_queue_insert_enable
+
+Boolean value to enable query queues for INSERT loading. Default: `false`.
+
+* query_queue_max_queued_queries
+
+The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `0`.
+
+* query_queue_mem_used_pct_limit
+
+The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Default: `0`. Range: [0, 1]
+
+* query_queue_pending_timeout_second
+
+The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected. Unit: second. Default: `300`.
+
+* query_queue_select_enable
+
+Boolean value to enable query queues for SELECT queries. Default: `false`.
+
+* query_queue_statistic_enable
+
+Boolean value to enable query queues for statistics queries.
 
 * query_timeout
 

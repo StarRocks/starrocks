@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -13,7 +25,7 @@ struct StateAllocator;
 class SortedStreamingAggregator final : public Aggregator {
 public:
     SortedStreamingAggregator(const TPlanNode& tnode);
-    ~SortedStreamingAggregator();
+    ~SortedStreamingAggregator() override;
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
                    MemTracker* mem_tracker) override;
@@ -26,8 +38,8 @@ private:
 
     Status _update_states(size_t chunk_size);
 
-    void _get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
-                                 vectorized::Columns& agg_result_columns);
+    Status _get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
+                                   vectorized::Columns& agg_result_columns);
     void _close_group_by(size_t chunk_size, const std::vector<uint8_t>& selector);
 
     Status _build_group_by_columns(size_t chunk_size, size_t selected_size, const std::vector<uint8_t>& selector,

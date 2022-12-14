@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/agent/agent_server.cpp
 
@@ -51,6 +64,7 @@ const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
+const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
 
 class AgentServer::Impl {
 public:
@@ -59,6 +73,8 @@ public:
     ~Impl();
 
     void init_or_die();
+
+    void stop();
 
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
 
@@ -101,6 +117,7 @@ private:
     std::unique_ptr<ReportDiskStateTaskWorkerPool> _report_disk_state_workers;
     std::unique_ptr<ReportOlapTableTaskWorkerPool> _report_tablet_workers;
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
+    std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
 };
 
 void AgentServer::Impl::init_or_die() {
@@ -209,10 +226,12 @@ void AgentServer::Impl::init_or_die() {
     CREATE_AND_START_POOL(_report_disk_state_workers, ReportDiskStateTaskWorkerPool, REPORT_DISK_STATE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_tablet_workers, ReportOlapTableTaskWorkerPool, REPORT_OLAP_TABLE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_workgroup_workers, ReportWorkgroupTaskWorkerPool, REPORT_WORKGROUP_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
+                          REPORT_RESOURCE_USAGE_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::Impl::~Impl() {
+void AgentServer::Impl::stop() {
     _thread_pool_publish_version->shutdown();
     _thread_pool_drop->shutdown();
     _thread_pool_create_tablet->shutdown();
@@ -241,8 +260,11 @@ AgentServer::Impl::~Impl() {
     STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
     STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
     STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
+    STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
 #undef STOP_POOL
 }
+
+AgentServer::Impl::~Impl() {}
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
@@ -550,6 +572,10 @@ ThreadPool* AgentServer::get_thread_pool(int type) const {
 
 void AgentServer::init_or_die() {
     return _impl->init_or_die();
+}
+
+void AgentServer::stop() {
+    return _impl->stop();
 }
 
 } // namespace starrocks

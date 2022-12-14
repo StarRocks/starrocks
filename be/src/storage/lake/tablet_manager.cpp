@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/lake/tablet_manager.h"
 
@@ -35,7 +47,8 @@
 namespace starrocks::lake {
 
 static Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
-static Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size);
+static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
+                                int txns_size);
 static void* metadata_gc_trigger(void* arg);
 static void* segment_gc_trigger(void* arg);
 
@@ -159,11 +172,11 @@ void TabletManager::prune_metacache() {
 
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     // generate tablet metadata pb
-    TabletMetadataPB tablet_metadata_pb;
-    tablet_metadata_pb.set_id(req.tablet_id);
-    tablet_metadata_pb.set_version(1);
-    tablet_metadata_pb.set_next_rowset_id(1);
-    tablet_metadata_pb.set_cumulative_point(0);
+    auto tablet_metadata_pb = std::make_shared<TabletMetadataPB>();
+    tablet_metadata_pb->set_id(req.tablet_id);
+    tablet_metadata_pb->set_version(1);
+    tablet_metadata_pb->set_next_rowset_id(1);
+    tablet_metadata_pb->set_cumulative_point(0);
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
@@ -189,7 +202,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             }
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     } else {
         std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
@@ -198,10 +211,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-    return put_tablet_metadata(tablet_metadata_pb);
+    return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
@@ -257,9 +270,10 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
     return put_tablet_metadata(std::move(metadata_ptr));
 }
 
-StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location) {
+StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache) {
     std::string read_buf;
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(metadata_location));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, metadata_location));
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     if (UNLIKELY(size > std::numeric_limits<int>::max())) {
         return Status::Corruption("file size exceeded the int range");
@@ -283,7 +297,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     if (auto ptr = lookup_tablet_metadata(path); ptr != nullptr) {
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path));
+    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
@@ -319,9 +333,10 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     return TabletMetadataIter{this, std::move(objects)};
 }
 
-StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path) {
+StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path, bool fill_cache) {
     std::string read_buf;
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(txn_log_path));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, txn_log_path));
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     if (UNLIKELY(size > std::numeric_limits<int>::max())) {
         return Status::Corruption("file size exceeded the int range");
@@ -341,7 +356,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     if (auto ptr = lookup_txn_log(path); ptr != nullptr) {
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_txn_log(path));
+    ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
@@ -443,8 +458,8 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id) {
     return schema;
 }
 
-Status TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                      int txns_size) {
+StatusOr<double> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
+                                                const int64_t* txns, int txns_size) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
     return publish(&tablet, base_version, new_version, txns, txns_size);
 }
@@ -577,19 +592,28 @@ Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     return Status::OK();
 }
 
-Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size) {
+StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
+                         int txns_size) {
+    auto compaction_score = [](const TabletMetadata& metadata) {
+        return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
+    };
+
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
-    if (!res.ok()) {
-        // Check if the new version metadata exist.
-        if (res.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-            // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ optimization, there is no need to invoke `get_metadata` in all
-            // circumstances, e.g, network and permission problems.
-            return Status::OK();
+    if (res.status().is_not_found()) {
+        auto target_metadata_or = tablet->get_metadata(new_version);
+        if (target_metadata_or.ok()) {
+            // base version metadata does not exist but the new version metadata has been generated, maybe
+            // this is a duplicated publish version request.
+            return compaction_score(**target_metadata_or);
         }
+    }
+
+    if (!res.ok()) {
         LOG(WARNING) << "Fail to get " << tablet->metadata_location(base_version) << ": " << res.status();
         return res.status();
     }
+
     const TabletMetadataPtr& base_metadata = res.value();
 
     // make a copy of metadata
@@ -601,11 +625,17 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
     for (int i = 0; i < txns_size; i++) {
         auto txn_id = txns[i];
         auto txn_log_st = tablet->get_txn_log(txn_id);
-        if (txn_log_st.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-            // txn log does not exist but the new version metadata has been generated, maybe
-            // this is a duplicated publish version request.
-            return Status::OK();
-        } else if (!txn_log_st.ok()) {
+
+        if (txn_log_st.status().is_not_found()) {
+            auto target_metadata_or = tablet->get_metadata(new_version);
+            if (target_metadata_or.ok()) {
+                // txn log does not exist but the new version metadata has been generated, maybe
+                // this is a duplicated publish version request.
+                return compaction_score(**target_metadata_or);
+            }
+        }
+
+        if (!txn_log_st.ok()) {
             LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
             return txn_log_st.status();
         }
@@ -629,11 +659,16 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         DCHECK(base_version == 1 && txns_size == 1);
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
-            if (txn_vlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-                // txn version log does not exist but the new version metadata has been generated, maybe
-                // this is a duplicated publish version request.
-                return Status::OK();
-            } else if (!txn_vlog.ok()) {
+            if (txn_vlog.status().is_not_found()) {
+                auto target_metadata_or = tablet->get_metadata(new_version);
+                if (target_metadata_or.ok()) {
+                    // txn version log does not exist but the new version metadata has been generated, maybe
+                    // this is a duplicated publish version request.
+                    return compaction_score(**target_metadata_or);
+                }
+            }
+
+            if (!txn_vlog.ok()) {
                 LOG(WARNING) << "Fail to get " << tablet->txn_vlog_location(v) << ": " << txn_vlog.status();
                 return txn_vlog.status();
             }
@@ -665,7 +700,7 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
             LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
         }
     }
-    return Status::OK();
+    return compaction_score(*new_metadata);
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
@@ -744,6 +779,10 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
     auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
     auto st = fs::delete_file(location);
     return st.is_not_found() ? Status::OK() : st;
+}
+
+std::set<int64_t> TabletManager::owned_tablets() {
+    return _location_provider->owned_tablets();
 }
 
 void TabletManager::start_gc() {

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/olap_scan_node.h"
 
@@ -202,6 +214,10 @@ Status OlapScanNode::close(RuntimeState* state) {
     if (runtime_state() != nullptr) {
         // Reduce the memory usage if the the average string size is greater than 512.
         release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
+    }
+
+    for (const auto& rowsets_per_tablet : _tablet_rowsets) {
+        Rowset::release_readers(rowsets_per_tablet);
     }
 
     return ScanNode::close(state);
@@ -478,6 +494,9 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
 
+    _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
+    _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
+
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
     _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
@@ -500,7 +519,6 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_scan_profile, "DelVecFilterRows", TUnit::UNIT, "SegmentRead");
     _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
     _decompress_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressT", "SegmentRead");
-    _index_load_timer = ADD_CHILD_TIMER(_scan_profile, "IndexLoad", "SegmentRead");
     _rowsets_read_count = ADD_CHILD_COUNTER(_scan_profile, "RowsetsReadCount", TUnit::UNIT, "SegmentRead");
     _segments_read_count = ADD_CHILD_COUNTER(_scan_profile, "SegmentsReadCount", TUnit::UNIT, "SegmentRead");
     _total_columns_data_page_count =
@@ -677,13 +695,14 @@ Status OlapScanNode::_capture_tablet_rowsets() {
         {
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
         }
     }
 
     return Status::OK();
 }
 
-size_t _estimate_type_bytes(PrimitiveType ptype) {
+size_t _estimate_type_bytes(LogicalType ptype) {
     switch (ptype) {
     case TYPE_VARCHAR:
     case TYPE_CHAR:

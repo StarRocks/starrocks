@@ -1,11 +1,26 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <streamvbyte.h>
 
 #include <string_view>
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/chunk_extra_data.h"
 #include "common/statusor.h"
 #include "gen_cpp/data.pb.h" // ChunkPB
 
@@ -42,7 +57,16 @@ public:
 
     void set_encode_levels_in_pb(ChunkPB* const res);
 
+    static constexpr uint16_t STREAMVBYTE_PADDING_SIZE = STREAMVBYTE_PADDING;
+
+    static bool enable_encode_integer(const int encode_level) { return encode_level & ENCODE_INTEGER; }
+
+    static bool enable_encode_string(const int encode_level) { return encode_level & ENCODE_STRING; }
+
 private:
+    static constexpr int ENCODE_INTEGER = 2;
+    static constexpr int ENCODE_STRING = 4;
+
     // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
     void _adjust(const int col_id);
     const int _session_encode_level;
@@ -87,6 +111,8 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_consts;
     vectorized::Chunk::SlotHashMap slot_id_to_index;
     vectorized::Chunk::TupleHashMap tuple_id_to_index;
+    // extra data meta
+    std::vector<vectorized::ChunkExtraColumnsMeta> extra_data_metas;
 };
 
 class ProtobufChunkDeserializer {

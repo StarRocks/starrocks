@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "fs/fs_memory.h"
 
@@ -93,10 +105,6 @@ public:
             auto stream = std::make_shared<MemoryFileInputStream>(iter->second);
             return std::make_unique<SequentialFile>(std::move(stream), path.value());
         }
-    }
-
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const butil::FilePath& path) {
-        return new_random_access_file(RandomAccessFileOptions(), path);
     }
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
@@ -367,16 +375,12 @@ MemoryFileSystem::~MemoryFileSystem() {
     delete _impl;
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> MemoryFileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> MemoryFileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                                const std::string& path) {
+    (void)opts;
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_sequential_file(butil::FilePath(new_path));
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> MemoryFileSystem::new_random_access_file(const std::string& path) {
-    std::string new_path;
-    RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_random_access_file(butil::FilePath(new_path));
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> MemoryFileSystem::new_random_access_file(
@@ -537,7 +541,7 @@ Status MemoryFileSystem::append_file(const std::string& path, const Slice& conte
 }
 
 Status MemoryFileSystem::read_file(const std::string& path, std::string* content) {
-    ASSIGN_OR_RETURN(auto random_access_file, new_random_access_file(path));
+    ASSIGN_OR_RETURN(auto random_access_file, new_random_access_file(RandomAccessFileOptions(), path));
     ASSIGN_OR_RETURN(const uint64_t size, random_access_file->get_size());
     raw::make_room(content, size);
     return random_access_file->read_at_fully(0, content->data(), content->size());

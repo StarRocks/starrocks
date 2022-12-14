@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
@@ -68,9 +80,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (!_aggregator->is_none_group_by_exprs()) {
                 TRY_CATCH_ALLOC_SCOPE_START()
-                _aggregator->hash_map_variant().visit([&](auto& hash_table_with_key) {
-                    _aggregator->build_hash_map(*hash_table_with_key, chunk_size, agg_group_by_with_limit);
-                });
+                _aggregator->build_hash_map(chunk_size, agg_group_by_with_limit);
                 _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
 
                 _aggregator->try_convert_to_two_level_map();
@@ -133,22 +143,20 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = runtime_state()->chunk_size();
+    const auto chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->convert_to_chunk_no_groupby(chunk);
+        RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(chunk));
     } else {
-        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, chunk_size, chunk);
-        });
+        RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, chunk));
     }
 
-    size_t old_size = (*chunk)->num_rows();
+    const int64_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
     RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
+    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>((*chunk)->num_rows())));
 
     _aggregator->process_limit(chunk);
 
@@ -173,13 +181,15 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
 
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
+    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         // shared by sink operator and source operator
         auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
         auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
         auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
 
@@ -199,8 +209,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
 
-    source_operator->set_need_local_shuffle(
-            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
+    source_operator->set_could_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
 
     ops_with_source.push_back(std::move(source_operator));
     if (should_cache) {
@@ -220,24 +230,35 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
 
     bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
     bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
-    bool need_local_shuffle = context->need_local_shuffle(ops_with_sink) && has_group_by_keys;
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
         std::vector<ExprContext*> group_by_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
         Expr::prepare(group_by_expr_ctxs, runtime_state());
         Expr::open(group_by_expr_ctxs, runtime_state());
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
     };
 
-    if (agg_node.need_finalize && !sorted_streaming_aggregate) {
-        // If finalize aggregate with group by clause, then it can be parallelized
-        if (has_group_by_keys) {
-            if (need_local_shuffle) {
+    if (!sorted_streaming_aggregate) {
+        // 1. Finalize aggregation:
+        //   - Without group by clause, it cannot be parallelized and need local passthough.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+        // 2. Non-finalize aggregation:
+        //   - Without group by clause, it can be parallelized and needn't local shuffle.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+        if (agg_node.need_finalize) {
+            if (!has_group_by_keys) {
+                ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+            } else if (could_local_shuffle) {
                 ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
             }
         } else {
-            ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+            if (!has_group_by_keys) {
+                // Do nothing.
+            } else if (could_local_shuffle) {
+                ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+            }
         }
     }
 
@@ -252,7 +273,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
     }
 
     // insert local shuffle after sorted streaming aggregate
-    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && need_local_shuffle) {
+    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && could_local_shuffle && has_group_by_keys) {
         ops_with_source = try_interpolate_local_shuffle(ops_with_source);
     }
 

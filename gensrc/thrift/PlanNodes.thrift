@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/thrift/PlanNodes.thrift
 
@@ -68,6 +81,7 @@ enum TPlanNodeType {
   STREAM_SCAN_NODE,
   STREAM_JOIN_NODE,
   STREAM_AGG_NODE,
+  LAKE_META_SCAN_NODE,
 }
 
 // phases of an execution node
@@ -221,7 +235,12 @@ struct TBrokerScanRangeParams {
     // hdfs_read_buffer_size_kb for reading through lib hdfs directly
     15: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    16: THdfsProperties hdfs_properties
+    16: optional THdfsProperties hdfs_properties
+    // used for channel stream load only
+    20: optional string db_name
+    21: optional string table_name
+    22: optional string label
+    23: optional i64 txn_id
 }
 
 // Broker scan range
@@ -229,6 +248,8 @@ struct TBrokerScanRange {
     1: required list<TBrokerRangeDesc> ranges
     2: required TBrokerScanRangeParams params
     3: required list<Types.TNetworkAddress> broker_addresses
+    // used for channel stream load only
+    4: optional i32 channel_id
 }
 
 // Es scan range
@@ -290,6 +311,16 @@ struct THdfsScanRange {
     11: optional list<TIcebergDeleteFile> delete_files;
 }
 
+struct TBinlogScanRange {
+  1: optional string db_name
+  2: optional Types.TTableId table_id
+  3: optional Types.TPartitionId partition_id
+  4: optional Types.TTabletId tablet_id
+  
+  // Start offset of binlog consumption
+  11: optional Types.TBinlogOffset offset
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -301,6 +332,8 @@ struct TScanRange {
 
   // scan range for hdfs
   20: optional THdfsScanRange hdfs_scan_range
+  
+  30: optional TBinlogScanRange binlog_scan_range
 }
 
 struct TMySQLScanNode {
@@ -309,6 +342,7 @@ struct TMySQLScanNode {
   3: required list<string> columns
   4: required list<string> filters
   5: optional i64 limit
+  6: optional string temporal_clause
 }
 
 struct TFileScanNode {
@@ -921,8 +955,18 @@ struct TConnectorScanNode {
   // 2: optional THdfsScanNode hdfs_scan_node
 }
 
-// TODO
+struct TBinlogScanNode {
+  1: optional Types.TTupleId tuple_id
+}
+
+// Union of all stream source nodes, distinguished by type
 struct TStreamScanNode {
+  // Common fields for all stream-scan nodes
+  1: optional Types.StreamSourceType source_type
+  
+  // Specific scan nodes, distinguished by source_type
+  11: optional TBinlogScanNode binlog_scan
+  // TODO: othe stream scan nodes
 }
 
 struct TStreamJoinNode {

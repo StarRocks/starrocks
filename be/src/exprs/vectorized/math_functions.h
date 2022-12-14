@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -7,11 +19,11 @@
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/decimal_binary_function.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/unary_function.h"
-#include "udf/udf.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -116,6 +128,12 @@ public:
      * @param columns: [DoubleColumn]
      * @return DoubleColumn
      */
+    DEFINE_VECTORIZED_FN(sinh);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
     DEFINE_VECTORIZED_FN(cos);
 
     /**
@@ -128,6 +146,12 @@ public:
      * @param columns: [DoubleColumn]
      * @return DoubleColumn
      */
+    DEFINE_VECTORIZED_FN(cosh);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
     DEFINE_VECTORIZED_FN(tan);
 
     /**
@@ -135,6 +159,12 @@ public:
      * @return DoubleColumn
      */
     DEFINE_VECTORIZED_FN(atan);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
+    DEFINE_VECTORIZED_FN(tanh);
 
     /**
     * @param columns: [DoubleColumn]
@@ -254,10 +284,8 @@ public:
     // =====================================
 
     // rand's auxiliary method
-    static Status rand_prepare(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status rand_close(starrocks_udf::FunctionContext* context,
-                             starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status rand_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     /**
      * @param: []
      * @return: DoubleColumn
@@ -271,14 +299,6 @@ public:
      * Get the pseudo-random number that normalize to [0,1] with a seed
      */
     DEFINE_VECTORIZED_FN(rand_seed);
-
-    static void generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t* seed) {
-        for (int i = 0; i < num_rows; ++i) {
-            *seed = ::rand_r(seed);
-            // Normalize to [0,1].
-            result->append(static_cast<double>(*seed) / RAND_MAX);
-        }
-    }
 
     //
     /**
@@ -309,7 +329,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(pmod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -326,7 +346,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(fmod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -341,7 +361,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(mod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -365,7 +385,7 @@ public:
      * @param: [TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(positive) {
         return VECTORIZED_FN_ARGS(0);
     }
@@ -376,7 +396,7 @@ public:
      * @param: [TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(negative) {
         if constexpr (pt_is_decimal<Type>) {
             const auto& type = context->get_return_type();
@@ -393,8 +413,8 @@ public:
     * @param: [TypeColumn, ...]
     * @return: TypeColumn
     */
-    template <PrimitiveType Type>
-    static ColumnPtr least(FunctionContext* context, const Columns& columns) {
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> least(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
         }
@@ -434,8 +454,8 @@ public:
      * @param: [TypeColumn, ...]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
-    static ColumnPtr greatest(FunctionContext* context, const Columns& columns) {
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> greatest(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
         }
@@ -470,7 +490,7 @@ public:
     }
 
     template <DecimalRoundRule rule>
-    static ColumnPtr decimal_round(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> decimal_round(FunctionContext* context, const Columns& columns);
 
     // Specifically, keep_scale means whether to keep the original scale of lv
     // Given an example

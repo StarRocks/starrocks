@@ -2,14 +2,14 @@
 
 This topic explains how to manage a cluster.
 
-## Start and stop a cluster
+## Start and stop StarRocks
 
 We recommend that your machines in the cluster are equipped with the following configurations:
 
 - The machines used as frontends (FEs) are equipped with an 8-core CPU and 16 GB of RAM or higher configurations.
 - The machines used as backends (BEs) are equipped with a 16-core CPU and 64 GB of RAM or higher configurations.
 
-### Start an FE
+### Start FE
 
 Before you set up an FE, configure the `meta_dir` parameter and the communication ports:
 
@@ -37,7 +37,7 @@ When you start multiple FEs, start the follower FE one by one. When you upgrade 
 - If you configured multiple follower FEs, the cluster can select one follower FE as the leader FE to process queries only when more than half of configured follower FEs are available.
 - We recommend that you verify every FE that you want to start. You can send a query to an FE to verify the FE.
 
-### Start a BE
+### Start BE
 
 Before you set up the BE, configure the  `storage_root_path` parameter and the communication ports:
 
@@ -100,66 +100,105 @@ cd StarRocks-x.x.x/be
 ./bin/stop_cn.sh
 ```
 
-### Upgrade a cluster
+## Upgrade StarRocks
 
 StarRocks can perform a rolling upgrade, which allows you to first upgrade the BEs, then the FEs, and finally the Brokers in a cluster. StarRocks ensures that the BEs are backward compatible with the FEs.
 
-#### Before you begin
+### Before you begin
 
-- (Optional) Test whether the cluster after the upgrade affects your current data.
+- Test whether the cluster after the upgrade affects your current data.
+
+    For BE:
+
+    1. Stop a random BE node.
+    2. Replace files under **bin** and **lib** of this BE node.
+    3. Start this BE node. Check if it is started successfully in the BE log file **be.INFO**.
+    4. Check the causes of the failure if the start fails. if the problem is irresolvable, you can drop this BE node, clean the data, restart the BE node with deployment files of the previous version, and add the BE node back to the cluster.
+
+    For FE:
+
+    1. Deploy a new FE node in DEV environment with deployment files of new version.
+    2. Modify the FE configuration file **fe.conf**. Assign different ports to this FE node.
+    3. Add `cluster_id = 123456` in **fe.conf**.
+    4. Add `metadata_failure_recovery = true` in **fe.conf**.
+    5. Copy the **meta** directory of the Leader FE node in PRD environment and paste it into that of the DEV environment.
+    6. Modify **meta/image/VERSION** in DEV environment. Set `cluster_id` to `123456`.
+    7. Start the FE node in DEV environment.
+    8. Check if it is started successfully in the FE log file **fe.log**.
 
 - Distribute the BE and FE binary files for new versions of BE and FE to the deployment directory of BE and FE.
 
-- For a minor version update (for example, from 2.0.x to 2.0.y), you only need to upgrade `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
+  - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
+  - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
 
-- For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
+### Upgrade BE
 
-#### Procedure
+1. Navigate to the BE working directory and stop the BE node.
 
-1. Confirm that the files of the previous version are replaced with the files of the new version.
-2. Restart the BEs one by one and then restart the FEs one by one. Start the next BE or FE only after the previous BE or FE has successfully started.
+    ```shell
+    cd StarRocks-x.x.x/be
+    sh bin/stop_be.sh
+    ```
 
-##### Upgrade a  BE
+2. Replace the deployment files of BE.
 
-```Plain%20Text
-cd be_work_dir
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-x.x.x/be/lib  .
+    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+    ```
 
-./bin/stop_be.sh
+3. Start the BE node.
 
-mv lib lib.bak 
+    ```shell
+    sh bin/start_be.sh --daemon
+    ```
 
-mv bin bin.bak
+4. Check if the node is started successfully.
 
-cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .   
+    ```shell
+    ps aux | grep starrocks_be
+    ```
 
-cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .  
+5. Repeat the above procedures to upgrade other BE nodes.
 
-./bin/start_be.sh --daemon
+### Upgrade FE
 
-ps aux | grep starrocks_be
-```
+You must upgrade all Follower FE nodes first and then the Leader FE node.
 
-##### Upgrade an FE
+1. Navigate to the FE working directory and stop the FE node.
 
-```Plain%20Text
-cd fe_work_dir
+    ```shell
+    cd StarRocks-x.x.x/fe
+    sh bin/stop_fe.sh
+    ```
 
-./bin/stop_fe.sh
+2. Replace the deployment files of FE.
 
-mv lib lib.bak 
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-x.x.x/fe/lib  .   
+    cp -r /tmp/StarRocks-x.x.x/fe/bin  .
+    cp -r /tmp/StarRocks-x.x.x/fe/spark-dpp  .
+    ```
 
-mv bin bin.bak
+3. Start the FE node.
 
-cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
+    ```shell
+    sh bin/start_fe.sh --daemon
+    ```
 
-cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
+4. Check if the node is started successfully.
 
-./bin/start_fe.sh --daemon
+    ```shell
+    ps aux | grep StarRocksFE
+    ```
 
-ps aux | grep StarRocksFE
-```
+5. Repeat the above procedures to upgrade other Follower FE nodes, and finally the Leader FE node.
 
-##### Upgrade a Compute Node
+### Upgrade CN
 
 Since the Compute Node node is stateless, you only need to replace the binary file and restart the process. We recommend to stop it gracefully.
 
@@ -169,106 +208,147 @@ Since the Compute Node node is stateless, you only need to replace the binary fi
 
 By using this method, the Compute Node waits until the currently running task finishes before exiting the process.
 
-##### Upgrade a Broker
+### Upgrade Broker
 
-```Plain%20Text
-cd broker_work_dir 
+1. Navigate to the Broker working directory and stop the Broker node.
 
-mv lib lib.bak 
+    ```shell
+    cd StarRocks-x.x.x/apache_hdfs_broker
+    sh bin/stop_broker.sh
+    ```
 
-mv bin bin.bak
+2. Replace the deployment files of Broker.
 
-cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/lib  .   
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-x.x.x/apache_hdfs_broker/lib  .   
+    cp -r /tmp/StarRocks-x.x.x/apache_hdfs_broker/bin  .
+    ```
 
-cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/bin  .
+3. Start the Broker node.
 
-./bin/stop_broker.sh
+    ```shell
+    sh bin/start_broker.sh --daemon
+    ```
 
-./bin/start_broker.sh --daemon
+4. Check if the node is started successfully.
 
-ps aux | grep broker
-```
+    ```shell
+    ps aux | grep broker
+    ```
 
-**Note**: You must update the BEs before you upgrade the FEs. If you upgrade the FEs before the BEs, the FEs of the new version may be incompatible with the BEs of the previous version. As a result, the commands that are issued by the FEs may cause the BEs not to work properly.
+5. Repeat the above procedures to upgrade other Broker nodes.
 
-## Roll back a cluster
+## Roll back StarRocks
 
-All StarRocks versions, which are named StarRocks-xx, support rollbacks. You need to first roll back the FEs, then the BEs, and finally the Brokers in a cluster. If an exception occurs after you upgrade a cluster, you can perform the following steps to roll back the cluster to the previous version. This way, you can quickly recover the cluster.
+All StarRocks versions support rollbacks. You need to first roll back the FEs, then the BEs, and finally the Brokers in a cluster. If an exception occurs after you upgrade a cluster, you can perform the following steps to roll back the cluster to the previous version. This way, you can quickly recover the cluster.
 
 ### Before you begin
 
-- For a minor version rollback (for example, from 2.0.x to 2.0.x), you need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
+- Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
 
-- To a major version rollback (for example, from 2.x.x to 2.0.x), you need to replace the bin and lib folders of the FEs and BEs.
+  - For a minor version rollback (for example, from 2.0.y to 2.0.x), you only need to replace **starrocks_be** for the BEs and **starrocks-fe.jar** for the FEs.
+  - For a major version rollback (for example, from 2.x.x to 2.0.x), you need to replace the **bin** and **lib** folders of the BEs and replace the **bin**, **lib**, and **spark-dpp** for FEs.
 
-### Procedure
+### Roll back FE
 
-1. Confirm that the files of the previous version are replaced with the files of the new version.
-2. Restart the FEs one by one and then restart the BEs one by one.
+You must roll back all Follower FE nodes first and then the Leader FE node.
 
-**Note**: Start the next FE or BE only after the previous FE or BE has successfully started.
+1. Navigate to the FE working directory and stop the FE node.
 
-#### Roll back an FE
+    ```shell
+    cd StarRocks-x.x.x/fe
+    sh bin/stop_fe.sh
+    ```
 
-```Plain%20Text
-cd fe_work_dir 
+2. Replace the deployment files of FE.
 
-mv lib libtmp.bak 
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-x.x.x/fe/lib  .   
+    cp -r /tmp/StarRocks-x.x.x/fe/bin  .
+    cp -r /tmp/StarRocks-x.x.x/fe/spark-dpp  .
+    ```
 
-mv bin bintmp.bak 
+3. Start the FE node.
 
-mv lib.bak lib   
+    ```shell
+    sh bin/start_fe.sh --daemon
+    ```
 
-mv bin.bak bin 
+4. Check if the node is started successfully.
 
-./bin/stop_fe.sh
+    ```shell
+    ps aux | grep StarRocksFE
+    ```
 
-./bin/start_fe.sh --daemon
+5. Repeat the above procedures to rollback other Follower FE nodes, and finally the Leader FE node.
 
-ps aux | grep StarRocksFe
-```
+### Roll back BE
 
-#### Roll back a BE
+1. Navigate to the BE working directory and stop the BE node.
 
-```Plain%20Text
-cd be_work_dir 
+    ```shell
+    cd StarRocks-x.x.x/be
+    sh bin/stop_be.sh
+    ```
 
-mv lib libtmp.bak 
+2. Replace the deployment files of BE.
 
-mv bin bintmp.bak 
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-x.x.x/be/lib  .
+    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+    ```
 
-mv lib.bak lib
+3. Start the BE node.
 
-mv bin.bak bin
+    ```shell
+    sh bin/start_be.sh --daemon
+    ```
 
-./bin/stop_be.sh
+4. Check if the node is started successfully.
 
-./bin/start_be.sh --daemon
+    ```shell
+    ps aux | grep starrocks_be
+    ```
 
-ps aux | grep starrocks_be
-```
+5. Repeat the above procedures to roll back other BE nodes.
 
-#### Roll back a Broker
+#### Roll back Broker
 
-```Plain%20Text
-cd broker_work_dir 
+1. Navigate to the Broker working directory and stop the Broker node.
 
-mv lib libtmp.bak 
+    ```shell
+    cd StarRocks-x.x.x/apache_hdfs_broker
+    sh bin/stop_broker.sh
+    ```
 
-mv bin bintmp.bak
+2. Replace the deployment files of Broker.
 
-mv lib.bak lib
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-x.x.x/apache_hdfs_broker/lib  .   
+    cp -r /tmp/StarRocks-x.x.x/apache_hdfs_broker/bin  .
+    ```
 
-mv bin.bak bin
+3. Start the Broker node.
 
-./bin/stop_broker.sh
+    ```shell
+    sh bin/start_broker.sh --daemon
+    ```
 
-./bin/start_broker.sh --daemon
+4. Check if the node is started successfully.
 
-ps aux | grep broker
-```
+    ```shell
+    ps aux | grep broker
+    ```
 
-**Note**: You must roll back the FEs before you roll back the BEs. If you rollback the BEs before the FEs, the FEs of the new version may be incompatible with the BEs of the previous version. As a result, the commands that are issued by the FEs may cause the BEs to break down.
+5. Repeat the above procedures to roll back other Broker nodes.
 
 ### Usage notes for grayscale upgrade from StarRocks 2.0 to StarRocks 2.1
 
@@ -280,7 +360,7 @@ If you need to perform a grayscale upgrade from StarRocks 2.0 to StarRocks 2.1, 
 
 - `batch_size`: set this configuration item less than or equal to 4096 for all FEs. Default value: 4096. Unit: rows. This option is a global variable in the cluster. If you modified this configuration item in the current session, this configuration item in other sessions also changes.
 
-```Lua
+```plain
 -- check batch_size
 
 mysql> show variables like '%batch_size%';
@@ -303,29 +383,3 @@ mysql> show variables like '%batch_size%';
 
 mysql> set global batch_size = 4096;
 ```
-
-## Test the upgrade of a cluster (Optional)
-
-Before you upgrade a cluster, you can perform the following steps to test whether the cluster after the upgrade affects your current data.
-
-### Test the upgrade of BEs
-
-1. Select a BE and deploy the **starrocks_be** binary file of the new version on the BE.
-2. Restart the BE. Then view the **be.INFO** log file of BE to check whether the restart is successful.
-3. If the restart fails, troubleshoot the failure.
-
-### Test the upgrade of FEs
-
-The FE metadata is critical and an abnormal upgrade may cause data loss. We recommend that you test the upgrade of FEs in your test environment (If you do not have a test environment, you can first upgrade a follower FE or an observer FE and then check whether it runs as expected). Proceed with caution when you perform the following steps.
-
-1. Deploy an FE of the new version in your testing environment, such as your local development machine.
-2. Modify the **fe.conf** file. Configure the ports of the test FE to be different from the ports of the online FEs.
-3. Set `cluster_id` in the **fe.conf** file to `123456`.
-4. Set `metadata_failure_recovery` in the **fe.conf** file to `true`.
-5. Copy the metadata directory of the leader FE in the production environment to your test environment.
-6. Set the `cluster_id` configuration item in the **meta/image/VERSION** file to 123456.
-7. In your test environment, run `./bin/start_fe.sh` to start the test FE.
-8. View the **fe.log** file of the test FE to check whether the restart is successful.
-9. If the restart is successful, run `./bin/stop_fe.sh` to stop the test FE.
-
-The step 2 through 6 aim to prevent the test FE from connecting to the production environment after a restart.

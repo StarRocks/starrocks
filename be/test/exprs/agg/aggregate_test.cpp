@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <gtest/gtest.h>
 
@@ -16,6 +28,7 @@
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
 #include "exprs/anyval_util.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gen_cpp/Data_types.h"
 #include "gutil/casts.h"
@@ -23,7 +36,6 @@
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"
-#include "udf/udf_internal.h"
 #include "util/slice.h"
 #include "util/thrift_util.h"
 #include "util/unaligned_access.h"
@@ -76,7 +88,7 @@ ColumnPtr gen_input_column1() {
     return column;
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
     for (int i = 0; i < 1024; i++) {
@@ -175,7 +187,7 @@ ColumnPtr gen_input_column2<DateValue>() {
     return column;
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
     for (int i = 2000; i < 3000; i++) {
@@ -221,7 +233,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     ASSERT_EQ(merge_result, result_column->get_data()[2]);
 }
 
-template <PrimitiveType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
+template <LogicalType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                TResult update_result2, TResult merge_result) {
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
@@ -284,7 +296,7 @@ void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* f
     func->serialize_to_column(ctx, state->state(), serde_column.get());
     func->merge(ctx, serde_column.get(), state2->state(), 0);
     func->finalize_to_column(ctx, state2->state(), result_column.get());
-    ASSERT_TRUE(abs(merge_result - result_column->get_data()[2]) < 1e-8);
+    ASSERT_TRUE(std::abs(merge_result - result_column->get_data()[2]) < 1e-8);
 }
 
 TEST_F(AggregateTest, test_count) {
@@ -640,7 +652,7 @@ TEST_F(AggregateTest, test_stddev_samp) {
 }
 
 TEST_F(AggregateTest, test_maxby) {
-    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
+    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, false);
     auto result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx, func);
     auto int_column = Int32Column::create();
@@ -663,7 +675,7 @@ TEST_F(AggregateTest, test_maxby) {
     ASSERT_EQ(2, result_column->get_data()[0]);
 
     //test nullable column
-    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, false);
     aggr_state = ManagedAggrState::create(ctx, func);
     auto data_column1 = DoubleColumn::create();
     auto null_column1 = NullColumn::create();
@@ -692,6 +704,73 @@ TEST_F(AggregateTest, test_maxby) {
     }
     func->update_batch_single_state(ctx, doubleColumn->size(), raw_nullColumns.data(), aggr_state->state());
     func->finalize_to_column(ctx, aggr_state->state(), nullable_result_column.get());
+    ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
+}
+
+TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
+    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
+    auto* ctx_with_args0 = FunctionContext::create_test_context(
+            {FunctionContext::TypeDesc{.type = TYPE_INT}, FunctionContext::TypeDesc{.type = TYPE_VARCHAR}},
+            FunctionContext::TypeDesc{.type = TYPE_INT});
+    std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
+
+    auto result_column = Int32Column::create();
+    auto aggr_state = ManagedAggrState::create(ctx_with_args0, func);
+    auto int_column = Int32Column::create();
+    for (int i = 0; i < 10; i++) {
+        int_column->append(i);
+    }
+    auto varchar_column = BinaryColumn::create();
+    std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
+    varchar_column->append_strings(strings);
+    Columns columns;
+    columns.emplace_back(int_column);
+    columns.emplace_back(varchar_column);
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(columns.size());
+    for (int i = 0; i < columns.size(); ++i) {
+        raw_columns[i] = columns[i].get();
+    }
+    func->update_batch_single_state(ctx_with_args0, int_column->size(), raw_columns.data(), aggr_state->state());
+    func->finalize_to_column(ctx_with_args0, aggr_state->state(), result_column.get());
+    ASSERT_EQ(2, result_column->get_data()[0]);
+
+    //test nullable column
+    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    auto* ctx_with_args1 = FunctionContext::create_test_context(
+            {FunctionContext::TypeDesc{.type = TYPE_DOUBLE},
+             FunctionContext::TypeDesc{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
+            FunctionContext::TypeDesc{.type = TYPE_DOUBLE});
+    std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
+
+    aggr_state = ManagedAggrState::create(ctx_with_args1, func);
+    auto data_column1 = DoubleColumn::create();
+    auto null_column1 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column1->append(i + 0.11);
+        null_column1->append(i % 13 ? false : true);
+    }
+    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    auto data_column2 = DecimalColumn::create();
+    auto null_column2 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column2->append(DecimalV2Value(i));
+        null_column2->append(i % 11 ? false : true);
+    }
+    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    auto data_column3 = DoubleColumn::create();
+    auto null_column3 = NullColumn::create();
+    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    Columns nullColumns;
+    nullColumns.emplace_back(doubleColumn);
+    nullColumns.emplace_back(decimalColumn);
+    std::vector<const Column*> raw_nullColumns;
+    raw_nullColumns.resize(nullColumns.size());
+    for (int i = 0; i < nullColumns.size(); ++i) {
+        raw_nullColumns[i] = nullColumns[i].get();
+    }
+    func->update_batch_single_state(ctx_with_args1, doubleColumn->size(), raw_nullColumns.data(), aggr_state->state());
+    func->finalize_to_column(ctx_with_args1, aggr_state->state(), nullable_result_column.get());
     ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
 }
 
@@ -904,7 +983,7 @@ TEST_F(AggregateTest, test_window_funnel) {
     const_columns.emplace_back(const_column1); // first column
     const_columns.emplace_back(column3);
     const_columns.emplace_back(column3); // 3rd const column
-    local_ctx->impl()->set_constant_columns(const_columns);
+    local_ctx->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_column; // to column list.
     raw_column.resize(4);
@@ -1130,7 +1209,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
     Columns const_columns;
     const_columns.emplace_back(data_column);
     const_columns.emplace_back(separator_column);
-    local_ctx->impl()->set_constant_columns(const_columns);
+    local_ctx->set_constant_columns(const_columns);
 
     // test update
     group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
@@ -1234,7 +1313,7 @@ TEST_F(AggregateTest, test_intersect_count) {
     const_columns.emplace_back(nullptr);
     const_columns.emplace_back(int_const1);
     const_columns.emplace_back(int_const2);
-    ctx->impl()->set_constant_columns(const_columns);
+    ctx->set_constant_columns(const_columns);
 
     // test update
     group_concat_function->update_batch_single_state(ctx, data_column->size(), raw_columns.data(), state->state());
@@ -1315,7 +1394,7 @@ TEST_F(AggregateTest, test_histogram) {
     const_columns.emplace_back(const1); // first column
     const_columns.emplace_back(const2);
     const_columns.emplace_back(const3); // 3rd const column
-    local_ctx->impl()->set_constant_columns(const_columns);
+    local_ctx->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_columns;
     raw_columns.resize(4);

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.catalog;
 
@@ -28,19 +41,13 @@ public class ScalarTypeTest {
         Assert.assertEquals(
                 ScalarType.createUnifiedDecimalType(27, 3),
                 ScalarType.createDecimalV2Type(27, 3));
-        try {
-            ScalarType.createUnifiedDecimalType(28, 9);
-            Assert.fail("should throw an exception");
-        } catch (Error ex) {
+        Assert.assertEquals(
+                ScalarType.createUnifiedDecimalType(28, 9),
+                ScalarType.createDecimalV2Type(28, 9));
+        Assert.assertEquals(
+                ScalarType.createUnifiedDecimalType(18, 10),
+                ScalarType.createUnifiedDecimalType(18, 10));
 
-        }
-
-        try {
-            ScalarType.createUnifiedDecimalType(18, 10);
-            Assert.fail("should throw an exception");
-        } catch (Error ex) {
-
-        }
         Config.enable_decimal_v3 = true;
         Assert.assertEquals(
                 ScalarType.createUnifiedDecimalType(9, 3),
@@ -70,26 +77,8 @@ public class ScalarTypeTest {
                 ScalarType.createUnifiedDecimalType(38, 38),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 38));
 
-        try {
-            ScalarType.createUnifiedDecimalType(39, 38);
-            Assert.fail("should throw an error");
-        } catch (Throwable ex) {
-
-        }
-
-        try {
-            ScalarType.createUnifiedDecimalType(0, 0);
-            Assert.fail("should throw an error");
-        } catch (Throwable ex) {
-
-        }
-
-        try {
-            ScalarType.createUnifiedDecimalType(10, 11);
-            Assert.fail("should throw an error");
-        } catch (Throwable ex) {
-
-        }
+        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(39, 38));
+        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(10, 11));
     }
 
     @Test

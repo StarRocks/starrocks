@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/plain_page_test.cpp
 
@@ -50,21 +63,16 @@ public:
         return ret;
     }
 
-    template <FieldType type, class PageDecoderType>
+    template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        MemPool pool;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(1, true, get_type_info(type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
-
+        auto column = ChunkHelper::column_from_field_type(type, false);
         size_t n = 1;
-        decoder->next_batch(&n, &column_block_view);
+        decoder->next_batch(&n, column.get());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(block.cell_ptr(0));
+        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
-    template <FieldType Type, class PageBuilderType, class PageDecoderType>
+    template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
 
@@ -90,23 +98,17 @@ public:
 
         ASSERT_EQ(0, page_decoder.current_index());
 
-        MemPool pool;
-
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(size, true, get_type_info(Type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
-        status = page_decoder.next_batch(&size, &column_block_view);
+        auto column = ChunkHelper::column_from_field_type(Type, false);
+        status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
-
-        auto* decoded = reinterpret_cast<CppType*>(block.data());
+        const auto* decoded = reinterpret_cast<const CppType*>(column->raw_data());
         for (uint i = 0; i < size; i++) {
             if (src[i] != decoded[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << decoded[i];
             }
         }
 
-        auto column = ChunkHelper::column_from_field_type(Type, false);
+        auto column1 = ChunkHelper::column_from_field_type(Type, false);
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
 
@@ -115,10 +117,10 @@ public:
         read_range.add(vectorized::Range(size / 2, (size * 2 / 3)));
         read_range.add(vectorized::Range((size * 3 / 4), size));
         size_t read_num = read_range.span_size();
-        status = page_decoder.next_batch(read_range, column.get());
+        status = page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
 
-        const auto* decoded_data = reinterpret_cast<const CppType*>(column->raw_data());
+        const auto* decoded_data = reinterpret_cast<const CppType*>(column1->raw_data());
         vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {
@@ -143,7 +145,7 @@ public:
         }
     }
 
-    template <FieldType Type, class PageBuilderType, class PageDecoderType>
+    template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_seek_at_or_after_value_template(typename TypeTraits<Type>::CppType* src, size_t size,
                                               typename TypeTraits<Type>::CppType* small_than_smallest,
                                               typename TypeTraits<Type>::CppType* bigger_than_biggest) {
@@ -196,7 +198,7 @@ public:
         }
     }
 
-    template <FieldType Type, class PageBuilderType>
+    template <LogicalType Type, class PageBuilderType>
     void test_multi_pages(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
 
@@ -221,7 +223,7 @@ public:
             }
             added += num;
             round++;
-            pos += num * TypeTraits<OLAP_FIELD_TYPE_INT>::size;
+            pos += num * TypeTraits<TYPE_INT>::size;
             page_builder.reset();
         } while (num > 0);
         EXPECT_EQ(size, added);
@@ -237,8 +239,8 @@ TEST_F(PlainPageTest, TestInt32PlainPageRandom) {
         ints.get()[i] = random();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, PlainPageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT, PlainPageBuilder<TYPE_INT>, PlainPageDecoder<TYPE_INT>>(ints.get(),
+                                                                                                       size);
 }
 
 TEST_F(PlainPageTest, TestInt32PlainPageSeekValue) {
@@ -250,9 +252,8 @@ TEST_F(PlainPageTest, TestInt32PlainPageSeekValue) {
     int32_t small_than_smallest = 99;
     int32_t bigger_than_biggest = 1111;
 
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_INT, PlainPageBuilder<OLAP_FIELD_TYPE_INT>,
-                                         PlainPageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size, &small_than_smallest,
-                                                                                &bigger_than_biggest);
+    test_seek_at_or_after_value_template<TYPE_INT, PlainPageBuilder<TYPE_INT>, PlainPageDecoder<TYPE_INT>>(
+            ints.get(), size, &small_than_smallest, &bigger_than_biggest);
 }
 
 TEST_F(PlainPageTest, TestInt64PlainPageRandom) {
@@ -262,8 +263,8 @@ TEST_F(PlainPageTest, TestInt64PlainPageRandom) {
         ints.get()[i] = random();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_BIGINT, PlainPageBuilder<OLAP_FIELD_TYPE_BIGINT>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_BIGINT>>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_BIGINT, PlainPageBuilder<TYPE_BIGINT>, PlainPageDecoder<TYPE_BIGINT>>(
+            ints.get(), size);
 }
 
 TEST_F(PlainPageTest, TestInt64PlainPageSeekValue) {
@@ -275,8 +276,7 @@ TEST_F(PlainPageTest, TestInt64PlainPageSeekValue) {
     int64_t small_than_smallest = 99;
     int64_t bigger_than_biggest = 1111;
 
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_BIGINT, PlainPageBuilder<OLAP_FIELD_TYPE_BIGINT>,
-                                         PlainPageDecoder<OLAP_FIELD_TYPE_BIGINT>>(
+    test_seek_at_or_after_value_template<TYPE_BIGINT, PlainPageBuilder<TYPE_BIGINT>, PlainPageDecoder<TYPE_BIGINT>>(
             ints.get(), size, &small_than_smallest, &bigger_than_biggest);
 }
 
@@ -288,8 +288,8 @@ TEST_F(PlainPageTest, TestPlainFloatBlockEncoderRandom) {
         floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_FLOAT, PlainPageBuilder<OLAP_FIELD_TYPE_FLOAT>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_FLOAT>>(floats.get(), size);
+    test_encode_decode_page_template<TYPE_FLOAT, PlainPageBuilder<TYPE_FLOAT>, PlainPageDecoder<TYPE_FLOAT>>(
+            floats.get(), size);
 }
 
 TEST_F(PlainPageTest, TestDoublePageEncoderRandom) {
@@ -298,8 +298,8 @@ TEST_F(PlainPageTest, TestDoublePageEncoderRandom) {
     for (int i = 0; i < size; i++) {
         doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
     }
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_DOUBLE, PlainPageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
+    test_encode_decode_page_template<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>, PlainPageDecoder<TYPE_DOUBLE>>(
+            doubles.get(), size);
 }
 
 TEST_F(PlainPageTest, TestDoublePageEncoderEqual) {
@@ -310,8 +310,8 @@ TEST_F(PlainPageTest, TestDoublePageEncoderEqual) {
         doubles.get()[i] = 19880217.19890323;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_DOUBLE, PlainPageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
+    test_encode_decode_page_template<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>, PlainPageDecoder<TYPE_DOUBLE>>(
+            doubles.get(), size);
 }
 
 TEST_F(PlainPageTest, TestDoublePageEncoderSequence) {
@@ -325,8 +325,8 @@ TEST_F(PlainPageTest, TestDoublePageEncoderSequence) {
         doubles.get()[i] = base;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_DOUBLE, PlainPageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
+    test_encode_decode_page_template<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>, PlainPageDecoder<TYPE_DOUBLE>>(
+            doubles.get(), size);
 }
 
 TEST_F(PlainPageTest, TestPlainInt32PageEncoderEqual) {
@@ -337,8 +337,8 @@ TEST_F(PlainPageTest, TestPlainInt32PageEncoderEqual) {
         ints.get()[i] = 12345;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, PlainPageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT, PlainPageBuilder<TYPE_INT>, PlainPageDecoder<TYPE_INT>>(ints.get(),
+                                                                                                       size);
 }
 
 TEST_F(PlainPageTest, TestInt32PageEncoderSequence) {
@@ -350,8 +350,8 @@ TEST_F(PlainPageTest, TestInt32PageEncoderSequence) {
         ints.get()[i] = ++number;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, PlainPageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     PlainPageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT, PlainPageBuilder<TYPE_INT>, PlainPageDecoder<TYPE_INT>>(ints.get(),
+                                                                                                       size);
 }
 
 TEST_F(PlainPageTest, TestBoolPlainPageSeekValue) {
@@ -359,16 +359,16 @@ TEST_F(PlainPageTest, TestBoolPlainPageSeekValue) {
     bools.get()[0] = false;
     bools.get()[1] = true;
 
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_BOOL, PlainPageBuilder<OLAP_FIELD_TYPE_BOOL>,
-                                         PlainPageDecoder<OLAP_FIELD_TYPE_BOOL>>(bools.get(), 2, nullptr, nullptr);
+    test_seek_at_or_after_value_template<TYPE_BOOLEAN, PlainPageBuilder<TYPE_BOOLEAN>, PlainPageDecoder<TYPE_BOOLEAN>>(
+            bools.get(), 2, nullptr, nullptr);
 
     bool t = true;
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_BOOL, PlainPageBuilder<OLAP_FIELD_TYPE_BOOL>,
-                                         PlainPageDecoder<OLAP_FIELD_TYPE_BOOL>>(bools.get(), 1, nullptr, &t);
+    test_seek_at_or_after_value_template<TYPE_BOOLEAN, PlainPageBuilder<TYPE_BOOLEAN>, PlainPageDecoder<TYPE_BOOLEAN>>(
+            bools.get(), 1, nullptr, &t);
 
     t = false;
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_BOOL, PlainPageBuilder<OLAP_FIELD_TYPE_BOOL>,
-                                         PlainPageDecoder<OLAP_FIELD_TYPE_BOOL>>(&bools.get()[1], 1, &t, nullptr);
+    test_seek_at_or_after_value_template<TYPE_BOOLEAN, PlainPageBuilder<TYPE_BOOLEAN>, PlainPageDecoder<TYPE_BOOLEAN>>(
+            &bools.get()[1], 1, &t, nullptr);
 }
 
 TEST_F(PlainPageTest, TestBoolMultiplePages) {
@@ -379,7 +379,7 @@ TEST_F(PlainPageTest, TestBoolMultiplePages) {
         bools.get()[i] = i % 2;
     }
 
-    test_multi_pages<OLAP_FIELD_TYPE_BOOL, PlainPageBuilder<OLAP_FIELD_TYPE_BOOL>>(bools.get(), size);
+    test_multi_pages<TYPE_BOOLEAN, PlainPageBuilder<TYPE_BOOLEAN>>(bools.get(), size);
 }
 
 TEST_F(PlainPageTest, TestInt32MultiplePages) {
@@ -390,7 +390,7 @@ TEST_F(PlainPageTest, TestInt32MultiplePages) {
         ints.get()[i] = random();
     }
 
-    test_multi_pages<OLAP_FIELD_TYPE_INT, PlainPageBuilder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_multi_pages<TYPE_INT, PlainPageBuilder<TYPE_INT>>(ints.get(), size);
 }
 
 TEST_F(PlainPageTest, TestInt64MultiplePages) {
@@ -401,7 +401,7 @@ TEST_F(PlainPageTest, TestInt64MultiplePages) {
         longs.get()[i] = random();
     }
 
-    test_multi_pages<OLAP_FIELD_TYPE_BIGINT, PlainPageBuilder<OLAP_FIELD_TYPE_BIGINT>>(longs.get(), size);
+    test_multi_pages<TYPE_BIGINT, PlainPageBuilder<TYPE_BIGINT>>(longs.get(), size);
 }
 
 TEST_F(PlainPageTest, TestFloatMultiplePages) {
@@ -412,7 +412,7 @@ TEST_F(PlainPageTest, TestFloatMultiplePages) {
         floats.get()[i] = random() + static_cast<float>(random()) / INT_MAX;
     }
 
-    test_multi_pages<OLAP_FIELD_TYPE_FLOAT, PlainPageBuilder<OLAP_FIELD_TYPE_FLOAT>>(floats.get(), size);
+    test_multi_pages<TYPE_FLOAT, PlainPageBuilder<TYPE_FLOAT>>(floats.get(), size);
 }
 
 TEST_F(PlainPageTest, TestDoubleMultiplePages) {
@@ -423,7 +423,7 @@ TEST_F(PlainPageTest, TestDoubleMultiplePages) {
         doubles.get()[i] = random() + static_cast<double>(random()) / INT_MAX;
     }
 
-    test_multi_pages<OLAP_FIELD_TYPE_DOUBLE, PlainPageBuilder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
+    test_multi_pages<TYPE_DOUBLE, PlainPageBuilder<TYPE_DOUBLE>>(doubles.get(), size);
 }
 
 } // namespace starrocks

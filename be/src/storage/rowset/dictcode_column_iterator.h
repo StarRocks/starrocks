@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -47,10 +59,6 @@ public:
 
     Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return _col_iter->next_batch(n, dst, has_null);
-    }
-
     ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
 
     bool all_page_dict_encoded() const override { return _col_iter->all_page_dict_encoded(); }
@@ -86,7 +94,7 @@ public:
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data, GlobalDictMap* gdict)
             : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data) {}
 
-    ~GlobalDictCodeColumnIterator() = default;
+    ~GlobalDictCodeColumnIterator() override = default;
 
     ColumnId column_id() const { return _cid; }
 
@@ -112,10 +120,6 @@ public:
     Status seek_to_first() override { return _col_iter->seek_to_first(); }
 
     Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
-
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return Status::InternalError("scalar next_batch() should never be called");
-    }
 
     ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
 

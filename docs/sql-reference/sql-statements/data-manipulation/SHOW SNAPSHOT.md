@@ -1,46 +1,52 @@
 # SHOW SNAPSHOT
 
-## description
+## Description
 
-This statement is used to view backups that already exist in the repository.
+Views data snapshots in a specified repository.
 
-Syntax:
+## Syntax
 
-```sql
-SHOW SNAPSHOT ON `repo_name`
-[WHERE SNAPSHOT = "snapshot" [AND TIMESTAMP = "backup_timestamp"]];
+```SQL
+SHOW SNAPSHOT ON <repo_name>
+[WHERE SNAPSHOT = <snapshot_name> [AND TIMESTAMP = <backup_timestamp>]]
 ```
 
-Note：
+## Parameters
 
-```plain text
-1.The meanings of each column are as follows:
-Snapshot：   name of the backup
-Timestamp：  the time version of the corresponding backup
-Status：     if the backup is normal, it displays OK; otherwise, it displays an error message
+| **Parameter**    | **Description**                                      |
+| ---------------- | ---------------------------------------------------- |
+| repo_name        | Name of the repository that the snapshot belongs to. |
+| snapshot_nam     | Name of the snapshot.                                |
+| backup_timestamp | Backup timestamp of the snapshot.                    |
 
-2.2. If TIMESTAMP is specified, the following additional information will be displayed:
-Database：   the name of the database to which the backup data belongs
-Details：    display the data directory and file structure of the whole backup in the form of Json
+## Return
+
+| **Return** | **Description**                                              |
+| ---------- | ------------------------------------------------------------ |
+| Snapshot   | Name of the snapshot.                                        |
+| Timestamp  | Backup timestamp of the snapshot.                            |
+| Status     | Displays `OK` if the snapshot is okay. Displays error message if the snapshot is not okay. |
+| Database   | Name of the database that the snapshot belongs to.           |
+| Details    | JSON-formatted directory and structure of the snapshot.      |
+
+## Example
+
+Example 1: Views snapshots in repository `example_repo`.
+
+```SQL
+SHOW SNAPSHOT ON example_repo;
 ```
 
-## example
+Example 2: Views the snapshot named `backup1` in repository `example_repo`.
 
-1. View existing backups in the example_repo repository:
+```SQL
+SHOW SNAPSHOT ON example_repo
+WHERE SNAPSHOT = "backup1";
+```
 
-    ```sql
-    SHOW SNAPSHOT ON example_repo;
-    ```
+Example 3: Views the snapshot named `backup1` with backup timestamp `2018-05-05-15-34-26` in repository `example_repo`.
 
-2. View only the backup named backup1 in the example_repo repository:
-
-    ```sql
-    SHOW SNAPSHOT ON example_repo WHERE SNAPSHOT = "backup1";
-    ```
-
-3. View the details of the backup named backup1 in the example_repo repository with the time version of "2018-05-05-15-34-26":
-
-    ```sql
-    SHOW SNAPSHOT ON example_repo
-    WHERE SNAPSHOT = "backup1" AND TIMESTAMP = "2018-05-05-15-34-26";
-    ```
+```SQL
+SHOW SNAPSHOT ON example_repo 
+WHERE SNAPSHOT = "backup1" AND TIMESTAMP = "2018-05-05-15-34-26";
+```

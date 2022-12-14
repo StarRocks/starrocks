@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/transaction/DatabaseTransactionMgr.java
 
@@ -58,7 +71,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -364,7 +377,8 @@ public class DatabaseTransactionMgr {
      * 6. update nextVersion because of the failure of persistent transaction resulting in error version
      */
     public VisibleStateWaiter commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+            List<TabletFailInfo> tabletFailInfos,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -435,7 +449,7 @@ public class DatabaseTransactionMgr {
             if (listener == null) {
                 throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
-            listener.preCommit(transactionState, tabletCommitInfos);
+            listener.preCommit(transactionState, tabletCommitInfos, tabletFailInfos);
             if (tableListString.length() != 0) {
                 tableListString.append(',');
             }
@@ -487,7 +501,8 @@ public class DatabaseTransactionMgr {
      * 4. persistent transactionState
      */
     public void prepareTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                   TxnCommitAttachment txnCommitAttachment)
+            List<TabletFailInfo> tabletFailInfos,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -561,7 +576,7 @@ public class DatabaseTransactionMgr {
             if (listener == null) {
                 throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
-            listener.preCommit(transactionState, tabletCommitInfos);
+            listener.preCommit(transactionState, tabletCommitInfos, tabletFailInfos);
             if (tableListString.length() != 0) {
                 tableListString.append(',');
             }
@@ -569,6 +584,9 @@ public class DatabaseTransactionMgr {
             stateListeners.add(listener);
         }
 
+        // before state transform
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.PREPARED);
+        boolean txnOperated = false;
         txnSpan.setAttribute("tables", tableListString.toString());
 
         Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedPreparedTransaction", txnSpan);
@@ -576,6 +594,7 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             unprotectedPrepareTransaction(transactionState, stateListeners);
+            txnOperated = true;
         } finally {
             writeUnlock();
             int numPartitions = 0;
@@ -584,6 +603,8 @@ public class DatabaseTransactionMgr {
             }
             txnSpan.setAttribute("num_partition", numPartitions);
             unprotectedCommitSpan.end();
+            // after state transform
+            transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, callback, null);
         }
 
         LOG.info("transaction:[{}] successfully prepare", transactionState);
@@ -822,10 +843,10 @@ public class DatabaseTransactionMgr {
                                 return false;
                             }
                             // quorum publish will make table unstable
-                            // so that we wait quorom_publish_wait_time_ms util all backend publish finish
+                            // so that we wait quorum_publish_wait_time_ms util all backend publish finish
                             // before quorum publish
                             if (successHealthyReplicaNum != replicaNum
-                                    && !unfinishedBackends.isEmpty()
+                                    && CollectionUtils.isNotEmpty(unfinishedBackends)
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
 
@@ -1205,11 +1226,16 @@ public class DatabaseTransactionMgr {
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
-        abortTransaction(transactionId, true, reason, txnCommitAttachment);
+        abortTransaction(transactionId, true, reason, txnCommitAttachment, Lists.newArrayList());
+    }
+
+    public void abortTransaction(long transactionId, String reason,
+            TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets) throws UserException {
+        abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
     }
 
     public void abortTransaction(long transactionId, boolean abortPrepared, String reason,
-                                 TxnCommitAttachment txnCommitAttachment)
+                                 TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
             throws UserException {
         if (transactionId < 0) {
             LOG.info("transaction id is {}, less than 0, maybe this is an old type load job, ignore abort operation",
@@ -1270,7 +1296,7 @@ public class DatabaseTransactionMgr {
         }
 
         for (TransactionStateListener listener : listeners) {
-            listener.postAbort(transactionState);
+            listener.postAbort(transactionState, failedTablets);
         }
     }
 
@@ -1481,6 +1507,11 @@ public class DatabaseTransactionMgr {
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             Table table = db.getTable(tableCommitInfo.getTableId());
+            // table may be dropped by force after transaction committed
+            // so that it will be a visible edit log after drop table
+            if (table == null) {
+                continue;
+            }
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyVisibleLog(transactionState, tableCommitInfo, db);
         }

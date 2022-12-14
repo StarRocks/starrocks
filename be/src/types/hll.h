@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/hll.h
 
@@ -30,8 +43,8 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gutil/macros.h"
-#include "runtime/memory/chunk.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "types/constexpr.h"
 #include "util/phmap/phmap.h"
 
@@ -142,8 +155,8 @@ private:
 
     // This field is much space consumming(HLL_REGISTERS_COUNT), we create
     // it only when it is really needed.
-    // Allocate memory by ChunkAllocator in order to reuse memory.
-    Chunk _registers;
+    // Allocate memory by MemChunkAllocator in order to reuse memory.
+    MemChunk _registers;
 
 private:
     void _convert_explicit_to_register();
@@ -159,7 +172,7 @@ private:
         hash_value >>= HLL_COLUMN_PRECISION;
         // make sure max first_one_bit is HLL_ZERO_COUNT_BITS + 1
         hash_value |= ((uint64_t)1 << HLL_ZERO_COUNT_BITS);
-        uint8_t first_one_bit = (uint8_t)(__builtin_ctzl(hash_value) + 1);
+        auto first_one_bit = (uint8_t)(__builtin_ctzl(hash_value) + 1);
         _registers.data[idx] = std::max((uint8_t)_registers.data[idx], first_one_bit);
     }
 };

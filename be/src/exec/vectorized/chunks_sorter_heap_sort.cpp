@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/chunks_sorter_heap_sort.h"
 
@@ -51,11 +63,11 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
         // Special optimization for single columns
         if (_sort_exprs->size() == 1) {
             switch ((*_sort_exprs)[0]->root()->type().type) {
-#define M(NAME)                                                                                                 \
-    case PrimitiveType::NAME: {                                                                                 \
-        _do_filter_data = std::bind(&ChunksSorterHeapSort::_do_filter_data_for_type<PrimitiveType::NAME>, this, \
-                                    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);       \
-        break;                                                                                                  \
+#define M(NAME)                                                                                               \
+    case LogicalType::NAME: {                                                                                 \
+        _do_filter_data = std::bind(&ChunksSorterHeapSort::_do_filter_data_for_type<LogicalType::NAME>, this, \
+                                    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);     \
+        break;                                                                                                \
     }
                 APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
@@ -149,7 +161,7 @@ Status ChunksSorterHeapSort::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter,
                                                     int row_sz) {
     const auto& top_cursor = _sort_heap->top();

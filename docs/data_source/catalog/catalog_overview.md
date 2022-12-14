@@ -2,7 +2,9 @@
 
 This topic describes what the catalog is, and how to manage and query internal data and external data by using the catalog.
 
-> Note: Only StarRocks 2.3 and later supports the catalog feature.
+> **Note**
+>
+> Only StarRocks 2.3 and later supports the catalog feature.
 
 ## Basic concepts
 
@@ -21,6 +23,12 @@ Catalogs enable you to manage internal and external data in one system. They off
   - [Hive catalog](../catalog/hive_catalog.md): used to query data from Hive.
   - [Iceberg catalog](../catalog/iceberg_catalog.md): used to query data from Iceberg.
   - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.
+
+  StarRocks interacts with the following two components of external data sources when you query external data:
+
+  - **Metadata service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
+  - **Data storage system**: used to store external data. Both distributed file systems and object
+  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations, and then return the query result.
 
 ## Query data
 

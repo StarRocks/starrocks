@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/greg7mdp/parallel-hashmap/blob/master/parallel_hashmap/btree.h
 
@@ -9,7 +22,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,7 +39,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -597,7 +610,7 @@ constexpr bool do_less_than_comparison(const Compare& compare, const K& x, const
 template <typename Int, phmap::enable_if_t<std::is_same<int, Int>::value, int> = 0>
 constexpr phmap::weak_ordering compare_result_as_ordering(const Int c) {
     return c < 0 ? phmap::weak_ordering::less
-                 : c == 0 ? phmap::weak_ordering::equivalent : phmap::weak_ordering::greater;
+                 : (c == 0 ? phmap::weak_ordering::equivalent : phmap::weak_ordering::greater);
 }
 constexpr phmap::weak_ordering compare_result_as_ordering(const phmap::weak_ordering c) {
     return c;
@@ -612,7 +625,7 @@ template <typename Compare, typename K, typename LK,
           phmap::enable_if_t<std::is_same<bool, phmap::invoke_result_t<Compare, const K&, const LK&>>::value, int> = 0>
 constexpr phmap::weak_ordering do_three_way_comparison(const Compare& compare, const K& x, const LK& y) {
     return compare(x, y) ? phmap::weak_ordering::less
-                         : compare(y, x) ? phmap::weak_ordering::greater : phmap::weak_ordering::equivalent;
+                         : (compare(y, x) ? phmap::weak_ordering::greater : phmap::weak_ordering::equivalent);
 }
 
 } // namespace compare_internal
@@ -972,9 +985,9 @@ private:
     // padding.
     constexpr static size_type NodeTargetValues(const int begin, const int end) {
         return begin == end ? begin
-                            : SizeWithNValues((begin + end) / 2 + 1) > params_type::kTargetNodeSize
-                                      ? NodeTargetValues(begin, (begin + end) / 2)
-                                      : NodeTargetValues((begin + end) / 2 + 1, end);
+                            : (SizeWithNValues((begin + end) / 2 + 1) > params_type::kTargetNodeSize
+                                       ? NodeTargetValues(begin, (begin + end) / 2)
+                                       : NodeTargetValues((begin + end) / 2 + 1, end));
     }
 
     enum {

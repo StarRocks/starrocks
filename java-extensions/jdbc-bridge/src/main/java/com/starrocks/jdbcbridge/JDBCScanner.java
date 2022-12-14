@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.jdbcbridge;
 
@@ -31,8 +43,8 @@ public class JDBCScanner {
     }
 
     public void open() throws Exception {
-
-        dataSource = DataSourceCache.getInstance().getSource(scanContext.getJdbcURL(), () -> {
+        String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
+        dataSource = DataSourceCache.getInstance().getSource(key, () -> {
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
             config.setJdbcUrl(scanContext.getJdbcURL());
@@ -76,7 +88,28 @@ public class JDBCScanner {
         resultNumRows = 0;
         do {
             for (int i = 0; i < columnCount; i++) {
-                resultChunk.get(i)[resultNumRows] = resultSet.getObject(i + 1);
+                Object[] dataColumn = resultChunk.get(i);
+                Object resultObject = resultSet.getObject(i + 1);
+                // in some cases, the real java class type of result is not consistent with the type from
+                // resultSetMetadata,
+                // for example,FLOAT type in oracle gives java.lang.Double type in resultSetMetaData,
+                // but the result type is BigDecimal when we getObject from resultSet.
+                // So we choose to convert the value to the target type here.
+                if (resultObject == null) {
+                    dataColumn[resultNumRows] = null;
+                } else if (dataColumn instanceof Short[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).shortValue();
+                } else if (dataColumn instanceof Integer[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).intValue();
+                } else if (dataColumn instanceof Long[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).longValue();
+                } else if (dataColumn instanceof Float[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
+                } else if (dataColumn instanceof Double[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
+                } else {
+                    dataColumn[resultNumRows] = resultObject;
+                }
             }
             resultNumRows++;
         } while (resultNumRows < chunkSize && resultSet.next());

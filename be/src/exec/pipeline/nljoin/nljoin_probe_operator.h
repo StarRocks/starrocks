@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
@@ -53,7 +67,7 @@ private:
     int _num_build_chunks() const;
     vectorized::Chunk* _move_build_chunk_index(int index);
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
-    Status _probe(RuntimeState* state, const ChunkPtr& chunk);
+    Status _probe(RuntimeState* state, ChunkPtr chunk);
     void _advance_join_stage(JoinStage stage) const;
     bool _skip_probe() const;
     void _check_post_probe() const;
@@ -63,8 +77,13 @@ private:
     Status _permute_right_join(RuntimeState* state);
     void _permute_left_join(RuntimeState* state, const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
+    void iterate_enumerate_chunk(const ChunkPtr& chunk, std::function<void(bool, size_t, size_t)> call);
+
+    // Join type check
     bool _is_left_join() const;
     bool _is_right_join() const;
+    bool _is_left_semi_join() const;
+    bool _is_left_anti_join() const;
 
 private:
     const TJoinOp::type _join_op;
@@ -83,8 +102,8 @@ private:
     mutable ChunkAccumulator _output_accumulator;
 
     // Build states
-    int _curr_build_chunk_index = 0;
     vectorized::Chunk* _curr_build_chunk = nullptr;
+    size_t _curr_build_chunk_index = 0;
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
     mutable std::vector<uint8_t> _self_build_match_flag;
@@ -105,14 +124,14 @@ class NLJoinProbeOperatorFactory final : public OperatorWithDependencyFactory {
 public:
     NLJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
                                const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
-                               const std::string& sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
+                               std::string sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
                                std::vector<ExprContext*>&& conjunct_ctxs,
                                std::shared_ptr<NLJoinContext>&& cross_join_context, TJoinOp::type join_op)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
               _join_op(join_op),
               _left_row_desc(left_row_desc),
               _right_row_desc(right_row_desc),
-              _sql_join_conjuncts(sql_join_conjuncts),
+              _sql_join_conjuncts(std::move(sql_join_conjuncts)),
               _join_conjuncts(std::move(join_conjuncts)),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _cross_join_context(std::move(cross_join_context)) {}

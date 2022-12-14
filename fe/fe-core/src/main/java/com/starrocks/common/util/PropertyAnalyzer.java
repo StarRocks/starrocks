@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/util/PropertyAnalyzer.java
 
@@ -21,18 +34,23 @@
 
 package com.starrocks.common.util;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -44,6 +62,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.catalog.TableProperty.INVALID;
+
 
 public class PropertyAnalyzer {
     private static final Logger LOG = LogManager.getLogger(PropertyAnalyzer.class);
@@ -90,6 +111,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
+    public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -104,8 +127,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
-
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
+    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
+    public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -193,19 +218,78 @@ public class PropertyAnalyzer {
     }
 
     public static int analyzePartitionTimeToLive(Map<String, String> properties) throws AnalysisException {
-        int partitionTimeToLive = -1;
+        int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {
                 partitionTimeToLive = Integer.parseInt(properties.get(PROPERTIES_PARTITION_TTL_NUMBER));
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Partition TTL Number: " + e.getMessage());
             }
-            if (partitionTimeToLive <= 0) {
-                throw new AnalysisException("Partition TTL Number should larger than 0.");
+            if (partitionTimeToLive <= 0 && partitionTimeToLive != INVALID) {
+                throw new AnalysisException("Illegal Partition TTL Number: " + partitionTimeToLive);
             }
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
         return partitionTimeToLive;
+    }
+
+    public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv)
+            throws AnalysisException {
+        if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
+            throw new AnalysisException("The auto_refresh_partitions_limit property does not support manual refresh mode.");
+        }
+        int autoRefreshPartitionsLimit = -1;
+        if (properties != null && properties.containsKey(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+            try {
+                autoRefreshPartitionsLimit = Integer.parseInt(properties.get(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Auto Refresh Partitions Limit: " + e.getMessage());
+            }
+            if (autoRefreshPartitionsLimit <= 0 && autoRefreshPartitionsLimit != INVALID) {
+                throw new AnalysisException("Illegal Auto Refresh Partitions Limit: " + autoRefreshPartitionsLimit);
+            }
+            properties.remove(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
+        }
+        return autoRefreshPartitionsLimit;
+    }
+
+    public static int analyzePartitionRefreshNumber(Map<String, String> properties) throws AnalysisException {
+        int partitionRefreshNumber = -1;
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+            try {
+                partitionRefreshNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_REFRESH_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
+            }
+            if (partitionRefreshNumber <= 0 && partitionRefreshNumber != INVALID) {
+                throw new AnalysisException("Illegal Partition Refresh Number: " + partitionRefreshNumber);
+            }
+            properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
+        }
+        return partitionRefreshNumber;
+    }
+
+    public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv)
+            throws AnalysisException {
+        if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
+            throw new AnalysisException("The excluded_trigger_tables property only applies to asynchronous refreshes.");
+        }
+        List<TableName> tables = Lists.newArrayList();
+        if (properties != null && properties.containsKey(PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            String tableStr = properties.get(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+            List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults().splitToList(tableStr);
+            for (String table : tableList) {
+                TableName tableName = AnalyzerUtils.stringToTableName(table);
+                if (mv.containsBaseTable(tableName)) {
+                    tables.add(tableName);
+                } else {
+                    throw new AnalysisException(tableName.toSql() +
+                            " is not base table of materialized view " + mv.getName());
+                }
+            }
+            properties.remove(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        }
+        return tables;
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)

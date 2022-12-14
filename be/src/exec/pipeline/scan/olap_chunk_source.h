@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -37,8 +49,6 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
-
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
@@ -91,12 +101,6 @@ private:
     // The following are profile meatures
     int64_t _num_rows_read = 0;
 
-    // Local counters for row-size estimation, will be reset after a batch
-    size_t _local_sum_row_bytes = 0;
-    size_t _local_num_rows = 0;
-    size_t _local_sum_chunks = 0;
-    size_t _local_max_chunk_rows = 0;
-
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
@@ -111,6 +115,8 @@ private:
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
+    RuntimeProfile::Counter* _get_rowsets_timer = nullptr;
+    RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
@@ -122,7 +128,6 @@ private:
     RuntimeProfile::Counter* _block_load_timer = nullptr;
     RuntimeProfile::Counter* _block_load_counter = nullptr;
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
-    RuntimeProfile::Counter* _index_load_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;

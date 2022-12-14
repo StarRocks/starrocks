@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.delta;
 
@@ -6,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import io.delta.standalone.DeltaLog;
@@ -14,13 +28,16 @@ import io.delta.standalone.types.DataType;
 import io.delta.standalone.types.StructField;
 import io.delta.standalone.types.StructType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-import static com.starrocks.connector.ColumnTypeConverter.fromDeltaLakeType;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class DeltaUtils {
+    private static final Logger LOG = LogManager.getLogger(DeltaUtils.class);
+
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
                                                        Configuration configuration) {
         DeltaLog deltaLog = DeltaLog.forTable(configuration, path);
@@ -41,8 +58,14 @@ public class DeltaUtils {
 
         for (StructField field : metadata.getSchema().getFields()) {
             DataType dataType = field.getDataType();
-            Type srType = fromDeltaLakeType(dataType);
-            Column column = new Column(field.getName(), srType, true);
+            Type type;
+            try {
+                type = ColumnTypeConverter.fromDeltaLakeType(dataType);
+            } catch (InternalError | Exception e) {
+                LOG.error("Failed to convert delta type {} on {}.{}.{}", dataType.getTypeName(), catalog, dbName, tblName, e);
+                type = Type.UNKNOWN_TYPE;
+            }
+            Column column = new Column(field.getName(), type, true);
             fullSchema.add(column);
         }
 

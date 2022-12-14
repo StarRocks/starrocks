@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/olap_server.cpp
 
@@ -32,7 +45,6 @@
 #include "common/status.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_scheduler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
@@ -161,11 +173,8 @@ Status StorageEngine::start_bg_threads() {
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
-        _compaction_scheduler = std::thread([] {
-            CompactionScheduler compaction_scheduler;
-            compaction_scheduler.schedule();
-        });
-        Thread::set_thread_name(_compaction_scheduler, "compact_sched");
+
+        _compaction_manager->schedule();
 
         _compaction_checker_thread = std::thread([this] { compaction_check(); });
         Thread::set_thread_name(_compaction_checker_thread, "compact_check");
@@ -373,7 +382,7 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
 
         int32_t interval = config::update_compaction_check_interval_seconds;
         if (interval <= 0) {
-            LOG(WARNING) << "base compaction check interval config is illegal: " << interval << ", force set to 1";
+            LOG(WARNING) << "update compaction check interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
         do {
@@ -448,7 +457,6 @@ void StorageEngine::submit_repair_compaction_tasks(
         const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks) {
     std::lock_guard lg(_repair_compaction_tasks_lock);
     std::unordered_set<int64_t> all_tasks;
-    size_t submitted = 0;
     for (const auto& t : _repair_compaction_tasks) {
         all_tasks.insert(t.first);
     }
@@ -456,7 +464,6 @@ void StorageEngine::submit_repair_compaction_tasks(
         if (all_tasks.find(task.first) == all_tasks.end()) {
             all_tasks.insert(task.first);
             _repair_compaction_tasks.push_back(task);
-            submitted++;
             LOG(INFO) << "submit repair compaction task tablet: " << task.first << " #rowset:" << task.second.size()
                       << " current tasks: " << _repair_compaction_tasks.size();
         }
@@ -473,49 +480,32 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    uint32_t max_interval = config::max_garbage_sweep_interval;
-    uint32_t min_interval = config::min_garbage_sweep_interval;
-
-    if (!(max_interval >= min_interval && min_interval > 0)) {
-        LOG(WARNING) << "garbage sweep interval config is illegal: max=" << max_interval << " min=" << min_interval;
-        min_interval = 1;
-        max_interval = max_interval >= min_interval ? max_interval : min_interval;
-        LOG(INFO) << "force reset garbage sweep interval. "
-                  << "max_interval=" << max_interval << ", min_interval=" << min_interval;
-    }
-
-    const double pi = 4 * std::atan(1);
-    double usage = 1.0;
+    GarbageSweepIntervalCalculator interval_calculator;
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        usage *= 100.0;
-        // when disk usage is less than 60%, ratio is about 1;
-        // when disk usage is between [60%, 75%], ratio drops from 0.87 to 0.27;
-        // when disk usage is greater than 75%, ratio drops slowly.
-        // when disk usage =90%, ratio is about 0.0057
-        double ratio = (1.1 * (pi / 2 - std::atan(usage / 5 - 14)) - 0.28) / pi;
-        ratio = ratio > 0 ? ratio : 0;
-        uint32_t curr_interval = max_interval * ratio;
-        // when usage < 60%,curr_interval is about max_interval,
-        // when usage > 80%, curr_interval is close to min_interval
-        curr_interval = curr_interval > min_interval ? curr_interval : min_interval;
+        interval_calculator.maybe_interval_updated();
+        int32_t curr_interval = interval_calculator.curr_interval();
 
         // For shutdown gracefully
         std::cv_status cv_status = std::cv_status::no_timeout;
-        int64_t left_seconds = curr_interval;
-        while (!_bg_worker_stopped.load(std::memory_order_consume) && left_seconds > 0) {
+        int64_t spent_seconds = 0;
+        while (!_bg_worker_stopped.load(std::memory_order_consume) && spent_seconds < curr_interval) {
             std::unique_lock<std::mutex> lk(_trash_sweeper_mutex);
             cv_status = _trash_sweeper_cv.wait_for(lk, std::chrono::seconds(1));
             if (cv_status == std::cv_status::no_timeout) {
                 LOG(INFO) << "trash sweeper has been notified";
                 break;
             }
-            --left_seconds;
+
+            if (interval_calculator.maybe_interval_updated()) {
+                curr_interval = interval_calculator.curr_interval();
+            }
+            spent_seconds++;
         }
         if (_bg_worker_stopped.load(std::memory_order_consume)) {
             break;
         }
         // start sweep, and get usage after sweep
-        Status res = _start_trash_sweep(&usage);
+        Status res = _start_trash_sweep(&interval_calculator.mutable_disk_usage());
         if (!res.ok()) {
             LOG(WARNING) << "one or more errors occur when sweep trash."
                             "see previous message for detail. err code="
@@ -524,6 +514,54 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
     }
 
     return nullptr;
+}
+
+GarbageSweepIntervalCalculator::GarbageSweepIntervalCalculator()
+        : _original_min_interval(config::min_garbage_sweep_interval),
+          _original_max_interval(config::max_garbage_sweep_interval),
+          _min_interval(_original_min_interval),
+          _max_interval(_original_max_interval) {
+    _normalize_min_max();
+}
+
+bool GarbageSweepIntervalCalculator::maybe_interval_updated() {
+    int32_t new_min_interval = config::min_garbage_sweep_interval;
+    int32_t new_max_interval = config::max_garbage_sweep_interval;
+    if (new_min_interval != _original_min_interval || new_max_interval != _original_max_interval) {
+        _original_min_interval = new_min_interval;
+        _original_max_interval = new_max_interval;
+        _min_interval = new_min_interval;
+        _max_interval = new_max_interval;
+        _normalize_min_max();
+        return true;
+    }
+    return false;
+}
+
+int32_t GarbageSweepIntervalCalculator::curr_interval() const {
+    // when disk usage is less than 60%, ratio is about 1;
+    // when disk usage is between [60%, 75%], ratio drops from 0.87 to 0.27;
+    // when disk usage is greater than 75%, ratio drops slowly.
+    // when disk usage =90%, ratio is about 0.0057
+    double ratio = (1.1 * (M_PI / 2 - std::atan(_disk_usage * 100 / 5 - 14)) - 0.28) / M_PI;
+    ratio = std::max(0.0, ratio);
+    int32_t curr_interval = _max_interval * ratio;
+    // when usage < 60%,curr_interval is about max_interval,
+    // when usage > 80%, curr_interval is close to min_interval
+    curr_interval = std::max(curr_interval, _min_interval);
+    curr_interval = std::min(curr_interval, _max_interval);
+
+    return curr_interval;
+}
+
+void GarbageSweepIntervalCalculator::_normalize_min_max() {
+    if (!(_max_interval >= _min_interval && _min_interval > 0)) {
+        LOG(WARNING) << "garbage sweep interval config is illegal: max=" << _max_interval << " min=" << _min_interval;
+        _min_interval = 1;
+        _max_interval = std::max(_max_interval, _min_interval);
+        LOG(INFO) << "force reset garbage sweep interval. "
+                  << "max_interval=" << _max_interval << ", min_interval=" << _min_interval;
+    }
 }
 
 void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {

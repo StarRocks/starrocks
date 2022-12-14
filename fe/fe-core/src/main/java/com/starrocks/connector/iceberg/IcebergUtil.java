@@ -1,15 +1,32 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -27,9 +44,11 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.types.Types;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +58,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class IcebergUtil {
+    private static final Logger LOG = LogManager.getLogger(IcebergUtil.class);
 
     /**
      * Get Iceberg table identifier by table property
@@ -63,6 +83,8 @@ public class IcebergUtil {
         switch (catalogType) {
             case HIVE_CATALOG:
                 return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris(), table.getIcebergProperties());
+            case REST_CATALOG:
+                return getIcebergRESTCatalog(table.getIcebergProperties());
             case CUSTOM_CATALOG:
                 return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
@@ -88,8 +110,18 @@ public class IcebergUtil {
                 new Configuration(), icebergProperties, catalogImpl).loadCatalog();
     }
 
+    /**
+     * Returns the corresponding glue catalog implementation.
+     */
     public static IcebergCatalog getIcebergGlueCatalog(String catalogName, Map<String, String> icebergProperties) {
         return IcebergGlueCatalog.getInstance(catalogName, icebergProperties);
+    }
+
+    /**
+     * Returns the corresponding rest catalog implementation.
+     */
+    public static IcebergCatalog getIcebergRESTCatalog(Map<String, String> icebergProperties) {
+        return IcebergRESTCatalog.getInstance(icebergProperties);
     }
 
     /**
@@ -127,21 +159,20 @@ public class IcebergUtil {
      *
      * @param table
      * @param snapshot
-     * @param icebergPredicates
+     * @param icebergPredicate
      * @return
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates) {
+                                         Expression icebergPredicate) {
         // TODO: use planWith(executorService) after
         // https://github.com/apache/iceberg/commit/74db81f4dd81360bf3c0ad438d4be937c7a812d9 release
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
-        Expression filterExpressions = Expressions.alwaysTrue();
-        if (!icebergPredicates.isEmpty()) {
-            filterExpressions = icebergPredicates.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
+        if (icebergPredicate != null) {
+            tableScan = tableScan.filter(icebergPredicate);
         }
 
-        return tableScan.filter(filterExpressions);
+        return tableScan;
     }
 
     public static void refreshTable(Table table) {
@@ -259,6 +290,17 @@ public class IcebergUtil {
         return convertToSRTable(icebergTable, properties);
     }
 
+    public static IcebergTable convertRESTCatalogToSRTable(org.apache.iceberg.Table icebergTable,
+                                                           String catalogName, String dbName,
+                                                           String tblName) throws DdlException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, catalogName);
+        properties.put(IcebergTable.ICEBERG_DB, dbName);
+        properties.put(IcebergTable.ICEBERG_TABLE, tblName);
+        properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "REST_CATALOG");
+        return convertToSRTable(icebergTable, properties);
+    }
+
     private static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, Map<String, String> properties)
             throws DdlException {
         try {
@@ -267,7 +309,14 @@ public class IcebergUtil {
             List<Column> fullSchema = Lists.newArrayList();
             for (Map.Entry<String, Types.NestedField> entry : icebergColumns.entrySet()) {
                 Types.NestedField icebergColumn = entry.getValue();
-                Type srType = convertColumnType(icebergColumn.type());
+                Type srType;
+                try {
+                    srType = convertColumnType(icebergColumn.type());
+                } catch (InternalError | Exception e) {
+                    LOG.error("Failed to convert iceberg type {}", icebergColumn.type().toString(), e);
+                    srType = Type.UNKNOWN_TYPE;
+                }
+
                 Column column = new Column(icebergColumn.name(), srType, true);
                 fullSchema.add(column);
             }
@@ -310,7 +359,7 @@ public class IcebergUtil {
                 break;
             case STRING:
             case UUID:
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
@@ -322,11 +371,29 @@ public class IcebergUtil {
                 } else {
                     return Type.UNKNOWN_TYPE;
                 }
+            case MAP:
+                Type mapType = convertToMapType(icebergType);
+                if (mapType.isMapType()) {
+                    return mapType;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case STRUCT:
+                List<Types.NestedField> fields = icebergType.asStructType().fields();
+                Preconditions.checkArgument(fields.size() > 0);
+                ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+                for (Types.NestedField field : fields) {
+                    String fieldName = field.name();
+                    Type fieldType = convertColumnType(field.type());
+                    if (fieldType.isUnknown()) {
+                        return Type.UNKNOWN_TYPE;
+                    }
+                    structFields.add(new StructField(fieldName, fieldType));
+                }
+                return new StructType(structFields);
             case TIME:
             case FIXED:
             case BINARY:
-            case STRUCT:
-            case MAP:
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
@@ -338,6 +405,19 @@ public class IcebergUtil {
     }
 
     private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()));
+        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()), true);
+    }
+
+    private static Type convertToMapType(org.apache.iceberg.types.Type icebergType) {
+        Type keyType = convertColumnType(icebergType.asMapType().keyType());
+        // iceberg support complex type as key type, but sr is not supported now
+        if (keyType.isComplexType() || keyType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        Type valueType = convertColumnType(icebergType.asMapType().valueType());
+        if (valueType.isUnknown()) {
+            return Type.UNKNOWN_TYPE;
+        }
+        return new MapType(keyType, valueType);
     }
 }

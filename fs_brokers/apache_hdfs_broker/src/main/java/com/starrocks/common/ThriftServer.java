@@ -29,6 +29,7 @@ import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 
 /**
  * Created by zhaochun on 14-9-2.
@@ -60,8 +61,12 @@ public class ThriftServer {
     }
 
     private void createThreadPoolServer() throws TTransportException {
+        TServerSocket.ServerSocketTransportArgs socketTransportArgs = new TServerSocket.ServerSocketTransportArgs()
+                .bindAddr(new InetSocketAddress(port))
+                .backlog(1024);
+
         TThreadPoolServer.Args args =
-            new TThreadPoolServer.Args(new TServerSocket(port)).protocolFactory(
+            new TThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
                 new TBinaryProtocol.Factory()).processor(processor);
         server = new TThreadPoolServer(args);
     }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/journal/JournalEntity.java
 
@@ -49,6 +62,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
@@ -282,6 +296,10 @@ public class JournalEntity implements Writable {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+                data = ModifyTablePropertyOperationLog.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_RENAME_MATERIALIZED_VIEW:
                 data = RenameMaterializedViewLog.read(in);
                 isRead = true;
@@ -495,6 +513,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
+                data = StreamLoadTask.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CREATE_LOAD_JOB: {
                 data = com.starrocks.load.loadv2.LoadJob.read(in);
                 isRead = true;
@@ -581,6 +604,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
+            case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;

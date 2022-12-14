@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -46,7 +58,7 @@ TEST_F(StringFunctionConcatTest, concatNormalTest) {
     columns.emplace_back(str3);
     columns.emplace_back(str4);
 
-    ColumnPtr result = StringFunctions::concat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -83,7 +95,7 @@ TEST_F(StringFunctionConcatTest, concatConstTest) {
     state->is_const = true;
     state->is_oversize = false;
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
-    ColumnPtr result = StringFunctions::concat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_binary());
     ASSERT_FALSE(result->is_nullable());
@@ -115,7 +127,7 @@ TEST_F(StringFunctionConcatTest, concatNullTest) {
     columns.emplace_back(str3);
     columns.emplace_back(NullableColumn::create(str4, null));
 
-    ColumnPtr result = StringFunctions::concat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
     ASSERT_FALSE(result->is_binary());
     ASSERT_TRUE(result->is_nullable());
@@ -156,7 +168,7 @@ TEST_F(StringFunctionConcatTest, concatWsTest) {
     columns.emplace_back(str2);
     columns.emplace_back(NullableColumn::create(str3, null));
 
-    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_FALSE(result->is_nullable());
 
@@ -195,7 +207,7 @@ TEST_F(StringFunctionConcatTest, concatWs1Test) {
     columns.emplace_back(str2);
     columns.emplace_back(NullableColumn::create(str3, null));
 
-    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_FALSE(result->is_nullable());
 
@@ -245,7 +257,7 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
     state->is_oversize = false;
     context->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
 
-    auto result = StringFunctions::concat(context.get(), columns);
+    auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
     auto result_nullable = down_cast<NullableColumn*>(result.get());
@@ -279,7 +291,7 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
 static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns const& columns, size_t col_idx,
                                          const size_t limit) {
     std::shared_ptr<FunctionContext> context(FunctionContext::create_test_context());
-    auto result = StringFunctions::concat(context.get(), columns);
+    auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
     auto result_nullable = down_cast<NullableColumn*>(result.get());
@@ -404,7 +416,7 @@ TEST_F(StringFunctionConcatTest, concatNotConstBigOversizeTest) {
 static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullColumnPtr& null_col,
                                   const ColumnPtr& sep, Columns const& columns, size_t col_idx, const size_t limit) {
     std::shared_ptr<FunctionContext> context(FunctionContext::create_test_context());
-    auto result = StringFunctions::concat_ws(context.get(), columns);
+    auto result = StringFunctions::concat_ws(context.get(), columns).value();
     auto union_null_col = FunctionHelper::union_null_column(sep_null_col, null_col);
 
     ASSERT_TRUE(result->is_nullable());

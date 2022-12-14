@@ -1,12 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -19,6 +34,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
+
+import static java.util.function.Function.identity;
 
 public class LogicalAggregationOperator extends LogicalOperator {
     private final AggType type;
@@ -121,6 +139,25 @@ public class LogicalAggregationOperator extends LogicalOperator {
             columns.union(new ArrayList<>(aggregations.keySet()));
             return columns;
         }
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> keyMap = groupingKeys.stream().collect(Collectors.toMap(identity(), identity()));
+        columnRefMap.putAll(keyMap);
+        columnRefMap.putAll(aggregations);
+        return columnRefMap;
+    }
+
+    @Override
+    public Map<ColumnRefOperator, ScalarOperator> getLineage(
+            ColumnRefFactory refFactory, ExpressionContext expressionContext) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        if (projection != null) {
+            columnRefMap.putAll(projection.getColumnRefMap());
+        }
+        columnRefMap.putAll(getColumnRefMap());
+        return columnRefMap;
     }
 
     @Override

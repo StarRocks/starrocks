@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "table_function_operator.h"
 
@@ -54,13 +66,13 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     // Get table function from TableFunctionResolver
     TFunction table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
     std::string table_function_name = table_fn.name.function_name;
-    std::vector<PrimitiveType> arg_types;
+    std::vector<LogicalType> arg_types;
     for (const TTypeDesc& ttype_desc : table_fn.arg_types) {
         TypeDescriptor arg_type = TypeDescriptor::from_thrift(ttype_desc);
         arg_types.emplace_back(arg_type.type);
     }
 
-    std::vector<PrimitiveType> return_types;
+    std::vector<LogicalType> return_types;
     for (const TTypeDesc& ttype_desc : table_fn.table_fn.ret_types) {
         TypeDescriptor return_type = TypeDescriptor::from_thrift(ttype_desc);
         return_types.emplace_back(return_type.type);

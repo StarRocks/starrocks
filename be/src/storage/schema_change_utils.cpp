@@ -1,10 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/schema_change_utils.h"
 
 #include "column/datum_convert.h"
+#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/wrapper_field.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
 #include "util/percentile_value.h"
@@ -16,9 +28,6 @@ ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
 }
 
 ChunkChanger::~ChunkChanger() {
-    for (auto it = _schema_mapping.begin(); it != _schema_mapping.end(); ++it) {
-        SAFE_DELETE(it->default_value);
-    }
     _schema_mapping.clear();
 }
 
@@ -52,30 +61,30 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
 #define CONVERT_FROM_TYPE(from_type)                                                \
     {                                                                               \
         switch (new_type) {                                                         \
-        case OLAP_FIELD_TYPE_TINYINT:                                               \
+        case TYPE_TINYINT:                                                          \
             TYPE_REINTERPRET_CAST(from_type, int8_t);                               \
-        case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:                                      \
+        case TYPE_UNSIGNED_TINYINT:                                                 \
             TYPE_REINTERPRET_CAST(from_type, uint8_t);                              \
-        case OLAP_FIELD_TYPE_SMALLINT:                                              \
+        case TYPE_SMALLINT:                                                         \
             TYPE_REINTERPRET_CAST(from_type, int16_t);                              \
-        case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:                                     \
+        case TYPE_UNSIGNED_SMALLINT:                                                \
             TYPE_REINTERPRET_CAST(from_type, uint16_t);                             \
-        case OLAP_FIELD_TYPE_INT:                                                   \
+        case TYPE_INT:                                                              \
             TYPE_REINTERPRET_CAST(from_type, int32_t);                              \
-        case OLAP_FIELD_TYPE_UNSIGNED_INT:                                          \
+        case TYPE_UNSIGNED_INT:                                                     \
             TYPE_REINTERPRET_CAST(from_type, uint32_t);                             \
-        case OLAP_FIELD_TYPE_BIGINT:                                                \
+        case TYPE_BIGINT:                                                           \
             TYPE_REINTERPRET_CAST(from_type, int64_t);                              \
-        case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:                                       \
+        case TYPE_UNSIGNED_BIGINT:                                                  \
             TYPE_REINTERPRET_CAST(from_type, uint64_t);                             \
-        case OLAP_FIELD_TYPE_LARGEINT:                                              \
+        case TYPE_LARGEINT:                                                         \
             TYPE_REINTERPRET_CAST(from_type, int128_t);                             \
-        case OLAP_FIELD_TYPE_DOUBLE:                                                \
+        case TYPE_DOUBLE:                                                           \
             TYPE_REINTERPRET_CAST(from_type, double);                               \
         default:                                                                    \
             LOG(WARNING) << "the column type which was altered to was unsupported." \
-                         << " origin_type=" << field_type_to_string(ref_type)       \
-                         << ", alter_type=" << field_type_to_string(new_type);      \
+                         << " origin_type=" << logical_type_to_string(ref_type)     \
+                         << ", alter_type=" << logical_type_to_string(new_type);    \
             return false;                                                           \
         }                                                                           \
         break;                                                                      \
@@ -87,24 +96,24 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
     }
 
 struct ConvertTypeMapHash {
-    size_t operator()(const std::pair<FieldType, FieldType>& pair) const { return (pair.first + 31) ^ pair.second; }
+    size_t operator()(const std::pair<LogicalType, LogicalType>& pair) const { return (pair.first + 31) ^ pair.second; }
 };
 
 class ConvertTypeResolver {
     DECLARE_SINGLETON(ConvertTypeResolver);
 
 public:
-    bool convert_type_exist(const FieldType from_type, const FieldType to_type) const {
+    bool convert_type_exist(const LogicalType from_type, const LogicalType to_type) const {
         return _convert_type_set.find(std::make_pair(from_type, to_type)) != _convert_type_set.end();
     }
 
-    template <FieldType from_type, FieldType to_type>
+    template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
         _convert_type_set.emplace(std::make_pair(from_type, to_type));
     }
 
 private:
-    typedef std::pair<FieldType, FieldType> convert_type_pair;
+    typedef std::pair<LogicalType, LogicalType> convert_type_pair;
     std::unordered_set<convert_type_pair, ConvertTypeMapHash> _convert_type_set;
 
     DISALLOW_COPY(ConvertTypeResolver);
@@ -112,77 +121,77 @@ private:
 
 ConvertTypeResolver::ConvertTypeResolver() {
     // from varchar type
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_TINYINT>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_INT>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_BIGINT>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_LARGEINT>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_FLOAT>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DOUBLE>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DATE>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DATE_V2>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DECIMAL32>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DECIMAL64>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_DECIMAL128>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_JSON>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_TINYINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_SMALLINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_INT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_BIGINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_LARGEINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_FLOAT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DOUBLE>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DATE>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_JSON>();
 
     // to varchar type
-    add_convert_type_mapping<OLAP_FIELD_TYPE_TINYINT, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_BIGINT, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_LARGEINT, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_FLOAT, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DOUBLE, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_CHAR, OLAP_FIELD_TYPE_VARCHAR>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_JSON, OLAP_FIELD_TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_TINYINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_SMALLINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_INT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_BIGINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_LARGEINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_FLOAT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DOUBLE, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMALV2, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_CHAR, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_JSON, TYPE_VARCHAR>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATETIME>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_TIMESTAMP>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATE_V2, OLAP_FIELD_TYPE_DATETIME>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATE_V2, OLAP_FIELD_TYPE_TIMESTAMP>();
+    add_convert_type_mapping<TYPE_DATE_V1, TYPE_DATETIME_V1>();
+    add_convert_type_mapping<TYPE_DATE_V1, TYPE_DATETIME>();
+    add_convert_type_mapping<TYPE_DATE, TYPE_DATETIME_V1>();
+    add_convert_type_mapping<TYPE_DATE, TYPE_DATETIME>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATETIME, OLAP_FIELD_TYPE_DATE>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATETIME, OLAP_FIELD_TYPE_DATE_V2>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_TIMESTAMP, OLAP_FIELD_TYPE_DATE>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_TIMESTAMP, OLAP_FIELD_TYPE_DATE_V2>();
+    add_convert_type_mapping<TYPE_DATETIME_V1, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_DATETIME_V1, TYPE_DATE>();
+    add_convert_type_mapping<TYPE_DATETIME, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_DATETIME, TYPE_DATE>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_FLOAT, OLAP_FIELD_TYPE_DOUBLE>();
+    add_convert_type_mapping<TYPE_FLOAT, TYPE_DOUBLE>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_DATE>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_DATE_V2>();
+    add_convert_type_mapping<TYPE_INT, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_INT, TYPE_DATE>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATE_V2>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATE_V2, OLAP_FIELD_TYPE_DATE>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DATETIME, OLAP_FIELD_TYPE_TIMESTAMP>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_TIMESTAMP, OLAP_FIELD_TYPE_DATETIME>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_DECIMAL_V2>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_DECIMAL128>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DATE_V1, TYPE_DATE>();
+    add_convert_type_mapping<TYPE_DATE, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_DATETIME_V1, TYPE_DATETIME>();
+    add_convert_type_mapping<TYPE_DATETIME, TYPE_DATETIME_V1>();
+    add_convert_type_mapping<TYPE_DECIMAL, TYPE_DECIMALV2>();
+    add_convert_type_mapping<TYPE_DECIMALV2, TYPE_DECIMAL>();
+    add_convert_type_mapping<TYPE_DECIMAL, TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMALV2, TYPE_DECIMAL128>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL32>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL32>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL64>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>();
 
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL32>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL64>();
-    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>();
 }
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
 const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(const std::string& materialized_function,
-                                                                             FieldType type) {
+                                                                             LogicalType type) {
     if (materialized_function == "to_bitmap") {
         return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_BITMAP);
     } else if (materialized_function == "hll_hash") {
@@ -208,9 +217,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
         if (ref_column >= 0) {
-            FieldType ref_type =
+            LogicalType ref_type =
                     TypeUtils::to_storage_format_v2(base_tablet_meta->tablet_schema().column(ref_column).type());
-            FieldType new_type = TypeUtils::to_storage_format_v2(new_tablet_meta->tablet_schema().column(i).type());
+            LogicalType new_type = TypeUtils::to_storage_format_v2(new_tablet_meta->tablet_schema().column(i).type());
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const auto& materialized_function = _schema_mapping[i].materialized_function;
                 const MaterializeTypeConverter* converter =
@@ -222,7 +231,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 }
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-                Field ref_field = ChunkHelper::convert_field_to_format_v2(
+                VectorizedField ref_field = ChunkHelper::convert_field_to_format_v2(
                         ref_column, base_tablet_meta->tablet_schema().column(ref_column));
                 Status st = converter->convert_materialized(base_col, new_col, ref_field.type().get());
                 if (!st.ok()) {
@@ -241,7 +250,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
 
             if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
                                          (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
-                if (new_type == OLAP_FIELD_TYPE_CHAR) {
+                if (new_type == TYPE_CHAR) {
                     for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                         Datum base_datum = base_col->get(row_index);
                         Datum new_datum;
@@ -276,36 +285,36 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
 
-                Field ref_field = ChunkHelper::convert_field_to_format_v2(
+                VectorizedField ref_field = ChunkHelper::convert_field_to_format_v2(
                         ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                Field new_field =
+                VectorizedField new_field =
                         ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
 
                 Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
                                                       new_col.get(), mem_pool);
                 if (!st.ok()) {
-                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                 << field_type_to_string(new_type);
+                    LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
+                                 << logical_type_to_string(new_type);
                     return false;
                 }
             } else {
                 // copy and alter the field
                 switch (ref_type) {
-                case OLAP_FIELD_TYPE_TINYINT:
+                case TYPE_TINYINT:
                     CONVERT_FROM_TYPE(int8_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+                case TYPE_UNSIGNED_TINYINT:
                     CONVERT_FROM_TYPE(uint8_t);
-                case OLAP_FIELD_TYPE_SMALLINT:
+                case TYPE_SMALLINT:
                     CONVERT_FROM_TYPE(int16_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+                case TYPE_UNSIGNED_SMALLINT:
                     CONVERT_FROM_TYPE(uint16_t);
-                case OLAP_FIELD_TYPE_INT:
+                case TYPE_INT:
                     CONVERT_FROM_TYPE(int32_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_INT:
+                case TYPE_UNSIGNED_INT:
                     CONVERT_FROM_TYPE(uint32_t);
-                case OLAP_FIELD_TYPE_BIGINT:
+                case TYPE_BIGINT:
                     CONVERT_FROM_TYPE(int64_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+                case TYPE_UNSIGNED_BIGINT:
                     CONVERT_FROM_TYPE(uint64_t);
                 default:
                     LOG(WARNING) << "the column type which was altered from was unsupported."
@@ -315,62 +324,22 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 if (new_type < ref_type) {
                     LOG(INFO) << "type degraded while altering column. "
                               << "column=" << new_tablet_meta->tablet_schema().column(i).name()
-                              << ", origin_type=" << field_type_to_string(ref_type)
-                              << ", alter_type=" << field_type_to_string(new_type);
+                              << ", origin_type=" << logical_type_to_string(ref_type)
+                              << ", alter_type=" << logical_type_to_string(new_type);
                 }
             }
         } else {
             ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-            Datum dst_datum;
-            if (_schema_mapping[i].default_value->is_null()) {
-                dst_datum.set_null();
-                COLUMN_APPEND_DATUM();
-            } else {
-                Field new_field =
-                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
-                const FieldType field_type = new_field.type()->type();
-                std::string tmp = _schema_mapping[i].default_value->to_string();
-                if (field_type == OLAP_FIELD_TYPE_HLL || field_type == OLAP_FIELD_TYPE_OBJECT ||
-                    field_type == OLAP_FIELD_TYPE_PERCENTILE) {
-                    switch (field_type) {
-                    case OLAP_FIELD_TYPE_HLL: {
-                        HyperLogLog hll(tmp);
-                        dst_datum.set_hyperloglog(&hll);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_OBJECT: {
-                        BitmapValue bitmap(tmp);
-                        dst_datum.set_bitmap(&bitmap);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_PERCENTILE: {
-                        PercentileValue percentile(tmp);
-                        dst_datum.set_percentile(&percentile);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    default:
-                        LOG(WARNING) << "the column type is wrong. column_type: " << field_type_to_string(field_type);
-                        return false;
-                    }
-                } else {
-                    Status st = datum_from_string(new_field.type().get(), &dst_datum, tmp, nullptr);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "create datum from string failed: status=" << st;
-                        return false;
-                    }
-                    COLUMN_APPEND_DATUM();
-                }
+            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
+                new_col->append_datum(_schema_mapping[i].default_value_datum);
             }
         }
     }
     return true;
 }
 
-bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
-                                   const Schema& new_schema, MemPool* mem_pool) {
+bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const VectorizedSchema& base_schema,
+                                   const VectorizedSchema& new_schema, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
@@ -426,28 +395,28 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
                                                       new_col.get(), mem_pool);
                 if (!st.ok()) {
-                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                 << field_type_to_string(new_type);
+                    LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
+                                 << logical_type_to_string(new_type);
                     return false;
                 }
             } else {
                 // copy and alter the field
                 switch (ref_type) {
-                case OLAP_FIELD_TYPE_TINYINT:
+                case TYPE_TINYINT:
                     CONVERT_FROM_TYPE(int8_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+                case TYPE_UNSIGNED_TINYINT:
                     CONVERT_FROM_TYPE(uint8_t);
-                case OLAP_FIELD_TYPE_SMALLINT:
+                case TYPE_SMALLINT:
                     CONVERT_FROM_TYPE(int16_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+                case TYPE_UNSIGNED_SMALLINT:
                     CONVERT_FROM_TYPE(uint16_t);
-                case OLAP_FIELD_TYPE_INT:
+                case TYPE_INT:
                     CONVERT_FROM_TYPE(int32_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_INT:
+                case TYPE_UNSIGNED_INT:
                     CONVERT_FROM_TYPE(uint32_t);
-                case OLAP_FIELD_TYPE_BIGINT:
+                case TYPE_BIGINT:
                     CONVERT_FROM_TYPE(int64_t);
-                case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+                case TYPE_UNSIGNED_BIGINT:
                     CONVERT_FROM_TYPE(uint64_t);
                 default:
                     LOG(WARNING) << "the column type which was altered from was unsupported."
@@ -457,53 +426,14 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 if (new_type < ref_type) {
                     LOG(INFO) << "type degraded while altering column. "
                               << "column=" << new_schema.field(i)->name()
-                              << ", origin_type=" << field_type_to_string(ref_type)
-                              << ", alter_type=" << field_type_to_string(new_type);
+                              << ", origin_type=" << logical_type_to_string(ref_type)
+                              << ", alter_type=" << logical_type_to_string(new_type);
                 }
             }
         } else {
             ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-            Datum dst_datum;
-            if (_schema_mapping[i].default_value->is_null()) {
-                dst_datum.set_null();
-                COLUMN_APPEND_DATUM();
-            } else {
-                TypeInfoPtr new_type_info = new_schema.field(i)->type();
-                const FieldType field_type = new_type_info->type();
-                std::string tmp = _schema_mapping[i].default_value->to_string();
-                if (field_type == OLAP_FIELD_TYPE_HLL || field_type == OLAP_FIELD_TYPE_OBJECT ||
-                    field_type == OLAP_FIELD_TYPE_PERCENTILE) {
-                    switch (field_type) {
-                    case OLAP_FIELD_TYPE_HLL: {
-                        HyperLogLog hll(tmp);
-                        dst_datum.set_hyperloglog(&hll);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_OBJECT: {
-                        BitmapValue bitmap(tmp);
-                        dst_datum.set_bitmap(&bitmap);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_PERCENTILE: {
-                        PercentileValue percentile(tmp);
-                        dst_datum.set_percentile(&percentile);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    default:
-                        LOG(WARNING) << "the column type is wrong. column_type: " << field_type_to_string(field_type);
-                        return false;
-                    }
-                } else {
-                    Status st = datum_from_string(new_type_info.get(), &dst_datum, tmp, nullptr);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "create datum from string failed: status=" << st;
-                        return false;
-                    }
-                    COLUMN_APPEND_DATUM();
-                }
+            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
+                new_col->append_datum(_schema_mapping[i].default_value_datum);
             }
         }
     }
@@ -703,16 +633,36 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
 
 Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
                                               const std::string& value) {
-    column_mapping->default_value = WrapperField::create(column_schema);
-
-    if (column_mapping->default_value == nullptr) {
-        return Status::InternalError("malloc error");
-    }
-
     if (column_schema.is_nullable() && value.length() == 0) {
-        column_mapping->default_value->set_null();
+        column_mapping->default_value_datum.set_null();
     } else {
-        column_mapping->default_value->from_string(value);
+        auto field_type = column_schema.type();
+        auto type_info = get_type_info(column_schema);
+
+        switch (field_type) {
+        case TYPE_HLL: {
+            column_mapping->default_hll = std::make_unique<HyperLogLog>(value);
+            column_mapping->default_value_datum.set_hyperloglog(column_mapping->default_hll.get());
+            break;
+        }
+        case TYPE_OBJECT: {
+            column_mapping->default_bitmap = std::make_unique<BitmapValue>(value);
+            column_mapping->default_value_datum.set_bitmap(column_mapping->default_bitmap.get());
+            break;
+        }
+        case TYPE_PERCENTILE: {
+            column_mapping->default_percentile = std::make_unique<PercentileValue>(value);
+            column_mapping->default_value_datum.set_percentile(column_mapping->default_percentile.get());
+            break;
+        }
+        case TYPE_JSON: {
+            column_mapping->default_json = std::make_unique<JsonValue>(value);
+            column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
+            break;
+        }
+        default:
+            return datum_from_string(type_info.get(), &column_mapping->default_value_datum, value, nullptr);
+        }
     }
 
     return Status::OK();

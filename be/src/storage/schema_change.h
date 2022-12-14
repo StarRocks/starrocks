@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/schema_change.h
 
@@ -48,7 +61,7 @@ public:
     ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation);
     virtual ~ChunkAllocator() = default;
 
-    static Status allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema);
+    static Status allocate(ChunkPtr& chunk, size_t num_rows, VectorizedSchema& schema);
     bool is_memory_enough_to_sort(size_t num_rows) const;
     void set_cur_mem_usage(size_t mem_usage) { _memory_allocated = mem_usage; }
     void set_row_len(size_t row_len) { _row_len = row_len; }
@@ -57,6 +70,19 @@ private:
     size_t _memory_allocated = 0;
     size_t _row_len;
     size_t _memory_limitation;
+};
+
+class ChunkSorter {
+public:
+    explicit ChunkSorter(ChunkAllocator* allocator);
+    virtual ~ChunkSorter();
+
+    bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
+
+private:
+    ChunkAllocator* _chunk_allocator = nullptr;
+    ChunkPtr _swap_chunk;
+    size_t _max_allocated_rows;
 };
 
 class SchemaChange {
@@ -116,10 +142,10 @@ public:
     Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                       TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-private:
     static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                   TabletSharedPtr tablet);
 
+private:
     ChunkChanger* _chunk_changer = nullptr;
     size_t _memory_limitation;
     ChunkAllocator* _chunk_allocator = nullptr;

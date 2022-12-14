@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <gtest/gtest.h>
 
 #include "exprs/vectorized/string_functions.h"
@@ -17,7 +30,7 @@ TEST_F(StringFunctionSpaceTest, spaceTest) {
 
     columns.emplace_back(times);
 
-    ColumnPtr result = StringFunctions::space(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::space(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_TRUE(result->is_binary());
 
@@ -45,7 +58,7 @@ TEST_F(StringFunctionSpaceTest, spaceConstTest) {
     for (auto& c : times_cases) {
         auto [column, is_null, expect] = c;
         Columns columns{column};
-        ColumnPtr result = StringFunctions::space(ctx.get(), columns);
+        ColumnPtr result = StringFunctions::space(ctx.get(), columns).value();
         ASSERT_EQ(result->size(), 1);
         if (is_null) {
             ASSERT_TRUE(result->is_null(0));
@@ -104,7 +117,7 @@ TEST_F(StringFunctionSpaceTest, spaceNullableColumnTest) {
         null_col->append(is_null);
     }
     Columns columns{NullableColumn::create(times_col, null_col)};
-    auto result = StringFunctions::space(ctx.get(), columns);
+    auto result = StringFunctions::space(ctx.get(), columns).value();
     const auto num_rows = times_col->size();
     ASSERT_EQ(result->size(), num_rows);
     ASSERT_TRUE(num_rows - start_row > 0);

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/http/action/stream_load.cpp
 
@@ -478,6 +491,9 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
         }
     }
+    if (!http_req->header(HTTP_MERGE_CONDITION).empty()) {
+        request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
+    }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }
@@ -487,15 +503,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_load_dop(parallel_request_num);
         } catch (const std::invalid_argument& e) {
             return Status::InvalidArgument("Invalid load_dop format");
-        }
-    }
-    if (!http_req->header(HTTP_ENABLE_REPLICATED_STORAGE).empty()) {
-        if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "false")) {
-            request.__set_enable_replicated_storage(false);
-        } else if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "true")) {
-            request.__set_enable_replicated_storage(true);
-        } else {
-            return Status::InvalidArgument("Invalid enable replicated storage flag format. Must be bool type");
         }
     }
     if (ctx->timeout_second != -1) {

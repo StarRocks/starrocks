@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "runtime/local_tablets_channel.h"
 
@@ -20,6 +32,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/load_channel.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
@@ -370,6 +383,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     _is_replicated_storage = params.is_replicated_storage();
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
+    std::vector<int64_t> failed_tablet_ids;
     for (const PTabletWithPartition& tablet : params.tablets()) {
         vectorized::DeltaWriterOptions options;
         options.tablet_id = tablet.tablet_id();
@@ -383,19 +397,33 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.index_id = _index_id;
         options.node_id = _node_id;
         options.timeout_ms = params.timeout_ms();
-        options.is_replicated_storage = params.is_replicated_storage();
         options.write_quorum = params.write_quorum();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
             }
+            if (options.replicas.size() > 0 && options.replicas[0].node_id() == options.node_id) {
+                options.replica_state = vectorized::Primary;
+            } else {
+                options.replica_state = vectorized::Secondary;
+            }
+        } else {
+            options.replica_state = vectorized::Peer;
         }
+        options.merge_condition = params.merge_condition();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
-        RETURN_IF_ERROR(res.status());
-        auto writer = std::move(res).value();
-        _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
-        tablet_ids.emplace_back(tablet.tablet_id());
+        if (res.status().ok()) {
+            auto writer = std::move(res).value();
+            _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
+            tablet_ids.emplace_back(tablet.tablet_id());
+        } else {
+            if (options.replica_state == vectorized::Secondary) {
+                failed_tablet_ids.emplace_back(tablet.tablet_id());
+            } else {
+                return res.status();
+            }
+        }
     }
     _s_tablet_writer_count += _delta_writers.size();
     DCHECK_EQ(_delta_writers.size(), params.tablets_size());
@@ -406,9 +434,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     }
     std::stringstream ss;
     ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open delta writer: ";
-
     for (auto& [tablet_id, delta_writer] : _delta_writers) {
         ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+    }
+    ss << " failed_tablets: ";
+    for (auto& tablet_id : failed_tablet_ids) {
+        ss << tablet_id << ",";
     }
     LOG(INFO) << ss.str();
     return Status::OK();
@@ -484,14 +515,31 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
     return std::move(context);
 }
 
-void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* info) {
+void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* committed_info,
+                                             const FailedRowsetInfo* failed_info) {
     _context->update_status(st);
-    if (info != nullptr) {
+    if (failed_info != nullptr) {
+        PTabletInfo tablet_info;
+        tablet_info.set_tablet_id(failed_info->tablet_id);
+        // unused but it's required field of protobuf
+        tablet_info.set_schema_hash(0);
+        _context->add_failed_tablet_info(&tablet_info);
+
+        // committed tablets from seconary replica
+        if (failed_info->replicate_token) {
+            const auto failed_tablet_infos = failed_info->replicate_token->failed_tablet_infos();
+            for (const auto& failed_tablet_info : *failed_tablet_infos) {
+                _context->add_failed_tablet_info(failed_tablet_info.get());
+            }
+        }
+    }
+    if (committed_info != nullptr) {
         // committed tablets from primary replica
         PTabletInfo tablet_info;
-        tablet_info.set_tablet_id(info->tablet->tablet_id());
-        tablet_info.set_schema_hash(info->tablet->schema_hash());
-        const auto& rowset_global_dict_columns_valid_info = info->rowset_writer->global_dict_columns_valid_info();
+        tablet_info.set_tablet_id(committed_info->tablet->tablet_id());
+        tablet_info.set_schema_hash(committed_info->tablet->schema_hash());
+        const auto& rowset_global_dict_columns_valid_info =
+                committed_info->rowset_writer->global_dict_columns_valid_info();
         for (const auto& item : rowset_global_dict_columns_valid_info) {
             if (item.second) {
                 tablet_info.add_valid_dict_cache_columns(item.first);
@@ -502,8 +550,8 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
         _context->add_committed_tablet_info(&tablet_info);
 
         // committed tablets from seconary replica
-        if (info->replicate_token) {
-            const auto replicated_tablet_infos = info->replicate_token->replicated_tablet_infos();
+        if (committed_info->replicate_token) {
+            const auto replicated_tablet_infos = committed_info->replicate_token->replicated_tablet_infos();
             for (const auto& synced_tablet_info : *replicated_tablet_infos) {
                 _context->add_committed_tablet_info(synced_tablet_info.get());
             }

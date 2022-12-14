@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.journal;
 
@@ -13,7 +26,7 @@ import java.util.concurrent.TimeoutException;
 
 public class JournalTask implements Future<Boolean> {
     // serialized JournalEntity
-    private DataOutputBuffer buffer;
+    private final DataOutputBuffer buffer;
     // write result
     private Boolean isSucceed = null;
     // count down latch, the producer which called logEdit() will wait on it.
@@ -48,7 +61,7 @@ public class JournalTask implements Future<Boolean> {
 
     public long estimatedSizeByte() {
         // journal id + buffer
-        return Long.SIZE / 8 + buffer.getLength();
+        return Long.SIZE / 8 + (long) buffer.getLength();
     }
 
     public DataOutputBuffer getBuffer() {
@@ -69,7 +82,9 @@ public class JournalTask implements Future<Boolean> {
     @Override
     public Boolean get(long timeout, @NotNull TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
-        latch.await(timeout, unit);
+        if (!latch.await(timeout, unit)) {
+            return false;
+        }
         return isSucceed;
     }
 

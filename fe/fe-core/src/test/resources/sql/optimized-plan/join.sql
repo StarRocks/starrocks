@@ -225,7 +225,7 @@ LEFT SEMI JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
 [sql]
 select v1,v2,v3,v4 from t0 inner join t1 on v1=v5 and 1>2
 [result]
-INNER JOIN (join-predicate [null] post-join-predicate [null])
+CROSS JOIN (join-predicate [null] post-join-predicate [null])
     VALUES
     EXCHANGE BROADCAST
         VALUES

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/connector_scan_node.h"
 
@@ -53,7 +65,8 @@ inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool 
 
 class ConnectorScanner {
 public:
-    ConnectorScanner(connector::DataSourcePtr&& data_source) : _data_source(std::move(data_source)) {}
+    ConnectorScanner(connector::DataSourcePtr&& data_source, RuntimeProfile* runtime_profile)
+            : _data_source(std::move(data_source)), _runtime_profile(runtime_profile) {}
 
     Status init(RuntimeState* state) {
         _runtime_state = state;
@@ -61,12 +74,16 @@ public:
     }
     Status open(RuntimeState* state) {
         if (_opened) return Status::OK();
+
+        _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+        SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
         return Status::OK();
     }
     void close(RuntimeState* state) { _data_source->close(state); }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
+        SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
         return Status::OK();
     }
@@ -107,6 +124,8 @@ private:
     bool _keep_priority = false;
     std::atomic_bool _pending_token = false;
     MonotonicStopWatch _pending_queue_sw;
+    RuntimeProfile* _runtime_profile = nullptr;
+    RuntimeProfile::Counter* _scan_timer = nullptr;
 };
 
 // ======================================================
@@ -132,8 +151,21 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     size_t dop = context->dop_of_source_operator(id());
-    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-            context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
+    std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
+
+    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    if (config::connector_dynamic_chunk_buffer_limiter_enable && mem_limit > 0) {
+        // port from olap scan node.
+        size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+        size_t default_buffer_capacity = max_buffer_capacity;
+        pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+                max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
+        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop,
+                                                                           std::move(buffer_limiter));
+    } else {
+        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+                context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
+    }
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
@@ -201,7 +233,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);
     data_source->set_runtime_profile(_runtime_profile.get());
-    ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source)));
+    ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
     scanner->init(state);
     _push_pending_scanner(scanner);
     return Status::OK();
@@ -545,6 +577,10 @@ void ConnectorScanNode::_init_counter() {
 
 int ConnectorScanNode::io_tasks_per_scan_operator() const {
     return config::connector_io_tasks_per_scan_operator;
+}
+
+bool ConnectorScanNode::always_shared_scan() const {
+    return config::connector_scan_node_always_shared_scan;
 }
 
 } // namespace starrocks::vectorized

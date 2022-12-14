@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/load/routineload/KafkaRoutineLoadJob.java
 
@@ -30,6 +43,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -49,6 +63,9 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.load.Load;
+import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
@@ -65,6 +82,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * KafkaRoutineLoadJob is a kind of RoutineLoadJob which fetch data from kafka.
@@ -74,6 +92,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private static final Logger LOG = LogManager.getLogger(KafkaRoutineLoadJob.class);
 
     public static final String KAFKA_FILE_CATALOG = "kafka";
+
+    private static final String PROPERTY_KAFKA_GROUP_ID = "group.id";
 
     private String brokerList;
     private String topic;
@@ -374,6 +394,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
             Table table = db.getTable(stmt.getTableName());
+            Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table);
             tableId = table.getId();
         } finally {
             db.readUnlock();
@@ -385,12 +406,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
-        kafkaRoutineLoadJob.checkCustomPartition();
+        kafkaRoutineLoadJob.checkCustomPartition(kafkaRoutineLoadJob.customKafkaPartitions);
 
         return kafkaRoutineLoadJob;
     }
 
-    private void checkCustomPartition() throws UserException {
+    private void checkCustomPartition(List<Integer> customKafkaPartitions) throws UserException {
         if (customKafkaPartitions.isEmpty()) {
             return;
         }
@@ -444,6 +465,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         if (!stmt.getCustomKafkaProperties().isEmpty()) {
             setCustomKafkaProperties(stmt.getCustomKafkaProperties());
         }
+
+        setDefaultKafkaGroupID();
     }
 
     // this is a unprotected method which is called in the initialization function
@@ -456,6 +479,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private void setCustomKafkaProperties(Map<String, String> kafkaProperties) {
         this.customProperties = kafkaProperties;
+    }
+
+    private void setDefaultKafkaGroupID() {
+        if (this.customProperties.containsKey(PROPERTY_KAFKA_GROUP_ID)) {
+            return;
+        }
+        this.customProperties.put(PROPERTY_KAFKA_GROUP_ID, name + "_" + UUID.randomUUID());
     }
 
     @Override
@@ -513,6 +543,35 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
             }
         }
+    }
+
+    /**
+     * add extra parameter check for changing kafka offset
+     * 1. if customKafkaParition is specified, only the specific partitions can be modified
+     * 2. otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
+     */
+    @Override
+    public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
+                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatement originStatement,
+                          boolean isReplay) throws DdlException {
+        if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
+            List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
+            if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
+                for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
+                    if (! customKafkaPartitions.contains(pair.first)) {
+                        throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
+                    }
+                }
+            } else {
+                // check if partition is validate
+                try {
+                    checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+                } catch (UserException e) {
+                    throw new DdlException("The specified partition is not in the consumed partitions ", e);
+                }
+            }
+        }
+        super.modifyJob(routineLoadDesc, jobProperties, dataSourceProperties, originStatement, isReplay);
     }
 
     @Override

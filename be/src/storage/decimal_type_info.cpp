@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/decimal_type_info.h"
 
@@ -11,12 +23,11 @@
 
 namespace starrocks {
 
-VALUE_GUARD(FieldType, DecimalFTGuard, ft_is_decimal, OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64,
-            OLAP_FIELD_TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, DecimalFTGuard, ft_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 
-VALUE_GUARD(FieldType, InvalidFTGuard, ft_is_invalid, OLAP_FIELD_TYPE_MAX_VALUE);
+VALUE_GUARD(LogicalType, InvalidFTGuard, ft_is_invalid, TYPE_MAX_VALUE);
 
-template <FieldType TYPE, typename = DecimalFTGuard<TYPE>>
+template <LogicalType TYPE, typename = DecimalFTGuard<TYPE>>
 class DecimalTypeInfo final : public TypeInfo {
 public:
     virtual ~DecimalTypeInfo() = default;
@@ -36,12 +47,6 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override {
         return _delegate->deep_copy(dest, src, mem_pool);
-    }
-
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    // It is same with deep_copy() for all type except for HLL and OBJECT type
-    void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
-        return _delegate->copy_object(dest, src, mem_pool);
     }
 
     void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
@@ -67,11 +72,11 @@ public:
         return Status::OK();
     }
 
-    static inline Status to_decimal(FieldType src_type, FieldType dst_type, const void* src, void* dst,
+    static inline Status to_decimal(LogicalType src_type, LogicalType dst_type, const void* src, void* dst,
                                     int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                               \
                                                                                                              \
-    if (src_type == OLAP_FIELD_TYPE_DECIMAL##n && dst_type == OLAP_FIELD_TYPE_DECIMAL##m) {                  \
+    if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                                        \
         int##n##_t src_datum = 0;                                                                            \
         int##m##_t dst_datum = 0;                                                                            \
         src_datum = unaligned_load<typeof(src_datum)>(src);                                                  \
@@ -100,37 +105,12 @@ public:
         return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
-    //convert and deep copy value from other type's source
-    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
-        switch (src_type->type()) {
-        case OLAP_FIELD_TYPE_CHAR:
-        case OLAP_FIELD_TYPE_VARCHAR: {
-            using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
-            auto src_value = reinterpret_cast<const SrcType*>(src);
-            CppType result;
-            auto fail = DecimalV3Cast::from_string<CppType>(&result, precision(), scale(), src_value->data,
-                                                            src_value->size);
-            if (UNLIKELY(fail)) {
-                return Status::InvalidArgument("Fail to cast to decimal.");
-            }
-            memcpy(dest, &result, sizeof(CppType));
-            return Status::OK();
-        }
-        case OLAP_FIELD_TYPE_DECIMAL32:
-        case OLAP_FIELD_TYPE_DECIMAL64:
-        case OLAP_FIELD_TYPE_DECIMAL128:
-            return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
-                              precision(), scale());
-        default:
-            return Status::InvalidArgument("Fail to cast to decimal.");
-        }
-    }
-
-    static inline Status to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum, Datum& dst_datum,
-                                    int src_precision, int src_scale, int dst_precision, int dst_scale) {
+    static inline Status to_decimal(LogicalType src_type, LogicalType dst_type, const Datum& src_datum,
+                                    Datum& dst_datum, int src_precision, int src_scale, int dst_precision,
+                                    int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
                                                                                                          \
-    if (src_type == OLAP_FIELD_TYPE_DECIMAL##n && dst_type == OLAP_FIELD_TYPE_DECIMAL##m) {              \
+    if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                                    \
         int##m##_t dst_val = 0;                                                                          \
         int##n##_t src_val = src_datum.get_int##n();                                                     \
         auto overflow = to_decimal<int##n##_t, int##m##_t>(&src_val, &dst_val, src_precision, src_scale, \
@@ -159,19 +139,6 @@ public:
 #undef TO_DECIMAL_MACRO
 
         return Status::InvalidArgument("Fail to cast to decimal.");
-    }
-
-    //convert and deep copy value from other type's source
-    Status convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const override {
-        switch (src_type->type()) {
-        case OLAP_FIELD_TYPE_DECIMAL32:
-        case OLAP_FIELD_TYPE_DECIMAL64:
-        case OLAP_FIELD_TYPE_DECIMAL128:
-            return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
-                              precision(), scale());
-        default:
-            return Status::InternalError("Fail to cast to decimal.");
-        }
     }
 
     Status from_string(void* buf, const std::string& scan_key) const override {
@@ -211,7 +178,7 @@ public:
 
     int scale() const override { return _scale; }
 
-    FieldType type() const override { return TYPE; }
+    LogicalType type() const override { return TYPE; }
 
     std::string to_zone_map_string(const void* src) { return _delegate->to_string(src); }
 
@@ -228,31 +195,31 @@ private:
     const int _scale;
 };
 
-TypeInfoPtr get_decimal_type_info(FieldType type, int precision, int scale) {
+TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale) {
     switch (type) {
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(precision, scale);
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>>(precision, scale);
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>>(precision, scale);
+    case TYPE_DECIMAL32:
+        return std::make_shared<DecimalTypeInfo<TYPE_DECIMAL32>>(precision, scale);
+    case TYPE_DECIMAL64:
+        return std::make_shared<DecimalTypeInfo<TYPE_DECIMAL64>>(precision, scale);
+    case TYPE_DECIMAL128:
+        return std::make_shared<DecimalTypeInfo<TYPE_DECIMAL128>>(precision, scale);
     default:
         return nullptr;
     }
 }
 
-std::string get_decimal_zone_map_string(TypeInfo* type_info, const char* value) {
+std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value) {
     switch (type_info->type()) {
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>*>(type_info);
+    case TYPE_DECIMAL32: {
+        auto* decimal_type_info = down_cast<DecimalTypeInfo<TYPE_DECIMAL32>*>(type_info);
         return decimal_type_info->to_zone_map_string(value);
     }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>*>(type_info);
+    case TYPE_DECIMAL64: {
+        auto* decimal_type_info = down_cast<DecimalTypeInfo<TYPE_DECIMAL64>*>(type_info);
         return decimal_type_info->to_zone_map_string(value);
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>*>(type_info);
+    case TYPE_DECIMAL128: {
+        auto* decimal_type_info = down_cast<DecimalTypeInfo<TYPE_DECIMAL128>*>(type_info);
         return decimal_type_info->to_zone_map_string(value);
     }
     default:

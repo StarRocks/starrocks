@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/runtime_filter_bank.h"
 
@@ -24,13 +36,13 @@ namespace starrocks::vectorized {
 static const uint8_t RF_VERSION = 0x2;
 
 struct FilterBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     JoinRuntimeFilter* operator()() {
         return new RuntimeBloomFilter<ptype>();
     }
 };
 
-JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, PrimitiveType type) {
+JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type) {
     JoinRuntimeFilter* filter = type_dispatch_filter(type, (JoinRuntimeFilter*)nullptr, FilterBuilder());
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
@@ -69,7 +81,7 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
     }
 
     // peek primitive type.
-    PrimitiveType type;
+    LogicalType type;
     memcpy(&type, data + offset, sizeof(type));
     JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
     DCHECK(filter != nullptr);
@@ -80,13 +92,13 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
     }
 }
 
-JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, PrimitiveType type) {
+JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
     JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
     return filter;
 }
 
 struct FilterIniter {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     auto operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
         using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
         auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
@@ -114,7 +126,7 @@ struct FilterIniter {
     }
 };
 
-Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type,
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
     type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
@@ -152,7 +164,7 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
 }
 
 struct FilterZoneMapWithMinMaxOp {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
         using CppType = RunTimeCppType<ptype>;
         auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
@@ -162,12 +174,13 @@ struct FilterZoneMapWithMinMaxOp {
     }
 };
 
-bool RuntimeFilterHelper::filter_zonemap_with_min_max(PrimitiveType type, const JoinRuntimeFilter* filter,
+bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const JoinRuntimeFilter* filter,
                                                       const Column* min_column, const Column* max_column) {
     return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
 
-Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc) {
+Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
+                                          RuntimeState* state) {
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;
     _has_remote_targets = desc.has_remote_targets;
@@ -193,12 +206,12 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         _broadcast_grf_destinations = desc.broadcast_grf_destinations;
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx));
+    RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
 }
 
-Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
-                                          TPlanNodeId node_id) {
+Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id,
+                                          RuntimeState* state) {
     _filter_id = desc.filter_id;
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;
@@ -210,7 +223,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_target_expr.find(node_id);
         if (it != desc.plan_node_id_to_target_expr.end()) {
             not_found = false;
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx));
+            RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx, state));
         }
     }
 
@@ -223,7 +236,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         // TODO(lishuming): maybe reuse probe exprs because partition_by_exprs and probe_expr
         // must be overlapped.
         if (it != desc.plan_node_id_to_partition_by_exprs.end()) {
-            RETURN_IF_ERROR(Expr::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts));
+            RETURN_IF_ERROR(Expr::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts, state));
         }
     }
 
@@ -612,6 +625,118 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
         set_runtime_filter(_shared_runtime_filter.get());
     }
+}
+
+// ========================================================
+template <LogicalType Type>
+class MinMaxPredicate : public Expr {
+public:
+    using CppType = RunTimeCppType<Type>;
+    MinMaxPredicate(SlotId slot_id, const CppType& min_value, const CppType& max_value)
+            : Expr(TypeDescriptor(Type), false), _slot_id(slot_id), _min_value(min_value), _max_value(max_value) {
+        _node_type = TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR;
+    }
+    ~MinMaxPredicate() override = default;
+    Expr* clone(ObjectPool* pool) const override {
+        return pool->add(new MinMaxPredicate<Type>(_slot_id, _min_value, _max_value));
+    }
+
+    bool is_constant() const override { return false; }
+    bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
+
+    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
+        const vectorized::ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
+        size_t size = col->size();
+
+        std::shared_ptr<vectorized::BooleanColumn> result(new vectorized::BooleanColumn(size, 1));
+        uint8_t* res = result->get_data().data();
+
+        if (col->only_null()) {
+            return result;
+        }
+
+        if (col->is_constant()) {
+            CppType value = ColumnHelper::get_const_value<Type>(col);
+            if (!(value >= _min_value && value <= _max_value)) {
+                memset(res, 0x0, size);
+            }
+            return result;
+        }
+
+        // NOTE(yan): make sure following code can be compiled into SIMD instructions:
+        // in original version, we use
+        //   1. memcpy filter -> res
+        //   2. res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
+        // but they can not be compiled into SIMD instructions.
+        if (col->is_nullable()) {
+            auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
+            uint8_t* __restrict__ null_data = tmp->null_column_data().data();
+            CppType* __restrict__ data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
+            for (int i = 0; i < size; i++) {
+                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
+            }
+            // we take null as true value.
+            for (int i = 0; i < size; i++) {
+                res[i] = res[i] | null_data[i];
+            }
+        } else {
+            CppType* data = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
+            for (int i = 0; i < size; i++) {
+                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
+            }
+        }
+
+        // NOTE(yan): filter can be used optionally.
+        // if (filter != nullptr) {
+        //     for (int i = 0; i < size; i++) {
+        //         res[i] = res[i] & filter[i];
+        //     }
+        // }
+
+        return result;
+    }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        return evaluate_with_filter(context, ptr, nullptr);
+    }
+
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
+        slot_ids->emplace_back(_slot_id);
+        return 1;
+    }
+
+private:
+    SlotId _slot_id;
+    const CppType _min_value;
+    const CppType _max_value;
+};
+
+class MinMaxPredicateBuilder {
+public:
+    MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const JoinRuntimeFilter* filter)
+            : _pool(pool), _slot_id(slot_id), _filter(filter) {}
+
+    template <LogicalType ptype>
+    Expr* operator()() {
+        auto* bloom_filter = (RuntimeBloomFilter<ptype>*)(_filter);
+        MinMaxPredicate<ptype>* p =
+                _pool->add(new MinMaxPredicate<ptype>(_slot_id, bloom_filter->min_value(), bloom_filter->max_value()));
+        return p;
+    }
+
+private:
+    ObjectPool* _pool;
+    SlotId _slot_id;
+    const JoinRuntimeFilter* _filter;
+};
+
+void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
+                                                         const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
+    *min_max_predicate = nullptr;
+    if (filter == nullptr || filter->has_null()) return;
+    if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
+    auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
+    *min_max_predicate = res;
 }
 
 } // namespace starrocks::vectorized

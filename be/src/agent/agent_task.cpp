@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "agent/agent_task.h"
 
@@ -682,6 +694,8 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 // This property is no longer supported.
                 break;
             case TTabletMetaType::WRITE_QUORUM:
+                break;
+            case TTabletMetaType::REPLICATED_STORAGE:
                 break;
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/greg7mdp/parallel-hashmap/blob/master/parallel_hashmap/phmap_base.h
 
@@ -11,7 +24,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +41,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -1836,16 +1849,16 @@ template <typename T>
 constexpr copy_traits get_ctor_copy_traits() {
     return std::is_copy_constructible<T>::value
                    ? copy_traits::copyable
-                   : std::is_move_constructible<T>::value ? copy_traits::movable : copy_traits::non_movable;
+                   : (std::is_move_constructible<T>::value ? copy_traits::movable : copy_traits::non_movable);
 }
 
 template <typename T>
 constexpr copy_traits get_assign_copy_traits() {
     return phmap::is_copy_assignable<T>::value && std::is_copy_constructible<T>::value
                    ? copy_traits::copyable
-                   : phmap::is_move_assignable<T>::value && std::is_move_constructible<T>::value
-                             ? copy_traits::movable
-                             : copy_traits::non_movable;
+                   : (phmap::is_move_assignable<T>::value && std::is_move_constructible<T>::value
+                              ? copy_traits::movable
+                              : copy_traits::non_movable);
 }
 
 // Whether T is constructible or convertible from optional<U>.
@@ -2332,7 +2345,7 @@ constexpr auto operator==(const optional<T>& x, const optional<U>& y)
         -> decltype(optional_internal::convertible_to_bool(*x == *y)) {
     return static_cast<bool>(x) != static_cast<bool>(y)
                    ? false
-                   : static_cast<bool>(x) == false ? true : static_cast<bool>(*x == *y);
+                   : (static_cast<bool>(x) == false ? true : static_cast<bool>(*x == *y));
 }
 
 // Returns: If bool(x) != bool(y), true; otherwise, if bool(x) == false, false;
@@ -2342,7 +2355,7 @@ constexpr auto operator!=(const optional<T>& x, const optional<U>& y)
         -> decltype(optional_internal::convertible_to_bool(*x != *y)) {
     return static_cast<bool>(x) != static_cast<bool>(y)
                    ? true
-                   : static_cast<bool>(x) == false ? false : static_cast<bool>(*x != *y);
+                   : (static_cast<bool>(x) == false ? false : static_cast<bool>(*x != *y));
 }
 // Returns: If !y, false; otherwise, if !x, true; otherwise *x < *y.
 template <typename T, typename U>

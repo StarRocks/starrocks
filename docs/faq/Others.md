@@ -57,7 +57,7 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 
 ## Does StarRocks support updating particular fields in a table by executing the UPSERT statement?
 
-StarRocks 2.2 and later support updating specific fields in a table by using the primary key model. StarRocks 1.9 and later support updating all fields in a table by using the primary key model. For more information, see [Primary key model](https://docs.starrocks.com/en-us/2.2/table_design/Data_model#primary-key-model) in StarRocks 2.2.
+StarRocks 2.2 and later support updating specific fields in a table by using the primary key model. StarRocks 1.9 and later support updating all fields in a table by using the primary key model. For more information, see [Primary key model](../table_design/Data_model.md#primary-key-model) in StarRocks 2.2.
 
 ## How to swap the data between two tables or two partitions？
 
@@ -214,7 +214,7 @@ StarRocks supports single node deployment, so you need to configure at least one
 
 You can create a new user account and then set the data permission by granting permissions on the table query to the user.
 
-## Why does the profile fail to display after I set `is_report_success` to `true`?
+## Why does the profile fail to display after I set `enable_profile` to `true`?
 
 The report is only submitted to the leader FE for access.
 
@@ -225,3 +225,11 @@ Run the `show create table xxx` command.
 ## When I create a table, how to specify the default value for the NOW() function?
 
 Only StarRocks 2.1 or later version supports specifying the default value for a function. For versions earlier than StarRocks 2.1, you can only specify a constant for a function.
+
+## How can I release the storage space of BE nodes?
+
+You can remove the directory `trash` using `rm -rf` command. If you have already restored your data from snapshot, you can remove the directory `snapshot`.
+
+## Can add extra disks to BE nodes?
+
+Yes. You can add the disks to the directory specified by the BE configuration item `storage_root_path`.

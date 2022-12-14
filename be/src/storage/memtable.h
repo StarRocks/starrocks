@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -22,11 +34,14 @@ class MemTableSink;
 
 class MemTable {
 public:
-    MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+    MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
              MemTableSink* sink, MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
+    MemTable(int64_t tablet_id, const VectorizedSchema* schema, MemTableSink* sink, int64_t max_buffer_size,
              MemTracker* mem_tracker);
+
+    MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+             MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker);
 
     ~MemTable();
 
@@ -48,7 +63,8 @@ public:
 
     bool is_full() const;
 
-    static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
+    static VectorizedSchema convert_schema(const TabletSchema* tablet_schema,
+                                           const std::vector<SlotDescriptor*>* slot_descs);
 
 private:
     void _merge();
@@ -71,7 +87,7 @@ private:
 
     int64_t _tablet_id;
 
-    const Schema* _vectorized_schema;
+    const VectorizedSchema* _vectorized_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;
@@ -85,6 +101,8 @@ private:
 
     bool _has_op_slot = false;
     std::unique_ptr<Column> _deletes;
+
+    std::string _merge_condition;
 
     int64_t _max_buffer_size = config::write_buffer_size;
 

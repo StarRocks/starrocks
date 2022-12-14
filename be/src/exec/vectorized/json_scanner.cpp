@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/json_scanner.h"
 
@@ -28,6 +40,7 @@
 namespace starrocks::vectorized {
 
 const int64_t MAX_ERROR_LINES_IN_FILE = 50;
+const int64_t MAX_ERROR_LOG_LENGTH = 64;
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
@@ -99,7 +112,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
             return status;
         }
     }
-    auto cast_chunk = _cast_chunk(src_chunk);
+    ASSIGN_OR_RETURN(auto cast_chunk, _cast_chunk(src_chunk));
     return materialize(src_chunk, cast_chunk);
 }
 
@@ -288,7 +301,7 @@ Status JsonScanner::_open_next_reader() {
     return Status::OK();
 }
 
-ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chunk) {
+StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chunk) {
     SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
 
@@ -299,7 +312,7 @@ ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chu
             continue;
         }
 
-        ColumnPtr col = _cast_exprs[column_pos]->evaluate(nullptr, src_chunk.get());
+        ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[column_pos]->evaluate_checked(nullptr, src_chunk.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), col);
         cast_chunk->append_column(std::move(col), slot->id());
     }
@@ -446,7 +459,9 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 return st;
             }
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
+            _state->append_error_msg_to_file(
+                    fmt::format("parser current location: {}", parser->left_bytes_string(MAX_ERROR_LOG_LENGTH)),
+                    st.to_string());
             return st;
         }
         size_t chunk_row_num = chunk->num_rows();

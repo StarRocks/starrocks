@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/exec_env.cpp
 
@@ -21,6 +34,7 @@
 
 #include "runtime/exec_env.h"
 
+#include <memory>
 #include <thread>
 
 #include "agent/agent_server.h"
@@ -47,7 +61,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
@@ -58,7 +72,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "runtime/thread_resource_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -137,7 +150,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
-    _thread_mgr = new ThreadResourceMgr();
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init());
@@ -164,6 +176,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
     _pipeline_sink_io_pool =
             new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
+
+    int query_rpc_threads = config::internal_service_query_rpc_thread_num;
+    if (query_rpc_threads <= 0) {
+        query_rpc_threads = std::thread::hardware_concurrency();
+    }
+    _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = std::thread::hardware_concurrency();
@@ -300,7 +318,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _broker_mgr->init();
     _small_file_mgr->init();
 
-    RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
+    RETURN_IF_ERROR(_load_channel_mgr->init(load_mem_tracker()));
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
@@ -354,42 +372,44 @@ Status ExecEnv::init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    _mem_tracker = new MemTracker(MemTracker::PROCESS, bytes_limit, "process");
-    _query_pool_mem_tracker = new MemTracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", _mem_tracker);
+    _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    _query_pool_mem_tracker =
+            regist_tracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", this->process_mem_tracker());
 
-    int64_t load_mem_limit = calc_max_load_memory(_mem_tracker->limit());
-    _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
+    int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
+    _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
+
     // Metadata statistics memory statistics do not use new mem statistics framework with hook
-    _metadata_mem_tracker = new MemTracker(-1, "metadata", nullptr);
+    _metadata_mem_tracker = regist_tracker(-1, "metadata", nullptr);
 
-    _tablet_metadata_mem_tracker = new MemTracker(-1, "tablet_metadata", _metadata_mem_tracker);
-    _rowset_metadata_mem_tracker = new MemTracker(-1, "rowset_metadata", _metadata_mem_tracker);
-    _segment_metadata_mem_tracker = new MemTracker(-1, "segment_metadata", _metadata_mem_tracker);
-    _column_metadata_mem_tracker = new MemTracker(-1, "column_metadata", _metadata_mem_tracker);
+    _tablet_metadata_mem_tracker = regist_tracker(-1, "tablet_metadata", metadata_mem_tracker());
+    _rowset_metadata_mem_tracker = regist_tracker(-1, "rowset_metadata", metadata_mem_tracker());
+    _segment_metadata_mem_tracker = regist_tracker(-1, "segment_metadata", metadata_mem_tracker());
+    _column_metadata_mem_tracker = regist_tracker(-1, "column_metadata", metadata_mem_tracker());
 
-    _tablet_schema_mem_tracker = new MemTracker(-1, "tablet_schema", _tablet_metadata_mem_tracker);
-    _segment_zonemap_mem_tracker = new MemTracker(-1, "segment_zonemap", _segment_metadata_mem_tracker);
-    _short_key_index_mem_tracker = new MemTracker(-1, "short_key_index", _segment_metadata_mem_tracker);
-    _column_zonemap_index_mem_tracker = new MemTracker(-1, "column_zonemap_index", _column_metadata_mem_tracker);
-    _ordinal_index_mem_tracker = new MemTracker(-1, "ordinal_index", _column_metadata_mem_tracker);
-    _bitmap_index_mem_tracker = new MemTracker(-1, "bitmap_index", _column_metadata_mem_tracker);
-    _bloom_filter_index_mem_tracker = new MemTracker(-1, "bloom_filter_index", _column_metadata_mem_tracker);
+    _tablet_schema_mem_tracker = regist_tracker(-1, "tablet_schema", tablet_metadata_mem_tracker());
+    _segment_zonemap_mem_tracker = regist_tracker(-1, "segment_zonemap", segment_metadata_mem_tracker());
+    _short_key_index_mem_tracker = regist_tracker(-1, "short_key_index", segment_metadata_mem_tracker());
+    _column_zonemap_index_mem_tracker = regist_tracker(-1, "column_zonemap_index", column_metadata_mem_tracker());
+    _ordinal_index_mem_tracker = regist_tracker(-1, "ordinal_index", column_metadata_mem_tracker());
+    _bitmap_index_mem_tracker = regist_tracker(-1, "bitmap_index", column_metadata_mem_tracker());
+    _bloom_filter_index_mem_tracker = regist_tracker(-1, "bloom_filter_index", column_metadata_mem_tracker());
 
-    int64_t compaction_mem_limit = calc_max_compaction_memory(_mem_tracker->limit());
-    _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
-    _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
-    _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
-    _page_cache_mem_tracker = new MemTracker(-1, "page_cache", _mem_tracker);
+    int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
+    _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", process_mem_tracker());
+    _schema_change_mem_tracker = regist_tracker(-1, "schema_change", process_mem_tracker());
+    _column_pool_mem_tracker = regist_tracker(-1, "column_pool", process_mem_tracker());
+    _page_cache_mem_tracker = regist_tracker(-1, "page_cache", process_mem_tracker());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _update_mem_tracker = new MemTracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
-    _chunk_allocator_mem_tracker = new MemTracker(-1, "chunk_allocator", _mem_tracker);
-    _clone_mem_tracker = new MemTracker(-1, "clone", _mem_tracker);
-    int64_t consistency_mem_limit = calc_max_consistency_memory(_mem_tracker->limit());
-    _consistency_mem_tracker = new MemTracker(consistency_mem_limit, "consistency", _mem_tracker);
+    _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
+    _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", process_mem_tracker());
+    _clone_mem_tracker = regist_tracker(-1, "clone", process_mem_tracker());
+    int64_t consistency_mem_limit = calc_max_consistency_memory(process_mem_tracker()->limit());
+    _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", process_mem_tracker());
 
-    ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
+    MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
+    SetMemTrackerForColumnPool op(column_pool_mem_tracker());
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
     _init_storage_page_cache();
     return Status::OK();
@@ -398,8 +418,8 @@ Status ExecEnv::init_mem_tracker() {
 int64_t ExecEnv::get_storage_page_cache_size() {
     std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
-    if (_mem_tracker->has_limit()) {
-        mem_limit = _mem_tracker->limit();
+    if (process_mem_tracker()->has_limit()) {
+        mem_limit = process_mem_tracker()->limit();
     }
     return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
 }
@@ -422,7 +442,7 @@ int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
 Status ExecEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
     storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
-    StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
+    StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
 
     // TODO(zc): The current memory usage configuration is a bit confusing,
     // we need to sort out the use of memory
@@ -451,49 +471,22 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
+    SAFE_DELETE(_query_rpc_pool);
     SAFE_DELETE(_scan_executor_without_workgroup);
     SAFE_DELETE(_scan_executor_with_workgroup);
     SAFE_DELETE(_connector_scan_executor_without_workgroup);
     SAFE_DELETE(_connector_scan_executor_with_workgroup);
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_thread_pool);
-    SAFE_DELETE(_thread_mgr);
-    SAFE_DELETE(_consistency_mem_tracker);
-    SAFE_DELETE(_clone_mem_tracker);
-    SAFE_DELETE(_chunk_allocator_mem_tracker);
-    SAFE_DELETE(_update_mem_tracker);
-    SAFE_DELETE(_page_cache_mem_tracker);
-    SAFE_DELETE(_column_pool_mem_tracker);
-    SAFE_DELETE(_schema_change_mem_tracker);
-    SAFE_DELETE(_compaction_mem_tracker);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
     }
 
-    SAFE_DELETE(_bloom_filter_index_mem_tracker);
-    SAFE_DELETE(_bitmap_index_mem_tracker);
-    SAFE_DELETE(_ordinal_index_mem_tracker);
-    SAFE_DELETE(_column_zonemap_index_mem_tracker);
-    SAFE_DELETE(_segment_zonemap_mem_tracker);
-    SAFE_DELETE(_short_key_index_mem_tracker);
-    SAFE_DELETE(_tablet_schema_mem_tracker);
-
-    SAFE_DELETE(_column_metadata_mem_tracker);
-    SAFE_DELETE(_segment_metadata_mem_tracker);
-    SAFE_DELETE(_rowset_metadata_mem_tracker);
-    SAFE_DELETE(_tablet_schema_mem_tracker);
-
-    SAFE_DELETE(_metadata_mem_tracker);
-
-    SAFE_DELETE(_load_mem_tracker);
-
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
     SAFE_DELETE(_query_context_mgr);
     SAFE_DELETE(_driver_limiter);
-    SAFE_DELETE(_query_pool_mem_tracker);
-    SAFE_DELETE(_mem_tracker);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
     SAFE_DELETE(_backend_client_cache);
@@ -505,6 +498,21 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
+
+    _reset_tracker();
+}
+
+void ExecEnv::_reset_tracker() {
+    for (auto iter = _mem_trackers.rbegin(); iter != _mem_trackers.rend(); ++iter) {
+        iter->reset();
+    }
+}
+
+template <class... Args>
+std::shared_ptr<MemTracker> ExecEnv::regist_tracker(Args&&... args) {
+    auto mem_tracker = std::make_shared<MemTracker>(std::forward<Args>(args)...);
+    _mem_trackers.emplace_back(mem_tracker);
+    return mem_tracker;
 }
 
 void ExecEnv::destroy(ExecEnv* env) {

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/mysql/MysqlChannel.java
 
@@ -21,6 +34,7 @@
 
 package com.starrocks.mysql;
 
+import com.starrocks.mysql.ssl.SSLChannel;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,6 +66,9 @@ public class MysqlChannel {
     // default packet byte buffer for most packet
     protected ByteBuffer defaultBuffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
     protected ByteBuffer sendBuffer;
+
+    private SSLChannel sslChannel;
+
     // for log and show
     protected String remoteHostPortString;
     protected String remoteIp;
@@ -59,19 +76,16 @@ public class MysqlChannel {
     protected boolean closed;
 
     protected MysqlChannel() {
+        this(null);
+    }
+
+    public MysqlChannel(SocketChannel channel) {
         this.closed = false;
         this.sequenceId = 0;
         this.isSend = false;
         this.remoteHostPortString = "";
         this.remoteIp = "";
-    }
-
-    public MysqlChannel(SocketChannel channel) {
-        this.sequenceId = 0;
         this.channel = channel;
-        this.isSend = false;
-        this.remoteHostPortString = "";
-        this.remoteIp = "";
 
         if (channel != null) {
             try {
@@ -130,10 +144,22 @@ public class MysqlChannel {
         }
     }
 
+    public void setSSLChannel(SSLChannel sslChannel) {
+        this.sslChannel = sslChannel;
+    }
+
     protected int readAll(ByteBuffer dstBuf) throws IOException {
+        if (sslChannel != null) {
+            return sslChannel.readAll(dstBuf);
+        } else {
+            return readAllPlain(dstBuf);
+        }
+    }
+
+    protected int readAllPlain(ByteBuffer dstBuf) throws IOException {
         int readLen = 0;
         while (dstBuf.remaining() != 0) {
-            int ret = channel.read(dstBuf);
+            int ret = realNetRead(dstBuf);
             // return -1 when remote peer close the channel
             if (ret == -1) {
                 return readLen;
@@ -141,6 +167,10 @@ public class MysqlChannel {
             readLen += ret;
         }
         return readLen;
+    }
+
+    public int realNetRead(ByteBuffer dstBuf) throws IOException {
+        return channel.read(dstBuf);
     }
 
     // read one logical mysql protocol packet
@@ -156,7 +186,8 @@ public class MysqlChannel {
             readLen = readAll(headerByteBuffer);
             if (readLen != PACKET_HEADER_LEN) {
                 // remote has close this channel
-                LOG.info("Receive packet header failed, remote {} may close the channel.", remoteHostPortString);
+                LOG.info("Receive packet header failed, " +
+                        "remote {} may close the channel.", remoteHostPortString);
                 return null;
             }
             if (packetId() != sequenceId) {
@@ -196,7 +227,16 @@ public class MysqlChannel {
         return result;
     }
 
-    protected void realNetSend(ByteBuffer buffer) throws IOException {
+    private void send(ByteBuffer buffer) throws IOException {
+        if (sslChannel != null) {
+            sslChannel.write(buffer);
+        } else {
+            realNetSend(buffer);
+        }
+        isSend = true;
+    }
+
+    public void realNetSend(ByteBuffer buffer) throws IOException {
         long bufLen = buffer.remaining();
         long writeLen = channel.write(buffer);
         if (bufLen != writeLen) {
@@ -204,7 +244,6 @@ public class MysqlChannel {
                     + ", needToWrite=" + bufLen + "]");
         }
         channel.write(buffer);
-        isSend = true;
     }
 
     public void flush() throws IOException {
@@ -215,7 +254,7 @@ public class MysqlChannel {
 
         sendBuffer.flip();
         try {
-            realNetSend(sendBuffer);
+            send(sendBuffer);
         } finally {
             sendBuffer.clear();
         }
@@ -237,8 +276,7 @@ public class MysqlChannel {
     }
 
     private void writeHeader(int length) throws IOException {
-        long leftLength = sendBuffer.capacity() - sendBuffer.position();
-        if (leftLength < 4) {
+        if ((sendBuffer.capacity() - sendBuffer.position()) < 4) {
             flush();
         }
 
@@ -258,7 +296,7 @@ public class MysqlChannel {
         }
         // Send this buffer if large enough
         if (buffer.remaining() > sendBuffer.remaining()) {
-            realNetSend(buffer);
+            send(buffer);
             return;
         }
         // Put it to

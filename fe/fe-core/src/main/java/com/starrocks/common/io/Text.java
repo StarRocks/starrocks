@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/io/Text.java
 
@@ -31,10 +44,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
-import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.zip.CheckedInputStream;
 import java.util.zip.CheckedOutputStream;
 
@@ -50,24 +63,8 @@ import java.util.zip.CheckedOutputStream;
  * length of an encoded string.
  */
 public class Text implements Writable {
+
     private static final Logger LOG = LogManager.getLogger(Text.class);
-
-    private static final ThreadLocal<CharsetEncoder> ENCODER_FACTORY = new ThreadLocal<CharsetEncoder>() {
-        protected CharsetEncoder initialValue() {
-            return Charset.forName("UTF-8").newEncoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT);
-        }
-    };
-
-    private static final ThreadLocal<CharsetDecoder> DECODER_FACTORY = new ThreadLocal<CharsetDecoder>() {
-        protected CharsetDecoder initialValue() {
-            return Charset.forName("UTF-8").newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT);
-        }
-    };
-
     private static final byte[] EMPTY_BYTES = new byte[0];
 
     private byte[] bytes;
@@ -102,12 +99,11 @@ public class Text implements Writable {
     public void setLength(int len) {
         if (len < 0) {
             return;
-        } else if (this.length >= len) {
-            this.length = len;
-        } else {
-            setCapacity(len, true);
-            this.length = len;
         }
+        if (this.length < len) {
+            setCapacity(len, true);
+        }
+        this.length = len;
     }
 
     /**
@@ -178,7 +174,7 @@ public class Text implements Writable {
             return -1; // not found
         } catch (CharacterCodingException e) {
             // can't get here
-            e.printStackTrace();
+            LOG.warn(e);
             return -1;
         }
     }
@@ -190,8 +186,7 @@ public class Text implements Writable {
             bytes = bb.array();
             length = bb.limit();
         } catch (CharacterCodingException e) {
-            throw new RuntimeException("Should not have happened "
-                    + e.toString());
+            throw new RuntimeException("Should not have happened " + e);
         }
     }
 
@@ -266,8 +261,7 @@ public class Text implements Writable {
         try {
             return decode(bytes, 0, length);
         } catch (CharacterCodingException e) {
-            throw new RuntimeException("Should not have happened "
-                    + e.toString());
+            throw new RuntimeException("Should not have happened " + e);
         }
     }
 
@@ -286,7 +280,7 @@ public class Text implements Writable {
 
     public static void skipFully(DataInput in, int len) throws IOException {
         int total = 0;
-        int cur = 0;
+        int cur;
 
         while ((total < len) && ((cur = in.skipBytes(len - total)) > 0)) {
             total += cur;
@@ -331,7 +325,9 @@ public class Text implements Writable {
      */
     private static String decode(ByteBuffer utf8, boolean replace)
             throws CharacterCodingException {
-        CharsetDecoder decoder = DECODER_FACTORY.get();
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
         if (replace) {
             decoder.onMalformedInput(java.nio.charset.CodingErrorAction.REPLACE);
             decoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
@@ -369,7 +365,9 @@ public class Text implements Writable {
      */
     public static ByteBuffer encode(String string, boolean replace)
             throws CharacterCodingException {
-        CharsetEncoder encoder = ENCODER_FACTORY.get();
+        CharsetEncoder encoder = StandardCharsets.UTF_8.newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
         if (replace) {
             encoder.onMalformedInput(CodingErrorAction.REPLACE);
             encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
@@ -390,8 +388,14 @@ public class Text implements Writable {
         int length = in.readInt();
         byte[] bytes = new byte[length];
         in.readFully(bytes, 0, length);
-        String res = decode(bytes);
-        return res;
+        return decode(bytes);
+    }
+
+    public static byte[] readBinary(DataInput in) throws IOException {
+        int length = in.readInt();
+        byte[] bytes = new byte[length];
+        in.readFully(bytes);
+        return bytes;
     }
 
     /**
@@ -402,6 +406,13 @@ public class Text implements Writable {
         int length = bytes.limit();
         out.writeInt(length);
         out.write(bytes.array(), 0, length);
+        return length;
+    }
+
+    public static int writeBinary(DataOutput out, byte[] bytes) throws IOException {
+        int length = bytes.length;
+        out.writeInt(length);
+        out.write(bytes, 0, length);
         return length;
     }
 
@@ -423,6 +434,7 @@ public class Text implements Writable {
             throw new EOFException(String.format("reach EOF: read expect %d actual %d!", expectLength, readRet));
         }
     }
+
     /**
      * Same as readString(), but to a CheckedInputStream
      */

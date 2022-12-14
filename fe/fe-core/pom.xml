@@ -38,7 +38,8 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
-        <iceberg.version>0.12.1</iceberg.version>
+        <iceberg.version>1.0.0</iceberg.version>
+        <awsv2.version>2.17.257</awsv2.version>
         <python>python</python>
     </properties>
 
@@ -183,6 +184,14 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.awaitility/awaitility -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf -->
         <dependency>
             <groupId>com.baidu</groupId>
@@ -238,8 +247,53 @@ under the License.
 
         <dependency>
             <groupId>org.apache.iceberg</groupId>
-            <artifactId>iceberg-mr</artifactId>
+            <artifactId>iceberg-api</artifactId>
             <version>${iceberg.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-bundled-guava</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-common</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-core</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-hive-metastore</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-aws</artifactId>
+            <version>${iceberg.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>bundle</artifactId>
+            <version>${awsv2.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>${awsv2.version}</version>
+            <scope>runtime</scope>
         </dependency>
 
         <dependency>
@@ -533,12 +587,12 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
-            <version>0.1.8</version>
+            <version>0.1.9</version>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starmanager</artifactId>
-            <version>0.1.8</version>
+            <version>0.1.9</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->

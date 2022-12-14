@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/condition_expr.h"
 
@@ -20,7 +32,7 @@
 
 namespace starrocks::vectorized {
 
-template <bool isConstC0, bool isConst1, PrimitiveType Type>
+template <bool isConstC0, bool isConst1, LogicalType Type>
 struct SelectIfOP {
     static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, const TypeDescriptor& type_desc) {
         [[maybe_unused]] Column::Filter& select_vec = ColumnHelper::merge_nullable_filter(selector.get());
@@ -59,20 +71,20 @@ struct SelectIfOP {
                                                 \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedIfNullExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfNullExpr);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto lhs = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
 
         int null_count = ColumnHelper::count_nulls(lhs);
         if (null_count == 0) {
             return lhs->clone();
         }
 
-        auto rhs = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (null_count == lhs->size()) {
             return rhs->clone();
         }
@@ -101,19 +113,19 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedNullIfExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedNullIfExpr);
 
     // NullIF: return null if lhs == rhs else return lhs
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto lhs = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
         }
 
-        auto rhs = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(rhs) == rhs->size()) {
             return lhs->clone();
         }
@@ -147,21 +159,21 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedIfExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfExpr);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto bhs = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto bhs, _children[0]->evaluate_checked(context, ptr));
         int true_count = ColumnHelper::count_true_with_notnull(bhs);
 
-        auto lhs = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
             return lhs->clone();
         }
 
-        auto rhs = _children[2]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto rhs, _children[2]->evaluate_checked(context, ptr));
         if (true_count == 0) {
             return rhs->clone();
         }
@@ -269,16 +281,16 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedCoalesceExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         std::vector<ColumnViewer<Type>> viewers;
         std::vector<ColumnPtr> columns;
         for (int i = 0; i < _children.size(); ++i) {
-            auto value = _children[i]->evaluate(context, ptr);
+            ASSIGN_OR_RETURN(auto value, _children[i]->evaluate_checked(context, ptr));
             auto null_count = ColumnHelper::count_nulls(value);
 
             // 1.return if first column is all not null.
@@ -371,7 +383,7 @@ public:
     CASE_TYPE(TYPE_DECIMAL128, CLASS);
 
 Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedIfNullExpr);
     default:
@@ -381,7 +393,7 @@ Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExpr
 }
 
 Expr* VectorizedConditionExprFactory::create_null_if_expr(const TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedNullIfExpr);
     default:
@@ -391,7 +403,7 @@ Expr* VectorizedConditionExprFactory::create_null_if_expr(const TExprNode& node)
 }
 
 Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
 
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedIfExpr);
@@ -402,7 +414,7 @@ Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node) {
 }
 
 Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedCoalesceExpr);
     default:

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/snapshot_manager.cpp
 
@@ -572,11 +585,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
     snapshot_meta.set_snapshot_format(snapshot_format);
     snapshot_meta.set_snapshot_type(snapshot_type);
     snapshot_meta.set_snapshot_version(snapshot_version);
-    snapshot_meta.rowset_metas().reserve(rowset_metas.size());
-    for (const auto& rowset_meta : rowset_metas) {
-        RowsetMetaPB& meta_pb = snapshot_meta.rowset_metas().emplace_back();
-        rowset_meta->to_rowset_pb(&meta_pb);
-    }
+    tablet->updates()->to_rowset_meta_pb(rowset_metas, snapshot_meta.rowset_metas());
     if (snapshot_type == SNAPSHOT_TYPE_FULL) {
         auto meta_store = tablet->data_dir()->get_meta();
         uint32_t new_rsid = 0;

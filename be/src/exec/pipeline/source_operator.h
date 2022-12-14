@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -42,12 +54,13 @@ public:
     // There are two source operators returning false.
     // - The scan operator, which has been assigned tablets with the specific bucket sequences.
     // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
-    virtual bool need_local_shuffle() const { return true; }
-    virtual void set_need_local_shuffle(bool need){};
+    virtual bool could_local_shuffle() const { return _could_local_shuffle; }
+    virtual void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; };
     virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
 
 protected:
     size_t _degree_of_parallelism = 1;
+    bool _could_local_shuffle = true;
     MorselQueueFactory* _morsel_queue_factory = nullptr;
 };
 

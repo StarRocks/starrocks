@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/aggregate/distinct_streaming_node.h"
 
@@ -68,9 +80,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
                 TRY_CATCH_ALLOC_SCOPE_START()
 
-                _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
-                    _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
-                });
+                _aggregator->build_hash_set(input_chunk_size);
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
@@ -94,9 +104,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
                     TRY_CATCH_ALLOC_SCOPE_START()
-                    _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
-                        _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
-                    });
+                    _aggregator->build_hash_set(input_chunk_size);
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
                     _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -108,11 +116,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 } else {
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        TRY_CATCH_ALLOC_SCOPE_START()
-                        _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
-                            _aggregator->build_hash_set_with_selection(*hash_set_with_key, input_chunk_size);
-                        });
-                        TRY_CATCH_ALLOC_SCOPE_END()
+                        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection(input_chunk_size));
                     }
 
                     {
@@ -126,7 +130,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     }
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-                    if ((*chunk)->num_rows() > 0) {
+                    if ((*chunk) != nullptr && (*chunk)->num_rows() > 0) {
                         break;
                     } else {
                         continue;
@@ -166,9 +170,7 @@ void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
     }
 
-    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
-        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, runtime_state()->chunk_size(), chunk);
-    });
+    _aggregator->convert_hash_set_to_chunk(runtime_state()->chunk_size(), chunk);
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::decompose_to_pipeline(
@@ -179,7 +181,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::
     // and we may set other parallelism for source operator in many special cases
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
+    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         // shared by sink operator factory and source operator factory
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode =
@@ -189,6 +192,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::
                 context->next_operator_id(), id(), aggregator_factory);
         auto source_operator = std::make_shared<AggregateDistinctStreamingSourceOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
     auto operators = operators_generator(true);

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -14,17 +26,14 @@
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class LikePredicate {
 public:
     // Like method
-    static Status like_prepare(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status like_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status like_close(starrocks_udf::FunctionContext* context,
-                             starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status like_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * like predicate method interface
@@ -36,11 +45,9 @@ public:
     DEFINE_VECTORIZED_FN(like);
 
     // regex method
-    static Status regex_prepare(starrocks_udf::FunctionContext* context,
-                                starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status regex_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status regex_close(starrocks_udf::FunctionContext* context,
-                              starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status regex_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * regex predicate method interface
@@ -130,37 +137,37 @@ private:
       * @paramType: [BinaryColumn, BinaryColumn]
       * @return: BooleanColumn
       */
-    static ColumnPtr regex_match(FunctionContext* context, const Columns& columns, bool is_like_pattern);
+    static StatusOr<ColumnPtr> regex_match(FunctionContext* context, const Columns& columns, bool is_like_pattern);
 
-    static ColumnPtr regex_match_full(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> regex_match_full(FunctionContext* context, const Columns& columns);
 
-    static ColumnPtr regex_match_partial(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> regex_match_partial(FunctionContext* context, const Columns& columns);
 
     template <bool full_match>
-    static ColumnPtr match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns);
 
     /// Convert a LIKE pattern (with embedded % and _) into the corresponding
     /// regular expression pattern. Escaped chars are copied verbatim.
     template <bool fullMatch>
-    static std::string convert_like_pattern(starrocks_udf::FunctionContext* context, const Slice& pattern);
+    static std::string convert_like_pattern(FunctionContext* context, const Slice& pattern);
 
     static void remove_escape_character(std::string* search_string);
 
 private:
-    static ColumnPtr _predicate_const_regex(FunctionContext* context, ColumnBuilder<TYPE_BOOLEAN>* result,
-                                            const ColumnViewer<TYPE_VARCHAR>& value_viewer,
-                                            const ColumnPtr& value_column);
+    static StatusOr<ColumnPtr> _predicate_const_regex(FunctionContext* context, ColumnBuilder<TYPE_BOOLEAN>* result,
+                                                      const ColumnViewer<TYPE_VARCHAR>& value_viewer,
+                                                      const ColumnPtr& value_column);
 
     // This is used when pattern is empty string, &_DUMMY_STRING_FOR_EMPTY_PATTERN used as not null pointer
     // to avoid crash with hs_scan.
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
     struct LikePredicateState;
-    static bool hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
+    static bool hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, FunctionContext*,
                                              const Slice& slice);
     template <bool full_match>
     static Status compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
-                                                starrocks_udf::FunctionContext* context, const Slice& slice);
+                                                FunctionContext* context, const Slice& slice);
     struct LikePredicateState {
         char escape_char{'\\'};
 
@@ -193,7 +200,7 @@ private:
         // one scratch space per thread, or concurrent caller, is required
         hs_scratch_t* scratch = nullptr;
 
-        LikePredicateState() {}
+        LikePredicateState() = default;
 
         ~LikePredicateState() {
             if (scratch != nullptr) {
@@ -212,5 +219,4 @@ private:
         }
     };
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

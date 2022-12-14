@@ -1,7 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import avro.shaded.com.google.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
@@ -36,6 +49,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
     public static final PruneHDFSScanColumnRule HUDI_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final PruneHDFSScanColumnRule DELTALAKE_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
+    public static final PruneHDFSScanColumnRule FILE_SCAN =
+            new PruneHDFSScanColumnRule(OperatorType.LOGICAL_FILE_SCAN);
 
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));
@@ -55,7 +70,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         // if not, we have to choose one materialized column from scan operator output columns
         // with the minimal cost.
         if (!containsMaterializedColumn(scanOperator, scanColumns)) {
-            List<ColumnRefOperator> preOutputColumns = new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
+            List<ColumnRefOperator> preOutputColumns =
+                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
             List<ColumnRefOperator> outputColumns = preOutputColumns.stream()
                     .filter(column -> !column.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
                     .collect(Collectors.toList());
@@ -71,7 +87,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                     smallestIndex = index;
                 }
                 Type columnType = outputColumns.get(index).getType();
-                if (columnType.isScalarType()) {
+                if (columnType.isScalarType() && columnType.isSupported()) {
                     int columnLength = columnType.getTypeSize();
                     if (columnLength < smallestColumnLength) {
                         smallestIndex = index;

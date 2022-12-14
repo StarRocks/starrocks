@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <memory>
 #include <shared_mutex>
@@ -8,8 +20,7 @@
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class SinkIOExecutor : public bthread::Executor {
 public:
@@ -26,7 +37,7 @@ public:
 private:
     SinkIOExecutor() = default;
 
-    ~SinkIOExecutor() = default;
+    ~SinkIOExecutor() override = default;
 };
 
 // SinkIOBuffer accepts input from all sink operators, it uses an execution queue to asynchronously process chunks one by one.
@@ -97,7 +108,7 @@ public:
     }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
-        SinkIOBuffer* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
+        auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         for (; iter; ++iter) {
             sink_io_buffer->_process_chunk(iter);
         }
@@ -123,5 +134,4 @@ protected:
     static const int32_t kExecutionQueueSizeLimit = 64;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

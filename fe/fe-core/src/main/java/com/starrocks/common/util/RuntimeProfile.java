@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/util/RuntimeProfile.java
 
@@ -54,9 +67,6 @@ public class RuntimeProfile {
 
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
-    private static final Set<String> NON_MERGE_COUNTER_NAMES =
-            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates",
-                    "MemoryLimit");
     private static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
     private static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
 
@@ -248,6 +258,7 @@ public class RuntimeProfile {
                         Counter counter =
                                 addCounter(topName, tcounter.type, parentName);
                         counter.setValue(tcounter.value);
+                        counter.setSkipMerge(tcounter.skip_merge);
                         tCounterMap.remove(topName);
                     } else if (pair != null && tcounter != null) {
                         if (pair.first.getType() != tcounter.type) {
@@ -275,6 +286,7 @@ public class RuntimeProfile {
                 if (pair == null) {
                     Counter counter = addCounter(tcounter.name, tcounter.type);
                     counter.setValue(tcounter.value);
+                    counter.setSkipMerge(tcounter.skip_merge);
                 } else {
                     if (pair.first.getType() != tcounter.type) {
                         LOG.error("Cannot update counters with the same name but different types"
@@ -567,10 +579,6 @@ public class RuntimeProfile {
                 List<String> currentNames = Lists.newArrayList(nameQueue);
                 nameQueue.clear();
                 for (String name : currentNames) {
-                    if (NON_MERGE_COUNTER_NAMES.contains(name)) {
-                        continue;
-                    }
-
                     Set<String> childNames = profile.childCounterMap.get(name);
                     if (childNames != null) {
                         for (String childName : childNames) {
@@ -584,6 +592,9 @@ public class RuntimeProfile {
                     Pair<Counter, String> pair = profile.counterMap.get(name);
                     Preconditions.checkNotNull(pair);
                     Counter counter = pair.first;
+                    if (counter.isSkipMerge()) {
+                        continue;
+                    }
                     String parentName = pair.second;
 
                     while (allLevelCounters.size() <= levelIdx) {
@@ -630,6 +641,7 @@ public class RuntimeProfile {
             long minValue = Long.MAX_VALUE;
             long maxValue = Long.MIN_VALUE;
             boolean alreadyMerged = false;
+            boolean skipMerge = false;
             for (RuntimeProfile profile : profiles) {
                 Counter counter = profile.getCounter(name);
 
@@ -644,6 +656,9 @@ public class RuntimeProfile {
                             "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
                             profile0.name, name, type.name(), counter.getType().name());
                     return;
+                }
+                if (counter.isSkipMerge()) {
+                    skipMerge = true;
                 }
 
                 Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
@@ -681,6 +696,9 @@ public class RuntimeProfile {
                                 profile0.name, name, parentName);
                     }
                     counter0 = profile0.addCounter(name, type);
+                }
+                if (skipMerge) {
+                    counter0.setSkipMerge(true);
                 }
             }
             counter0.setValue(mergedValue);
@@ -723,20 +741,10 @@ public class RuntimeProfile {
                 continue;
             }
 
-            if (Counter.isAverageType(minCounter.getType())) {
-                // For time metrics, remove MIN/MAX metrics if it's values are close
-                long diff = maxCounter.getValue() - minCounter.getValue();
-                long mergedValue = counter.getValue();
-                if (diff <= mergedValue / 5.0) {
-                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
-                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
-                }
-            } else {
-                // For non-time metrics, remove MIN/MAX metrics if it's value is identical
-                if (Objects.equals(minCounter.getValue(), maxCounter.getValue())) {
-                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
-                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
-                }
+            if (Objects.equals(minCounter.getValue(), maxCounter.getValue()) &&
+                    Objects.equals(minCounter.getValue(), counter.getValue())) {
+                profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
+                profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
             }
         }
 

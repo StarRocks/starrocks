@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Subquery;
@@ -62,14 +75,12 @@ public class AnalyzeSetVariableTest {
         sql = "set @var = 1 + 2";
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
         UserVariable userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        userVariable.analyze();
         Assert.assertNotNull(userVariable.getResolvedExpression());
         Assert.assertEquals("3", userVariable.getResolvedExpression().getStringValue());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        userVariable.analyze();
         Assert.assertTrue(userVariable.getExpression() instanceof Subquery);
 
         sql = "set @var = (select 1)";
@@ -89,6 +100,9 @@ public class AnalyzeSetVariableTest {
         setStmt = (SetStmt) analyzeSuccess(sql);
         Assert.assertEquals(2, setStmt.getSetVars().size());
 
+        sql = "set @var = [1,2,3]";
+        analyzeFail(sql, "Can't set variable with type ARRAY");
+
         sql = "set @var = bitmap_empty()";
         analyzeFail(sql, "Can't set variable with type BITMAP");
 
@@ -100,6 +114,9 @@ public class AnalyzeSetVariableTest {
 
         sql = "set @var = percentile_empty()";
         analyzeFail(sql, "Can't set variable with type PERCENTILE");
+
+        sql = "set @var=foo";
+        analyzeFail(sql, "Column 'foo' cannot be resolved");
     }
 
     @Test

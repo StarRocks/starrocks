@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/agg/aggregate_factory.h"
 
@@ -81,7 +93,7 @@ AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {
     return std::make_shared<NtileWindowFunction>();
 }
 
-static const AggregateFunction* get_function(const std::string& name, PrimitiveType arg_type, PrimitiveType return_type,
+static const AggregateFunction* get_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                              bool is_window_function, bool is_null,
                                              TFunctionBinaryType::type binary_type, int func_version) {
     std::string func_name = name;
@@ -93,7 +105,7 @@ static const AggregateFunction* get_function(const std::string& name, PrimitiveT
         }
     }
 
-    auto is_decimal_type = [](PrimitiveType pt) {
+    auto is_decimal_type = [](LogicalType pt) {
         return pt == TYPE_DECIMAL32 || pt == TYPE_DECIMAL64 || pt == TYPE_DECIMAL128;
     };
     if (func_version > 2 && is_decimal_type(arg_type)) {
@@ -115,13 +127,12 @@ static const AggregateFunction* get_function(const std::string& name, PrimitiveT
     return nullptr;
 }
 
-const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
-                                                PrimitiveType return_type, bool is_null,
-                                                TFunctionBinaryType::type binary_type, int func_version) {
+const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
+                                                bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
     return get_function(name, arg_type, return_type, false, is_null, binary_type, func_version);
 }
 
-const AggregateFunction* get_window_function(const std::string& name, PrimitiveType arg_type, PrimitiveType return_type,
+const AggregateFunction* get_window_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                              bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return get_function(name, arg_type, return_type, true, is_null, binary_type, func_version);

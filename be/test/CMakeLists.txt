@@ -1,5 +1,3 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 set(EXEC_FILES
         ./test_main.cpp
         ./column/array_column_test.cpp
@@ -10,7 +8,7 @@ set(EXEC_FILES
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
-        ./column/field_test.cpp
+        ./column/vectorized_field_test.cpp
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
         ./column/map_column_test.cpp
@@ -58,6 +56,7 @@ set(EXEC_FILES
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -126,6 +125,9 @@ set(EXEC_FILES
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
+        ./formats/orc/orc_lazy_load_test.cpp
+        ./formats/orc/orc_test_util/MemoryOutputStream.cc
+        ./formats/orc/orc_test_util/MemoryInputStream.cc
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
@@ -193,6 +195,7 @@ set(EXEC_FILES
         ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
+        ./storage/rowset/default_value_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
@@ -204,9 +207,9 @@ set(EXEC_FILES
         ./storage/tablet_updates_test.cpp
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
-        ./storage/compaction_context_test.cpp
         ./storage/compaction_manager_test.cpp
-        ./storage/base_and_cumulative_compaction_policy_test.cpp
+        ./storage/default_compaction_policy_test.cpp
+        ./storage/size_tiered_compaction_policy_test.cpp
         ./storage/aggregate_iterator_test.cpp
         ./storage/chunk_aggregator_test.cpp
         ./storage/chunk_helper_test.cpp
@@ -215,7 +218,7 @@ set(EXEC_FILES
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
         ./storage/merge_iterator_test.cpp
-	    ./storage/memtable_flush_executor_test.cpp
+        ./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
@@ -227,11 +230,11 @@ set(EXEC_FILES
         ./storage/base_compaction_test.cpp
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
+        ./storage/storage_engine_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
-        ./runtime/decimal_value_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
         ./runtime/free_list_test.cpp
@@ -239,17 +242,15 @@ set(EXEC_FILES
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
         ./runtime/large_int_value_test.cpp
-        ./runtime/memory/chunk_allocator_test.cpp
+        ./runtime/memory/mem_chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
-        ./runtime/raw_value_test.cpp
         ./runtime/result_queue_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
-        ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
@@ -275,6 +276,7 @@ set(EXEC_FILES
         ./util/countdown_latch_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
+        ./util/exception_stack_test.cpp
         ./util/faststring_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
@@ -305,6 +307,7 @@ set(EXEC_FILES
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
+        ./util/cpu_usage_info_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/transaction/PartitionCommitInfo.java
 
@@ -26,6 +39,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -33,6 +47,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import javax.annotation.Nullable;
 
 public class PartitionCommitInfo implements Writable {
 
@@ -59,6 +74,10 @@ public class PartitionCommitInfo implements Writable {
     private List<String> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
     private List<String> validDictCacheColumns = Lists.newArrayList();
+
+    // compaction score quantiles of lake table
+    @SerializedName(value = "compactionScore")
+    private Quantiles compactionScore;
 
     public PartitionCommitInfo() {
 
@@ -126,6 +145,15 @@ public class PartitionCommitInfo implements Writable {
 
     public List<String> getValidDictCacheColumns() {
         return validDictCacheColumns;
+    }
+
+    public void setCompactionScore(Quantiles compactionScore) {
+        this.compactionScore = compactionScore;
+    }
+
+    @Nullable
+    public Quantiles getCompactionScore() {
+        return compactionScore;
     }
 
     @Override

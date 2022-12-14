@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -22,6 +35,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.StatementBase;
 
@@ -178,7 +192,7 @@ public class PrivilegeStmtAnalyzerV2 {
                     stmt.setObjectList(null);
                 }
                 privilegeManager.validateGrant(stmt.getPrivType(), stmt.getPrivList(), stmt.getObjectList());
-                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getPrivType(), stmt.getTypeId(), stmt.getPrivList()));
+                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getTypeId(), stmt.getPrivList()));
             } catch (PrivilegeException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);
@@ -214,5 +228,15 @@ public class PrivilegeStmtAnalyzerV2 {
             }
             return null;
         }
+
+        @Override
+        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
+            if (stmt.isAllowRevert()) {
+                throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
+            }
+            analyseUser(stmt.getToUser(), true);
+            return null;
+        }
+
     }
 }

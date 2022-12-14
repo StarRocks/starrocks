@@ -6,7 +6,7 @@ Removes duplicate elements from an array.
 
 ## Syntax
 
-```SQL
+```Haskell
 array_distinct(array)
 ```
 

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/ConnectContext.java
 
@@ -33,6 +46,8 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.ssl.SSLChannel;
+import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
@@ -47,6 +62,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,6 +70,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connect context for it.
 // We store session information here. Meanwhile ConnectScheduler all
@@ -166,6 +183,10 @@ public class ConnectContext {
 
     protected ResourceGroup resourceGroup;
 
+    protected volatile boolean isPending = false;
+
+    protected SSLContext sslContext;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -183,10 +204,14 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        this(null);
+        this(null, null);
     }
 
     public ConnectContext(SocketChannel channel) {
+        this(channel, null);
+    }
+
+    public ConnectContext(SocketChannel channel, SSLContext sslContext) {
         closed = false;
         state = new QueryState();
         returnRows = 0;
@@ -205,6 +230,8 @@ public class ConnectContext {
         if (channel != null) {
             remoteIP = mysqlChannel.getRemoteIp();
         }
+
+        this.sslContext = sslContext;
     }
 
     public long getStmtId() {
@@ -300,10 +327,19 @@ public class ConnectContext {
     }
 
     public SetStmt getModifiedSessionVariables() {
+        List<SetVar> sessionVariables = new ArrayList<>();
         if (!modifiedSessionVariables.isEmpty()) {
-            return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));
+            sessionVariables.addAll(modifiedSessionVariables.values());
         }
-        return null;
+        if (!userVariables.isEmpty()) {
+            sessionVariables.addAll(userVariables.values());
+        }
+
+        if (sessionVariables.isEmpty()) {
+            return null;
+        } else {
+            return new SetStmt(sessionVariables);
+        }
     }
 
     public SessionVariable getSessionVariable() {
@@ -535,13 +571,14 @@ public class ConnectContext {
 
     // kill operation with no protect.
     public void kill(boolean killConnection) {
-        LOG.warn("kill timeout query, {}, kill connection: {}",
+        LOG.warn("kill query, {}, kill connection: {}",
                 getMysqlChannel().getRemoteHostPortString(), killConnection);
         // Now, cancel running process.
         StmtExecutor executorRef = executor;
         if (killConnection) {
             isKilled = true;
         }
+        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
         }
@@ -556,7 +593,7 @@ public class ConnectContext {
                         break;
                     }
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    LOG.warn(e);
                     LOG.warn("sleep exception, ignore.");
                     break;
                 }
@@ -584,7 +621,11 @@ public class ConnectContext {
                 killConnection = true;
             }
         } else {
-            if (delta > sessionVariable.getQueryTimeoutS() * 1000L) {
+            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            if (isPending) {
+                timeoutSecond += GlobalVariable.getQueryQueuePendingTimeoutSecond();
+            }
+            if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}",
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
 
@@ -615,6 +656,40 @@ public class ConnectContext {
 
     public int getTotalBackendNumber() {
         return globalStateMgr.getClusterInfo().getTotalBackendNumber();
+    }
+
+    public void setPending(boolean pending) {
+        isPending = pending;
+    }
+
+    public boolean isPending() {
+        return isPending;
+    }
+
+    public boolean supportSSL() {
+        return sslContext != null;
+    }
+
+    public boolean enableSSL() throws IOException {
+        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
+        if (clazz == null) {
+            LOG.warn("load SSLChannelImp class failed");
+            throw new IOException("load SSLChannelImp class failed");
+        }
+
+        try {
+            SSLChannel sslChannel = (SSLChannel) clazz.getConstructors()[0]
+                    .newInstance(sslContext.createSSLEngine(), mysqlChannel);
+            if (!sslChannel.init()) {
+                return false;
+            } else {
+                mysqlChannel.setSSLChannel(sslChannel);
+                return true;
+            }
+        } catch (Exception e) {
+            LOG.warn("construct SSLChannelImp class failed");
+            throw new IOException("construct SSLChannelImp class failed");
+        }
     }
 
     public class ThreadInfo {
@@ -648,6 +723,7 @@ public class ConnectContext {
                 }
             }
             row.add(stmt);
+            row.add(Boolean.toString(isPending));
             return row;
         }
     }

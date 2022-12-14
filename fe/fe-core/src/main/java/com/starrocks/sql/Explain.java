@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql;
 
@@ -53,6 +66,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -638,6 +654,64 @@ public class Explain {
             return new OperatorStr(sb.toString(), context.step,
                     buildChildOperatorStr(optExpression, context.step));
         }
+
+        @Override
+        public OperatorStr visitPhysicalStreamAgg(OptExpression optExpression, ExplainContext context) {
+            OperatorStr child = visit(optExpression.inputAt(0), new ExplainContext(context.step + 1));
+            PhysicalStreamAggOperator aggregate = (PhysicalStreamAggOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- StreamAgg[").append(aggregate.getGroupBys().stream().map(c -> new ExpressionPrinter().print(c))
+                    .collect(Collectors.joining(", "))).append("]");
+            sb.append(buildOutputColumns(aggregate, ""));
+            sb.append("\n");
+
+            buildCostEstimate(sb, optExpression, context.step);
+
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
+                String analyticCallString =
+                        new ExpressionPrinter().print(entry.getKey()) + " := " +
+                                new ExpressionPrinter().print(entry.getValue());
+                buildOperatorProperty(sb, analyticCallString, context.step);
+            }
+
+            buildCommonProperty(sb, aggregate, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.singletonList(child));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamJoin(OptExpression optExpression, ExplainContext context) {
+            OperatorStr left = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
+
+            PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- StreamJoin/").append(join.getJoinType());
+            if (!join.getJoinType().isCrossJoin()) {
+                sb.append(" [").append(new ExpressionPrinter().print(join.getOnPredicate())).append("]");
+            }
+            sb.append(buildOutputColumns(join, ""));
+            sb.append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, join, context.step);
+            return new OperatorStr(sb.toString(), context.step, Arrays.asList(left, right));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, ExplainContext context) {
+            PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
+
+            StringBuilder sb = new StringBuilder("- SCAN [")
+                    .append(((OlapTable) scan.getTable()).getName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
     }
 
     public static class ExpressionPrinter
@@ -656,9 +730,15 @@ public class Explain {
         public String visitConstant(ConstantOperator literal, Void context) {
             if (literal.getType().isDatetime()) {
                 LocalDateTime time = (LocalDateTime) Optional.ofNullable(literal.getValue()).orElse(LocalDateTime.MIN);
-                return String.format("%04d-%02d-%02d %02d:%02d:%02d",
-                        time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
-                        time.getHour(), time.getMinute(), time.getSecond());
+                if (time.getNano() > 0) {
+                    return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d",
+                            time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
+                            time.getHour(), time.getMinute(), time.getSecond(), time.getNano() / 1000);
+                } else {
+                    return String.format("%04d-%02d-%02d %02d:%02d:%02d",
+                            time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
+                            time.getHour(), time.getMinute(), time.getSecond());
+                }
             } else if (literal.getType().isDate()) {
                 LocalDateTime time = (LocalDateTime) Optional.ofNullable(literal.getValue()).orElse(LocalDateTime.MIN);
                 return String.format("%04d-%02d-%02d", time.getYear(), time.getMonthValue(), time.getDayOfMonth());

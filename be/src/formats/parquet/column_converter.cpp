@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/column_converter.h"
 
@@ -123,7 +135,7 @@ public:
     }
 };
 
-template <typename SourceType, PrimitiveType DestType>
+template <typename SourceType, LogicalType DestType>
 class PrimitiveToDecimalConverter : public ColumnConverter {
 public:
     using DestDecimalType = typename vectorized::RunTimeTypeTraits<DestType>::CppType;
@@ -184,7 +196,7 @@ private:
 // This class is to convert *fixed length* binary to decimal
 // and for fixed length binary in parquet, string data is contiguous,
 // and that's why we can do memcpy 8 bytes without accessing invalid address.
-template <PrimitiveType DestType>
+template <LogicalType DestType>
 class BinaryToDecimalConverter : public ColumnConverter {
 public:
     using DecimalType = typename vectorized::RunTimeTypeTraits<DestType>::CppType;
@@ -327,7 +339,7 @@ private:
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
                                                 std::unique_ptr<ColumnConverter>* converter) {
-    PrimitiveType col_type = typeDescriptor.type;
+    LogicalType col_type = typeDescriptor.type;
     bool need_convert = false;
     tparquet::Type::type parquet_type = field.physical_type;
     const auto& schema_element = field.schema_element;
@@ -338,44 +350,44 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     // so when we read `col0` from parquet file, we have to do a type conversion from int32_t to int8_t.
     switch (parquet_type) {
     case tparquet::Type::type::BOOLEAN: {
-        if (col_type != PrimitiveType::TYPE_BOOLEAN) {
+        if (col_type != LogicalType::TYPE_BOOLEAN) {
             need_convert = true;
         }
         break;
     }
     case tparquet::Type::type::INT32: {
-        if (col_type != PrimitiveType::TYPE_INT) {
+        if (col_type != LogicalType::TYPE_INT) {
             need_convert = true;
         }
         switch (col_type) {
-        case PrimitiveType::TYPE_TINYINT:
+        case LogicalType::TYPE_TINYINT:
             *converter = std::make_unique<IntToIntConverter<int32_t, int8_t>>();
             break;
-        case PrimitiveType::TYPE_SMALLINT:
+        case LogicalType::TYPE_SMALLINT:
             *converter = std::make_unique<IntToIntConverter<int32_t, int16_t>>();
             break;
-        case PrimitiveType::TYPE_BIGINT:
+        case LogicalType::TYPE_BIGINT:
             *converter = std::make_unique<IntToIntConverter<int32_t, int64_t>>();
             break;
-        case PrimitiveType::TYPE_DATE:
+        case LogicalType::TYPE_DATE:
             *converter = std::make_unique<Int32ToDateConverter>();
             break;
             // when decimal precision is greater than 27, precision may be lost in the following
             // process. However to handle most enviroment, we also make progress other than
             // rejection
-        case PrimitiveType::TYPE_DECIMALV2:
+        case LogicalType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
             *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMALV2>>(field.scale, 9);
             break;
-        case PrimitiveType::TYPE_DECIMAL32:
+        case LogicalType::TYPE_DECIMAL32:
             *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL32>>(field.scale,
                                                                                                 typeDescriptor.scale);
             break;
-        case PrimitiveType::TYPE_DECIMAL64:
+        case LogicalType::TYPE_DECIMAL64:
             *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL64>>(field.scale,
                                                                                                 typeDescriptor.scale);
             break;
-        case PrimitiveType::TYPE_DECIMAL128:
+        case LogicalType::TYPE_DECIMAL128:
             *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL128>>(field.scale,
                                                                                                  typeDescriptor.scale);
             break;
@@ -385,40 +397,40 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::INT64: {
-        if (col_type != PrimitiveType::TYPE_BIGINT) {
+        if (col_type != LogicalType::TYPE_BIGINT) {
             need_convert = true;
         }
         switch (col_type) {
-        case PrimitiveType::TYPE_TINYINT:
+        case LogicalType::TYPE_TINYINT:
             *converter = std::make_unique<IntToIntConverter<int64_t, int8_t>>();
             break;
-        case PrimitiveType::TYPE_SMALLINT:
+        case LogicalType::TYPE_SMALLINT:
             *converter = std::make_unique<IntToIntConverter<int64_t, int16_t>>();
             break;
-        case PrimitiveType::TYPE_INT:
+        case LogicalType::TYPE_INT:
             *converter = std::make_unique<IntToIntConverter<int64_t, int32_t>>();
             break;
             // when decimal precision is greater than 27, precision may be lost in the following
             // process. However to handle most enviroment, we also make progress other than
             // rejection
-        case PrimitiveType::TYPE_DECIMALV2:
+        case LogicalType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
             *converter = std::make_unique<PrimitiveToDecimalConverter<int64_t, TYPE_DECIMALV2>>(field.scale, 9);
             break;
-        case PrimitiveType::TYPE_DECIMAL32:
+        case LogicalType::TYPE_DECIMAL32:
             *converter = std::make_unique<PrimitiveToDecimalConverter<int64_t, TYPE_DECIMAL32>>(field.scale,
                                                                                                 typeDescriptor.scale);
             break;
-        case PrimitiveType::TYPE_DECIMAL64:
+        case LogicalType::TYPE_DECIMAL64:
             *converter = std::make_unique<PrimitiveToDecimalConverter<int64_t, TYPE_DECIMAL64>>(field.scale,
                                                                                                 typeDescriptor.scale);
             break;
-        case PrimitiveType::TYPE_DECIMAL128:
+        case LogicalType::TYPE_DECIMAL128:
             *converter = std::make_unique<PrimitiveToDecimalConverter<int64_t, TYPE_DECIMAL128>>(field.scale,
                                                                                                  typeDescriptor.scale);
             break;
 
-        case PrimitiveType::TYPE_DATETIME: {
+        case LogicalType::TYPE_DATETIME: {
             auto _converter = std::make_unique<Int64ToDateTimeConverter>();
             RETURN_IF_ERROR(_converter->init(timezone, schema_element));
             *converter = std::move(_converter);
@@ -430,30 +442,30 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::BYTE_ARRAY: {
-        if (col_type != PrimitiveType::TYPE_VARCHAR && col_type != PrimitiveType::TYPE_CHAR) {
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
             need_convert = true;
         }
         break;
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
         int32_t type_length = field.type_length;
-        if (col_type != PrimitiveType::TYPE_VARCHAR && col_type != PrimitiveType::TYPE_CHAR) {
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
             need_convert = true;
         }
         switch (col_type) {
-        case PrimitiveType::TYPE_DECIMALV2:
+        case LogicalType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, 9, type_length);
             break;
-        case PrimitiveType::TYPE_DECIMAL32:
+        case LogicalType::TYPE_DECIMAL32:
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, typeDescriptor.scale,
                                                                                     type_length);
             break;
-        case PrimitiveType::TYPE_DECIMAL64:
+        case LogicalType::TYPE_DECIMAL64:
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, typeDescriptor.scale,
                                                                                     type_length);
             break;
-        case PrimitiveType::TYPE_DECIMAL128:
+        case LogicalType::TYPE_DECIMAL128:
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale,
                                                                                      type_length);
             break;
@@ -464,7 +476,7 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
     case tparquet::Type::type::INT96: {
         need_convert = true;
-        if (col_type == PrimitiveType::TYPE_DATETIME) {
+        if (col_type == LogicalType::TYPE_DATETIME) {
             auto _converter = std::make_unique<Int96ToDateTimeConverter>();
             RETURN_IF_ERROR(_converter->init(timezone));
             *converter = std::move(_converter);
@@ -472,13 +484,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::FLOAT: {
-        if (col_type != PrimitiveType::TYPE_FLOAT) {
+        if (col_type != LogicalType::TYPE_FLOAT) {
             need_convert = true;
         }
         break;
     }
     case tparquet::Type::DOUBLE: {
-        if (col_type != PrimitiveType::TYPE_DOUBLE) {
+        if (col_type != LogicalType::TYPE_DOUBLE) {
             need_convert = true;
         }
         break;

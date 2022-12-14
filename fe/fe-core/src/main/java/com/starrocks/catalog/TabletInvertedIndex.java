@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/TabletInvertedIndex.java
 
@@ -27,6 +40,7 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
@@ -74,6 +88,8 @@ public class TabletInvertedIndex {
 
     // replica id -> tablet id
     private Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
+
+    private Set<Long> forceDeleteTablets = Sets.newHashSet();
 
     // tablet id -> (backend id -> replica)
     private Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
@@ -155,7 +171,7 @@ public class TabletInvertedIndex {
                                     tabletSyncMap.put(tabletMeta.getDbId(), tabletId);
                                 }
 
-                                // check and set path
+                                // check and set path,
                                 // path info of replica is only saved in Leader FE
                                 if (backendTabletInfo.isSetPath_hash() &&
                                         replica.getPathHash() != backendTabletInfo.getPath_hash()) {
@@ -181,7 +197,7 @@ public class TabletInvertedIndex {
                                     tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
                                 }
 
-                                // check if need migration
+                                // check if tablet needs migration
                                 long partitionId = tabletMeta.getPartitionId();
                                 TStorageMedium storageMedium = storageMediumMap.get(partitionId);
                                 if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
@@ -201,7 +217,7 @@ public class TabletInvertedIndex {
                                         tabletMeta.setStorageMedium(storageMedium);
                                     }
                                 }
-                                // check if should clear transactions
+                                // check if we should clear transactions
                                 if (backendTabletInfo.isSetTransaction_ids()) {
                                     List<Long> transactionIds = backendTabletInfo.getTransaction_ids();
                                     GlobalTransactionMgr transactionMgr =
@@ -225,7 +241,7 @@ public class TabletInvertedIndex {
                                                  * This may happen as follows:
                                                  * 1. txn is committed on BE, and report commit info to FE
                                                  * 2. FE received report and begin to assemble partitionCommitInfos.
-                                                 * 3. At the same time, some of partitions have been dropped, so
+                                                 * 3. At the same time, some partitions have been dropped, so
                                                  *    partitionCommitInfos does not contain these partitions.
                                                  * 4. So we will not able to get partitionCommitInfo here.
                                                  *
@@ -254,13 +270,13 @@ public class TabletInvertedIndex {
                                     }
                                 } // end for txn id
 
-                                // update replicas's version count
+                                // update replica's version count
                                 // no need to write log, and no need to get db lock.
                                 if (backendTabletInfo.isSetVersion_count()) {
                                     replica.setVersionCount(backendTabletInfo.getVersion_count());
                                 }
                             } else {
-                                // tablet with invalid schemahash
+                                // tablet with invalid schema hash
                                 foundTabletsWithInvalidSchema.put(tabletId, backendTabletInfo);
                             } // end for be tablet info
                         }
@@ -404,6 +420,18 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    public boolean tabletForceDelete(long tabletId) {
+        return forceDeleteTablets.contains(tabletId);
+    }
+
+    public void markTabletForceDelete(long tabletId) {
+        forceDeleteTablets.add(tabletId);
+    }
+    
+    public void eraseTabletForceDelete(long tabletId) {
+        forceDeleteTablets.remove(tabletId);
     }
 
     public void deleteTablet(long tabletId) {

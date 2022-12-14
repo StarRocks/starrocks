@@ -1,16 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include "column/column_builder.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
-#include "udf/udf.h"
 #include "util/timezone_hsscan.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // TODO:
 class TimeFunctions {
@@ -212,10 +223,8 @@ public:
     // datetime_trunc for sql.
     DEFINE_VECTORIZED_FN(datetime_trunc);
 
-    static Status datetime_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status datetime_trunc_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status datetime_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /*
      * Called by time_slice
@@ -260,10 +269,8 @@ public:
     // time_slice for sql.
     DEFINE_VECTORIZED_FN(time_slice);
 
-    static Status time_slice_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status time_slice_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status time_slice_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status time_slice_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     /*
      * Called by date_trunc
      * Truncate to the corresponding part
@@ -281,18 +288,14 @@ public:
     // datetime_trunc for sql.
     DEFINE_VECTORIZED_FN(date_trunc);
 
-    static Status date_trunc_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status date_trunc_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status date_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status date_trunc_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     DEFINE_VECTORIZED_FN(month_name);
     DEFINE_VECTORIZED_FN(day_name);
 
-    static Status convert_tz_prepare(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status convert_tz_close(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status convert_tz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status convert_tz_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     DEFINE_VECTORIZED_FN(convert_tz);
 
@@ -468,19 +471,20 @@ public:
     // try to transfer content to date format based on "%Y-%m-%d",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
-    static ColumnPtr str_to_date_from_date_format(FunctionContext* context,
-                                                  const starrocks::vectorized::Columns& columns,
-                                                  const char* str_format);
+    static StatusOr<ColumnPtr> str_to_date_from_date_format(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns,
+                                                            const char* str_format);
 
     // try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
-    static ColumnPtr str_to_date_from_datetime_format(FunctionContext* context,
-                                                      const starrocks::vectorized::Columns& columns,
-                                                      const char* str_format);
+    static StatusOr<ColumnPtr> str_to_date_from_datetime_format(FunctionContext* context,
+                                                                const starrocks::vectorized::Columns& columns,
+                                                                const char* str_format);
 
     // Try to process string content, based on uncommon string format
-    static ColumnPtr str_to_date_uncommon(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context,
+                                                    const starrocks::vectorized::Columns& columns);
     /**
      *
      * cast string to datetime
@@ -500,16 +504,12 @@ public:
     static bool is_date_format(const Slice& slice, char** start);
     static bool is_datetime_format(const Slice& slice, char** start);
 
-    static Status str_to_date_prepare(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status str_to_date_close(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status str_to_date_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status str_to_date_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status format_prepare(starrocks_udf::FunctionContext* context,
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status format_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status format_close(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status format_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * Format TimestampValue.
@@ -564,11 +564,9 @@ public:
     DEFINE_VECTORIZED_FN(from_unix_to_datetime);
 
     // from_unix_datetime with format's auxiliary method
-    static Status from_unix_prepare(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status from_unix_close(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status from_unix_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [timestamp, formatstr]
@@ -607,17 +605,20 @@ private:
 
     static std::string convert_format(const Slice& format);
 
-    static ColumnPtr from_unix_with_format_general(FunctionContext* context,
-                                                   const starrocks::vectorized::Columns& columns);
-    static ColumnPtr from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                 const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> from_unix_with_format_general(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns);
 
-    static ColumnPtr convert_tz_general(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 
-    static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns, const cctz::time_zone& from,
-                                      const cctz::time_zone& to);
+    static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
+                                                const cctz::time_zone& from, const cctz::time_zone& to);
 
 public:
+    static TimestampValue start_of_time_slice;
+    static std::string info_reported_by_time_slice;
+
     enum FormatType {
         yyyyMMdd,
         yyyy_MM_dd,
@@ -636,7 +637,7 @@ private:
     struct FromUnixState {
         bool const_format{false};
         std::string format_content;
-        FromUnixState() {}
+        FromUnixState() = default;
     };
 
     // The context used for convert tz
@@ -665,9 +666,8 @@ private:
         ScalarFunction function;
     };
 
-    template <PrimitiveType Type>
-    friend ColumnPtr do_format(const FormatCtx* ctx, const Columns& cols);
+    template <LogicalType Type>
+    friend StatusOr<ColumnPtr> do_format(const FormatCtx* ctx, const Columns& cols);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

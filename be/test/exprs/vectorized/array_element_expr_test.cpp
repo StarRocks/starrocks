@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/array_element_expr.h"
 
@@ -16,7 +28,7 @@ class FakeConstExpr : public starrocks::Expr {
 public:
     explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
 
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool*) const override { return nullptr; }
 
@@ -68,10 +80,10 @@ private:
 // NOLINTNEXTLINE
 TEST_F(ArrayElementExprTest, test_one_dim_array) {
     TypeDescriptor type_array_int;
-    type_array_int.type = PrimitiveType::TYPE_ARRAY;
-    type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
 
-    TypeDescriptor type_int(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto array = ColumnHelper::create_column(type_array_int, true);
     array->append_datum(DatumArray{Datum((int32_t)1)});                    // [1]
@@ -304,13 +316,13 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
 // NOLINTNEXTLINE
 TEST_F(ArrayElementExprTest, test_two_dim_array) {
     TypeDescriptor type_desc;
-    type_desc.type = PrimitiveType::TYPE_ARRAY;
+    type_desc.type = LogicalType::TYPE_ARRAY;
     type_desc.children.emplace_back();
-    type_desc.children.back().type = PrimitiveType::TYPE_ARRAY;
+    type_desc.children.back().type = LogicalType::TYPE_ARRAY;
     type_desc.children.back().children.emplace_back();
-    type_desc.children.back().children.back().type = PrimitiveType::TYPE_INT;
+    type_desc.children.back().children.back().type = LogicalType::TYPE_INT;
 
-    TypeDescriptor type_int(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     //
     //  array:

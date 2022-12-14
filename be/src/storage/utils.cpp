@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/utils.cpp
 
@@ -29,6 +42,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <boost/regex.hpp>
 #include <cerrno>
 #include <chrono>
 #include <cstdarg>
@@ -39,7 +53,6 @@
 #include <ctime>
 #include <filesystem>
 #include <mutex>
-#include <regex>
 #include <string>
 #include <vector>
 
@@ -280,9 +293,9 @@ bool valid_signed_number<int128_t>(const std::string& value_str) {
 
 bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
     const char* decimal_pattern = "-?\\d+(.\\d+)?";
-    std::regex e(decimal_pattern);
-    std::smatch what;
-    if (!std::regex_match(value_str, what, e) || what[0].str().size() != value_str.size()) {
+    boost::regex e(decimal_pattern);
+    boost::smatch what;
+    if (!boost::regex_match(value_str, what, e) || what[0].str().size() != value_str.size()) {
         LOG(WARNING) << "invalid decimal value. [value=" << value_str << "]";
         return false;
     }
@@ -317,10 +330,10 @@ bool valid_datetime(const string& value_str) {
     const char* datetime_pattern =
             "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
             "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
-    std::regex e(datetime_pattern);
-    std::smatch what;
+    boost::regex e(datetime_pattern);
+    boost::smatch what;
 
-    if (std::regex_match(value_str, what, e)) {
+    if (boost::regex_match(value_str, what, e)) {
         if (what[0].str().size() != value_str.size()) {
             LOG(WARNING) << "datetime str does not fully match. value_str=" << value_str << " match=" << what[0].str();
             return false;

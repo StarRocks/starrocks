@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
@@ -168,6 +180,9 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     _ck_acc.set_max_size(state->chunk_size());
+    if (config::connector_min_max_predicate_from_runtime_filter_enable) {
+        _data_source->parse_runtime_filters(state);
+    }
     return Status::OK();
 }
 
@@ -205,7 +220,13 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
                 break;
             }
         } else if (!_status.is_end_of_file()) {
-            return _status;
+            if (_status.is_time_out()) {
+                Status t = _status;
+                _status = Status::OK();
+                return t;
+            } else {
+                return _status;
+            }
         } else {
             _ck_acc.finalize();
             DCHECK(_status.is_end_of_file());
@@ -215,9 +236,11 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     DCHECK(_status.ok() || _status.is_end_of_file());
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
+    _cpu_time_spent_ns = _data_source->cpu_time_spent();
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
         _rows_read += (*chunk)->num_rows();
+        _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();
     }
     _ck_acc.reset();

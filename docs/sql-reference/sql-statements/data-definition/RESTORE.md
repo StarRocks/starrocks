@@ -1,63 +1,63 @@
 # RESTORE
 
-## description
+## Description
 
-1. RESTORE
+Restores data to a specified database, table, or partition. Currently, StarRocks only supports restoring data to OLAP tables.
 
-  RESTORE statement is used to restore data previously backed up through BACKUP command to specified database. This command is asynchronous. After running the statement, users can check the progress through SHOW RESTORE command. It only supports the restoration of table with OLAP type.
+RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../data-manipulation/SHOW%20RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../data-definition/CANCEL%20RESTORE.md).
 
-Syntax:
+> **CAUTION**
+>
+> - Only users with the ADMIN privilege can restore data.
+> - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 
-```sql
-RESTORE SNAPSHOT [db_name].{snapshot_name}
-FROM `repository_name`
-ON (
-`table_name` [PARTITION (`p1`, ...)] [AS `tbl_alias`],
-...
-)
-PROPERTIES ("key"="value", ...);
+## Syntax
+
+```SQL
+RESTORE SNAPSHOT <db_name>.<snapshot_name>
+FROM <repository_name>
+[ ON ( <table_name> [ PARTITION ( <partition_name> [, ...] ) ]
+    [ AS <table_alias>] [, ...] ) ]
+PROPERTIES ("key"="value", ...)
 ```
 
-Note:
+## Parameters
 
-- Only one BACKUP or RESTORE task can be performed under the same database.
-- Tables and partitions needed to be restored should be identified in ON clause. If no partition is specified, all partitions of the table will be restored by default. The specified tables and partitions must already exist in the backup warehouse.
-- The backup tables in the warehouse could be restored to new tables through AS statement with the precondition that the new table name does not exist in the database before restoration. Partition names cannot be changed.
-- Backup tables in the warehouse can be restored to replace tables with identical names in the database. But the table structures of the two must be consistent. Structures included: table name, column, partition, Rollup and etc.
-- Part of the partitions in a table can be specified to be restored. The system will verify whether the Range of partitions is matched.
-- PROPERTIES currently support the following attributes:
-  - "backup_timestamp" = "2018-05-04-16-45-08": It specifies which backed-up version should be restored. It must be filled in. This information could be obtained through "SHOW SNAPSHOT ON repo;" statement.  
-  - "replication_num" = "3": It specifies the number of table or partition replicas to be restored. Default number: 3. To restore existing tables or partitions, please make sure the number of replicas to be restored is the same as that of existing replicas.  Meanwhile, there must be enough hosts to accommodate multiple replicas.
-  - "timeout" = "3600": Task timeout. Default time: one day. Unit: second.
-  - "meta_version": Use specified meta_version to read the metadata before backup. Please note that this parameter is just a temporary solution and is only used to restore data backed up from the previous version of StarRocks. Backup data from the latest version already includes meta version and does not need to be specified.
+| **Parameter**   | **Description**                                              |
+| --------------- | ------------------------------------------------------------ |
+| db_name         | Name of the database that the data is restored to.           |
+| snapshot_name   | Name for the data snapshot.                                  |
+| repository_name | Repository name.                                             |
+| ON              | Name of the tables to restored. The whole database is restored if this parameter is not specified. |
+| PARTITION       | Name of the partitions to be restored. The whole table is restored if this parameter is not specified. You can view the partition name using [SHOW PARTITIONS](../data-manipulation/SHOW%20PARTITIONS.md). |
+| PROPERTIES      | Properties of the RESTORE operation. Valid keys:<ul><li>`backup_timestamp`: Backup timestamp. **Required**. You can view backup timestamps using [SHOW SNAPSHOT](../data-manipulation/SHOW%20SNAPSHOT.md).</li><li>`replication_num`: Specify the number of replicas to be restored. Default: `3`.</li><li>`meta_version`: This parameter is only used as a temporary solution to restore the data backed up by the earlier version of StarRocks. The latest version of the backed up data already contains `meta version`, and you do not need to specify it.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li></ul> |
 
-## example
+## Examples
 
-1. Restore table backup_tbl in backup snapshot_1 from example_repo to database example_ab1 with the time version of "2018-05-04-16-45-08". Restore it as 1 replica.
+Example 1: Restores the table `backup_tbl` in the snapshot `snapshot_label1` from `example_repo` repository to the database `example_db`, and the backup timestamp is `2018-05-04-16-45-08`. Restores one replica.
 
-    ```sql
-    RESTORE SNAPSHOT example_db1.`snapshot_1`
-    FROM `example_repo`
-    ON ( `backup_tbl` )
-    PROPERTIES
-    (
-        "backup_timestamp"="2018-05-04-16-45-08",
-        "replication_num" = "1"
-    );
-    ````
+```SQL
+RESTORE SNAPSHOT example_db.snapshot_label1
+FROM example_repo
+ON ( backup_tbl )
+PROPERTIES
+(
+    "backup_timestamp"="2018-05-04-16-45-08",
+    "replication_num" = "1"
+);
+```
 
-2. Restore partitions p1, p2 of table backup_tbl in backup snapshot_2 from example_repo as well as table backup_tbl2 to database example_db1. Rename backup_tbl2 as new_tbl. Time version: "2018-05-04-17-11-01". Restore to 3 replicas by default.  
+Example 2: Restores partitions `p1` and `p2` of table `backup_tbl` in `snapshot_label2` and table `backup_tbl2` from `example_repo` to database `example_db`, and rename `backup_tbl2` to `new_tbl`. The backup timestamp is `2018-05-04-17-11-01`. Restores three replicas by default.
 
-    ```sql
-    RESTORE SNAPSHOT example_db1.`snapshot_2`
-    FROM `example_repo`
-    ON
-    (
-    `backup_tbl` PARTITION (`p1`, `p2`),
-    `backup_tbl2` AS `new_tbl`
-    )
-    PROPERTIES
-    (
-        "backup_timestamp"="2018-05-04-17-11-01"
-    );
-    ```
+```SQL
+RESTORE SNAPSHOT example_db.snapshot_label2
+FROM example_repo
+ON(
+    backup_tbl PARTITION (p1, p2),
+    backup_tbl2 AS new_tbl
+)
+PROPERTIES
+(
+    "backup_timestamp"="2018-05-04-17-11-01"
+);
+```

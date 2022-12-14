@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/Config.java
 
@@ -156,6 +169,46 @@ public class Config extends ConfigBase {
     public static String dump_log_roll_interval = "DAY";
     @ConfField
     public static String dump_log_delete_age = "7d";
+
+    /**
+     * big_query_log_dir:
+     * This specifies FE big query log dir.
+     * Dump log fe.big_query.log contains all information about big query.
+     * The structure of each log record is very similar to the audit log.
+     * If the cpu cost of a query exceeds big_query_log_cpu_second_threshold,
+     * or scan rows exceeds big_query_log_scan_rows_threshold,
+     * or scan bytes exceeds big_query_log_scan_bytes_threshold,
+     * we will consider it as a big query.
+     * These thresholds are defined by the user.
+     * <p>
+     * big_query_log_roll_num:
+     * Maximal FE log files to be kept within an big_query_log_roll_interval.
+     * <p>
+     * big_query_log_modules:
+     * Informations for all big queries.
+     * <p>
+     * big_query_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * big_query_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 mins
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static String big_query_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int big_query_log_roll_num = 10;
+    @ConfField
+    public static String[] big_query_log_modules = {"query"};
+    @ConfField
+    public static String big_query_log_roll_interval = "DAY";
+    @ConfField
+    public static String big_query_log_delete_age = "7d";
 
     /**
      * plugin_dir:
@@ -431,6 +484,12 @@ public class Config extends ConfigBase {
     public static String metadata_failure_recovery = "false";
 
     /**
+     * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
+     */
+    @ConfField
+    public static boolean start_with_incomplete_meta = false;
+
+    /**
      * If true, non-leader FE will ignore the meta data delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
      * Non-leader FE will still offer read service.
@@ -501,7 +560,7 @@ public class Config extends ConfigBase {
      * some hang up problems in java.net.SocketInputStream.socketRead0
      */
     @ConfField
-    public static int thrift_client_timeout_ms = 0;
+    public static int thrift_client_timeout_ms = 5000;
 
     /**
      * The backlog_num for thrift server
@@ -626,6 +685,13 @@ public class Config extends ConfigBase {
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
+     * If there is no thread to handle new request, the request will be pend to a queue,
+     * the pending queue size is thrift_server_queue_size
+     */
+    @ConfField
+    public static int thrift_server_queue_size = 4096;
+
+    /**
      * Maximal wait seconds for straggler node in load
      * eg.
      * there are 3 replicas A, B, C
@@ -688,6 +754,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_stream_load_timeout_second = 259200; // 3days
+
+    /**
+     * Max stream load load batch size
+     */
+    @ConfField(mutable = true)
+    public static int max_stream_load_batch_size_mb = 100;
 
     /**
      * Default prepared transaction timeout
@@ -813,13 +885,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_strict_storage_medium_check = false;
-
-    /**
-     * When create a table(or partition), you can specify its storage medium(HDD or SSD).
-     * If not set, this specifies the default medium when creat.
-     */
-    @ConfField
-    public static String default_storage_medium = "HDD";
 
     /**
      * After dropping database(table/partition), you can recover it by using RECOVER stmt.
@@ -976,7 +1041,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int storage_high_watermark_usage_percent = 85;
     @ConfField(mutable = true)
-    public static long storage_min_left_capacity_bytes = 2 * 1024 * 1024 * 1024; // 2G
+    public static long storage_min_left_capacity_bytes = 2L * 1024 * 1024 * 1024; // 2G
 
     /**
      * If capacity of disk reach the 'storage_flood_stage_usage_percent' and 'storage_flood_stage_left_capacity_bytes',
@@ -987,7 +1052,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int storage_flood_stage_usage_percent = 95;
     @ConfField(mutable = true)
-    public static long storage_flood_stage_left_capacity_bytes = 1 * 1024 * 1024 * 1024; // 1G
+    public static long storage_flood_stage_left_capacity_bytes = 1024L * 1024 * 1024; // 1G
 
     // update interval of tablet stat
     // All frontends will get tablet stat from all backends at each interval
@@ -1048,6 +1113,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, aliases = {"disable_colocate_balance"})
     public static boolean tablet_sched_disable_colocate_balance = false;
+
+    /**
+     * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
 
     @ConfField(aliases = {"tablet_balancer_strategy"})
     public static String tablet_sched_balancer_strategy = "disk_and_tablet";
@@ -1117,6 +1188,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
+
+    /**
+     * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
+     * so that other threads can get the lock.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
 
     @Deprecated
     @ConfField(mutable = true)
@@ -1333,6 +1411,18 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * The start time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_start_time = "00:00:00";
+
+    /**
+     * The end time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_end_time = "23:59:59";
+
+    /**
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
     @ConfField(mutable = true)
@@ -1348,7 +1438,7 @@ public class Config extends ConfigBase {
      * The collect thread work interval
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_interval_sec = 5 * 60; // 5m
+    public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
     /**
      * Num of thread to handle statistic collect
@@ -1372,7 +1462,7 @@ public class Config extends ConfigBase {
      * The column statistic cache update interval
      */
     @ConfField(mutable = true)
-    public static long statistic_update_interval_sec = 24 * 60 * 60;
+    public static long statistic_update_interval_sec = 24L * 60L * 60L;
 
     /**
      * Enable full statistics collection
@@ -1493,6 +1583,12 @@ public class Config extends ConfigBase {
     public static long remote_file_cache_ttl_s = 3600 * 36L;
 
     /**
+     * The maximum number of partitions to fetch from the metastore in one RPC.
+     */
+    @ConfField
+    public static int max_hive_partitions_per_rpc = 1000;
+
+    /**
      * The interval of lazy refreshing remote file's metadata cache
      */
     @ConfField
@@ -1593,7 +1689,7 @@ public class Config extends ConfigBase {
      * connection and socket timeout for broker client
      */
     @ConfField
-    public static int broker_client_timeout_ms = 10000;
+    public static int broker_client_timeout_ms = 120000;
 
     /**
      * Unused config field, leave it here for backward compatibility
@@ -1673,6 +1769,19 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    @ConfField
+    public static String hdfs_url = "";
+
+    /* default file store type used */
+    @ConfField
+    public static String default_fs_type = "S3";
+
+    /**
+     * default storage cache ttl of lake table
+     */
+    @ConfField(mutable = true)
+    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
+
     /**
      * default bucket number when create OLAP table without buckets info
      */
@@ -1745,19 +1854,22 @@ public class Config extends ConfigBase {
     public static String jaeger_grpc_endpoint = "";
 
     @ConfField
-    public static String lake_compaction_selector = "SimpleSelector";
+    public static String lake_compaction_selector = "ScoreSelector";
 
     @ConfField
-    public static String lake_compaction_sorter = "RandomSorter";
+    public static String lake_compaction_sorter = "ScoreSorter";
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_min_versions = 3;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_threshold_versions = 10;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_threshold_seconds = 300;
+
+    @ConfField(mutable = true)
+    public static double lake_compaction_score_selector_min_score = 2.0;
 
     /**
      * -1 means calculate the value in an adaptive way.
@@ -1767,7 +1879,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = false;
+    public static boolean enable_new_publish_mechanism = true;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
@@ -1778,7 +1890,7 @@ public class Config extends ConfigBase {
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     @ConfField(mutable = true)
-    public static boolean recursive_dir_search_enabled = false;
+    public static boolean recursive_dir_search_enabled = true;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
@@ -1805,4 +1917,28 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean ignore_invalid_privilege_authentications = false;
+
+    /**
+     * the keystore file path
+     */
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    /**
+     * the password of keystore file
+     */
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    /**
+     * the password of private key
+     */
+    @ConfField
+    public static String ssl_key_password = "";
+
+    /**
+     * ignore check db status when show proc '/catalog/catalog_name'
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_check_db_state = true;
 }

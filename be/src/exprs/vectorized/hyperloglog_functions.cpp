@@ -1,13 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/hyperloglog_functions.h"
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/object_column.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/unary_function.h"
 #include "types/hll.h"
-#include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
@@ -18,8 +30,8 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityFromStringImpl, str) {
     return hll.estimate_cardinality();
 }
 
-ColumnPtr HyperloglogFunction::hll_cardinality_from_string(FunctionContext* context,
-                                                           const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_cardinality_from_string(FunctionContext* context,
+                                                                      const starrocks::vectorized::Columns& columns) {
     return VectorizedStrictUnaryFunction<hllCardinalityFromStringImpl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
 }
 
@@ -28,13 +40,13 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityImpl, hll_ptr) {
     return hll_ptr->estimate_cardinality();
 }
 
-ColumnPtr HyperloglogFunction::hll_cardinality(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_cardinality(FunctionContext* context,
+                                                          const starrocks::vectorized::Columns& columns) {
     return VectorizedStrictUnaryFunction<hllCardinalityImpl>::evaluate<TYPE_HLL, TYPE_BIGINT>(columns[0]);
 }
 
 // hll_hash
-ColumnPtr HyperloglogFunction::hll_hash(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_hash(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
 
     auto hll_column = HyperLogLogColumn::create();
@@ -59,7 +71,7 @@ ColumnPtr HyperloglogFunction::hll_hash(FunctionContext* context, const Columns&
 }
 
 // hll_empty
-ColumnPtr HyperloglogFunction::hll_empty(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_empty(FunctionContext* context, const Columns& columns) {
     auto p = HyperLogLogColumn::create();
 
     p->append_default();

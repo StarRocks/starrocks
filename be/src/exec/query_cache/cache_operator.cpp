@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exec/query_cache/cache_operator.h"
 
 #include <glog/logging.h>
@@ -28,6 +41,7 @@ struct PerLaneBuffer {
     PerLaneBufferState state;
     TabletSharedPtr tablet;
     std::vector<RowsetSharedPtr> rowsets;
+    RowsetsAcqRelPtr rowsets_acq_rel;
     int64_t required_version;
     int64_t cached_version;
     std::vector<ChunkPtr> chunks;
@@ -40,6 +54,7 @@ struct PerLaneBuffer {
         lane = -1;
         state = PLBS_INIT;
         tablet.reset();
+        rowsets_acq_rel.reset();
         rowsets.clear();
         required_version = 0;
         cached_version = 0;
@@ -193,7 +208,7 @@ void CacheOperator::close(RuntimeState* state) {
 
 void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cache_value, PerLaneBufferPtr& buffer,
                                               int64_t version) {
-    // In BE unittest, stale value is considered as partial-hit
+// In BE unittest, stale value is considered as partial-hit
 #ifdef BE_TEST
     {
         buffer->state = PLBS_HIT_PARTIAL;
@@ -212,6 +227,15 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
     }
 #endif
 
+    if (_cache_param.keys_type != TKeysType::PRIMARY_KEYS) {
+        _handle_stale_cache_value_for_non_pk(tablet_id, cache_value, buffer, version);
+    } else {
+        _handle_stale_cache_value_for_pk(tablet_id, cache_value, buffer, version);
+    }
+}
+
+void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, CacheValue& cache_value,
+                                                         PerLaneBufferPtr& buffer, int64_t version) {
     // Try to reuse partial cache result when cached version is less than required version, delta versions
     // should be captured at first.
     auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(
@@ -225,7 +249,7 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
     }
 
     // Delta versions are captured, several situations should be taken into consideration.
-    auto& [tablet, rowsets] = status.value();
+    auto& [tablet, rowsets, rowsets_acq_rel] = status.value();
     auto all_rs_empty = true;
     auto min_version = std::numeric_limits<int64_t>::max();
     auto max_version = std::numeric_limits<int64_t>::min();
@@ -237,8 +261,9 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
     Version delta_versions(min_version, max_version);
     buffer->tablet = tablet;
     auto has_delete_predicates = tablet->has_delete_predicates(delta_versions);
-    // case 1: there exist delete predicates in delta versions, the cache result is not reuse, so cache miss.
-    if (has_delete_predicates) {
+    // case 1: there exist delete predicates in delta versions, or data model can not support multiversion cache and
+    // the tablet has non-empty delta rowsets; then cache result is not reuse, so cache miss.
+    if (has_delete_predicates || (!_cache_param.can_use_multiversion && !all_rs_empty)) {
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
         return;
@@ -259,6 +284,7 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
     //  be scanned and merged with cache result to generate total result.
     buffer->state = PLBS_HIT_PARTIAL;
     buffer->rowsets = std::move(rowsets);
+    buffer->rowsets_acq_rel = std::move(rowsets_acq_rel);
     buffer->num_rows = 0;
     buffer->num_bytes = 0;
     for (const auto& chunk : buffer->chunks) {
@@ -266,6 +292,40 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
         buffer->num_bytes += chunk->bytes_usage();
     }
     buffer->chunks.back()->owner_info().set_last_chunk(false);
+}
+
+void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrocks::query_cache::CacheValue& cache_value,
+                                                     starrocks::query_cache::PerLaneBufferPtr& buffer,
+                                                     int64_t version) {
+    DCHECK(_cache_param.keys_type == TKeysType::PRIMARY_KEYS);
+    // At the present, PRIMARY_KEYS can not support merge-on-read, so we can not merge stale cache values and delta
+    // rowsets. Capturing delta rowsets is meaningless and unsupported, thus we capture all rowsets of the PK tablet.
+    auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(tablet_id, 0, version);
+    if (!status.ok()) {
+        buffer->state = PLBS_MISS;
+        buffer->cached_version = 0;
+        return;
+    }
+    auto& [tablet, rowsets, rowsets_acq_rel] = status.value();
+    const auto snapshot_version = cache_value.version;
+    bool can_pickup_delta_rowsets = false;
+    bool exists_non_empty_delta_rowsets = false;
+    for (auto& rs : rowsets) {
+        can_pickup_delta_rowsets |= rs->start_version() == snapshot_version + 1;
+        exists_non_empty_delta_rowsets |= rs->start_version() > snapshot_version && rs->has_data_files();
+    }
+    if (exists_non_empty_delta_rowsets || !can_pickup_delta_rowsets) {
+        buffer->state = PLBS_MISS;
+        buffer->cached_version = 0;
+        return;
+    }
+
+    buffer->cached_version = cache_value.version;
+    auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
+    _update_probe_metrics(tablet_id, chunks);
+    buffer->chunks = std::move(chunks);
+    buffer->state = PLBS_HIT_TOTAL;
+    buffer->chunks.back()->owner_info().set_last_chunk(true);
 }
 
 void CacheOperator::_update_probe_metrics(int64_t tablet_id, const std::vector<vectorized::ChunkPtr>& chunks) {
@@ -370,6 +430,16 @@ int64_t CacheOperator::cached_version(int64_t tablet_id) {
         return buffer->required_version;
     } else {
         return buffer->cached_version;
+    }
+}
+
+std::tuple<int64_t, vector<RowsetSharedPtr>> CacheOperator::delta_version_and_rowsets(int64_t tablet_id) {
+    auto lane_it = _owner_to_lanes.find(tablet_id);
+    if (lane_it == _owner_to_lanes.end()) {
+        return make_tuple(0, vector<RowsetSharedPtr>{});
+    } else {
+        auto& buffer = _per_lane_buffers[lane_it->second];
+        return make_tuple(buffer->cached_version + 1, buffer->rowsets);
     }
 }
 

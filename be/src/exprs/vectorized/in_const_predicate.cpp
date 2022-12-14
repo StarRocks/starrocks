@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/in_const_predicate.hpp"
 
@@ -11,7 +23,7 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
     Expr* probe_expr = _expr;
 
     TExprNode node;
-    PrimitiveType probe_type = probe_expr->type().type;
+    LogicalType probe_type = probe_expr->type().type;
 
     // create TExprNode
     node.__set_use_vectorized(true);
@@ -33,13 +45,13 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
     // and fill actual IN values later.
     switch (probe_type) {
 #define M(NAME)                                                                                                      \
-    case PrimitiveType::NAME: {                                                                                      \
-        if (_array_size != 0 && !VectorizedInConstPredicate<PrimitiveType::NAME>::can_use_array()) {                 \
+    case LogicalType::NAME: {                                                                                        \
+        if (_array_size != 0 && !VectorizedInConstPredicate<LogicalType::NAME>::can_use_array()) {                   \
             _st = Status::NotSupported(                                                                              \
                     strings::Substitute("Can not create in-const-predicate with array set on type $0", probe_type)); \
             return nullptr;                                                                                          \
         }                                                                                                            \
-        auto* in_pred = _pool->add(new VectorizedInConstPredicate<PrimitiveType::NAME>(node));                       \
+        auto* in_pred = _pool->add(new VectorizedInConstPredicate<LogicalType::NAME>(node));                         \
         in_pred->set_null_in_set(_null_in_set);                                                                      \
         in_pred->set_array_size(_array_size);                                                                        \
         _st = in_pred->prepare(_state);                                                                              \
@@ -65,13 +77,13 @@ Status VectorizedInConstPredicateBuilder::create() {
 }
 
 Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size_t column_offset) {
-    PrimitiveType type = _expr->type().type;
+    LogicalType type = _expr->type().type;
     Expr* expr = _in_pred_ctx->root();
     DCHECK(column != nullptr);
     if (!column->is_nullable()) {
         switch (type) {
 #define M(FIELD_TYPE)                                                                 \
-    case PrimitiveType::FIELD_TYPE: {                                                 \
+    case LogicalType::FIELD_TYPE: {                                                   \
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;        \
         auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);              \
         auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
@@ -93,7 +105,7 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
     } else {
         switch (type) {
 #define M(FIELD_TYPE)                                                                                           \
-    case PrimitiveType::FIELD_TYPE: {                                                                           \
+    case LogicalType::FIELD_TYPE: {                                                                             \
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                                  \
         auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                                        \
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                            \

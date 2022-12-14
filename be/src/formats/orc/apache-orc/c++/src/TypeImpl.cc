@@ -88,6 +88,15 @@ uint64_t TypeImpl::getColumnId() const {
     return static_cast<uint64_t>(columnId);
 }
 
+void TypeImpl::buildColumnIdToPosMap() const {
+    if (!columnIdToPos.empty()) {
+        return;
+    }
+    for (size_t i = 0; i < subtypeCount; i++) {
+        columnIdToPos[subTypes[i]->getColumnId()] = i;
+    }
+}
+
 uint64_t TypeImpl::getMaximumColumnId() const {
     ensureIdAssigned();
     return static_cast<uint64_t>(maximumColumnId);
@@ -103,6 +112,21 @@ uint64_t TypeImpl::getSubtypeCount() const {
 
 const Type* TypeImpl::getSubtype(uint64_t i) const {
     return subTypes[i].get();
+}
+
+const Type* TypeImpl::getSubtypeByColumnId(uint64_t id) const {
+    ensureIdAssigned();
+    if (id == columnId) {
+        return this;
+    }
+
+    buildColumnIdToPosMap();
+
+    auto it = columnIdToPos.find(id);
+    if (it == columnIdToPos.end()) {
+        throw std::range_error("Error column id range: " + std::to_string(id));
+    }
+    return subTypes[it->second].get();
 }
 
 const std::string& TypeImpl::getFieldName(uint64_t i) const {
@@ -312,6 +336,7 @@ std::unique_ptr<ColumnVectorBatch> TypeImpl::createRowBatch(uint64_t capacity, M
         std::unique_ptr<ColumnVectorBatch> return_value = std::unique_ptr<ColumnVectorBatch>(result);
         for (uint64_t i = 0; i < getSubtypeCount(); ++i) {
             result->fields.push_back(getSubtype(i)->createRowBatch(capacity, memoryPool, encoded).release());
+            result->fieldsColumnIdMap[getSubtype(i)->getColumnId()] = result->fields.back();
         }
         return return_value;
     }

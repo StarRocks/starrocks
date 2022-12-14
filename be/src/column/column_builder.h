@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -9,10 +21,9 @@
 #include "column/type_traits.h"
 #include "util/raw_container.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class ColumnBuilder {
 public:
     using DataColumnPtr = typename RunTimeColumnType<Type>::Ptr;
@@ -92,12 +103,19 @@ public:
 
     ColumnPtr build_nullable_column() { return NullableColumn::create(_column, _null_column); }
 
-    void reserve(int size) {
+    void reserve(size_t size) {
         _column->reserve(size);
         _null_column->reserve(size);
     }
 
+    void resize_uninitialized(size_t size) {
+        _column->resize_uninitialized(size);
+        _null_column->resize_uninitialized(size);
+    }
+
     DataColumnPtr data_column() { return _column; }
+    NullColumnPtr null_column() { return _null_column; }
+    void set_has_null(bool v) { _has_null = v; }
 
 protected:
     DataColumnPtr _column;
@@ -191,5 +209,4 @@ public:
 
 private:
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

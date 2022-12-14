@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 lexer grammar StarRocksLex;
 @parser::members {public static long sqlMode;}
@@ -188,6 +201,7 @@ LOCAL: 'LOCAL';
 LOCATION: 'LOCATION';
 LOGICAL: 'LOGICAL';
 MANUAL: 'MANUAL';
+MAP: 'MAP';
 MATERIALIZED: 'MATERIALIZED';
 MAX: 'MAX';
 MAXVALUE: 'MAXVALUE';
@@ -210,6 +224,7 @@ NOT: 'NOT';
 NULL: 'NULL';
 NULLS: 'NULLS';
 OBSERVER: 'OBSERVER';
+OF: 'OF';
 OFFSET: 'OFFSET';
 ON: 'ON';
 ONLY: 'ONLY';
@@ -237,6 +252,7 @@ PROCEDURE: 'PROCEDURE';
 PROCESSLIST: 'PROCESSLIST';
 PROPERTIES: 'PROPERTIES';
 PROPERTY: 'PROPERTY';
+QUALIFY: 'QUALIFY';
 QUARTER: 'QUARTER';
 QUERY: 'QUERY';
 QUOTA: 'QUOTA';
@@ -294,12 +310,15 @@ STATS: 'STATS';
 STATUS: 'STATUS';
 STOP: 'STOP';
 STORAGE: 'STORAGE';
+STREAM: 'STREAM';
 STRING: 'STRING';
 SUBMIT: 'SUBMIT';
 SUM: 'SUM';
 SYNC: 'SYNC';
 SYSTEM: 'SYSTEM';
+SYSTEM_TIME: 'SYSTEM_TIME';
 SWAP: 'SWAP';
+STRUCT: 'STRUCT';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLET: 'TABLET';
@@ -333,6 +352,7 @@ USER: 'USER';
 USING: 'USING';
 VALUE: 'VALUE';
 VALUES: 'VALUES';
+VARBINARY: 'VARBINARY';
 VARCHAR: 'VARCHAR';
 VARIABLES: 'VARIABLES';
 VERBOSE: 'VERBOSE';
@@ -370,6 +390,9 @@ BITAND: '&';
 BITOR: '|';
 BITXOR: '^';
 BITNOT: '~';
+BIT_SHIFT_LEFT: 'BITSHIFTLEFT';
+BIT_SHIFT_RIGHT: 'BITSHIFTRIGHT';
+BIT_SHIFT_RIGHT_LOGICAL: 'BITSHIFTRIGHTLOGICAL';
 
 ARROW: '->';
 AT: '@';
@@ -394,6 +417,14 @@ SINGLE_QUOTED_TEXT
 
 DOUBLE_QUOTED_TEXT
     : '"' ('\\'. | '""' | ~('"'| '\\'))* '"'
+    ;
+
+BINARY_SINGLE_QUOTED_TEXT
+    : 'X\'' (~('\'' | '\\'))* '\''
+    ;
+
+BINARY_DOUBLE_QUOTED_TEXT
+    : 'X"' (~('"'| '\\'))* '"'
     ;
 
 LETTER_IDENTIFIER

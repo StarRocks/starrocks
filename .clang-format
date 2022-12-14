@@ -13,6 +13,7 @@ PointerAlignment: Left
 ReflowComments: false
 SortUsingDeclarations: false
 SpacesBeforeTrailingComments: 1
+AllowShortFunctionsOnASingleLine: Inline
 ---
 Language: Java
 BasedOnStyle: Google

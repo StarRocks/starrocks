@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
@@ -82,7 +94,10 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _read_pages_num_counter = ADD_COUNTER(_runtime_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_runtime_profile, "CachedPagesNum", TUnit::UNIT);
-    _pushdown_predicates_counter = ADD_COUNTER(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
+    _pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
+
+    _get_rowsets_timer = ADD_TIMER(_runtime_profile, "GetRowsets");
+    _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
 
     // SegmentInit
     _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
@@ -107,7 +122,6 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, "SegmentRead");
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", "SegmentRead");
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", "SegmentRead");
-    _index_load_timer = ADD_CHILD_TIMER(_runtime_profile, "IndexLoad", "SegmentRead");
     _rowsets_read_count = ADD_CHILD_COUNTER(_runtime_profile, "RowsetsReadCount", TUnit::UNIT, "SegmentRead");
     _segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "SegmentsReadCount", TUnit::UNIT, "SegmentRead");
     _total_columns_data_page_count =
@@ -256,15 +270,15 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    starrocks::vectorized::Schema child_schema =
+    starrocks::vectorized::VectorizedSchema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
-                                             std::move(child_schema));
+                                             std::move(child_schema), _morsel->rowsets());
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::vectorized::Schema output_schema =
+        starrocks::vectorized::VectorizedSchema output_schema =
                 ChunkHelper::convert_schema_to_format_v2(tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
@@ -372,15 +386,7 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
         _runtime_state->update_num_bytes_load_from_source(bytes_usage);
     }
 
-    // Update local counters.
-    _local_sum_row_bytes += chunk->memory_usage();
-    _local_num_rows += chunk->num_rows();
-    _local_max_chunk_rows = std::max(_local_max_chunk_rows, chunk->num_rows());
-    if (_local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
-        _chunk_buffer.limiter()->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows, _local_max_chunk_rows);
-        _local_sum_row_bytes = 0;
-        _local_num_rows = 0;
-    }
+    _chunk_buffer.update_limiter(chunk);
 }
 
 void OlapChunkSource::_update_counter() {
@@ -399,6 +405,8 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
 
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
+    COUNTER_UPDATE(_get_rowsets_timer, _reader->stats().get_rowsets_ns);
+    COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
@@ -418,7 +426,6 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
-    COUNTER_UPDATE(_index_load_timer, _reader->stats().index_load_ns);
 
     COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
     COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);

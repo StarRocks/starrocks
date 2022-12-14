@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/Tablet.java
 
@@ -184,6 +197,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend == null) {
+                continue;
+            }
             backends.add(backend.getHost());
         }
         return backends;
@@ -207,8 +223,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Long, Long> getNormalReplicaBackendPathMap(int clusterId) {
-        Multimap<Long, Long> map = HashMultimap.create();
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
+        Multimap<Replica, Long> map = HashMultimap.create();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -218,7 +234,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             ReplicaState state = replica.getState();
             if (infoService.checkBackendAlive(replica.getBackendId())
                     && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
-                map.put(replica.getBackendId(), replica.getPathHash());
+                map.put(replica, replica.getPathHash());
             }
         }
         return map;
@@ -394,6 +410,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // we need to update immutableReplicas, because replicas after deserialization from a json string
         // will be different from the replicas initiated in the constructor
         immutableReplicas = Collections.unmodifiableList(replicas);
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 
     @Override
@@ -746,9 +767,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                         empty = false;
                     }
                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
-                    sb.append(String.format("[be:%s,version:%d%s]",
+                    sb.append(String.format(" %s:%d%s",
                             backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
-                            replica.getState() == ReplicaState.ALTER ? ",ALTER" : ""));
+                            replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));
                 }
             }
             if (!empty) {

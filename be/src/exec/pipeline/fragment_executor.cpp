@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/fragment_executor.h"
 
@@ -19,6 +31,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -33,9 +46,12 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
+#include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/time.h"
@@ -79,7 +95,7 @@ static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelineP
 
 static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    auto* dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
+    auto* dop_counter = ADD_COUNTER_SKIP_MERGE(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(dop_counter, static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, dop_counter->value());
@@ -123,6 +139,13 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
 
+    if (query_options.__isset.enable_profile && query_options.enable_profile) {
+        _query_ctx->set_report_profile();
+    }
+    if (query_options.__isset.pipeline_profile_level) {
+        _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+    }
+
     bool enable_query_trace = false;
     if (query_options.__isset.enable_query_debug_trace && query_options.enable_query_debug_trace) {
         enable_query_trace = true;
@@ -136,20 +159,12 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
-    const auto& query_options = request.common().query_options;
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
-
-    if (query_options.__isset.is_report_success && query_options.is_report_success) {
-        _fragment_ctx->set_report_profile();
-    }
-    if (query_options.__isset.pipeline_profile_level) {
-        _fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
-    }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(fragment_instance_id) << " backend_num=" << request.backend_num();
@@ -169,7 +184,7 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-        RETURN_IF_ERROR(_query_ctx->init_query(wg.get()));
+        RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
         _wg = wg;
     }
     DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
@@ -189,6 +204,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
 
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_enable_pipeline_engine(true);
 
     if (wg != nullptr && wg->use_big_query_mem_limit()) {
         _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
@@ -204,8 +221,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.common().__isset.func_version ? request.common().func_version : 2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
@@ -324,6 +339,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             cache_param.slot_remapping[slot] = remapped_slot;
             cache_param.reverse_slot_remapping[remapped_slot] = slot;
         }
+        cache_param.can_use_multiversion = tcache_param.can_use_multiversion;
+        cache_param.keys_type = tcache_param.keys_type;
         _fragment_ctx->set_enable_cache(true);
     }
 
@@ -355,14 +372,14 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                         continue;
                     }
                     const auto& region = tcache_param.region_map.at(partition_id);
-                    std::string cache_suffix_key;
-                    cache_suffix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&partition_id,
+                    std::string cache_prefix_key;
+                    cache_prefix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&partition_id,
                                             ((uint8_t*)&partition_id) + sizeof(partition_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), region.begin(), region.end());
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&tablet_id,
+                    cache_prefix_key.insert(cache_prefix_key.end(), region.begin(), region.end());
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&tablet_id,
                                             ((uint8_t*)&tablet_id) + sizeof(tablet_id));
-                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_suffix_key);
+                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_prefix_key);
                 }
             }
         }
@@ -370,11 +387,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
         }
-        // TODO (by satanson): intra-tablet parallelism will emit multiple EOS, this situation hard to handled in
-        //  current version. shared_scan mechanism conflicts with per-tablet computation that is required for query
-        //  cache, so it is turned off at present. in the future, these two issues will be handled.
+        // TODO (by satanson): shared_scan mechanism conflicts with per-tablet computation that is required for query
+        //  cache, so it is turned off at present, it would be solved in the future.
         if (_fragment_ctx->enable_cache()) {
-            enable_tablet_internal_parallel = false;
             enable_shared_scan = false;
         }
 
@@ -405,12 +420,64 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
         if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            _query_ctx->set_scan_limit(physical_scan_limit);
+            _query_ctx->set_scan_limit(std::max(_wg->big_query_scan_rows_limit(), physical_scan_limit));
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
     }
 
+    return Status::OK();
+}
+
+Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+    const TExecPlanFragmentParams& unique_request = request.unique();
+    if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+        return Status::OK();
+    }
+    const auto& scan_range_map = unique_request.params.node_to_per_driver_seq_scan_ranges;
+    if (scan_range_map.size() == 0) {
+        return Status::OK();
+    }
+    auto iter = scan_range_map.begin();
+    if (iter->second.size() == 0) {
+        return Status::OK();
+    }
+    auto iter2 = iter->second.begin();
+    if (iter2->second.size() == 0) {
+        return Status::OK();
+    }
+    if (!iter2->second[0].scan_range.__isset.broker_scan_range) {
+        return Status::OK();
+    }
+    if (!iter2->second[0].scan_range.broker_scan_range.__isset.channel_id) {
+        return Status::OK();
+    }
+    std::vector<StreamLoadContext*> stream_load_contexts;
+    for (; iter != scan_range_map.end(); iter++) {
+        for (; iter2 != iter->second.end(); iter2++) {
+            for (const auto& scan_range : iter2->second) {
+                const TBrokerScanRange& broker_scan_range = scan_range.scan_range.broker_scan_range;
+                int channel_id = broker_scan_range.channel_id;
+                const string& label = broker_scan_range.params.label;
+                const string& db_name = broker_scan_range.params.db_name;
+                const string& table_name = broker_scan_range.params.table_name;
+                TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
+                TUniqueId load_id = broker_scan_range.ranges[0].load_id;
+                long txn_id = broker_scan_range.params.txn_id;
+                StreamLoadContext* ctx = nullptr;
+                RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
+                        exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+                DeferOp op([&] {
+                    if (ctx->unref()) {
+                        delete ctx;
+                    }
+                });
+                RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                stream_load_contexts.push_back(ctx);
+            }
+        }
+    }
+    _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
     return Status::OK();
 }
 
@@ -476,6 +543,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     scan_operator->set_workgroup(_wg);
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
                         if (_wg != nullptr) {
                             scan_operator->set_scan_executor(exec_env->connector_scan_executor_with_workgroup());
@@ -552,8 +620,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
         if (prepare_success) {
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
-            auto* prepare_timer = fragment_ctx->runtime_state()->runtime_profile()->add_counter(
-                    "FragmentInstancePrepareTime", TUnit::TIME_NS);
+            auto* prepare_timer =
+                    ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
             COUNTER_SET(prepare_timer, prepare_time);
         } else {
             _fail_cleanup();
@@ -569,6 +637,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+    RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;
@@ -608,11 +677,7 @@ void FragmentExecutor::_fail_cleanup() {
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
-            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
-                if (_wg) {
-                    _wg->decr_num_queries();
-                }
-            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }
@@ -737,10 +802,10 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             Status st;
             std::unique_ptr<starrocks::stream_load::OlapTableSink> sink =
                     std::make_unique<starrocks::stream_load::OlapTableSink>(runtime_state->obj_pool(), output_exprs,
-                                                                            &st);
+                                                                            &st, runtime_state);
             RETURN_IF_ERROR(st);
             if (sink != nullptr) {
-                RETURN_IF_ERROR(sink->init(thrift_sink));
+                RETURN_IF_ERROR(sink->init(thrift_sink, runtime_state));
             }
             RuntimeProfile* sink_profile = sink->profile();
             if (sink_profile != nullptr) {
@@ -757,7 +822,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // For insert into select, in the simplest case like insert into table select * from table2;
         // the desired_tablet_sink_dop set by FE is same as the source_operator_dop.
         // However, if the select statement is complex, like insert into table select * from table2 limit 1,
-        // the desired_tablet_sink_dop set by FE is same as the source_operator_dop, and it needs to
+        // the desired_tablet_sink_dop set by FE is not same as the source_operator_dop, and it needs to
         // add a local passthrough exchange here
         if (desired_tablet_sink_dop != source_operator_dop) {
             std::vector<OpFactories> pred_operators_list;
@@ -806,6 +871,15 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().mysql_table_sink,
                 mysql_table_sink->get_output_expr(), dop, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::MemoryScratchSink)) {
+        auto* memory_scratch_sink = down_cast<starrocks::MemoryScratchSink*>(datasink.get());
+        auto output_expr = memory_scratch_sink->get_output_expr();
+        auto row_desc = memory_scratch_sink->get_row_desc();
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        DCHECK_EQ(dop, 1);
+        OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(context->next_operator_id(), row_desc,
+                                                                             output_expr, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 

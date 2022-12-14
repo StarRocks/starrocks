@@ -10,7 +10,7 @@ SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
 
 ## Syntax
 
-```sql
+```Haskell
 INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)
 ```
 

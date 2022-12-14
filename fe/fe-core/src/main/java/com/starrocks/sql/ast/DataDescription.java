@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.ast;
 
@@ -11,11 +24,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -589,21 +600,24 @@ public class DataDescription {
             throw new AnalysisException("No table name in load statement.");
         }
 
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, tableName,
-                PrivPredicate.LOAD)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(), tableName);
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // check auth
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, tableName,
+                                                                         PrivPredicate.LOAD)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                                                    ConnectContext.get().getQualifiedUser(),
+                                                    ConnectContext.get().getRemoteIP(), tableName);
+            }
         }
-
         // check hive table auth
         if (isLoadFromTable()) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, srcTableName,
-                    PrivPredicate.SELECT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(), srcTableName);
+            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, srcTableName,
+                                                                             PrivPredicate.SELECT)) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                                                        ConnectContext.get().getQualifiedUser(),
+                                                        ConnectContext.get().getRemoteIP(), srcTableName);
+                }
             }
         }
     }
@@ -632,14 +646,6 @@ public class DataDescription {
             for (int i = 0; i < filePaths.size(); ++i) {
                 filePaths.set(i, filePaths.get(i).trim());
             }
-        }
-
-        if (columnSeparator != null) {
-            columnSeparator.analyze();
-        }
-
-        if (rowDelimiter != null) {
-            rowDelimiter.analyze();
         }
 
         if (partitionNames != null) {

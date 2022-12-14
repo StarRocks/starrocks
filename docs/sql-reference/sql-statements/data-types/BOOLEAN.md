@@ -1,6 +1,6 @@
 # BOOLEAN
 
-## description
+## Description
 
 BOOL, BOOLEAN
 

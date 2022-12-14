@@ -1,60 +1,86 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.lake.compaction;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
-class PartitionStatistics {
+import javax.annotation.Nullable;
+
+public class PartitionStatistics {
     @SerializedName(value = "partition")
     private final PartitionIdentifier partition;
-    @SerializedName(value = "lastCompactionVersion")
-    private PartitionVersion lastCompactionVersion;
+    @SerializedName(value = "compactionVersion")
+    private PartitionVersion compactionVersion;
     @SerializedName(value = "currentVersion")
     private PartitionVersion currentVersion;
     @SerializedName(value = "nextCompactionTime")
     private long nextCompactionTime;
+    @SerializedName(value = "compactionScore")
+    private Quantiles compactionScore;
 
-    PartitionStatistics(PartitionIdentifier partition) {
+    public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
-        this.lastCompactionVersion = null;
+        this.compactionVersion = null;
         this.nextCompactionTime = 0;
     }
 
-    PartitionIdentifier getPartition() {
+    public PartitionIdentifier getPartition() {
         return partition;
     }
 
-    PartitionVersion getCurrentVersion() {
+    public PartitionVersion getCurrentVersion() {
         return currentVersion;
     }
 
-    void setCurrentVersion(PartitionVersion currentVersion) {
+    public void setCurrentVersion(PartitionVersion currentVersion) {
         this.currentVersion = currentVersion;
     }
 
-    PartitionVersion getLastCompactionVersion() {
-        return lastCompactionVersion;
+    public PartitionVersion getCompactionVersion() {
+        return compactionVersion;
     }
 
-    void setLastCompactionVersion(PartitionVersion value) {
-        lastCompactionVersion = value;
+    public void setCompactionVersion(PartitionVersion value) {
+        compactionVersion = value;
     }
 
-    long getLastCompactionTime() {
-        return getLastCompactionVersion().getCreateTime();
+    public long getLastCompactionTime() {
+        return getCompactionVersion().getCreateTime();
     }
 
-    void setNextCompactionTime(long nextCompactionTime) {
+    public void setNextCompactionTime(long nextCompactionTime) {
         this.nextCompactionTime = nextCompactionTime;
     }
 
-    long getNextCompactionTime() {
+    public long getNextCompactionTime() {
         return nextCompactionTime;
     }
 
-    long getDeltaVersions() {
-        return getCurrentVersion().getVersion() - getLastCompactionVersion().getVersion();
+    public long getDeltaVersions() {
+        return getCurrentVersion().getVersion() - getCompactionVersion().getVersion();
+    }
+
+    public void setCompactionScore(@Nullable Quantiles compactionScore) {
+        this.compactionScore = compactionScore;
+    }
+
+    @Nullable
+    public Quantiles getCompactionScore() {
+        return compactionScore;
     }
 
     @Override

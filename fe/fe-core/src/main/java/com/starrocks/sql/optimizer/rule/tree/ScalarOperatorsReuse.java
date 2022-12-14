@@ -1,9 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -15,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -70,7 +86,7 @@ public class ScalarOperatorsReuse {
             ColumnRefFactory columnRefFactory) {
         // 1. Recursively collect common sub operators for the input operators
         CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector();
-        scalarOperators.forEach(operator -> operator.accept(operatorCollector, null));
+        scalarOperators.forEach(operator -> operator.accept(operatorCollector, new CollectorContext(false)));
         if (operatorCollector.commonOperatorsByDepth.isEmpty()) {
             return ImmutableMap.of();
         }
@@ -128,6 +144,14 @@ public class ScalarOperatorsReuse {
                     call.getFunction(),
                     call.isDistinct());
             return tryRewrite(operator);
+        }
+
+        @Override
+        public ScalarOperator visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
+            ScalarOperator newOperator = new LambdaFunctionOperator(operator.getRefColumns(),
+                    operator.getLambdaExpr().accept(this, null), operator.getType()
+            );
+            return tryRewrite(newOperator);
         }
 
         @Override
@@ -206,7 +230,19 @@ public class ScalarOperatorsReuse {
         }
     }
 
-    private static class CommonSubScalarOperatorCollector extends ScalarOperatorVisitor<Integer, Void> {
+    private static class CollectorContext {
+        public boolean isWithinLambda() {
+            return withinLambda;
+        }
+
+        private final boolean withinLambda;
+        CollectorContext(boolean withinLambda) {
+            this.withinLambda = withinLambda;
+        }
+
+    }
+
+    private static class CommonSubScalarOperatorCollector extends ScalarOperatorVisitor<Integer, CollectorContext> {
         // The key is operator tree depth, the value is operator set with same tree depth.
         // For operator list [a + b, a + b + c, a + d]
         // The operatorsByDepth is
@@ -216,9 +252,9 @@ public class ScalarOperatorsReuse {
         private final Map<Integer, Set<ScalarOperator>> operatorsByDepth = new HashMap<>();
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
 
-        private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator) {
+        private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator, boolean lambda) {
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
-            if (operators.contains(operator)) {
+            if (!isNonDeterministicFuncOrLambdaArgumentExist(operator, lambda) && operators.contains(operator)) {
                 Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
                 commonOperators.add(operator);
             }
@@ -233,18 +269,49 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
-        public Integer visit(ScalarOperator scalarOperator, Void context) {
+        public Integer visit(ScalarOperator scalarOperator, CollectorContext context) {
             if (scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
 
-            return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(
-                    argument -> argument.accept(this, context)).reduce(Math::max).get() + 1, scalarOperator);
+            return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
+                    argument.accept(this, context)).reduce(Math::max).get() + 1, scalarOperator, context.isWithinLambda());
+        }
+
+        // get rid of the expressions with lambda arguments, for example, select a+b, array_map(x-> 2*x+2*x > a+b, [1])
+        // the a+b is reused, but 2*x is not reused as it contains the lambda argument x.
+        // TODO(fzh) support reusing lambda argument related expressions.
+        @Override
+        public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator, CollectorContext context) {
+            return collectCommonOperatorsByDepth(scalarOperator.getLambdaExpr().accept(this, new CollectorContext(true)),
+                    scalarOperator, true);
         }
 
         @Override
-        public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, Void context) {
-            return collectCommonOperatorsByDepth(1, scalarOperator);
+        public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, CollectorContext context) {
+            return collectCommonOperatorsByDepth(1, scalarOperator, context.isWithinLambda());
+        }
+
+        // If a scalarOperator contains any non-deterministic function, it cannot be reused
+        // because the non-deterministic function results returned each time are inconsistent.
+        private boolean isNonDeterministicFuncOrLambdaArgumentExist(ScalarOperator scalarOperator, boolean lambda) {
+            if (lambda && scalarOperator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+                return true;
+            }
+
+            if (scalarOperator instanceof CallOperator) {
+                String fnName = ((CallOperator) scalarOperator).getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            }
+
+            for (ScalarOperator child : scalarOperator.getChildren()) {
+                if (isNonDeterministicFuncOrLambdaArgumentExist(child, lambda)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
     }

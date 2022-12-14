@@ -1,16 +1,16 @@
 # array_avg
 
-## description
+## Description
 
-### Syntax
+Calculates the average value of all data in an ARRAY and return this result.
+
+## Syntax
 
 ```Haskell
 array_avg(array(type))
 ```
 
-Find the average of all data in an ARRAY and return this result.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_avg([11, 11, 12]);

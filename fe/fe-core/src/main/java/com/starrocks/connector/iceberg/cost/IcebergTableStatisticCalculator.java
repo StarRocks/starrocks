@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.iceberg.cost;
 
@@ -8,6 +21,7 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
@@ -15,15 +29,12 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -46,26 +57,26 @@ public class IcebergTableStatisticCalculator {
         this.icebergTable = icebergTable;
     }
 
-    public static Statistics getTableStatistics(List<Expression> icebergPredicates,
+    public static Statistics getTableStatistics(Expression icebergPredicate,
                                                 Table icebergTable,
                                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         return new IcebergTableStatisticCalculator(icebergTable)
-                .makeTableStatistics(icebergPredicates, colRefToColumnMetaMap);
+                .makeTableStatistics(icebergPredicate, colRefToColumnMetaMap);
     }
 
-    public static List<ColumnStatistic> getColumnStatistics(List<Expression> icebergPredicates,
+    public static List<ColumnStatistic> getColumnStatistics(Expression icebergPredicate,
                                                             Table icebergTable,
                                                             Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         return new IcebergTableStatisticCalculator(icebergTable)
-                .makeColumnStatistics(icebergPredicates, colRefToColumnMetaMap);
+                .makeColumnStatistics(icebergPredicate, colRefToColumnMetaMap);
     }
 
-    private List<ColumnStatistic> makeColumnStatistics(List<Expression> icebergPredicates,
+    private List<ColumnStatistic> makeColumnStatistics(Expression icebergPredicate,
                                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         List<ColumnStatistic> columnStatistics = new ArrayList<>();
         List<Types.NestedField> columns = icebergTable.schema().columns();
         IcebergFileStats icebergFileStats = new IcebergTableStatisticCalculator(icebergTable).
-                generateIcebergFileStats(icebergPredicates, columns);
+                generateIcebergFileStats(icebergPredicate, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream().
                 filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
@@ -88,11 +99,10 @@ public class IcebergTableStatisticCalculator {
         return columnStatistics;
     }
 
-    private Statistics makeTableStatistics(List<Expression> icebergPredicates,
-                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+    private Statistics makeTableStatistics(Expression icebergPredicate, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         LOG.debug("Begin to make iceberg table statistics!");
         List<Types.NestedField> columns = icebergTable.schema().columns();
-        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicates, columns);
+        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicate, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream()
                 .filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
@@ -194,7 +204,7 @@ public class IcebergTableStatisticCalculator {
         }
     }
 
-    private IcebergFileStats generateIcebergFileStats(List<Expression> icebergPredicates,
+    private IcebergFileStats generateIcebergFileStats(Expression icebergPredicate,
                                                       List<Types.NestedField> columns) {
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable);
         if (!snapshot.isPresent()) {
@@ -215,11 +225,11 @@ public class IcebergTableStatisticCalculator {
                 .collect(toImmutableList());
 
         TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
-                snapshot.get(), icebergPredicates);
+                snapshot.get(), icebergPredicate);
 
         IcebergFileStats icebergFileStats = null;
-        try (CloseableIterable<FileScanTask> fileScanTasks = tableScan.planFiles()) {
-            for (FileScanTask fileScanTask : fileScanTasks) {
+        for (CombinedScanTask combinedScanTask : tableScan.planTasks()) {
+            for (FileScanTask fileScanTask : combinedScanTask.files()) {
                 DataFile dataFile = fileScanTask.file();
                 // ignore this data file.
                 if (dataFile.recordCount() == 0) {
@@ -248,9 +258,8 @@ public class IcebergTableStatisticCalculator {
                     updateColumnSizes(icebergFileStats, dataFile.columnSizes());
                 }
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
+
         return icebergFileStats;
     }
 

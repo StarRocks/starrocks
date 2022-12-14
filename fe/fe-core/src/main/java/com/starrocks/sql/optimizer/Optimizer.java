@@ -1,8 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
@@ -45,6 +60,7 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -57,9 +73,50 @@ import java.util.List;
 public class Optimizer {
     private static final Logger LOG = LogManager.getLogger(Optimizer.class);
     private OptimizerContext context;
+    private final OptimizerConfig optimizerConfig;
+
+    public Optimizer() {
+        this(OptimizerConfig.defaultConfig());
+    }
+
+    public Optimizer(OptimizerConfig config) {
+        this.optimizerConfig = config;
+    }
+
+    @VisibleForTesting
+    public OptimizerConfig getOptimizerConfig() {
+        return optimizerConfig;
+    }
 
     public OptimizerContext getContext() {
         return context;
+    }
+
+    public OptExpression optimize(ConnectContext connectContext,
+                                  OptExpression logicOperatorTree,
+                                  PhysicalPropertySet requiredProperty,
+                                  ColumnRefSet requiredColumns,
+                                  ColumnRefFactory columnRefFactory) {
+        prepare(connectContext, logicOperatorTree, columnRefFactory);
+        if (optimizerConfig.isRuleBased()) {
+            return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+        } else {
+            return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+        }
+    }
+
+    // Optimize by rule will return logical plan.
+    // Used by materialized view query rewrite optimization.
+    private OptExpression optimizeByRule(ConnectContext connectContext,
+                                         OptExpression logicOperatorTree,
+                                         PhysicalPropertySet requiredProperty,
+                                         ColumnRefSet requiredColumns) {
+        OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
+        TaskContext rootTaskContext =
+                new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+        logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
+        OptimizerTraceUtil.log(connectContext, "after logical rewrite, new logicOperatorTree:\n%s", logicOperatorTree);
+        return logicOperatorTree;
     }
 
     /**
@@ -72,22 +129,18 @@ public class Optimizer {
      * @param requiredColumns   the required output columns from sql or groupExpression
      * @return the lowest cost physical operator for this query
      */
-    public OptExpression optimize(ConnectContext connectContext,
-                                  OptExpression logicOperatorTree,
-                                  PhysicalPropertySet requiredProperty,
-                                  ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory) {
+    private OptExpression optimizeByCost(ConnectContext connectContext,
+                                         OptExpression logicOperatorTree,
+                                         PhysicalPropertySet requiredProperty,
+                                         ColumnRefSet requiredColumns) {
         // Phase 1: none
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         // Phase 2: rewrite based on memo and group
-        Memo memo = new Memo();
-
-        context = new OptimizerContext(memo, columnRefFactory, connectContext);
-        context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
+        Memo memo = context.getMemo();
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
-            logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+            logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
         }
 
         memo.init(logicOperatorTree);
@@ -131,6 +184,26 @@ public class Optimizer {
             OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
 
             return finalPlan;
+        }
+    }
+
+    private void prepare(ConnectContext connectContext, OptExpression logicOperatorTree, ColumnRefFactory columnRefFactory) {
+        Memo memo = null;
+        if (!optimizerConfig.isRuleBased()) {
+            memo = new Memo();
+        }
+
+        context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
+
+        if (Config.enable_experimental_mv
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
+                && !optimizerConfig.isRuleBased()) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
+                MvRewritePreprocessor preprocessor =
+                        new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
+                preprocessor.prepareMvCandidatesForPlan();
+            }
         }
     }
 
@@ -236,7 +309,20 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+        if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
+                && sessionVariable.isEnableMaterializedViewRewrite()
+                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
         return tree.getInputs().get(0);
+    }
+
+    private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
+        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
+        OptExpressionValidator validator = new OptExpressionValidator();
+        validator.visit(tree, null);
+        return result;
     }
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
@@ -281,21 +367,25 @@ public class Optimizer {
             }
         }
 
-        //add join implementRule
-        String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
-        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addMergeJoinImplementationRule();
-        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addHashJoinImplementationRule();
-        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addNestLoopJoinImplementationRule();
+        if (!sessionVariable.isMVPlanner()) {
+            //add join implementRule
+            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addMergeJoinImplementationRule();
+            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addHashJoinImplementationRule();
+            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addNestLoopJoinImplementationRule();
+            } else {
+                context.getRuleSet().addAutoJoinImplementationRule();
+            }
         } else {
-            context.getRuleSet().addAutoJoinImplementationRule();
+            context.getRuleSet().addRealtimeMVRules();
         }
 
-        // add realtime mv rules
-        if (sessionVariable.isMVPlanner() && sessionVariable.isEnableRealtimeRefreshMV()) {
-            context.getRuleSet().addRealtimeMVRules();
+        if (!context.getCandidateMvs().isEmpty()
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
+            context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
@@ -351,7 +441,6 @@ public class Optimizer {
                 childPlans);
         // record inputProperties at optExpression, used for planFragment builder to determine join type
         expression.setRequiredProperties(inputProperties);
-        expression.setOutputProperty(groupExpression.getOutputProperty(requiredProperty));
         expression.setStatistics(groupExpression.getGroup().hasConfidenceStatistic(requiredProperty) ?
                 groupExpression.getGroup().getConfidenceStatistic(requiredProperty) :
                 groupExpression.getGroup().getStatistics());
@@ -370,24 +459,36 @@ public class Optimizer {
     }
 
     private void ruleRewriteIterative(OptExpression tree, TaskContext rootTaskContext, RuleSetType ruleSetType) {
+        if (optimizerConfig.isRuleSetTypeDisable(ruleSetType)) {
+            return;
+        }
         List<Rule> rules = rootTaskContext.getOptimizerContext().getRuleSet().getRewriteRulesByType(ruleSetType);
         context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }
 
     private void ruleRewriteIterative(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
+        if (optimizerConfig.isRuleDisable(rule.type())) {
+            return;
+        }
         List<Rule> rules = Collections.singletonList(rule);
         context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }
 
     private void ruleRewriteOnlyOnce(OptExpression tree, TaskContext rootTaskContext, RuleSetType ruleSetType) {
+        if (optimizerConfig.isRuleSetTypeDisable(ruleSetType)) {
+            return;
+        }
         List<Rule> rules = rootTaskContext.getOptimizerContext().getRuleSet().getRewriteRulesByType(ruleSetType);
         context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, true));
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }
 
     private void ruleRewriteOnlyOnce(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
+        if (optimizerConfig.isRuleDisable(rule.type())) {
+            return;
+        }
         List<Rule> rules = Collections.singletonList(rule);
         context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, true));
         context.getTaskScheduler().executeTasks(rootTaskContext);

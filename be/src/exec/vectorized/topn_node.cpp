@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/topn_node.h"
 
@@ -39,11 +51,11 @@ TopNNode::~TopNNode() {
 Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
-    RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool));
+    RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool, state));
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
+                                                &_analytic_partition_exprs, state));
         RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, runtime_state()));
         RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, runtime_state()));
         for (auto& expr : _analytic_partition_exprs) {

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/group_reader.h"
 
@@ -298,11 +310,11 @@ Status GroupReaderTest::_create_filemeta(FileMetaData** file_meta, GroupReaderPa
     auto* t_file_meta = _create_t_filemeta(param);
 
     *file_meta = _pool.add(new FileMetaData());
-    return (*file_meta)->init(*t_file_meta);
+    return (*file_meta)->init(*t_file_meta, true);
 }
 
 static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tparquet::Type::type par_type,
-                                                                     PrimitiveType prim_type) {
+                                                                     LogicalType prim_type) {
     GroupReaderParam::Column c;
     c.col_idx_in_parquet = idx;
     c.col_idx_in_chunk = idx;
@@ -315,17 +327,17 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tp
 static vectorized::HdfsScanStats g_hdfs_scan_stats;
 GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c1 =
-            _create_group_reader_param_of_column(0, tparquet::Type::type::INT32, PrimitiveType::TYPE_INT);
+            _create_group_reader_param_of_column(0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);
     GroupReaderParam::Column c2 =
-            _create_group_reader_param_of_column(1, tparquet::Type::type::INT64, PrimitiveType::TYPE_BIGINT);
+            _create_group_reader_param_of_column(1, tparquet::Type::type::INT64, LogicalType::TYPE_BIGINT);
     GroupReaderParam::Column c3 =
-            _create_group_reader_param_of_column(2, tparquet::Type::type::BYTE_ARRAY, PrimitiveType::TYPE_VARCHAR);
+            _create_group_reader_param_of_column(2, tparquet::Type::type::BYTE_ARRAY, LogicalType::TYPE_VARCHAR);
     GroupReaderParam::Column c4 =
-            _create_group_reader_param_of_column(3, tparquet::Type::type::INT96, PrimitiveType::TYPE_DATETIME);
+            _create_group_reader_param_of_column(3, tparquet::Type::type::INT96, LogicalType::TYPE_DATETIME);
     GroupReaderParam::Column c5 =
-            _create_group_reader_param_of_column(4, tparquet::Type::type::FLOAT, PrimitiveType::TYPE_FLOAT);
+            _create_group_reader_param_of_column(4, tparquet::Type::type::FLOAT, LogicalType::TYPE_FLOAT);
     GroupReaderParam::Column c6 =
-            _create_group_reader_param_of_column(5, tparquet::Type::type::DOUBLE, PrimitiveType::TYPE_DOUBLE);
+            _create_group_reader_param_of_column(5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
 
     auto* param = _pool.add(new GroupReaderParam());
     param->read_cols.emplace_back(c1);

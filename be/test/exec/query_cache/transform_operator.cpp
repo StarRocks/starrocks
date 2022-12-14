@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exec/query_cache/transform_operator.h"
 
 #include <utility>
@@ -187,8 +200,7 @@ StatusOr<vectorized::ChunkPtr> ReduceSourceOperator::pull_chunk(starrocks::Runti
 
 ReduceSourceOperatorFactory::ReduceSourceOperatorFactory(int32_t id,
                                                          starrocks::vectorized::ReducerFactoryPtr reducer_factory)
-        : pipeline::SourceOperatorFactory(id, "reduce_source", id),
-          _reducer_factory(std::move(reducer_factory)) {}
+        : pipeline::SourceOperatorFactory(id, "reduce_source", id), _reducer_factory(std::move(reducer_factory)) {}
 
 pipeline::OperatorPtr ReduceSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto reducer = _reducer_factory->create(degree_of_parallelism, driver_sequence);

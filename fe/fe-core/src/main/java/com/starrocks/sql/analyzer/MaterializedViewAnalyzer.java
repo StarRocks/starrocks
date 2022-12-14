@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -70,7 +83,10 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.logging.log4j.util.Strings;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -81,6 +97,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
 public class MaterializedViewAnalyzer {
@@ -103,6 +120,22 @@ public class MaterializedViewAnalyzer {
                     table instanceof IcebergTable;
         }
 
+        private boolean isExternalTableFromResource(Table table) {
+            if (table instanceof OlapTable) {
+                return false;
+            } else if (table instanceof HiveTable || table instanceof HudiTable) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                String catalogName = hiveMetaStoreTable.getCatalogName();
+                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+            } else if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                String catalogName = icebergTable.getCatalog();
+                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+            } else {
+                return true;
+            }
+        }
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -120,14 +153,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view query statement only support select");
             }
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
-            // check cte
-            if (selectRelation.hasWithClause()) {
-                throw new SemanticException("Materialized view query statement not support cte");
-            }
-            // check subquery
-            if (!AnalyzerUtils.collectAllSubQueryRelation(queryStatement).isEmpty()) {
-                throw new SemanticException("Materialized view query statement not support subquery");
-            }
+
             // check alias except * and SlotRef
             List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
             for (SelectListItem selectListItem : selectListItems) {
@@ -145,8 +171,8 @@ public class MaterializedViewAnalyzer {
             Analyzer.analyze(queryStatement, context);
 
             // convert queryStatement to sql and set
-            statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
-            statement.setSimpleViewDef(ViewDefBuilder.buildSimple(queryStatement));
+            statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));
+            statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndView(queryStatement);
             List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
@@ -167,10 +193,16 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException(
                             "Create materialized view from inactive materialized view: " + table.getName());
                 }
+                if (isExternalTableFromResource(table)) {
+                    throw new SemanticException(
+                            "Only supports creating materialized views based on the external table " +
+                                    "which created by catalog");
+                }
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
                 if (isInternalCatalog(tableNameInfo.getCatalog())) {
-                    baseTableInfos.add(new MaterializedView.BaseTableInfo(database.getId(), table.getId()));
+                    baseTableInfos.add(new MaterializedView.BaseTableInfo(database.getId(), database.getFullName(),
+                            table.getId()));
                 } else {
                     baseTableInfos.add(new MaterializedView.BaseTableInfo(tableNameInfo.getCatalog(),
                             tableNameInfo.getDb(), table.getTableIdentifier()));
@@ -204,14 +236,14 @@ public class MaterializedViewAnalyzer {
         // TODO(murphy) implement
         // Plan the query statement and store in memory
         private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
-            if (!ctx.getSessionVariable().isEnableRealtimeRefreshMV()) {
+            if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
                 return;
             }
             if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 return;
             }
-            QueryRelation queryRelation = query.getQueryRelation();
 
+            QueryRelation queryRelation = query.getQueryRelation();
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
@@ -227,7 +259,6 @@ public class MaterializedViewAnalyzer {
             logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
-            ExecPlan execPlan;
             try {
                 ctx.getSessionVariable().setMVPlanner(true);
                 OptExpression optimizedPlan = optimizer.optimize(
@@ -236,12 +267,18 @@ public class MaterializedViewAnalyzer {
                         requiredPropertySet,
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
+                optimizedPlan.deriveMVProperty();
 
                 // TODO: refine rules for mv plan
-                // TODO: infer key property
-                // TODO: infer retraction op
                 // TODO: infer state
+                // TODO: infer sink table information
                 // TODO: store the plan in create-mv statement and persist it at executor
+                // TODO: refine the output fragment
+                boolean hasOutputFragment = false;
+                ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                        optimizedPlan, ctx, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                createStmt.setMaintenancePlan(execPlan, columnRefFactory);
             } finally {
                 ctx.getSessionVariable().setMVPlanner(false);
             }
@@ -266,7 +303,7 @@ public class MaterializedViewAnalyzer {
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
-                Type type = AnalyzerUtils.transformType(outputExpression.get(i).getType());
+                Type type = AnalyzerUtils.transformTypeForMv(outputExpression.get(i).getType());
                 Column column = new Column(columnOutputNames.get(i), type,
                         outputExpression.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
@@ -392,7 +429,10 @@ public class MaterializedViewAnalyzer {
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
 
-            if (table.isLocalTable()) {
+            if (table == null) {
+                throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                        slotRef.toSql());
+            } else if (table.isLocalTable()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
@@ -478,10 +518,15 @@ public class MaterializedViewAnalyzer {
         private void replaceTableAlias(SlotRef slotRef,
                                        CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
-            if (slotRef.getTblNameWithoutAnalyzed().getDb() == null) {
-                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                OlapTable table = ((OlapTable) tableNameTableMap.get(tableName));
-                slotRef.setTblName(new TableName(null, statement.getTableName().getDb(), table.getName()));
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            Table table = tableNameTableMap.get(tableName);
+            List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
+            for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                if (baseTableInfo.getTable().equals(table)) {
+                    slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), table.getName()));
+                    break;
+                }
             }
         }
 
@@ -568,6 +613,19 @@ public class MaterializedViewAnalyzer {
                                     Arrays.asList(RefreshTimeUnit.values()));
                         }
                     }
+                }
+            } else if (statement.getModifyTablePropertiesClause() != null) {
+                TableName mvName = statement.getMvName();
+                Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
+                if (db == null) {
+                    throw new SemanticException("Can not find database:" + mvName.getDb());
+                }
+                OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
+                if (table == null) {
+                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
+                }
+                if (!(table instanceof MaterializedView)) {
+                    throw new SemanticException(mvName.getTbl() + " is not async materialized view");
                 }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
@@ -700,4 +758,5 @@ public class MaterializedViewAnalyzer {
             }
         }
     }
+
 }

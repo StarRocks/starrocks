@@ -1,6 +1,6 @@
 # SHOW TRANSACTION
 
-## description
+## Description
 
 This syntax is used to view the transaction details of the specified transaction id.
 
@@ -46,7 +46,7 @@ TimeoutMs: 300000
 * ListenerId: id of the related import job
 * TimeoutMs: transaction timeout, in milliseconds
 
-## example
+## Examples
 
 1. To view a transaction with id 4005:
 

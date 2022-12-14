@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exec/tablet_sink.cpp
 
@@ -29,6 +42,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -55,7 +69,7 @@ namespace starrocks::stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
+    _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() noexcept {
@@ -162,6 +176,7 @@ void NodeChannel::try_open() {
 
 void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure) {
     PTabletWriterOpenRequest request;
+    request.set_merge_condition(_parent->_merge_condition);
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
     request.set_txn_id(_parent->_txn_id);
@@ -248,6 +263,13 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     if (open_closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(open_closure->cntl.ErrorText());
+
+        // tablet_id == -1 means add backend to blacklist
+        TTabletFailInfo fail_info;
+        fail_info.__set_tabletId(-1);
+        fail_info.__set_backendId(_node_id);
+        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+
         return _err_st;
     }
     Status status(open_closure->result.status());
@@ -255,6 +277,12 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     if (!status.ok()) {
         _cancelled = true;
         _err_st = status;
+
+        TTabletFailInfo fail_info;
+        fail_info.__set_tabletId(-1);
+        fail_info.__set_backendId(_node_id);
+        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+
         return _err_st;
     }
 
@@ -272,7 +300,8 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
 
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
-        StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+        StatusOr<ChunkPB> res = Status::OK();
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
             _cancelled = true;
             _err_st = res.status();
@@ -395,7 +424,6 @@ Status NodeChannel::add_chunks(vectorized::Chunk* input, const std::vector<std::
 
     if (LIKELY(!eos)) {
         DCHECK(tablet_ids.size() == _rpc_request.requests_size());
-        SCOPED_TIMER(_parent->_pack_chunk_timer);
         if (UNLIKELY(_cur_chunk == nullptr)) {
             _cur_chunk = input->clone_empty_with_slot();
         }
@@ -406,6 +434,7 @@ Status NodeChannel::add_chunks(vectorized::Chunk* input, const std::vector<std::
             RETURN_IF_ERROR(_wait_one_prev_request());
         }
 
+        SCOPED_TIMER(_parent->_pack_chunk_timer);
         // 1. append data
         _cur_chunk->append_selective(*input, indexes.data(), from, size);
         for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
@@ -461,12 +490,14 @@ Status NodeChannel::_send_request(bool eos) {
     AddMultiChunkReq add_chunk = std::move(_request_queue.front());
     _request_queue.pop_front();
 
-    SCOPED_RAW_TIMER(&_actual_consume_ns);
-
     auto request = add_chunk.second;
     auto chunk = std::move(add_chunk.first);
 
     _mem_tracker->release(chunk->memory_usage());
+
+    RETURN_IF_ERROR(_wait_one_prev_request());
+
+    SCOPED_RAW_TIMER(&_actual_consume_ns);
 
     for (int i = 0; i < request.requests_size(); i++) {
         auto req = request.mutable_requests(i);
@@ -487,8 +518,6 @@ Status NodeChannel::_send_request(bool eos) {
             RETURN_IF_ERROR(_serialize_chunk(chunk.get(), pchunk));
         }
     }
-
-    RETURN_IF_ERROR(_wait_one_prev_request());
 
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
@@ -514,9 +543,16 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         return Status::OK();
     }
 
+    _parent->_client_rpc_timer->update(closure->latency());
+
     if (closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(closure->cntl.ErrorText());
+
+        TTabletFailInfo fail_info;
+        fail_info.__set_tabletId(-1);
+        fail_info.__set_backendId(_node_id);
+        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
         return _err_st;
     }
 
@@ -524,6 +560,18 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (!st.ok()) {
         _cancelled = true;
         _err_st = st;
+
+        for (auto& tablet : closure->result.failed_tablet_vec()) {
+            TTabletFailInfo fail_info;
+            fail_info.__set_tabletId(tablet.tablet_id());
+            if (tablet.has_node_id()) {
+                fail_info.__set_backendId(tablet.node_id());
+            } else {
+                fail_info.__set_backendId(_node_id);
+            }
+            _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        }
+
         return _err_st;
     }
 
@@ -741,15 +789,17 @@ bool IndexChannel::has_intolerable_failure() {
     }
 }
 
-OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
+OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
+        : _pool(pool) {
     if (!texprs.empty()) {
-        *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
+        *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs, state);
     }
 }
 
-Status OlapTableSink::init(const TDataSink& t_sink) {
+Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
+    _merge_condition = table_sink.merge_condition;
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
@@ -763,10 +813,13 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     if (table_sink.__isset.write_quorum_type) {
         _write_quorum_type = table_sink.write_quorum_type;
     }
+    if (table_sink.__isset.enable_replicated_storage) {
+        _enable_replicated_storage = table_sink.enable_replicated_storage;
+    }
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
-    RETURN_IF_ERROR(_vectorized_partition->init());
+    RETURN_IF_ERROR(_vectorized_partition->init(state));
     _location = _pool->add(new OlapTableLocationParam(table_sink.location));
     _nodes_info = _pool->add(new StarRocksNodesInfo(table_sink.nodes_info));
 
@@ -782,10 +835,6 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
 
-    if (state->query_options().__isset.enable_replicated_storage) {
-        _enable_replicated_storage = state->query_options().enable_replicated_storage;
-    }
-
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
 
@@ -796,16 +845,19 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
     _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
-    _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
-    _convert_chunk_timer = ADD_TIMER(_profile, "ConvertChunkTime");
-    _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
     _open_timer = ADD_TIMER(_profile, "OpenTime");
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
-    _serialize_chunk_timer = ADD_TIMER(_profile, "SerializeChunkTime");
-    _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
-    _compress_timer = ADD_TIMER(_profile, "CompressTime");
-    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
-    _send_rpc_timer = ADD_TIMER(_profile, "SendRpcTime");
+    _prepare_data_timer = ADD_TIMER(_profile, "PrepareDataTime");
+    _convert_chunk_timer = ADD_CHILD_TIMER(_profile, "ConvertChunkTime", "PrepareDataTime");
+    _validate_data_timer = ADD_CHILD_TIMER(_profile, "ValidateDataTime", "PrepareDataTime");
+    _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
+    _pack_chunk_timer = ADD_CHILD_TIMER(_profile, "PackChunkTime", "SendDataTime");
+    _send_rpc_timer = ADD_CHILD_TIMER(_profile, "SendRpcTime", "SendDataTime");
+    _wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
+    _serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
+    _compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
+    _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -842,19 +894,12 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         }
     }
 
-    _max_decimal_val.resize(_output_tuple_desc->slots().size());
-    _min_decimal_val.resize(_output_tuple_desc->slots().size());
-
     _max_decimalv2_val.resize(_output_tuple_desc->slots().size());
     _min_decimalv2_val.resize(_output_tuple_desc->slots().size());
     // check if need validate batch
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         auto* slot = _output_tuple_desc->slots()[i];
         switch (slot->type().type) {
-        case TYPE_DECIMAL:
-            _max_decimal_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
-            _min_decimal_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
-            break;
         case TYPE_DECIMALV2:
             _max_decimalv2_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
             _min_decimalv2_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
@@ -1049,71 +1094,73 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
     {
-        SCOPED_RAW_TIMER(&_convert_batch_ns);
-        if (!_output_expr_ctxs.empty()) {
-            _output_chunk = std::make_unique<vectorized::Chunk>();
-            for (size_t i = 0; i < _output_expr_ctxs.size(); ++i) {
-                ASSIGN_OR_RETURN(ColumnPtr tmp, _output_expr_ctxs[i]->evaluate(chunk));
-                ColumnPtr output_column = nullptr;
-                if (tmp->only_null()) {
-                    // Only null column maybe lost type info
-                    output_column =
-                            vectorized::ColumnHelper::create_column(_output_tuple_desc->slots()[i]->type(), true);
-                    output_column->append_nulls(num_rows);
-                } else {
-                    // Unpack normal const column
-                    output_column = vectorized::ColumnHelper::unpack_and_duplicate_const_column(num_rows, tmp);
+        SCOPED_TIMER(_prepare_data_timer);
+        {
+            SCOPED_RAW_TIMER(&_convert_batch_ns);
+            if (!_output_expr_ctxs.empty()) {
+                _output_chunk = std::make_unique<vectorized::Chunk>();
+                for (size_t i = 0; i < _output_expr_ctxs.size(); ++i) {
+                    ASSIGN_OR_RETURN(ColumnPtr tmp, _output_expr_ctxs[i]->evaluate(chunk));
+                    ColumnPtr output_column = nullptr;
+                    if (tmp->only_null()) {
+                        // Only null column maybe lost type info
+                        output_column =
+                                vectorized::ColumnHelper::create_column(_output_tuple_desc->slots()[i]->type(), true);
+                        output_column->append_nulls(num_rows);
+                    } else {
+                        // Unpack normal const column
+                        output_column = vectorized::ColumnHelper::unpack_and_duplicate_const_column(num_rows, tmp);
+                    }
+                    DCHECK(output_column != nullptr);
+                    _output_chunk->append_column(std::move(output_column), _output_tuple_desc->slots()[i]->id());
                 }
-                DCHECK(output_column != nullptr);
-                _output_chunk->append_column(std::move(output_column), _output_tuple_desc->slots()[i]->id());
+                chunk = _output_chunk.get();
+            } else {
+                chunk->reset_slot_id_to_index();
+                for (size_t i = 0; i < _output_tuple_desc->slots().size(); ++i) {
+                    chunk->set_slot_id_to_index(_output_tuple_desc->slots()[i]->id(), i);
+                }
             }
-            chunk = _output_chunk.get();
-        } else {
-            chunk->reset_slot_id_to_index();
-            for (size_t i = 0; i < _output_tuple_desc->slots().size(); ++i) {
-                chunk->set_slot_id_to_index(_output_tuple_desc->slots()[i]->id(), i);
-            }
-        }
-        DCHECK_EQ(chunk->get_slot_id_to_index_map().size(), _output_tuple_desc->slots().size());
-    }
-
-    {
-        _validate_selection.assign(num_rows, VALID_SEL_OK);
-        SCOPED_RAW_TIMER(&_validate_data_ns);
-        _validate_data(state, chunk);
-    }
-    {
-        SCOPED_TIMER(_pack_chunk_timer);
-        uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
-        int invalid_row_index = 0;
-        RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes, &_validate_selection,
-                                                            &invalid_row_index));
-
-        // Note: must padding char column after find_tablets.
-        _padding_char_column(chunk);
-
-        // Arrange selection_idx by merging _validate_selection
-        // If chunk num_rows is 6
-        // _validate_selection is [1, 0, 0, 0, 1, 1]
-        // selection_idx after arrange will be : [0, 4, 5]
-        _validate_select_idx.resize(num_rows);
-        size_t selected_size = 0;
-        for (uint16_t i = 0; i < num_rows; ++i) {
-            _validate_select_idx[selected_size] = i;
-            selected_size += (_validate_selection[i] & 0x1);
-        }
-        _validate_select_idx.resize(selected_size);
-
-        if (num_rows_after_validate - _validate_select_idx.size() > 0) {
-            if (!state->has_reached_max_error_msg_num()) {
-                std::string debug_row = chunk->debug_row(invalid_row_index);
-                state->append_error_msg_to_file(debug_row,
-                                                "The row is out of partition ranges. Please add a new partition.");
-            }
+            DCHECK_EQ(chunk->get_slot_id_to_index_map().size(), _output_tuple_desc->slots().size());
         }
 
-        _number_filtered_rows += (num_rows - _validate_select_idx.size());
-        _number_output_rows += _validate_select_idx.size();
+        {
+            SCOPED_RAW_TIMER(&_validate_data_ns);
+            _validate_selection.assign(num_rows, VALID_SEL_OK);
+            _validate_data(state, chunk);
+        }
+        {
+            uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
+            int invalid_row_index = 0;
+            RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                                                                &_validate_selection, &invalid_row_index));
+
+            // Note: must padding char column after find_tablets.
+            _padding_char_column(chunk);
+
+            // Arrange selection_idx by merging _validate_selection
+            // If chunk num_rows is 6
+            // _validate_selection is [1, 0, 0, 0, 1, 1]
+            // selection_idx after arrange will be : [0, 4, 5]
+            _validate_select_idx.resize(num_rows);
+            size_t selected_size = 0;
+            for (uint16_t i = 0; i < num_rows; ++i) {
+                _validate_select_idx[selected_size] = i;
+                selected_size += (_validate_selection[i] & 0x1);
+            }
+            _validate_select_idx.resize(selected_size);
+
+            if (num_rows_after_validate - _validate_select_idx.size() > 0) {
+                if (!state->has_reached_max_error_msg_num()) {
+                    std::string debug_row = chunk->debug_row(invalid_row_index);
+                    state->append_error_msg_to_file(debug_row,
+                                                    "The row is out of partition ranges. Please add a new partition.");
+                }
+            }
+
+            _number_filtered_rows += (num_rows - _validate_select_idx.size());
+            _number_output_rows += _validate_select_idx.size();
+        }
     }
 
     SCOPED_TIMER(_send_data_timer);
@@ -1382,14 +1429,17 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         state->update_num_rows_load_from_sink(state->num_rows_load_filtered() + state->num_rows_load_unselected());
         state->update_num_rows_load_filtered(_number_filtered_rows);
 
+        int64_t total_server_rpc_time_us = 0;
         // print log of add batch time of all node, for tracing load performance easily
         std::stringstream ss;
         ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
            << ", add chunk time(ms)/wait lock time(ms)/num: ";
         for (auto const& pair : node_add_batch_counter_map) {
+            total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
             ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
                << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
         }
+        _server_rpc_timer->update(total_server_rpc_time_us * 1000);
         LOG(INFO) << ss.str();
     } else {
         COUNTER_SET(_input_rows_counter, _number_input_rows);
@@ -1444,7 +1494,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 #endif
 }
 
-template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
+template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     if (state->has_reached_max_error_msg_num()) {
         return;
@@ -1459,7 +1509,7 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 #endif
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
                                       std::vector<uint8_t>* validate_selection) {
     using CppType = vectorized::RunTimeCppType<PT>;
@@ -1540,7 +1590,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
         switch (desc->type().type) {
         case TYPE_CHAR:
-        case TYPE_VARCHAR: {
+        case TYPE_VARCHAR:
+        case TYPE_VARBINARY: {
             uint32_t len = desc->type().len;
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
             auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
@@ -1602,7 +1653,7 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
             vectorized::Bytes& bytes = binary->get_bytes();
 
             // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
-            // TODO(kks): we could improve this if there are many null valus
+            // TODO(kks): we could improve this if there are many null values
             auto new_binary = vectorized::BinaryColumn::create();
             vectorized::Offsets& new_offset = new_binary->get_offset();
             vectorized::Bytes& new_bytes = new_binary->get_bytes();

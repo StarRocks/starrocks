@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -104,7 +116,7 @@ class CACHELINE_ALIGNED ColumnPool {
             _curr_free.bytes = 0;
         }
 
-        ~LocalPool() {
+        ~LocalPool() noexcept {
             if (_curr_free.nfree > 0 && !_pool->_push_free_block(_curr_free)) {
                 for (size_t i = 0; i < _curr_free.nfree; i++) {
                     ASAN_UNPOISON_MEMORY_REGION(_curr_free.ptrs[i], sizeof(T));
@@ -319,8 +331,7 @@ private:
     }
 
     bool _push_free_block(const FreeBlock& blk) {
-        DynamicFreeBlock* p =
-                (DynamicFreeBlock*)malloc(offsetof(DynamicFreeBlock, ptrs) + sizeof(*blk.ptrs) * blk.nfree);
+        auto* p = (DynamicFreeBlock*)malloc(offsetof(DynamicFreeBlock, ptrs) + sizeof(*blk.ptrs) * blk.nfree);
         if (UNLIKELY(p == nullptr)) {
             return false;
         }

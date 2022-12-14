@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -9,28 +21,28 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType SumResultPT = PT;
+template <LogicalType PT, typename = guard::Guard>
+inline constexpr LogicalType SumResultPT = PT;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType SumResultPT<PT, SumBigIntPTGuard<PT>> = TYPE_BIGINT;
+template <LogicalType PT>
+inline constexpr LogicalType SumResultPT<PT, SumBigIntPTGuard<PT>> = TYPE_BIGINT;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType SumResultPT<PT, FloatPTGuard<PT>> = TYPE_DOUBLE;
+template <LogicalType PT>
+inline constexpr LogicalType SumResultPT<PT, FloatPTGuard<PT>> = TYPE_DOUBLE;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType SumResultPT<PT, SumDecimal64PTGuard<PT>> = TYPE_DECIMAL64;
+template <LogicalType PT>
+inline constexpr LogicalType SumResultPT<PT, SumDecimal64PTGuard<PT>> = TYPE_DECIMAL64;
 
 // Only for compile, we don't support timestamp and date sum
-template <PrimitiveType PT>
-inline constexpr PrimitiveType SumResultPT<PT, DateOrDateTimePTGuard<PT>> = TYPE_DATETIME;
+template <LogicalType PT>
+inline constexpr LogicalType SumResultPT<PT, DateOrDateTimePTGuard<PT>> = TYPE_DATETIME;
 
 template <typename T>
 struct SumAggregateState {
     T sum{};
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, PrimitiveType ResultPT = SumResultPT<PT>,
+template <LogicalType PT, typename T = RunTimeCppType<PT>, LogicalType ResultPT = SumResultPT<PT>,
           typename ResultType = RunTimeCppType<ResultPT>>
 class SumAggregateFunction final
         : public AggregateFunctionBatchHelper<SumAggregateState<ResultType>,
@@ -154,7 +166,7 @@ public:
     std::string get_name() const override { return "sum"; }
 };
 
-template <PrimitiveType PT, typename = DecimalPTGuard<PT>>
+template <LogicalType PT, typename = DecimalPTGuard<PT>>
 using DecimalSumAggregateFunction =
         SumAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "io/cache_input_stream.h"
 
 #include <fmt/format.h>
@@ -6,6 +19,7 @@
 #include <utility>
 
 #include "block_cache/block_cache.h"
+#include "gutil/strings/fastmem.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
@@ -31,6 +45,7 @@ CacheInputStream::CacheInputStream(std::string filename, std::shared_ptr<Seekabl
 #ifdef WITH_BLOCK_CACHE
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
+    count = std::min(_size - _offset, count);
     const int64_t BLOCK_SIZE = cache->block_size();
     char* p = static_cast<char*>(out);
     char* pe = p + count;
@@ -83,8 +98,8 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         }
 
         if (!can_zero_copy) {
-            memcpy(p, src + shift, size);
-            _stats.read_cache_bytes += size;
+            // memcpy(p, src + shift, size);
+            strings::memcpy_inlined(p, src + shift, size);
         }
         p += size;
         _offset += size;
@@ -110,6 +125,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     int64_t load_size = std::min(count, _size - _offset);
     RETURN_IF_ERROR(_stream->read_at_fully(_offset, out, load_size));
+    _offset += load_size;
     return load_size;
 }
 #endif

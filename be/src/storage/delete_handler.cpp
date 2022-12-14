@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/delete_handler.cpp
 
@@ -23,8 +36,8 @@
 
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include <boost/regex.hpp>
 #include <limits>
-#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -39,10 +52,10 @@ using std::vector;
 using std::string;
 using std::stringstream;
 
-using std::regex;
-using std::regex_error;
-using std::regex_match;
-using std::smatch;
+using boost::regex;
+using boost::regex_error;
+using boost::regex_match;
+using boost::smatch;
 
 using google::protobuf::RepeatedPtrField;
 
@@ -113,40 +126,39 @@ std::string DeleteConditionHandler::construct_sub_predicates(const TCondition& c
 
 bool DeleteConditionHandler::is_condition_value_valid(const TabletColumn& column, const TCondition& cond,
                                                       const string& value_str) {
-    FieldType field_type = column.type();
+    LogicalType field_type = column.type();
     bool valid_condition = false;
 
     if ("IS" == cond.condition_op && ("NULL" == value_str || "NOT NULL" == value_str)) {
         valid_condition = true;
-    } else if (field_type == OLAP_FIELD_TYPE_TINYINT) {
+    } else if (field_type == TYPE_TINYINT) {
         valid_condition = valid_signed_number<int8_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_SMALLINT) {
+    } else if (field_type == TYPE_SMALLINT) {
         valid_condition = valid_signed_number<int16_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_INT) {
+    } else if (field_type == TYPE_INT) {
         valid_condition = valid_signed_number<int32_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_BIGINT) {
+    } else if (field_type == TYPE_BIGINT) {
         valid_condition = valid_signed_number<int64_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_LARGEINT) {
+    } else if (field_type == TYPE_LARGEINT) {
         valid_condition = valid_signed_number<int128_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_TINYINT) {
+    } else if (field_type == TYPE_UNSIGNED_TINYINT) {
         valid_condition = valid_unsigned_number<uint8_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_SMALLINT) {
+    } else if (field_type == TYPE_UNSIGNED_SMALLINT) {
         valid_condition = valid_unsigned_number<uint16_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_INT) {
+    } else if (field_type == TYPE_UNSIGNED_INT) {
         valid_condition = valid_unsigned_number<uint32_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_BIGINT) {
+    } else if (field_type == TYPE_UNSIGNED_BIGINT) {
         valid_condition = valid_unsigned_number<uint64_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_DECIMAL || field_type == OLAP_FIELD_TYPE_DECIMAL_V2 ||
-               is_decimalv3_field_type(field_type)) {
+    } else if (field_type == TYPE_DECIMAL || field_type == TYPE_DECIMALV2 || is_decimalv3_field_type(field_type)) {
         valid_condition = valid_decimal(value_str, column.precision(), column.scale());
-    } else if (field_type == OLAP_FIELD_TYPE_CHAR || field_type == OLAP_FIELD_TYPE_VARCHAR) {
+    } else if (field_type == TYPE_CHAR || field_type == TYPE_VARCHAR) {
         if (value_str.size() <= column.length()) {
             valid_condition = true;
         }
-    } else if (field_type == OLAP_FIELD_TYPE_DATE || field_type == OLAP_FIELD_TYPE_DATE_V2 ||
-               field_type == OLAP_FIELD_TYPE_DATETIME || field_type == OLAP_FIELD_TYPE_TIMESTAMP) {
+    } else if (field_type == TYPE_DATE_V1 || field_type == TYPE_DATE || field_type == TYPE_DATETIME_V1 ||
+               field_type == TYPE_DATETIME) {
         valid_condition = valid_datetime(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_BOOL) {
+    } else if (field_type == TYPE_BOOLEAN) {
         valid_condition = valid_bool(value_str);
     } else {
         LOG(WARNING) << "unknown field type " << field_type;
@@ -167,8 +179,8 @@ Status DeleteConditionHandler::check_condition_valid(const TabletSchema& schema,
     // Checks that the specified column is a key, is it type float or double.
     const TabletColumn& column = schema.column(field_index);
 
-    if ((!column.is_key() && schema.keys_type() != KeysType::DUP_KEYS) || column.type() == OLAP_FIELD_TYPE_DOUBLE ||
-        column.type() == OLAP_FIELD_TYPE_FLOAT) {
+    if ((!column.is_key() && schema.keys_type() != KeysType::DUP_KEYS) || column.type() == TYPE_DOUBLE ||
+        column.type() == TYPE_FLOAT) {
         LOG(WARNING) << "field is not key column, or storage model is not duplicate, or data type "
                         "is float or double.";
         return Status::InvalidArgument("Field is not key column");

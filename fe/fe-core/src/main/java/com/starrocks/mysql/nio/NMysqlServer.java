@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/mysql/nio/NMysqlServer.java
 
@@ -36,6 +49,7 @@ import org.xnio.channels.AcceptingChannel;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
+import javax.net.ssl.SSLContext;
 
 /**
  * mysql protocol implementation based on nio.
@@ -53,14 +67,14 @@ public class NMysqlServer extends MysqlServer {
     private ExecutorService taskService = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_mysql_service_task_threads_num, "starrocks-mysql-nio-pool", true);
 
-    public NMysqlServer(int port, ConnectScheduler connectScheduler) {
+    public NMysqlServer(int port, ConnectScheduler connectScheduler, SSLContext sslContext) {
         this.port = port;
         this.xnioWorker = Xnio.getInstance().createWorkerBuilder()
                 .setWorkerName("starrocks-mysql-nio")
                 .setWorkerIoThreads(Config.mysql_service_io_threads_num)
                 .setExternalExecutorService(taskService).build();
         // connectScheduler only used for idle check.
-        this.acceptListener = new AcceptListener(connectScheduler);
+        this.acceptListener = new AcceptListener(connectScheduler, sslContext);
     }
 
     // start MySQL protocol service

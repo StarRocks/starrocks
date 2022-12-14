@@ -6,7 +6,7 @@ Converts one or more key-value pairs to a JSON object that consists of the key-v
 
 ## Syntax
 
-```Plain%20Text
+```Haskell
 json_object(key, value, ...)
 ```
 

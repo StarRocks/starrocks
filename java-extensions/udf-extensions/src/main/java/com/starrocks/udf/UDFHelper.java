@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.udf;
 
@@ -24,16 +36,16 @@ import static com.starrocks.utils.NativeMethodHelper.getAddrs;
 import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
 
 public class UDFHelper {
-    public static final int TYPE_BOOLEAN = 2;
-    public static final int TYPE_TINYINT = 3;
-    public static final int TYPE_SMALLINT = 4;
+    public static final int TYPE_TINYINT = 1;
+    public static final int TYPE_SMALLINT = 3;
     public static final int TYPE_INT = 5;
-    public static final int TYPE_BIGINT = 6;
-    public static final int TYPE_FLOAT = 8;
-    public static final int TYPE_DOUBLE = 9;
-    public static final int TYPE_VARCHAR = 10;
-    public static final int TYPE_DATETIME = 12;
-    public static final int TYPE_ARRAY = 15;
+    public static final int TYPE_BIGINT = 7;
+    public static final int TYPE_FLOAT = 10;
+    public static final int TYPE_DOUBLE = 11;
+    public static final int TYPE_VARCHAR = 17;
+    public static final int TYPE_ARRAY = 19;
+    public static final int TYPE_BOOLEAN = 24;
+    public static final int TYPE_DATETIME = 51;
 
     private static final byte[] emptyBytes = new byte[0];
 

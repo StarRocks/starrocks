@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/chunks_sorter_heap_sort.h"
 
@@ -54,7 +66,7 @@ struct BuildOptions {
     bool is_nullable_value;
 };
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 struct ColumnRandomAppender {
     static bool append(ColumnPtr& col, int sz) {
         auto* spec_col = ColumnHelper::cast_to_raw<TYPE>(col);
@@ -71,14 +83,14 @@ struct ColumnRandomAppender {
     }
 };
 
-template <template <PrimitiveType, typename... Args> typename Function, typename... Args>
-void dispatch_function(PrimitiveType type, Args&&... args) {
+template <template <LogicalType, typename... Args> typename Function, typename... Args>
+void dispatch_function(LogicalType type, Args&&... args) {
     bool result = false;
     switch (type) {
-#define M(NAME)                                                                      \
-    case PrimitiveType::NAME: {                                                      \
-        result = Function<PrimitiveType::NAME>::append(std::forward<Args>(args)...); \
-        break;                                                                       \
+#define M(NAME)                                                                    \
+    case LogicalType::NAME: {                                                      \
+        result = Function<LogicalType::NAME>::append(std::forward<Args>(args)...); \
+        break;                                                                     \
     }
         APPLY_FOR_ALL_NUMBER_TYPE(M)
 #undef M

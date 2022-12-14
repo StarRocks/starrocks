@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <gtest/gtest.h>
 
 #include "exprs/vectorized/string_functions.h"
@@ -36,7 +49,7 @@ TEST_F(StringFunctionLocateTest, instrTest) {
     columns.emplace_back(str);
     columns.emplace_back(sub);
 
-    ColumnPtr result = StringFunctions::instr(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::instr(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -60,7 +73,7 @@ TEST_F(StringFunctionLocateTest, instrChineseTest) {
     columns.emplace_back(str);
     columns.emplace_back(sub);
 
-    ColumnPtr result = StringFunctions::instr(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::instr(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -86,7 +99,7 @@ TEST_F(StringFunctionLocateTest, locateNullTest) {
     columns.emplace_back(NullableColumn::create(sub, null));
     columns.emplace_back(str);
 
-    ColumnPtr result = StringFunctions::locate(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
     ASSERT_TRUE(result->is_nullable());
 
@@ -118,7 +131,7 @@ TEST_F(StringFunctionLocateTest, locatePosTest) {
     columns.emplace_back(str);
     columns.emplace_back(pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -149,7 +162,7 @@ TEST_F(StringFunctionLocateTest, locateHayStackEqualNeedleTest) {
     columns.emplace_back(str);
     columns.emplace_back(pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -176,7 +189,7 @@ TEST_F(StringFunctionLocateTest, locateNegativePosTest) {
     columns.emplace_back(str);
     columns.emplace_back(pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -203,7 +216,7 @@ TEST_F(StringFunctionLocateTest, locatePosLargerThanHaystackSizeTest) {
     columns.emplace_back(str);
     columns.emplace_back(pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -228,7 +241,7 @@ TEST_F(StringFunctionLocateTest, locateNeedleAllNullTest) {
     columns.emplace_back(haystack);
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
 
     auto v = ColumnHelper::as_column<ConstColumn>(result);
@@ -263,7 +276,7 @@ TEST_F(StringFunctionLocateTest, locateNeedleEmptyTest) {
     columns.emplace_back(haystack);
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -295,7 +308,7 @@ TEST_F(StringFunctionLocateTest, locateInVolnitskyTest) {
     columns.emplace_back(haystack);
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -326,7 +339,7 @@ TEST_F(StringFunctionLocateTest, locateInVolnitskyTest2) {
     columns.emplace_back(haystack);
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -358,7 +371,7 @@ TEST_F(StringFunctionLocateTest, locateInVolnitskyTest3) {
     columns.emplace_back(haystack);
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -387,7 +400,7 @@ TEST_F(StringFunctionLocateTest, locateInVolnitskyTest4) {
     columns.emplace_back(haystack);
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -419,7 +432,7 @@ TEST_F(StringFunctionLocateTest, locateVolnitskyTest5) {
     columns.emplace_back(NullableColumn::create(haystack, null));
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
     ASSERT_TRUE(result->is_nullable());
 
@@ -468,7 +481,7 @@ TEST_F(StringFunctionLocateTest, locateVolnitskyTest6) {
     columns.emplace_back(haystack);
     columns.emplace_back(start_pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -503,7 +516,7 @@ TEST_F(StringFunctionLocateTest, locateInFallbackVolnitskyTest) {
     columns.emplace_back(ConstColumn::create(needle, 1));
     columns.emplace_back(haystack);
 
-    ColumnPtr result = StringFunctions::locate(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);
@@ -530,7 +543,7 @@ TEST_F(StringFunctionLocateTest, locatePosChineseTest) {
     columns.emplace_back(str);
     columns.emplace_back(pos);
 
-    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_INT>(result);

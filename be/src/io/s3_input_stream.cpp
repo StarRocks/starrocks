@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "io/s3_input_stream.h"
 
@@ -7,6 +19,20 @@
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <fmt/format.h>
+
+#ifdef USE_STAROS
+#include "fslib/metric_key.h"
+#include "metrics/metrics.h"
+#endif
+
+#ifdef USE_STAROS
+namespace {
+static const staros::starlet::metrics::Labels kSrS3FsLables({{"fstype", "srs3"}});
+
+DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_srs3_read_iosize, staros::starlet::fslib::kMKReadIOSize, kSrS3FsLables);
+DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_srs3_read_iolatency, staros::starlet::fslib::kMKReadIOLatency, kSrS3FsLables);
+} // namespace
+#endif
 
 namespace starrocks::io {
 
@@ -22,6 +48,11 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     if (_offset >= _size) {
         return 0;
     }
+
+#ifdef USE_STAROS
+    staros::starlet::metrics::TimeObserver observer(s_srs3_read_iolatency);
+#endif
+
     auto range = fmt::format("bytes={}-{}", _offset, std::min<int64_t>(_offset + count, _size));
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(_bucket);
@@ -33,6 +64,9 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
         body.read(static_cast<char*>(out), count);
         _offset += body.gcount();
+#ifdef USE_STAROS
+        s_srs3_read_iosize.Observe(body.gcount());
+#endif
         return body.gcount();
     } else {
         return make_error_status(outcome.GetError());

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/hdfs_scanner.h"
 
@@ -186,26 +198,33 @@ Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
     _raw_file->set_size(_scanner_params.file_size);
-    auto stream = std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats);
-    std::shared_ptr<io::SeekableInputStream> input_stream = stream;
+
+    std::shared_ptr<io::SeekableInputStream> input_stream = _raw_file->stream();
+    // if compression
+    // input_stream = DecompressInputStream(input_stream)
     if (_compression_type != CompressionTypePB::NO_COMPRESSION) {
         using DecompressorPtr = std::shared_ptr<StreamCompression>;
         std::unique_ptr<StreamCompression> dec;
         RETURN_IF_ERROR(StreamCompression::create_decompressor(_compression_type, &dec));
         auto compressed_input_stream =
-                std::make_shared<io::CompressedInputStream>(stream, DecompressorPtr(dec.release()));
+                std::make_shared<io::CompressedInputStream>(input_stream, DecompressorPtr(dec.release()));
         input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
     }
 
+    // if block cache
+    // input_stream = CacheInputStream(input_stream)
     if (_scanner_params.use_block_cache && _compression_type == CompressionTypePB::NO_COMPRESSION) {
         _cache_input_stream = std::make_shared<io::CacheInputStream>(_raw_file->filename(), input_stream);
         _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_block_cache);
-        _file = std::make_unique<RandomAccessFile>(_cache_input_stream, _raw_file->filename());
-        _scanner_ctx.enable_block_cache = true;
-    } else {
-        _file = std::make_unique<RandomAccessFile>(input_stream, _raw_file->filename());
-        _scanner_ctx.enable_block_cache = false;
+        input_stream = _cache_input_stream;
     }
+
+    // input_stream = CountedInputStream(input_stream)
+    // NOTE: make sure `CountedInputStream` is last applied, so io time can be accurately timed.
+    input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_stats);
+
+    // so wrap function is f(x) = (CountedInputStream (CacheInputStream (DecompressInputStream x)))
+    _file = std::make_unique<RandomAccessFile>(input_stream, _raw_file->filename());
     _file->set_size(_scanner_params.file_size);
     return Status::OK();
 }

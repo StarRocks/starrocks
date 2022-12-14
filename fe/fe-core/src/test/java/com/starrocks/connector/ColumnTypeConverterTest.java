@@ -1,18 +1,39 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+
+import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
@@ -89,7 +110,7 @@ public class ColumnTypeConverterTest {
         Type resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createDefaultString();
+        itemType = ScalarType.createDefaultExternalTableString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = fromHiveTypeToArrayType(typeStr);
@@ -147,7 +168,7 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.DATE);
-        valueType = ScalarType.createDefaultString();
+        valueType = ScalarType.createDefaultExternalTableString();
         mapType = new MapType(keyType, valueType);
         typeStr = "map<date,string>";
         resType = fromHiveTypeToMapType(typeStr);
@@ -187,6 +208,70 @@ public class ColumnTypeConverterTest {
     }
 
     @Test
+    public void testStructString() {
+        {
+            String typeStr = "struct<a:struct<aa:date>,b:int>";
+            StructField aa = new StructField("aa", ScalarType.createType(PrimitiveType.DATE));
+
+            StructType innerStruct = new StructType(Lists.newArrayList(aa));
+            StructField a = new StructField("a", innerStruct);
+            StructField b = new StructField("b", ScalarType.createType(PrimitiveType.INT));
+            StructType outerStruct = new StructType(Lists.newArrayList(a, b));
+
+            Type resType = ColumnTypeConverter.fromHiveType(typeStr);
+            Assert.assertEquals(outerStruct, resType);
+        }
+
+        {
+            String typeStr = "array<struct<a:int,b:map<int,int>>>";
+            MapType map =
+                    new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.INT));
+            StructField a = new StructField("a", ScalarType.createType(PrimitiveType.INT));
+            StructField b = new StructField("b", map);
+            StructType structType = new StructType(Lists.newArrayList(a, b));
+            ArrayType arrayType = new ArrayType(structType);
+
+            Type resType = ColumnTypeConverter.fromHiveType(typeStr);
+            Assert.assertEquals(arrayType, resType);
+        }
+
+        {
+            String typeStr = "struct<struct_test:int,c1:struct<c1:int,cc1:string>>";
+            StructType c1 = new StructType(Lists.newArrayList(
+                    new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+                    new StructField("cc1", ScalarType.createDefaultExternalTableString())
+            ));
+            StructType root = new StructType(Lists.newArrayList(
+                    new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
+                    new StructField("c1", c1)
+            ));
+
+            Type resType = ColumnTypeConverter.fromHiveType(typeStr);
+            Assert.assertEquals(root, resType);
+        }
+    }
+
+    @Test
+    public void testSplitByFirstLevel() {
+        // Test for struct
+        String str = "a: int, b: struct<a: int, b: double>";
+        String[] result = ColumnTypeConverter.splitByFirstLevel(str, ',');
+        String[] expected = new String[] {"a: int", "b: struct<a: int, b: double>"};
+        Assert.assertArrayEquals(result, expected);
+
+        // Test for map
+        str = "int, struct<a:int,b:double>";
+        result = ColumnTypeConverter.splitByFirstLevel(str, ',');
+        expected = new String[] {"int", "struct<a:int,b:double>"};
+        Assert.assertArrayEquals(result, expected);
+
+        str = "b: struct<a: int, b: double>";
+        result = ColumnTypeConverter.splitByFirstLevel(str, ':');
+        expected = new String[] {"b", "struct<a: int, b: double>"};
+        Assert.assertArrayEquals(result, expected);
+    }
+
+    @Test
     public void testCharString() {
         Type charType = ScalarType.createCharType(100);
         String typeStr = "char(100)";
@@ -214,14 +299,14 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
-        Type stringType = ScalarType.createDefaultString();
+        Type stringType = ScalarType.createDefaultExternalTableString();
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, stringType);
     }
 
     @Test
-    public void testArraySchema() {
+    public void testArrayHudiSchema() {
         Schema unionSchema;
         Schema arraySchema;
 
@@ -239,10 +324,78 @@ public class ColumnTypeConverterTest {
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultString()));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultExternalTableString()));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
         Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
+    }
+
+    @Test
+    public void testStructHudiSchema() {
+        Schema.Field field1 = new Schema.Field("field1", Schema.create(Schema.Type.INT), null, null);
+        Schema.Field field2 = new Schema.Field("field2", Schema.create(Schema.Type.STRING), null, null);
+        List<Schema.Field> fields = new LinkedList<>();
+        fields.add(field1);
+        fields.add(field2);
+        Schema structSchema = Schema.createRecord(fields);
+
+        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField1);
+        structFields.add(structField2);
+        StructType structType = new StructType(structFields);
+        Assert.assertEquals(structType, fromHudiType(structSchema));
+    }
+
+    @Test
+    public void testMapHudiSchema() {
+        Schema.Field field1 = new Schema.Field("field1", Schema.create(Schema.Type.INT), null, null);
+        Schema.Field field2 = new Schema.Field("field2", Schema.create(Schema.Type.STRING), null, null);
+        List<Schema.Field> fields = new LinkedList<>();
+        fields.add(field1);
+        fields.add(field2);
+        Schema structSchema = Schema.createRecord(fields);
+
+        Schema mapSchema = Schema.createMap(structSchema);
+
+        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField1);
+        structFields.add(structField2);
+        StructType structType = new StructType(structFields);
+
+        MapType mapType = new MapType(ScalarType.createDefaultExternalTableString(), structType);
+
+        Assert.assertEquals(mapType, fromHudiType(mapSchema));
+    }
+
+    @Test
+    public void testColumnEquals() {
+        Column base = new Column("k1", Type.INT, false);
+        Column other = new Column("k1", Type.INT, false);
+
+        Assert.assertTrue(columnEquals(base, base));
+        Assert.assertTrue(columnEquals(base, other));
+
+        other = new Column("k2", Type.INT, false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        other = new Column("k1", Type.STRING, false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        base = new Column("k1", ScalarType.createCharType(5), false);
+        other = new Column("k1", ScalarType.createCharType(10), false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        base = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
+        other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 6, 5), false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        base = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
+        other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 4), false);
+        Assert.assertFalse(columnEquals(base, other));
     }
 }

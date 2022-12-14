@@ -1,13 +1,28 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
@@ -24,6 +39,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, ExpressionContext> {
     private final OptimizerContext context;
@@ -102,16 +118,27 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             Preconditions.checkState(leftLocalDistributionDesc.getColumns().size() ==
                     rightLocalDistributionDesc.getColumns().size());
         }
-        // check orders of predicate columns is right
-        // check predicate columns is satisfy bucket hash columns
+
+        // The order of equivalence predicates(shuffle columns are derived from them) is
+        // meaningless, hence it is correct to use a set to save these shuffle pairs. According
+        // to the distribution column information of the left and right children, we can build
+        // distribution pairs. We can use colocate join is judged by whether all the distribution
+        // pairs are exist in the equivalent predicates set.
+        Set<Pair<Integer, Integer>> shufflePairs = Sets.newHashSet();
+        for (int i = 0; i < leftShuffleColumns.size(); i++) {
+            shufflePairs.add(Pair.create(leftShuffleColumns.get(i), rightShuffleColumns.get(i)));
+        }
+
         for (int i = 0; i < leftLocalDistributionDesc.getColumns().size(); ++i) {
             int leftScanColumnId = leftLocalDistributionDesc.getColumns().get(i);
-            int leftIndex = leftShuffleColumns.indexOf(leftScanColumnId);
+            ColumnRefSet leftEquivalentCols = leftLocalDistributionSpec.getPropertyInfo()
+                    .getEquivalentColumns(leftScanColumnId);
 
             int rightScanColumnId = rightLocalDistributionDesc.getColumns().get(i);
-            int rightIndex = rightShuffleColumns.indexOf(rightScanColumnId);
+            ColumnRefSet rightEquivalentCols = rightLocalDistributionSpec.getPropertyInfo()
+                    .getEquivalentColumns(rightScanColumnId);
 
-            if (leftIndex != rightIndex) {
+            if (!isDistributionPairExist(shufflePairs, leftEquivalentCols, rightEquivalentCols)) {
                 return false;
             }
         }
@@ -439,5 +466,19 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             }
         }
         return leftIndexList.equals(rightIndexList);
+    }
+
+    private boolean isDistributionPairExist(Set<Pair<Integer, Integer>> shufflePairs,
+                                            ColumnRefSet leftEquivalentCols,
+                                            ColumnRefSet rightEquivalentCols) {
+        for (int leftCol : leftEquivalentCols.getColumnIds()) {
+            for (int rightCol : rightEquivalentCols.getColumnIds()) {
+                Pair<Integer, Integer> distributionPair = Pair.create(leftCol, rightCol);
+                if (shufflePairs.contains(distributionPair)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

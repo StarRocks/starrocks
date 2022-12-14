@@ -7,13 +7,13 @@ This function is used to convert Base64 strings into bitmap data.
 
 ## Syntax
 
-```SQL
-BITMAP base64_to_bitmap(STRING bitmap)
+```Haskell
+BITMAP base64_to_bitmap(VARCHAR bitmap)
 ```
 
 ## Parameters
 
-`bitmap`: The supported data type is STRING. Before you import bitmap data into StarRocks, you can use Java or C++ to first create a BitmapValue object, add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
+`bitmap`: The supported data type is VARCHAR. Before you import bitmap data into StarRocks, you can use Java or C++ to first create a BitmapValue object, add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
 
 ## Return value
 

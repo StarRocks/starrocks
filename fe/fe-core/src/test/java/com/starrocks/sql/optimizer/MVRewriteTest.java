@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/sql/optimizer/MVRewriteTest.java
 
@@ -24,6 +37,7 @@ package com.starrocks.sql.optimizer;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1160,6 +1174,23 @@ public class MVRewriteTest {
         query = "select deptno, sum(case empid when 1 then salary when 2 then salary end) as ssalary from " +
                 EMPS_TABLE_NAME + " group by deptno";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testCaseWhenAggWithPartialOrderBy() throws Exception {
+        String query = "select k6, k7 from all_type_table where k6 = 1 group by k6, k7";
+
+        String createMVSQL = "CREATE MATERIALIZED VIEW partial_order_by_mv AS " +
+                "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6";
+        CreateMaterializedViewStmt createMaterializedViewStmt =
+                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(createMVSQL, starRocksAssert.getCtx());
+        createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assert.assertTrue(k.isKey()));
+
+        starRocksAssert.withMaterializedView(createMVSQL).query(query).explainContains("rollup: partial_order_by_mv");
+
+        String createMVSQL2 = "CREATE MATERIALIZED VIEW order_by_mv AS " +
+                "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6, k7";
+        starRocksAssert.withMaterializedView(createMVSQL2).query(query).explainContains("rollup: order_by_mv");
     }
 
     @Test

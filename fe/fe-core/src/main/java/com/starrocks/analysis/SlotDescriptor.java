@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/SlotDescriptor.java
 
@@ -23,10 +36,14 @@ package com.starrocks.analysis;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
@@ -126,6 +143,41 @@ public class SlotDescriptor {
             throw new SemanticException("slot type shouldn't be invalid");
         }
         this.type = type;
+    }
+
+    public void setUsedSubfieldPosGroup(List<ImmutableList<Integer>> usedSubfieldPosGroup) {
+        Preconditions.checkArgument(type.isComplexType());
+        // type should be cloned from originType!
+        if (usedSubfieldPosGroup.isEmpty()) {
+            type.selectAllFields();
+            return;
+        }
+
+        for (List<Integer> usedSubfieldPos : usedSubfieldPosGroup) {
+            if (usedSubfieldPos.isEmpty()) {
+                type.selectAllFields();
+                return;
+            }
+            Type tmpType = type;
+            for (int i = 0; i < usedSubfieldPos.size(); i++) {
+                // we will always select the ItemType of ArrayType, so we don't mark it and skip it.
+                while (tmpType.isArrayType()) {
+                    tmpType = ((ArrayType)tmpType).getItemType();
+                }
+                int pos = usedSubfieldPos.get(i);
+                if (i == usedSubfieldPos.size() -1) {
+                    // last one, select children's all subfields
+                    tmpType.setSelectedField(pos, true);
+                } else {
+                    tmpType.setSelectedField(pos, false);
+                    if (tmpType.isStructType()) {
+                        tmpType = ((StructType)tmpType).getField(pos).getType();
+                    } else if (tmpType.isMapType()) {
+                        tmpType = pos == 0 ? ((MapType)tmpType).getKeyType() : ((MapType)tmpType).getValueType();
+                    }
+                }
+            }
+        }
     }
 
     public Type getOriginType() {
@@ -241,7 +293,7 @@ public class SlotDescriptor {
 
     // TODO
     public TSlotDescriptor toThrift() {
-        if (originType != null) {
+        if (originType != null && !originType.isComplexType()) {
             return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
                     byteOffset, nullIndicatorByte,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),

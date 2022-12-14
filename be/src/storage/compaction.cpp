@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "compaction.h"
 
@@ -142,7 +154,7 @@ Status Compaction::do_compaction_impl() {
 
 Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     TabletReader reader(_tablet, _output_rs_writer->version(), schema);
     TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
@@ -226,7 +238,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
             mask_buffer->flip_to_read();
         }
 
-        Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), _column_groups[i]);
+        VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), _column_groups[i]);
         TabletReader reader(_tablet, _output_rs_writer->version(), schema, is_key, mask_buffer.get());
         RETURN_IF_ERROR(reader.prepare());
         TabletReaderParams reader_params;

@@ -1,12 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.rpc;
 
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -36,10 +51,18 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
     Future<PTriggerProfileReportResult> triggerProfileReport(PTriggerProfileReportRequest request);
 
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "collect_query_statistics",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
+    Future<PCollectQueryStatisticsResult> collectQueryStatistics(PCollectQueryStatisticsRequest request);
+
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_info", onceTalkTimeout = 10000)
     Future<PProxyResult> getInfo(PProxyRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
+            attachmentHandler = ThriftClientAttachmentHandler.class)
+    Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
 }
 

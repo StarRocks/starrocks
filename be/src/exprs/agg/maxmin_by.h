@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -12,73 +24,21 @@
 #include "util/raw_container.h"
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct MaxByAggregateData {};
 
-template <PrimitiveType PT>
-struct MaxByAggregateData<PT, IntegralPTGuard<PT>> {
+template <LogicalType PT>
+struct MaxByAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     raw::RawVector<uint8_t> buffer_result;
-    T max = std::numeric_limits<T>::lowest();
+    T max = RunTimeTypeLimits<PT>::min_value();
     void reset() {
         buffer_result.clear();
-        max = std::numeric_limits<T>::lowest();
+        max = RunTimeTypeLimits<PT>::min_value();
     }
 };
 
-template <PrimitiveType PT>
-struct MaxByAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    raw::RawVector<uint8_t> buffer_result;
-    T max = std::numeric_limits<T>::lowest();
-    void reset() {
-        buffer_result.clear();
-        max = std::numeric_limits<T>::lowest();
-    }
-};
-
-template <>
-struct MaxByAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    raw::RawVector<uint8_t> buffer_result;
-    DecimalV2Value max = DecimalV2Value::get_min_decimal();
-    void reset() {
-        buffer_result.clear();
-        max = DecimalV2Value::get_min_decimal();
-    }
-};
-
-template <PrimitiveType PT>
-struct MaxByAggregateData<PT, DecimalPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    raw::RawVector<uint8_t> buffer_result;
-    T max = std::numeric_limits<T>::lowest();
-    void reset() {
-        buffer_result.clear();
-        max = std::numeric_limits<T>::lowest();
-    }
-};
-
-template <>
-struct MaxByAggregateData<TYPE_DATETIME, guard::Guard> {
-    raw::RawVector<uint8_t> buffer_result;
-    TimestampValue max = TimestampValue::MIN_TIMESTAMP_VALUE;
-    void reset() {
-        buffer_result.clear();
-        max = TimestampValue::MIN_TIMESTAMP_VALUE;
-    }
-};
-
-template <>
-struct MaxByAggregateData<TYPE_DATE, guard::Guard> {
-    raw::RawVector<uint8_t> buffer_result;
-    DateValue max = DateValue::MIN_DATE_VALUE;
-    void reset() {
-        buffer_result.clear();
-        max = DateValue::MIN_DATE_VALUE;
-    }
-};
-
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct MaxByElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
@@ -97,7 +57,7 @@ struct MaxByElement {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxByAggregateData<PT, StringPTGuard<PT>> {
     raw::RawVector<uint8_t> buffer_result;
     raw::RawVector<uint8_t> buffer_max;
@@ -111,9 +71,9 @@ struct MaxByAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
-struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
-    void operator()(MaxByAggregateData<PT>& state, Column* col, size_t row_num, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct MaxByElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(col->serialize_size(row_num));
             col->serialize(row_num, state.buffer_result.data());
@@ -123,7 +83,7 @@ struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
         }
     }
 
-    void operator()(MaxByAggregateData<PT>& state, const char* buffer, size_t size, const Slice& right) const {
+    void operator()(State& state, const char* buffer, size_t size, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(size);
             memcpy(state.buffer_result.data(), buffer, size);
@@ -134,7 +94,7 @@ struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class MaxByAggregateFunction final
         : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<PT, State, OP, T>> {
 public:
@@ -200,7 +160,7 @@ public:
                 column->null_column_data().push_back(0);
             }
         } else {
-            BinaryColumn* column = down_cast<BinaryColumn*>(to);
+            auto* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(buffer.data(), buffer.size()));
         }
     }
@@ -262,7 +222,7 @@ public:
     std::string get_name() const override { return "max_by"; }
 };
 
-template <PrimitiveType PT, typename State, class OP>
+template <LogicalType PT, typename State, class OP>
 class MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
@@ -347,7 +307,7 @@ public:
                 column->null_column_data().push_back(0);
             }
         } else {
-            BinaryColumn* column = down_cast<BinaryColumn*>(to);
+            auto* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(buffer.data(), buffer.size()));
         }
     }

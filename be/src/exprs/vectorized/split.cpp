@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "gutil/strings/split.h"
 
@@ -27,8 +39,7 @@ struct SplitState {
     const void* (*find_delimiter)(const void* big, size_t big_len, const void* little, size_t little_len);
 };
 
-Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::split_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -57,8 +68,7 @@ Status StringFunctions::split_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status StringFunctions::split_close(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::split_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<SplitState*>(context->get_function_state(scope));
         delete state;
@@ -71,7 +81,7 @@ Status StringFunctions::split_close(starrocks_udf::FunctionContext* context,
 * @paramType: [BinaryColumn, BinaryColumn]
 * @return: ArrayColumn
 */
-ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 

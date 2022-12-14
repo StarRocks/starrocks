@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/runtime_state.cpp
 
@@ -61,8 +74,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
-    Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
-    DCHECK(status.ok());
+    _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
 RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
@@ -79,8 +91,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
-    Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
-    DCHECK(status.ok());
+    _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
@@ -112,14 +123,10 @@ RuntimeState::~RuntimeState() {
         delete _error_log_file;
         _error_log_file = nullptr;
     }
-
-    if (_exec_env != nullptr && _exec_env->thread_mgr() != nullptr) {
-        _exec_env->thread_mgr()->unregister_pool(_resource_pool);
-    }
 }
 
-Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-                          const TQueryGlobals& query_globals, ExecEnv* exec_env) {
+void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                         const TQueryGlobals& query_globals, ExecEnv* exec_env) {
     _fragment_instance_id = fragment_instance_id;
     _query_options = query_options;
     if (query_globals.__isset.time_zone) {
@@ -157,20 +164,13 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
         _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     }
 
-    // Register with the thread mgr
-    if (exec_env != nullptr) {
-        _resource_pool = exec_env->thread_mgr()->register_pool();
-        DCHECK(_resource_pool != nullptr);
-    }
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
-
-    return Status::OK();
 }
 
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
-    auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+    auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
     mem_tracker_counter->set(bytes_limit);
 
     if (parent == nullptr) {

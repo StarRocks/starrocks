@@ -44,7 +44,7 @@ This topic describes how to use StarRocks operator to deploy a CN cluster on Kub
 
 ## Environment preparation
 
-- [Deploy a StarRocks cluster](https://docs.starrocks.com/en-us/latest/quick_start/Deploy).
+- [Deploy a StarRocks cluster](../quick_start/Deploy.md).
 
 - [Install a Kubernetes cluster](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/).
 
@@ -308,4 +308,4 @@ Execute `Kubectl get po -A` to check the status of pods.
     Warning  BackOff    41s (x27 over 5m46s)   kubelet            Back-off restarting failed container
     ```
 
-- **Solution:** Refer to [Deploy a CN cluster](#deploy-cn) and check the path of **start_cn.shell** in **cn.yaml**.
+- **Solution:** Refer to [Deploy a CN cluster](#deploy-a-cn-cluster) and check the path of **start_cn.shell** in **cn.yaml**.

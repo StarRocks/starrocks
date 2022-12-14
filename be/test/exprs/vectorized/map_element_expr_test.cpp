@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/map_element_expr.h"
 
@@ -15,7 +27,7 @@ class FakeConstExpr : public starrocks::Expr {
 public:
     explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
 
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool*) const override { return nullptr; }
 
@@ -73,11 +85,13 @@ private:
 // NOLINTNEXTLINE
 TEST_F(MapElementExprTest, test_map_int_int) {
     TypeDescriptor type_map_int_int;
-    type_map_int_int.type = PrimitiveType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.selected_fields.emplace_back(true);
+    type_map_int_int.selected_fields.emplace_back(true);
 
-    TypeDescriptor type_int(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_int_int, false);
 
@@ -184,16 +198,18 @@ TEST_F(MapElementExprTest, test_map_int_int) {
 // NOLINTNEXTLINE
 TEST_F(MapElementExprTest, test_map_varchar_int) {
     TypeDescriptor type_map_varchar_int;
-    type_map_varchar_int.type = PrimitiveType::TYPE_MAP;
+    type_map_varchar_int.type = LogicalType::TYPE_MAP;
     type_map_varchar_int.children.resize(2);
-    type_map_varchar_int.children[0].type = PrimitiveType::TYPE_VARCHAR;
+    type_map_varchar_int.children[0].type = LogicalType::TYPE_VARCHAR;
     type_map_varchar_int.children[0].len = 10;
-    type_map_varchar_int.children[1].type = PrimitiveType::TYPE_INT;
+    type_map_varchar_int.children[1].type = LogicalType::TYPE_INT;
+    type_map_varchar_int.selected_fields.emplace_back(true);
+    type_map_varchar_int.selected_fields.emplace_back(true);
 
-    TypeDescriptor type_varchar(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
     type_varchar.len = 10;
 
-    TypeDescriptor type_int(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_varchar_int, true);
 

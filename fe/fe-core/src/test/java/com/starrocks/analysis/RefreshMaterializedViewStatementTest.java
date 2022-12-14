@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.analysis;
 
@@ -74,11 +87,12 @@ public class RefreshMaterializedViewStatementTest {
     public void testRefreshMaterializedView() throws Exception {
         cluster.runSql("test",
                 "create table t1 ( c1 bigint NOT NULL, c2 string not null, c3 int not null ) " +
-                        "DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
-                        "PROPERTIES(\"replication_num\" = \"1\");");
+                        " DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
+                        " PROPERTIES(\"replication_num\" = \"1\");");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         starRocksAssert.withNewMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
-                "as select c1, sum(c3) as total from t1 group by c1");
+                " refresh manual" +
+                " as select c1, sum(c3) as total from t1 group by c1");
         cluster.runSql("test", "insert into t1 values(1, \"str1\", 100)");
         Table t1 = db.getTable("t1");
         Assert.assertNotNull(t1);

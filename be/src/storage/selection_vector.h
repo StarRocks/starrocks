@@ -105,7 +105,7 @@ private:
 
 inline bool SelectionVector::any_selected() const {
     size_t rem = _n_bytes;
-    const uint32_t* p32 = reinterpret_cast<const uint32_t*>(_bitmap.get());
+    const auto* p32 = reinterpret_cast<const uint32_t*>(_bitmap.get());
     while (rem >= 4) {
         if (*p32 != 0) {
             return true;
@@ -114,7 +114,7 @@ inline bool SelectionVector::any_selected() const {
         rem -= 4;
     }
 
-    const uint8_t* p8 = reinterpret_cast<const uint8_t*>(p32);
+    const auto* p8 = reinterpret_cast<const uint8_t*>(p32);
     while (rem > 0) {
         if (*p8 != 0) {
             return true;
@@ -134,7 +134,7 @@ public:
     // Constructs a new SelectionVectorView.
     //
     // The 'sel_vec' object must outlive this SelectionVectorView.
-    explicit SelectionVectorView(SelectionVector* sel_vec) : _sel_vec(sel_vec), _row_offset(0) {}
+    explicit SelectionVectorView(SelectionVector* sel_vec) : _sel_vec(sel_vec) {}
     void advance(size_t skip) {
         DCHECK_LE(skip, _sel_vec->nrows() - _row_offset);
         _row_offset += skip;
@@ -158,7 +158,7 @@ public:
 
 private:
     SelectionVector* _sel_vec;
-    size_t _row_offset;
+    size_t _row_offset{0};
 };
 
 } // namespace starrocks

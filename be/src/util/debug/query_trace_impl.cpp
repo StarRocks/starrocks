@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <filesystem>
 #include <fstream>
@@ -27,13 +39,14 @@ QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::stri
     event.instance_id = instance_id;
     event.driver = driver;
     event.args = std::move(args);
+    event.thread_id = std::this_thread::get_id();
     return event;
 }
 
 QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const std::string& category, int64_t id,
                                                  char phase, const QueryTraceContext& ctx) {
-    return create(name, category, id, phase, MonotonicMicros() - ctx.start_ts, -1, ctx.fragment_instance_id, ctx.driver,
-                  {});
+    return create(name, category, id, phase, MonotonicMicros() - ctx.start_ts, QueryTraceContext::DEFAULT_EVENT_ID,
+                  ctx.fragment_instance_id, ctx.driver, {});
 }
 
 QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const std::string& category, int64_t id,
@@ -43,18 +56,20 @@ QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const 
 }
 
 static const char* kSimpleEventFormat =
-        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"ph":"%c","args":%s})";
+        R"({"cat":"%s","name":"%s","pid":"0x%x","tid":"0x%x","id":"0x%x","ts":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
 static const char* kCompleteEventFormat =
-        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"dur":%ld,"ph":"%c","args":%s})";
+        R"({"cat":"%s","name":"%s","pid":"0x%x","tid":"0x%x","id":"0x%x","ts":%ld,"dur":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
 
 std::string QueryTraceEvent::to_string() {
     std::string args_str = args_to_string();
+    size_t tidx = std::hash<std::thread::id>{}(thread_id);
+
     if (phase == 'X') {
-        return fmt::sprintf(kCompleteEventFormat, category.c_str(), name.c_str(), instance_id, (int64_t)driver, id,
-                            timestamp, duration, phase, args_str.c_str());
+        return fmt::sprintf(kCompleteEventFormat, category.c_str(), name.c_str(), (uint64_t)instance_id,
+                            (uint64_t)driver, id, timestamp, duration, phase, args_str.c_str(), tidx);
     } else {
-        return fmt::sprintf(kSimpleEventFormat, category.c_str(), name.c_str(), instance_id, (int64_t)driver, id,
-                            timestamp, phase, args_str.c_str());
+        return fmt::sprintf(kSimpleEventFormat, category.c_str(), name.c_str(), (uint64_t)instance_id, (uint64_t)driver,
+                            id, timestamp, phase, args_str.c_str(), tidx);
     }
 }
 
@@ -112,25 +127,25 @@ Status QueryTrace::dump() {
         return Status::OK();
     }
     static const char* kProcessNameMetaEventFormat =
-            "{\"name\":\"process_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
+            "{\"name\":\"process_name\",\"ph\":\"M\",\"pid\":\"0x%x\",\"args\":{\"name\":\"%s\"}}";
     static const char* kThreadNameMetaEventFormat =
-            "{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
+            "{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":\"0x%x\",\"tid\":\"0x%x\",\"args\":{\"name\":\"%s\"}}";
     try {
         std::filesystem::create_directory(starrocks::config::query_debug_trace_dir);
         std::string file_name =
                 fmt::format("{}/{}.json", starrocks::config::query_debug_trace_dir, print_id(_query_id));
         std::ofstream oss(file_name.c_str(), std::ios::out | std::ios::binary);
-        oss << "{\"traceEvents\":[";
+        oss << "{\"traceEvents\":[\n";
         bool is_first = true;
         for (auto& [fragment_id, driver_set] : _fragment_drivers) {
             std::string fragment_id_str = print_id(fragment_id);
             oss << (is_first ? "" : ",\n");
-            oss << fmt::sprintf(kProcessNameMetaEventFormat, fragment_id.lo, fragment_id_str.c_str());
+            oss << fmt::sprintf(kProcessNameMetaEventFormat, (uint64_t)fragment_id.lo, fragment_id_str.c_str());
             is_first = false;
             for (auto& driver : *driver_set) {
                 starrocks::pipeline::DriverRawPtr ptr = reinterpret_cast<starrocks::pipeline::DriverRawPtr>(driver);
                 oss << (is_first ? "" : ",\n");
-                oss << fmt::sprintf(kThreadNameMetaEventFormat, fragment_id.lo, (int64_t)driver,
+                oss << fmt::sprintf(kThreadNameMetaEventFormat, (uint64_t)fragment_id.lo, (uint64_t)driver,
                                     ptr->get_name().c_str());
             }
         }
@@ -142,7 +157,7 @@ Status QueryTrace::dump() {
                 oss << iter.to_string();
             }
         }
-        oss << "]}";
+        oss << "\n]}";
 
         oss.close();
     } catch (std::exception& e) {
@@ -176,11 +191,12 @@ ScopedTracer::ScopedTracer(std::string name, std::string category)
     _start_ts = MonotonicMicros();
 }
 
-ScopedTracer::~ScopedTracer() {
+ScopedTracer::~ScopedTracer() noexcept {
     if (tls_trace_ctx.event_buffer != nullptr) {
         _duration = MonotonicMicros() - _start_ts;
-        tls_trace_ctx.event_buffer->add(QueryTraceEvent::create_with_ctx(
-                _name, _category, -1, 'X', _start_ts - tls_trace_ctx.start_ts, _duration, tls_trace_ctx));
+        tls_trace_ctx.event_buffer->add(
+                QueryTraceEvent::create_with_ctx(_name, _category, QueryTraceContext::DEFAULT_EVENT_ID, 'X',
+                                                 _start_ts - tls_trace_ctx.start_ts, _duration, tls_trace_ctx));
     }
 }
 

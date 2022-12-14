@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exec/pipeline/exec_state_reporter.h"
 
 #include <thrift/Thrift.h>
@@ -27,7 +40,8 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
     return url.str();
 }
 
-TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(FragmentContext* fragment_ctx,
+TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
+                                                                            FragmentContext* fragment_ctx,
                                                                             const Status& status, bool done) {
     TReportExecStatusParams params;
     auto* runtime_state = fragment_ctx->runtime_state();
@@ -46,11 +60,13 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
         runtime_state->update_report_load_status(&params);
+        params.__set_load_type(runtime_state->query_options().load_job_type);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             runtime_state->update_report_load_status(&params);
+            params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (fragment_ctx->is_report_profile()) {
+        if (query_ctx->is_report_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
         }

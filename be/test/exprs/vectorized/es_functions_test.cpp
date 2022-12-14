@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/es_functions.h"
 
@@ -32,7 +44,7 @@ TEST_F(EsFunctionsTest, matchTest) {
         columns.emplace_back(var1_col);
         columns.emplace_back(var2_col);
 
-        ColumnPtr result = ESFunctions::match(ctx, columns);
+        ColumnPtr result = ESFunctions::match(ctx, columns).value();
 
         ASSERT_EQ(1, result->size());
         ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));

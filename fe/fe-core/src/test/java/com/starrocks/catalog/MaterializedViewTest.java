@@ -1,8 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
@@ -718,5 +732,25 @@ public class MaterializedViewTest {
         TaskSchedule schedule = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName).getSchedule();
         // start time must equal 2022-12-31
         Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
+    }
+
+    @Test
+    public void testMvMysqlType() {
+        MaterializedView mv = new MaterializedView();
+        String mysqlType = mv.getMysqlType();
+        Assert.assertEquals("VIEW", mysqlType);
+    }
+
+    @Test
+    public void testShouldRefreshBy() {
+        MaterializedView mv = new MaterializedView();
+        MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+        mvRefreshScheme.setType(MaterializedView.RefreshType.ASYNC);
+        mv.setRefreshScheme(mvRefreshScheme);
+        boolean shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
+        Assert.assertTrue(shouldRefresh);
+        mv.setTableProperty(new TableProperty(Maps.newConcurrentMap()));
+        shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
+        Assert.assertTrue(shouldRefresh);
     }
 }

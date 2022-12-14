@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/thrift/InternalService.thrift
 
@@ -54,7 +67,9 @@ enum TLoadJobType {
     BROKER,
     SPARK,
     INSERT_QUERY,
-    INSERT_VALUES
+    INSERT_VALUES,
+    STREAM_LOAD,
+    ROUTINE_LOAD,
 }
 
 enum TErrorHubType {
@@ -116,7 +131,7 @@ struct TQueryOptions {
   12: optional i64 mem_limit = 2147483648
   13: optional bool abort_on_default_limit_exceeded = 0
   14: optional i32 query_timeout = 3600
-  15: optional bool is_report_success = 0
+  15: optional bool enable_profile = 0
   16: optional i32 codegen_level = 0
   // INT64::MAX
   17: optional i64 kudu_latest_observed_ts = 9223372036854775807 // Deprecated
@@ -190,8 +205,6 @@ struct TQueryOptions {
 
   64: optional TLoadJobType load_job_type
 
-  65: optional bool enable_replicated_storage;
-
   66: optional bool use_scan_block_cache;
 
   67: optional bool enable_pipeline_query_statistic = false;
@@ -199,6 +212,8 @@ struct TQueryOptions {
   68: optional i32 transmission_encode_level;
   
   69: optional bool enable_populate_block_cache;
+
+  70: optional bool allow_throw_exception = 0;
 }
 
 
@@ -314,7 +329,7 @@ struct TExecPlanFragmentParams {
 
   // Whether reportd when the backend fails
   // required in V1
-  9: optional bool is_report_success
+  9: optional bool enable_profile
 
   // required in V1
   10: optional Types.TResourceInfo resource_info

@@ -1,31 +1,31 @@
 # SHOW REPOSITORIES
 
-## description
+## Description
 
-This statement is used to view the currently created repositories.
+Views the repositories created in StarRocks.
 
-Syntax:
+## Syntax
 
-```sql
+```SQL
 SHOW REPOSITORIES;
 ```
 
-```plain text
-Note：
-1.The meanings of each column are as follows:：
-RepoId：     unique repositories ID
-RepoName：   repositories name
-CreateTime： the time when the repository was first created
-IsReadOnly： is it a read-only repository
-Location：   the root directory in the repository used to back up data
-Broker：     the dependent Broker
-ErrMsg：     StarRocks will regularly check the connectivity of the repository. If there is a problem, an error message will be displayed here
+## Return
+
+| **Return** | **Description**                                          |
+| ---------- | -------------------------------------------------------- |
+| RepoId     | Repository ID.                                           |
+| RepoName   | Repository name.                                         |
+| CreateTime | Repository creation time.                                |
+| IsReadOnly | If the repository is read-only.                          |
+| Location   | Location of the repository in the remote storage system. |
+| Broker     | Broker used to create the repository.                    |
+| ErrMsg     | Error message during connection to the repository.       |
+
+## Examples
+
+Example 1: Views the repositories created in StarRocks.
+
+```SQL
+SHOW REPOSITORIES;
 ```
-
-## example
-
-1. View created repositories：
-
-    ```sql
-    SHOW REPOSITORIES;
-    ```

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/utils.h
 
@@ -52,7 +65,7 @@ public:
     uint64_t get_elapse_time_us() {
         struct timeval now;
         gettimeofday(&now, nullptr);
-        return (uint64_t)((now.tv_sec - _begin_time.tv_sec) * 1e6 + (now.tv_usec - _begin_time.tv_usec));
+        return (uint64_t)((now.tv_sec - _begin_time.tv_sec) * 1000000 + (now.tv_usec - _begin_time.tv_usec));
     }
 
     double get_elapse_second() { return get_elapse_time_us() / 1000000.0; }
@@ -90,7 +103,7 @@ private:
     static __thread char _buf[BUF_SIZE];
 };
 
-inline bool is_io_error(Status status) {
+inline bool is_io_error(const Status& status) {
     return status.is_io_error();
 }
 

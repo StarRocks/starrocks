@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -62,7 +75,10 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
-            Preconditions.checkState(functionCallExpr.getChildren().size() > 1);
+            Preconditions.checkState(functionCallExpr.getChildren().size() > 1,
+                    "array_map should have at least two inputs");
+            Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
+                    "array_map's lambda function can not be null");
             // the normalized high_order functions:
             // high-order function(lambda_func(lambda_expr, lambda_arguments), input_arrays),
             // which puts various arguments/inputs at the tail e.g.,
@@ -161,6 +177,12 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.ARRAY_FILTER)) {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException("array_filter only support 2 parameters");
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException("array_sortby only support 2 parameters");
             }
         }
 

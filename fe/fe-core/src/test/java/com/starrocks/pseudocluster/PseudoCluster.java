@@ -1,14 +1,30 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.pseudocluster;
 
-import avro.shaded.com.google.common.collect.Sets;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.ibm.icu.impl.Assert;
-import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -139,14 +155,23 @@ public class PseudoCluster {
         private final List<ShardInfo> shardInfos = new ArrayList<>();
 
         @Override
-        public ShardStorageInfo getServiceShardStorageInfo() throws DdlException {
-            ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder()
-                    .setObjectUri("s3://bucket")
-                    .setAccessKey("testaccesskey")
-                    .setAccessKeySecret("testaccesskeysecret")
-                    .setEndpoint("http://127.0.0.1")
-                    .build();
-            return ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+            FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+            FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+            S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+            s3FsBuilder.setBucket("test-bucket");
+            s3FsBuilder.setRegion("test-region");
+            S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+            fsBuilder.setFsType(FileStoreType.S3);
+            fsBuilder.setFsKey("test-bucket");
+            fsBuilder.setS3FsInfo(s3FsInfo);
+            FileStoreInfo fsInfo = fsBuilder.build();
+
+            builder.setFsInfo(fsInfo);
+            builder.setFullPath("s3://test-bucket/1/");
+            return builder.build();
         }
 
         @Override
@@ -170,12 +195,16 @@ public class PseudoCluster {
         }
 
         @Override
-        public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo, long groupId) throws DdlException {
+        public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+            throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
                 long id = nextId++;
                 shardIds.add(id);
-                ShardInfo shardInfo = ShardInfo.newBuilder().setShardStorageInfo(shardStorageInfo).setShardId(id).build();
+                ShardInfo shardInfo = ShardInfo.newBuilder().setFileCache(cacheInfo)
+                                               .setFilePath(pathInfo)
+                                               .setShardId(id)
+                                               .build();
                 shardInfos.add(shardInfo);
             }
             return shardIds;
@@ -431,6 +460,7 @@ public class PseudoCluster {
         private int buckets = 3;
         private int replication = 3;
         private String quorum = "MAJORITY";
+        private String colocateGroup = "";
 
         private boolean ssd = true;
 
@@ -459,13 +489,23 @@ public class PseudoCluster {
             return this;
         }
 
+        public CreateTableSqlBuilder setColocateGroup(String colocateGroup) {
+            this.colocateGroup = colocateGroup;
+            return this;
+        }
+
         public String build() {
             return String.format("create table %s (id bigint not null, name varchar(64) not null, age int null) " +
                             "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
-                            "PROPERTIES(\"write_quorum\" = \"%s\", \"replication_num\" = \"%d\", \"storage_medium\" = \"%s\")",
+                            "PROPERTIES(" +
+                                "\"write_quorum\" = \"%s\", " +
+                                "\"replication_num\" = \"%d\", " +
+                                "\"storage_medium\" = \"%s\", " +
+                                "\"group_with\" = \"%s\")",
                     tableName,
                     buckets, quorum, replication,
-                    ssd ? "SSD" : "HDD");
+                    ssd ? "SSD" : "HDD",
+                    colocateGroup);
         }
     }
 

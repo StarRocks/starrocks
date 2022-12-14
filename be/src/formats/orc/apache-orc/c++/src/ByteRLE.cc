@@ -597,7 +597,7 @@ void BooleanRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) 
         if (notNull) {
             for (int64_t i = static_cast<int64_t>(numValues) - 1; i >= static_cast<int64_t>(position); --i) {
                 if (notNull[i]) {
-                    uint64_t shiftPosn = (-bitsLeft) % 8;
+                    uint64_t shiftPosn = (~bitsLeft + 1) % 8;
                     data[i] = (data[position + (bitsLeft - 1) / 8] >> shiftPosn) & 0x1;
                     bitsLeft -= 1;
                 } else {
@@ -607,7 +607,7 @@ void BooleanRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) 
         } else {
             for (int64_t i = static_cast<int64_t>(numValues) - 1; i >= static_cast<int64_t>(position);
                  --i, --bitsLeft) {
-                uint64_t shiftPosn = (-bitsLeft) % 8;
+                uint64_t shiftPosn = (~bitsLeft + 1) % 8;
                 data[i] = (data[position + (bitsLeft - 1) / 8] >> shiftPosn) & 0x1;
             }
         }

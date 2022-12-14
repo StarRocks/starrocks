@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/persist/OperationType.java
 
@@ -199,6 +212,7 @@ public class OperationType {
     public static final short OP_ERASE_MULTI_TABLES = 10004;
     public static final short OP_MODIFY_ENABLE_PERSISTENT_INDEX = 10005;
     public static final short OP_MODIFY_WRITE_QUORUM = 10006;
+    public static final short OP_MODIFY_REPLICATED_STORAGE = 10007;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
@@ -241,6 +255,7 @@ public class OperationType {
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
+    public static final short OP_ALTER_MATERIALIZED_VIEW_PROPERTIES = 10093;
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
@@ -278,4 +293,10 @@ public class OperationType {
     // alter load
     public static final short OP_ALTER_LOAD_JOB = 11100;
 
+    // stream load
+    public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
+
+    // MaterializedView Maintenance
+    public static final short OP_MV_EPOCH_UPDATE = 11030;
+    public static final short OP_MV_JOB_STATE = 11031;
 }

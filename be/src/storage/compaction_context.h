@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -6,44 +18,19 @@
 #include <set>
 #include <vector>
 
+#include "storage/compaction_policy.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
 namespace starrocks {
 
-#ifndef LEVEL_NUMBER
-#define LEVEL_NUMBER 3
-#endif
-
-const double COMPACTION_SCORE_THRESHOLD = 0.999;
-
-// rowsets here can never overlap
-struct RowsetComparator {
-    bool operator()(const Rowset* left, const Rowset* right) const {
-        return left->start_version() < right->start_version();
-    }
-};
+class CompactionPolicy;
 
 struct CompactionContext {
-    // sort rowsets by version
-    std::set<Rowset*, RowsetComparator> rowset_levels[LEVEL_NUMBER];
-    double cumulative_score = 0;
-    double base_score = 0;
-    TabletSharedPtr tablet;
-    CompactionType chosen_compaction_type = INVALID_COMPACTION;
-
-    bool need_compaction(CompactionType compaction_type) {
-        if (compaction_type == BASE_COMPACTION) {
-            return base_score > COMPACTION_SCORE_THRESHOLD;
-        } else if (compaction_type == CUMULATIVE_COMPACTION) {
-            return cumulative_score > COMPACTION_SCORE_THRESHOLD;
-        } else {
-            return false;
-        }
-    }
-
-    std::string to_string() const;
+    double score = 0;
+    CompactionType type = INVALID_COMPACTION;
+    std::unique_ptr<CompactionPolicy> policy;
 };
 
 } // namespace starrocks

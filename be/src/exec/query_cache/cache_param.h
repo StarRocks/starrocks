@@ -1,23 +1,38 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <string>
 #include <unordered_map>
-namespace starrocks {
-namespace query_cache {
 
-using CacheKeySuffixMap = std::unordered_map<int64_t, std::string>;
+#include "gen_cpp/Types_types.h"
+namespace starrocks::query_cache {
+
+using CacheKeyPrefixMap = std::unordered_map<int64_t, std::string>;
 using SlotRemapping = std::unordered_map<int32_t, int32_t>;
 struct CacheParam {
     int num_lanes;
     int32_t plan_node_id;
     std::string digest;
-    CacheKeySuffixMap cache_key_prefixes;
+    CacheKeyPrefixMap cache_key_prefixes;
     SlotRemapping slot_remapping;
     SlotRemapping reverse_slot_remapping;
     bool force_populate;
     size_t entry_max_bytes;
     size_t entry_max_rows;
+    bool can_use_multiversion;
+    TKeysType::type keys_type;
 };
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

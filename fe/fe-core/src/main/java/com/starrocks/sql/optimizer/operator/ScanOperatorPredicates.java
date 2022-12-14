@@ -1,8 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.operator;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -14,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class ScanOperatorPredicates {
     // id -> partition key
@@ -73,18 +86,25 @@ public class ScanOperatorPredicates {
 
     @Override
     public boolean equals(Object o) {
-        ScanOperatorPredicates targetPredicts = (ScanOperatorPredicates) o;
-        return Objects.equal(getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
-                Objects.equal(getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
-                Objects.equal(getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
-                Objects.equal(getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
-                Objects.equal(getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
-                Objects.equal(getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ScanOperatorPredicates that = (ScanOperatorPredicates) o;
+        return Objects.equals(idToPartitionKey, that.idToPartitionKey) &&
+                Objects.equals(selectedPartitionIds, that.selectedPartitionIds) &&
+                Objects.equals(partitionConjuncts, that.partitionConjuncts) &&
+                Objects.equals(noEvalPartitionConjuncts, that.noEvalPartitionConjuncts) &&
+                Objects.equals(nonPartitionConjuncts, that.nonPartitionConjuncts) &&
+                Objects.equals(minMaxConjuncts, that.minMaxConjuncts) &&
+                Objects.equals(minMaxColumnRefMap, that.minMaxColumnRefMap);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(idToPartitionKey, selectedPartitionIds, partitionConjuncts,
-                noEvalPartitionConjuncts, nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
+        return Objects.hash(idToPartitionKey, selectedPartitionIds, partitionConjuncts, noEvalPartitionConjuncts,
+                nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
     }
 }

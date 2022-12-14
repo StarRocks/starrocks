@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -118,8 +130,7 @@ private:
 
 class ValueNullableColumnAggregator final : public ValueColumnAggregatorBase {
 public:
-    explicit ValueNullableColumnAggregator(ValueColumnAggregatorPtr child)
-            : _child(std::move(child)), _aggregate_nulls(nullptr), _source_nulls_data(nullptr), _row_is_null(0) {}
+    explicit ValueNullableColumnAggregator(ValueColumnAggregatorPtr child) : _child(std::move(child)) {}
 
     void update_source(const ColumnPtr& src) override {
         _source_column = src;
@@ -265,11 +276,11 @@ private:
 
     ValueColumnAggregatorPtr _child;
 
-    NullColumn* _aggregate_nulls;
+    NullColumn* _aggregate_nulls{nullptr};
 
-    uint8_t* _source_nulls_data;
+    uint8_t* _source_nulls_data{nullptr};
 
-    uint8_t _row_is_null;
+    uint8_t _row_is_null{0};
 };
 
 } // namespace starrocks::vectorized

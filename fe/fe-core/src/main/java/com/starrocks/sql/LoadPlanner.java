@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
@@ -28,6 +41,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.ExchangeNode;
@@ -45,13 +59,12 @@ import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,6 +100,7 @@ public class LoadPlanner {
     private Map<String, String> sessionVariables;
 
     private long dbId;
+    private String dbName;
     private Table destTable;
     private DescriptorTable descTable;
     private TupleDescriptor tupleDesc;
@@ -106,18 +120,20 @@ public class LoadPlanner {
 
     // Routine/Stream load related structs
     List<ImportColumnDesc> columnDescs;
-    private StreamLoadTask streamLoadTask;
-    boolean routimeStreamLoadNegative;
+    private StreamLoadInfo streamLoadInfo;
+    private boolean routimeStreamLoadNegative;
 
+    // Stream load related structs
+    private String label;
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
-            boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-            List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+                       boolean strictMode, String timezone, long timeoutS,
+                       long startTime, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+                       List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -126,12 +142,16 @@ public class LoadPlanner {
         this.strictMode = strictMode;
         this.timeoutS = timeoutS;
         this.partialUpdate = partialUpdate;
-        this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
         if (context != null) {
             this.context = context;
         } else {
             this.context = new ConnectContext();
+        }
+        if (this.context.getSessionVariable().getEnableAdaptiveSinkDop()) {
+            this.parallelInstanceNum = this.context.getSessionVariable().getDegreeOfParallelism();
+        } else {
+            this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
         this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
         this.analyzer.setTimezone(timezone);
@@ -150,15 +170,16 @@ public class LoadPlanner {
         this.etlJobType = EtlJobType.BROKER;
     }
 
-    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
+    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
             boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
             Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative,
-            List<ImportColumnDesc> columnDescs, StreamLoadTask streamLoadTask, TRoutineLoadTask routineLoadTask) {
+            boolean routimeStreamLoadNegative, int parallelInstanceNum,
+            List<ImportColumnDesc> columnDescs, StreamLoadInfo streamLoadInfo) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
         this.dbId = dbId;
+        this.dbName = dbName;
         this.destTable = destTable;
         this.strictMode = strictMode;
         this.timezone = timezone;
@@ -172,46 +193,64 @@ public class LoadPlanner {
         this.execMemLimit = execMemLimit;
         this.isPrimaryKey = ((OlapTable) destTable).getKeysType() == KeysType.PRIMARY_KEYS;
         this.routimeStreamLoadNegative = routimeStreamLoadNegative;
+        this.parallelInstanceNum = parallelInstanceNum;
         this.columnDescs = columnDescs;
-        this.streamLoadTask = streamLoadTask;
+        this.streamLoadInfo = streamLoadInfo;
         this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
         this.descTable = analyzer.getDescTbl();
-        this.enableDictOptimize = Config.enable_dict_optimize_routine_load;
-        this.timeoutS = Config.routine_load_task_timeout_second;
+        this.enableDictOptimize = Config.enable_dict_optimize_stream_load;
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
-        this.etlJobType = EtlJobType.ROUTINE_LOAD;
-        this.routineLoadTask = routineLoadTask;
     }
 
-    public void plan() throws UserException {
-        if (this.etlJobType == EtlJobType.BROKER) {
-            brokerLoadPlan();
-        } else if (this.etlJobType == EtlJobType.ROUTINE_LOAD || this.etlJobType == EtlJobType.STREAM_LOAD) {
-            routineStreamLoadPlan();
+    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
+            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+            boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
+            StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
+        this(loadJobId, loadId, txnId, dbId, dbName, destTable, strictMode, timezone, partialUpdate, context,
+                sessionVariables, loadMemLimit, execMemLimit, routimeStreamLoadNegative, parallelInstanceNum,
+                columnDescs, streamLoadInfo);
+        this.label = label;
+        this.timeoutS = timeoutS;
+        this.etlJobType = EtlJobType.STREAM_LOAD;
+        this.context.getSessionVariable().setEnableResourceGroup(false);
+        if (Config.enable_pipeline_load) {
+            this.context.getSessionVariable().setEnablePipelineEngine(true);
         }
     }
 
-    public void brokerLoadPlan() throws UserException {
+    public void plan() throws UserException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
         if (isPrimaryKey && partialUpdate) {
-            if (fileGroups.size() > 1) {
-                throw new DdlException("partial update only support single filegroup.");
-            } else if (fileGroups.size() == 1) {
-                if (fileGroups.get(0).isNegative()) {
+            if (this.etlJobType == EtlJobType.BROKER) {
+                if (fileGroups.size() != 1) {
+                    throw new DdlException("partial update only support single filegroup.");
+                } else {
+                    if (fileGroups.get(0).isNegative()) {
+                        throw new DdlException("Primary key table does not support negative load");
+                    }
+                }
+            } else {
+                if (routimeStreamLoadNegative) {
                     throw new DdlException("Primary key table does not support negative load");
                 }
-                destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList());
-            } else {
-                throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
         } else if (!isPrimaryKey && partialUpdate) {
             throw new DdlException("Only primary key table support partial update");
+        }
+        if (partialUpdate) {
+            if (this.etlJobType == EtlJobType.BROKER) {
+                destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList());
+            } else {
+                destColumns = Load.getPartialUpateColumns(destTable, columnDescs);
+            }
         } else {
             destColumns = destTable.getFullSchema();
         }
+
         generateTupleDescriptor(destColumns, isPrimaryKey);
 
         // 2. Prepare scan nodes
@@ -283,48 +322,6 @@ public class LoadPlanner {
         Collections.reverse(fragments);
     }
 
-    public void routineStreamLoadPlan() throws UserException {
-        OlapTable olapDestTable = (OlapTable) destTable;
-        // 1. Generate tuple descriptor
-        if (isPrimaryKey) {
-            if (routimeStreamLoadNegative) {
-                throw new DdlException("Primary key table does not support negative load");
-            }
-        } else {
-            if (partialUpdate) {
-                throw new DdlException("Only primary key table support partial update");
-            }
-        }
-        List<Column> destColumns = null;
-        if (partialUpdate) {
-            destColumns = Load.getPartialUpateColumns(destTable, columnDescs);
-        } else {
-            destColumns = destTable.getFullSchema();
-        }
-        generateTupleDescriptor(destColumns, isPrimaryKey);
-
-        // 2. Prepare scan nodes
-        ScanNode scanNode = prepareScanNodes();
-
-        // 3. Prepare sink fragment
-        List<Long> partitionIds = getAllPartitionIds();
-
-        // For stream/routine load, we only need one fragment, ScanNode -> DataSink.
-        // OlapTableSink can dispatch data to corresponding node.
-        // Todo: add shuffle service here
-        PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.UNPARTITIONED);
-
-        prepareSinkFragment(sinkFragment, partitionIds, false, true);
-
-        fragments.add(sinkFragment);
-
-        // 4. finalize
-        for (PlanFragment fragment : fragments) {
-            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
-        }
-        Collections.reverse(fragments);
-    }
-
     private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws UserException {
         this.tupleDesc = descTable.createTupleDescriptor("DestTableTupleDescriptor");
         // Add column slotDesc for dest table
@@ -340,7 +337,7 @@ public class LoadPlanner {
 
             if (col.getType().isVarchar() && enableDictOptimize
                     && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                            col.getName())) {
+                    col.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
@@ -369,7 +366,8 @@ public class LoadPlanner {
             scanNode = fileScanNode;
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
-                    destTable, streamLoadTask);
+                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId);
+            streamScanNode.setNeedAssignBE(true);
             streamScanNode.setUseVectorizedLoad(true);
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
@@ -380,13 +378,12 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
-            boolean completeTabletSink) throws UserException {
+                                     boolean completeTabletSink) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
-            TWriteQuorumType writeQuorum = ((OlapTable) destTable).writeQuorum();
-
-            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine, writeQuorum);
+            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine,
+                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage());
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).complete();
@@ -417,17 +414,17 @@ public class LoadPlanner {
         Set<Long> partitionIds = Sets.newHashSet();
         OlapTable olapDestTable = (OlapTable) destTable;
         if (this.etlJobType == EtlJobType.BROKER) {
-            for (BrokerFileGroup brokerFileGroup : fileGroups) {
-                if (brokerFileGroup.getPartitionIds() != null) {
-                    partitionIds.addAll(brokerFileGroup.getPartitionIds());
-                }
+            if (CollectionUtils.isNotEmpty(fileGroups)) {
+                BrokerFileGroup brokerFileGroup = fileGroups.get(0);
                 // all file group in fileGroups should have same partitions, so only need to get
                 // partition ids
                 // from one of these file groups
-                break;
+                if (brokerFileGroup.getPartitionIds() != null) {
+                    partitionIds.addAll(brokerFileGroup.getPartitionIds());
+                }
             }
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == etlJobType.ROUTINE_LOAD) {
-            PartitionNames partitionNames = streamLoadTask.getPartitions();
+            PartitionNames partitionNames = streamLoadInfo.getPartitions();
             if (partitionNames != null) {
                 for (String partName : partitionNames.getPartitionNames()) {
                     Partition part = olapDestTable.getPartition(partName, partitionNames.isTemp());
@@ -483,6 +480,10 @@ public class LoadPlanner {
         }
 
         if (olapDestTable.getDefaultReplicationNum() <= 1) {
+            return false;
+        }
+
+        if (olapDestTable.enableReplicatedStorage()) {
             return false;
         }
 

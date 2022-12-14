@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/StmtExecutor.java
 
@@ -34,6 +47,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -80,12 +94,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
@@ -115,6 +130,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
@@ -131,6 +147,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -235,6 +252,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+            sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
+                    .append(variables.getEnableAdaptiveSinkDop())
+                    .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");
@@ -347,7 +367,7 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
+            try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     context.getDumpInfo().reset();
@@ -422,7 +442,7 @@ public class StmtExecutor {
 
                         handleQueryStmt(execPlan);
 
-                        if (context.getSessionVariable().isReportSucc()) {
+                        if (context.getSessionVariable().isEnableProfile()) {
                             writeProfile(beginTimeInNanoSecond);
                         }
                         break;
@@ -460,7 +480,7 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
                     handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
-                    if (context.getSessionVariable().isReportSucc()) {
+                    if (context.getSessionVariable().isEnableProfile()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
                 } catch (Throwable t) {
@@ -547,7 +567,7 @@ public class StmtExecutor {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
             handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isReportSucc()) {
+            if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }
             if (context.getState().getStateType() == MysqlStateType.ERR) {
@@ -640,7 +660,7 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel() {
-        if (parsedStmt instanceof DeleteStmt && !((DeleteStmt) parsedStmt).supportNewPlanner()) {
+        if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
             if (jobId != -1) {
@@ -666,14 +686,15 @@ public class StmtExecutor {
             // Suicide
             context.setKilled();
         } else {
-            // Check auth
-            // Only user itself and user with admin priv can kill connection
-            if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
-                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                    PrivPredicate.ADMIN)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
+            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                // Check auth
+                // Only user itself and user with admin priv can kill connection
+                if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
+                        && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                        PrivPredicate.ADMIN)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
+                }
             }
-
             killCtx.kill(killStmt.isConnectionKill());
         }
         context.getState().setOk();
@@ -699,11 +720,11 @@ public class StmtExecutor {
         context.getMysqlChannel().reset();
 
         if (parsedStmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan));
+            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan));
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
         }
 
         StatementBase queryStmt = parsedStmt;
@@ -849,8 +870,14 @@ public class StmtExecutor {
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        // from current session, may execute analyze stmt
+        statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                context.getSessionVariable().getStatisticCollectParallelism());
+
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                             analyzeStmt.getProperties()),
@@ -858,7 +885,7 @@ public class StmtExecutor {
                     //Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         } else {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
@@ -877,7 +904,8 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropBasicStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
     }
 
@@ -888,13 +916,21 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
 
+
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
-        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(killAnalyzeStmt.getAnalyzeId(), true);
+        long analyzeId = killAnalyzeStmt.getAnalyzeId();
+        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
+        }
+        // Try to kill the job anyway.
+        analyzeManager.unregisterConnection(analyzeId, true);
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -1057,11 +1093,11 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
-    private String buildExplainString(ExecPlan execPlan) {
+    private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType) {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context);
+                ResourceGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
                 String resourceGroupStr =
                         resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
                 explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
@@ -1095,16 +1131,20 @@ public class StmtExecutor {
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+                String sql = AstToStringBuilder.toString(parsedStmt);
+                if (sql == null) {
+                    sql = originStmt.originStmt;
+                }
+                LOG.warn("DDL statement (" + sql + ") process failed.", e);
             }
             context.setState(e.getQueryState());
-        } catch (UserException e) {
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
-            // Return message to info client what happened.
-            context.getState().setError(e.getMessage());
         } catch (Throwable e) {
-            // Maybe our bug
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+            // Maybe our bug or wrong input parematers
+            String sql = AstToStringBuilder.toString(parsedStmt);
+            if (sql == null || sql.isEmpty()) {
+                sql = originStmt.originStmt;
+            }
+            LOG.warn("DDL statement (" + sql + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());
         }
     }
@@ -1132,16 +1172,6 @@ public class StmtExecutor {
             statisticsForAuditLog.memCostBytes = 0L;
         }
         return statisticsForAuditLog;
-    }
-
-    /**
-     * Below function is added by new analyzer
-     */
-    private boolean isStatisticsOrAnalyzer(StatementBase statement, ConnectContext context) {
-        return (statement instanceof InsertStmt &&
-                context.getDatabase().equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME))
-                || statement instanceof AnalyzeStmt
-                || statement instanceof CreateAnalyzeJobStmt;
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
@@ -1172,15 +1202,15 @@ public class StmtExecutor {
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan));
+            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan));
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
         }
 
         // special handling for delete of non-primary key table, using old handler
-        if (stmt instanceof DeleteStmt && !((DeleteStmt) stmt).supportNewPlanner()) {
+        if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
             try {
                 context.getGlobalStateMgr().getDeleteHandler().process((DeleteStmt) stmt);
                 context.getState().setOk();
@@ -1273,7 +1303,7 @@ public class StmtExecutor {
         boolean insertError = false;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
-                //if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 context.getSessionVariable().setPreferComputeNode(false);
                 context.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
@@ -1289,9 +1319,9 @@ public class StmtExecutor {
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean containOlapScanNode = false;
-            for (int i = 0; i < scanNodes.size(); i++) {
-                if (scanNodes.get(i) instanceof OlapScanNode) {
-                    estimateScanRows += ((OlapScanNode) scanNodes.get(i)).getActualRows();
+            for (ScanNode scanNode : scanNodes) {
+                if (scanNode instanceof OlapScanNode) {
+                    estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
                     containOlapScanNode = true;
                 }
             }
@@ -1368,7 +1398,8 @@ public class StmtExecutor {
                                 database.getId(),
                                 transactionId,
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
-                                        + coord.getTrackingUrl()
+                                        + coord.getTrackingUrl(),
+                                TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
@@ -1415,6 +1446,7 @@ public class StmtExecutor {
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                        TabletFailInfo.fromThrift(coord.getFailInfos()),
                         context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
@@ -1446,7 +1478,8 @@ public class StmtExecutor {
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                            t.getMessage() == null ? "Unknown reason" : t.getMessage(),
+                            TabletFailInfo.fromThrift(coord.getFailInfos()));
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
@@ -1455,7 +1488,7 @@ public class StmtExecutor {
             }
 
             // if not using old load usage pattern, error will be returned directly to user
-            StringBuilder sb = new StringBuilder(t.getMessage());
+            StringBuilder sb = new StringBuilder(t.getMessage() == null ? "Unknown reason" : t.getMessage());
             if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
@@ -1493,8 +1526,8 @@ public class StmtExecutor {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
             LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             errMsg = "Publish timeout " + timeoutInfo;
         }

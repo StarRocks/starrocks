@@ -55,7 +55,6 @@ public class TimeUtilsTest {
     @Test
     public void testNormal() {
         Assert.assertNotNull(TimeUtils.getCurrentFormatTime());
-        Assert.assertNotNull(TimeUtils.getStartTime());
         Assert.assertTrue(TimeUtils.getEstimatedTime(0L) > 0);
 
         Assert.assertEquals(-62167420800000L, TimeUtils.MIN_DATE.getTime());
@@ -152,10 +151,10 @@ public class TimeUtilsTest {
         Assert.assertEquals("2015-03-12 10:00:00", TimeUtils.longToTimeString(timestamp));
 
         DateLiteral date = new DateLiteral("2015-03-01", ScalarType.DATE);
-        Assert.assertEquals(1031777L, date.getRealValue());
+        Assert.assertEquals(20150301000000L, date.getLongValue());
 
         DateLiteral datetime = new DateLiteral("2015-03-01 12:00:00", ScalarType.DATETIME);
-        Assert.assertEquals(20150301120000L, datetime.getRealValue());
+        Assert.assertEquals(20150301120000L, datetime.getLongValue());
     }
 
     @Test

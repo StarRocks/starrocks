@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/Catalog.java
 
@@ -33,6 +46,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
@@ -50,6 +64,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -77,6 +92,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
@@ -145,6 +161,7 @@ import com.starrocks.load.loadv2.LoadTimeoutChecker;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
+import com.starrocks.load.streamload.StreamLoadManager;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -186,13 +203,15 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVJobExecutor;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -220,6 +239,8 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -239,6 +260,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -280,7 +302,7 @@ public class GlobalStateMgr {
     // 0 ~ 9999 used for qe
     public static final long NEXT_ID_INIT_VALUE = 10000;
     private static final int REPLAY_INTERVAL_MS = 1;
-    private static final String IMAGE_DIR = "/image";
+    public static final String IMAGE_DIR = "/image";
     // will break the loop and refresh in-memory data after at most 10w logs or at most 1 seconds
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
@@ -302,6 +324,7 @@ public class GlobalStateMgr {
     private Load load;
     private LoadManager loadManager;
     private RoutineLoadManager routineLoadManager;
+    private StreamLoadManager streamLoadManager;
     private ExportMgr exportMgr;
     private Alter alter;
     private ConsistencyChecker consistencyChecker;
@@ -395,8 +418,9 @@ public class GlobalStateMgr {
     private LoadLoadingChecker loadLoadingChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
-
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
+
+    private MVJobExecutor mvMVJobExecutor;
 
     private SmallFileMgr smallFileMgr;
 
@@ -513,6 +537,7 @@ public class GlobalStateMgr {
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCheckpointCatalog) {
         this.load = new Load();
+        this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
         this.exportMgr = new ExportMgr();
         this.alter = new Alter();
@@ -578,6 +603,7 @@ public class GlobalStateMgr {
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        this.mvMVJobExecutor = new MVJobExecutor();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -894,7 +920,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init()) {
+        if (Config.use_staros && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -930,7 +956,8 @@ public class GlobalStateMgr {
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
-        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+        BlockingQueue<JournalTask> journalQueue =
+                new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
@@ -971,7 +998,7 @@ public class GlobalStateMgr {
         FrontendNodeType oldType = feType;
         // stop replayer
         if (replayer != null) {
-            replayer.exit();
+            replayer.setStop();
             try {
                 replayer.join();
             } catch (InterruptedException e) {
@@ -1056,8 +1083,23 @@ public class GlobalStateMgr {
             String msg = "leader finished to replay journal, can write now.";
             Util.stdoutWithTime(msg);
             LOG.info(msg);
+
             // for leader, there are some new thread pools need to register metric
             ThreadPoolManager.registerAllThreadPoolMetric();
+
+            if (nodeMgr.isFirstTimeStartUp()) {
+                // When the cluster is initially deployed, we set ENABLE_ADAPTIVE_SINK_DOP so
+                // that the load is automatically configured as the best performance
+                // configuration. If it is upgraded from an old version, the original
+                // configuration is retained to avoid system stability problems caused by
+                // changes in concurrency
+                VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
+                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                        LiteralExpr.create("true", Type.BOOLEAN)),
+                        false);
+            }
+        } catch (UserException e) {
+            LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
             feType = oldType;
@@ -1128,6 +1170,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        mvMVJobExecutor.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
@@ -1263,7 +1306,10 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadStreamLoadManager(dis, checksum);
+            remoteChecksum = dis.readLong();
             loadRBACPrivilege(dis);
+            checksum = MVManager.getInstance().reload(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1273,7 +1319,8 @@ public class GlobalStateMgr {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
-            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
+            LOG.warn(
+                    "follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
             usingNewPrivilege.set(false);
             domainResolver = new DomainResolver(auth);
         }
@@ -1449,6 +1496,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
+        streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
+        checksum ^= streamLoadManager.getChecksum();
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1460,14 +1513,18 @@ public class GlobalStateMgr {
         // Move image.ckpt to image.dataVersion
         LOG.info("Move " + ckpt.getAbsolutePath() + " to " + curFile.getAbsolutePath());
         if (!ckpt.renameTo(curFile)) {
-            curFile.delete();
+            if (!curFile.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", curFile.getAbsolutePath());
+            }
             throw new IOException();
         }
     }
 
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
-            curFile.createNewFile();
+            if (!curFile.createNewFile()) {
+                LOG.warn("Failed to create file, filepath={}", curFile.getAbsolutePath());
+            }
         }
 
         // save image does not need any lock. because only checkpoint thread will call this method.
@@ -1515,7 +1572,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
+            checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
+            dos.writeLong(checksum);
             saveRBACPrivilege(dos);
+            checksum = MVManager.getInstance().store(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1623,7 +1683,6 @@ public class GlobalStateMgr {
             }
         };
     }
-
 
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
@@ -1748,7 +1807,6 @@ public class GlobalStateMgr {
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
 
-
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -1761,6 +1819,8 @@ public class GlobalStateMgr {
                     "should replay to %d but actual replayed journal id is %d",
                     toJournalId, replayedJournalId.get()));
         }
+
+        streamLoadManager.cancelUnDurableTaskAfterRestart();
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -1918,7 +1978,7 @@ public class GlobalStateMgr {
         localMetastore.replayAlterDatabaseQuota(dbName, quota, quotaType);
     }
 
-    public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
+    public void renameDatabase(AlterDatabaseRenameStatement stmt) throws DdlException {
         localMetastore.renameDatabase(stmt);
     }
 
@@ -2009,7 +2069,8 @@ public class GlobalStateMgr {
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
                 || table.getType() == TableType.HUDI || table.getType() == TableType.ICEBERG
-                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
+                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC
+                || table.getType() == TableType.FILE) {
             sb.append("EXTERNAL ");
         }
         sb.append("TABLE ");
@@ -2063,15 +2124,6 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-            if (index.getSortKeyIdxes() != null) {
-                sb.append("\nORDER BY(");
-                List<String> sortKeysColumnNames = Lists.newArrayList();
-                for (Integer i : index.getSortKeyIdxes()) {
-                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
-                }
-                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
-            }
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
@@ -2090,6 +2142,17 @@ public class GlobalStateMgr {
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
             sb.append("\n").append(distributionInfo.toSql());
+
+            // order by
+            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (index.getSortKeyIdxes() != null) {
+                sb.append("\nORDER BY(");
+                List<String> sortKeysColumnNames = Lists.newArrayList();
+                for (Integer i : index.getSortKeyIdxes()) {
+                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+                }
+                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
+            }
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2143,7 +2206,8 @@ public class GlobalStateMgr {
             if (table.isLakeTable()) {
                 Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
 
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
 
@@ -2151,7 +2215,8 @@ public class GlobalStateMgr {
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
             }
@@ -2162,9 +2227,18 @@ public class GlobalStateMgr {
             sb.append(olapTable.getStorageFormat()).append("\"");
 
             // enable_persistent_index
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+            // replicated_storage
+            if (olapTable.enableReplicatedStorage()) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
+            }
 
             // write quorum
             if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
@@ -2296,6 +2370,14 @@ public class GlobalStateMgr {
                 sb.append(",\n");
             }
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == TableType.FILE) {
+            FileTable fileTable = (FileTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+            sb.append("\nPROPERTIES (\n");
+            sb.append(new PrintableMap<>(fileTable.getFileProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
@@ -2577,6 +2659,10 @@ public class GlobalStateMgr {
         return routineLoadManager;
     }
 
+    public StreamLoadManager getStreamLoadManager() {
+        return streamLoadManager;
+    }
+
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
         return routineLoadTaskScheduler;
     }
@@ -2657,7 +2743,6 @@ public class GlobalStateMgr {
         return this.icebergRepository;
     }
 
-
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -2712,7 +2797,7 @@ public class GlobalStateMgr {
     }
 
     public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
-            List<Integer> sortKeyIdxes)
+                                                List<Integer> sortKeyIdxes)
             throws DdlException {
         LOG.debug("sort key size: {}", sortKeyIdxes.size());
         Preconditions.checkArgument(sortKeyIdxes.size() > 0);
@@ -2817,6 +2902,10 @@ public class GlobalStateMgr {
 
     public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
         this.alter.replayChangeMaterializedViewRefreshScheme(log);
+    }
+
+    public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
+        this.alter.replayAlterMaterializedViewProperties(opCode, log);
     }
 
     /*
@@ -2933,6 +3022,10 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
+        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        }
         ctx.setCurrentCatalog(newCatalogName);
     }
 
@@ -2953,15 +3046,20 @@ public class GlobalStateMgr {
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
+            if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                    !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
             ctx.setCurrentCatalog(newCatalogName);
         }
 
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
+        // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }
@@ -3102,7 +3200,8 @@ public class GlobalStateMgr {
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable)) {
-                throw new StarRocksConnectorException("table : " + tableName + " not exists, or is not hive/hudi external table");
+                throw new StarRocksConnectorException(
+                        "table : " + tableName + " not exists, or is not hive/hudi external table");
             }
             hmsTable = (HiveMetaStoreTable) table;
         } finally {
@@ -3167,7 +3266,8 @@ public class GlobalStateMgr {
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
                                                               List<Long> tmpPartitionIds) {
-        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds, tmpPartitionIds);
+        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
+                tmpPartitionIds);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
@@ -3176,6 +3276,10 @@ public class GlobalStateMgr {
 
     public void replayTruncateTable(TruncateTableInfo info) {
         localMetastore.replayTruncateTable(info);
+    }
+
+    public void updateResourceUsage(long backendId, TResourceUsage usage) {
+        nodeMgr.updateResourceUsage(backendId, usage);
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
@@ -3298,7 +3402,7 @@ public class GlobalStateMgr {
 
     }
 
-    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
+    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         usingNewPrivilege.set(true);
@@ -3368,6 +3472,11 @@ public class GlobalStateMgr {
             backupHandler.removeOldJobs();
         } catch (Throwable t) {
             LOG.warn("backup handler clean old jobs failed", t);
+        }
+        try {
+            streamLoadManager.cleanOldStreamLoadTasks();
+        } catch (Throwable t) {
+            LOG.warn("delete handler remove old delete info failed", t);
         }
     }
 

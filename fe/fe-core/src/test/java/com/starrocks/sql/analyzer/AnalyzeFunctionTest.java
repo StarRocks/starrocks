@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.StringLiteral;
@@ -114,6 +127,12 @@ public class AnalyzeFunctionTest {
 
         analyzeFail("select time_slice(th, interval 1 second, FCEILK) from tall",
                 "time_slice must use FLOOR/CEIL as third parameter");
+
+        analyzeFail("select time_slice('2023-12-31 03:12:04',interval -3.2 day)",
+                "time_slice requires second parameter must be a constant interval");
+
+        analyzeFail("select date_slice('2023-12-31',interval -3.2 day)",
+                "date_slice requires second parameter must be a constant interval");
     }
 
     @Test
@@ -147,61 +166,61 @@ public class AnalyzeFunctionTest {
         QueryStatement queryStatement =
                 (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 day)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01 00:00:00', interval 2 day)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 minute)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 MINUTE)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01 00:00:00', interval 2 minute)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 MINUTE)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampadd(day, 2, '2022-01-01')");
         Assert.assertEquals("SELECT timestampadd(DAY, 2, '2022-01-01 00:00:00')",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', 2)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 year)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_sub('2022-01-01', interval 2 year)");
         Assert.assertEquals("SELECT date_sub('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select subdate('2022-01-01', interval 2 year)");
         Assert.assertEquals("SELECT subdate('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 year)");
         Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(day, '2020-01-01', '2020-01-03')");
         Assert.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess(
                 "select timestampdiff(day, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
         Assert.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(minute, '2020-01-01', '2020-01-03')");
         Assert.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess(
                 "select timestampdiff(minute, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
         Assert.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
-                AST2SQL.toString(queryStatement.getQueryRelation()));
+                AstToStringBuilder.toString(queryStatement.getQueryRelation()));
     }
 
     @Test

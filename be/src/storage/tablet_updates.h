@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -32,10 +44,11 @@ class TTabletInfo;
 namespace vectorized {
 class ChunkIterator;
 class CompactionState;
-class Schema;
+class VectorizedSchema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
+class ChunkAllocator;
 } // namespace vectorized
 
 struct CompactionInfo {
@@ -48,6 +61,8 @@ struct CompactionInfo {
 class TabletUpdates {
 public:
     using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using segment_rowid_t = uint32_t;
+    using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
@@ -161,6 +176,8 @@ public:
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         vectorized::ChunkChanger* chunk_changer);
 
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version);
+
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
@@ -228,6 +245,9 @@ public:
 
     Status get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& missing_version_ranges,
                                                 std::vector<RowsetSharedPtr>& rowsets);
+
+    void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                           std::vector<RowsetMetaPB>& rowset_metas_pb);
 
 private:
     friend class Tablet;
@@ -303,6 +323,10 @@ private:
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
     void _calc_compaction_score(RowsetStats* stats);
+
+    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
+                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, std::int64_t tablet_id,
+                      DeletesMap* new_deletes);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
@@ -398,6 +422,8 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
+
+    vectorized::ChunkAllocator* _chunk_allocator = nullptr;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;

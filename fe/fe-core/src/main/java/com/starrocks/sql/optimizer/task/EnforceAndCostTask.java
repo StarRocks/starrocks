@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.task;
 
@@ -283,11 +296,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         double leftOutputSize = leftChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex - 1));
         double rightOutputSize = rightChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex));
 
-        int parallelExecInstance = CostModel.getParallelExecInstanceNum(
-                groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum());
-        if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * sv.getBroadcastRightTableScaleFactor()
-                && rightChildStats.getOutputRowCount() >
-                sv.getBroadcastRowCountLimit()) {
+        if (leftOutputSize < rightOutputSize * beNum * sv.getBroadcastRightTableScaleFactor()
+                && rightChildStats.getOutputRowCount() > sv.getBroadcastRowCountLimit()) {
             return false;
         }
         return true;
@@ -307,7 +317,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                                        List<PhysicalPropertySet> childrenOutputProperties) {
         // re-calculate local cost and update total cost
         curTotalCost -= localCost;
-        localCost = CostModel.calculateCost(groupExpression);
+        localCost = CostModel.calculateCostWithChildrenOutProperty(groupExpression, childrenOutputProperties);
         curTotalCost += localCost;
 
         setSatisfiedPropertyWithCost(outputProperty, childrenOutputProperties);
@@ -444,7 +454,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                  * because repartition require sort again
                  */
                 PhysicalPropertySet newProperty =
-                        new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY);
+                        new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+                                outputProperty.getCteProperty());
                 groupExpression.getGroup().replaceBestExpressionProperty(outputProperty, newProperty,
                         groupExpression.getCost(outputProperty));
                 enforcedProperty = enforceSortAndDistribute(newProperty, requiredProperty);

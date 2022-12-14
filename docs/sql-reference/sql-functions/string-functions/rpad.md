@@ -1,16 +1,16 @@
 # rpad
 
-## description
+## Description
 
-### Syntax
+This function returns strings with a length of len (starting counting from the first syllable) in str. If len is longer than str, the return value is lengthened to len characters by adding pad characters in front of str.  If str is longer than len, the return value is shortened to len characters. Len means the length of characters, not bytes.
+
+## Syntax
 
 ```Haskell
 VARCHAR rpad(VARCHAR str, INT len, VARCHAR pad)
 ```
 
-This function returns strings with a length of len (starting counting from the first syllable) in str. If len is longer than str, the return value is lengthened to len characters by adding pad characters in front of str.  If str is longer than len, the return value is shortened to len characters. Len means the length of characters, not bytes.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT rpad("hi", 5, "xy");

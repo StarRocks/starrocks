@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "column/array_column.h"
 
@@ -81,6 +93,12 @@ void ArrayColumn::append_datum(const Datum& datum) {
         _elements->append_datum(array[i]);
     }
     _offsets->append(_offsets->get_data().back() + array_size);
+}
+
+void ArrayColumn::append_array_element(const Column& elem, size_t null_elem) {
+    _elements->append(elem);
+    _elements->append_nulls(null_elem);
+    _offsets->append(_offsets->get_data().back() + elem.size() + null_elem);
 }
 
 void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
@@ -444,6 +462,19 @@ Datum ArrayColumn::get(size_t idx) const {
         res[i] = _elements->get(offset + i);
     }
     return {res};
+}
+
+std::pair<size_t, size_t> ArrayColumn::get_element_offset_size(size_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size());
+    size_t offset = _offsets->get_data()[idx];
+    size_t size = _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
+    return {offset, size};
+}
+
+size_t ArrayColumn::get_element_null_count(size_t idx) const {
+    auto offset_size = get_element_offset_size(idx);
+    auto nullable = down_cast<NullableColumn*>(_elements.get());
+    return nullable->null_count(offset_size.first, offset_size.second);
 }
 
 size_t ArrayColumn::get_element_size(size_t idx) const {

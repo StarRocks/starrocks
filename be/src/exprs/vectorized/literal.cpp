@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/literal.h"
 
@@ -20,7 +32,7 @@ namespace starrocks::vectorized {
         break;                                                                              \
     }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
     static_assert(pt_is_decimal<PT>);
     RunTimeCppType<PT> value;
@@ -32,7 +44,7 @@ static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
     return value;
 }
 
-template <PrimitiveType DecimalType, typename = DecimalPTGuard<DecimalType>>
+template <LogicalType DecimalType, typename = DecimalPTGuard<DecimalType>>
 static ColumnPtr const_column_from_literal(const TExprNode& node, int precision, int scale) {
     using CppType = RunTimeCppType<DecimalType>;
     using ColumnType = RunTimeColumnType<DecimalType>;
@@ -82,7 +94,7 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
-        // @IMPORTANT: build slice though get_data, else maybe will case multi-thread crash in scanner
+        // @IMPORTANT: build slice though get_data, else maybe will cause multi-thread crash in scanner
         _value = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(node.string_literal.value), 1);
         break;
     }
@@ -124,6 +136,11 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
         _value = const_column_from_literal<TYPE_DECIMAL128>(node, this->type().precision, this->type().scale);
         break;
     }
+    case TYPE_VARBINARY: {
+        // @IMPORTANT: build slice though get_data, else maybe will cause multi-thread crash in scanner
+        _value = ColumnHelper::create_const_column<TYPE_VARBINARY>(Slice(node.binary_literal.value), 1);
+        break;
+    }
     default:
         DCHECK(false) << "Vectorized engine not implement type: " << _type.type;
         break;
@@ -137,7 +154,7 @@ VectorizedLiteral::VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& ty
 
 #undef CASE_TYPE_COLUMN
 
-ColumnPtr VectorizedLiteral::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
     ColumnPtr column = _value->clone_empty();
     column->append(*_value, 0, 1);
     if (ptr != nullptr) {

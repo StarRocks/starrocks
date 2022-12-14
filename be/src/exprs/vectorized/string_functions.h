@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -8,12 +20,11 @@
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/function_helper.h"
-#include "udf/udf.h"
 #include "util/url_parser.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 struct PadState {
     bool is_const;
@@ -273,10 +284,8 @@ public:
      */
     DEFINE_VECTORIZED_FN(split);
 
-    static Status split_prepare(starrocks_udf::FunctionContext* context,
-                                starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status split_close(starrocks_udf::FunctionContext* context,
-                              starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status split_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status split_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, delimiter, field]
@@ -286,12 +295,9 @@ public:
     DEFINE_VECTORIZED_FN(split_part);
 
     // regex method
-    static Status regexp_extract_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status regexp_replace_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status regexp_close(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value, pattern_value, index_value
@@ -312,62 +318,57 @@ public:
      * @paramType: [DoubleColumn]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_double(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_double(FunctionContext* context,
+                                                   const starrocks::vectorized::Columns& columns);
 
     /**
      * @param: [BIGINT]
      * @paramType: [Int64Column]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_bigint(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_bigint(FunctionContext* context,
+                                                   const starrocks::vectorized::Columns& columns);
 
     /**
      * @param: [DECIMALV2]
      * @paramType: [DecimalColumn]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_largeint(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_largeint(FunctionContext* context,
+                                                     const starrocks::vectorized::Columns& columns);
 
     /**
      * @param: [LARGEINT]
      * @paramType: [Int128Column]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_decimalv2val(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_decimalv2val(FunctionContext* context,
+                                                         const starrocks::vectorized::Columns& columns);
 
-    template <PrimitiveType Type>
-    static ColumnPtr money_format_decimal(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> money_format_decimal(FunctionContext* context,
+                                                    const starrocks::vectorized::Columns& columns);
 
     // parse's auxiliary method
-    static Status parse_url_prepare(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status parse_url_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status parse_url_close(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status parse_url_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status sub_str_prepare(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status sub_str_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status sub_str_close(starrocks_udf::FunctionContext* context,
-                                starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status sub_str_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status left_or_right_prepare(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status left_or_right_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status left_or_right_close(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status left_or_right_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status concat_prepare(starrocks_udf::FunctionContext* context,
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status concat_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status concat_close(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status concat_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status pad_prepare(starrocks_udf::FunctionContext* context,
-                              starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status pad_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    static Status pad_close(starrocks_udf::FunctionContext* context,
-                            starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status pad_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     /**
    * string_value is a url, part_value indicate a part of the url, return url's corresponding value;
    * part_values is fixed: "AUTHORITY"/"FILE"/"HOST"/"PROTOCOL" and so on.
@@ -404,13 +405,24 @@ public:
      */
     DEFINE_VECTORIZED_FN(sm3);
 
+    /**
+     * Compare two strings. Returns 0 if lhs and rhs compare equal,
+     * -1 if lhs appears before rhs in lexicographical order,
+     * 1 if lhs appears after rhs in lexicographical order.
+     *
+     * @param: [string_value, string_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: IntColumn
+     */
+    DEFINE_VECTORIZED_FN(strcmp);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
-    static Status hs_compile_and_alloc_scratch(const std::string&, StringFunctionsState*,
-                                               starrocks_udf::FunctionContext*, const Slice& slice);
+    static Status hs_compile_and_alloc_scratch(const std::string&, StringFunctionsState*, FunctionContext*,
+                                               const Slice& slice);
 
 private:
     struct CurrencyFormat : std::moneypunct<char> {
@@ -436,17 +448,18 @@ private:
         ParseUrlState() : url_part() {}
     };
 
-    static ColumnPtr parse_url_general(FunctionContext* context, const starrocks::vectorized::Columns& columns);
-    static ColumnPtr parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                     const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context,
+                                                 const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
+                                               const starrocks::vectorized::Columns& columns);
 
-    template <PrimitiveType Type, bool scale_up, bool check_overflow>
+    template <LogicalType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                  size_t num_rows, int adjust_scale,
                                                  ColumnBuilder<TYPE_VARCHAR>* result);
 };
 
-template <PrimitiveType Type, bool scale_up, bool check_overflow>
+template <LogicalType Type, bool scale_up, bool check_overflow>
 void StringFunctions::money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                 size_t num_rows, int adjust_scale,
                                                 ColumnBuilder<TYPE_VARCHAR>* result) {
@@ -481,9 +494,9 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
     }
 }
 
-template <PrimitiveType Type>
-ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
-                                                const starrocks::vectorized::Columns& columns) {
+template <LogicalType Type>
+StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* context,
+                                                          const starrocks::vectorized::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     using CppType = RunTimeCppType<Type>;
     static_assert(pt_is_decimal<Type>, "Invalid decimal type");
@@ -503,5 +516,4 @@ ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

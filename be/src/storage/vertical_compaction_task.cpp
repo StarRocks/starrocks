@@ -1,10 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/vertical_compaction_task.h"
 
 #include <vector>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
@@ -104,7 +116,8 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      vectorized::RowSourceMaskBuffer* mask_buffer,
                                                      std::vector<vectorized::RowSourceMask>* source_masks,
                                                      Statistics* statistics) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
+    vectorized::VectorizedSchema schema =
+            ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
     vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
                                     output_rs_writer->version(), schema, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
@@ -168,7 +181,7 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
 
 StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chunk_size,
                                                        const std::vector<uint32_t>& column_group,
-                                                       const vectorized::Schema& schema,
+                                                       const vectorized::VectorizedSchema& schema,
                                                        vectorized::TabletReader* reader, RowsetWriter* output_rs_writer,
                                                        vectorized::RowSourceMaskBuffer* mask_buffer,
                                                        std::vector<vectorized::RowSourceMask>* source_masks) {

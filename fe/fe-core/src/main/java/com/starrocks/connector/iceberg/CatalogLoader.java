@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.iceberg;
 
@@ -39,6 +52,10 @@ public interface CatalogLoader {
 
     static CatalogLoader glue(String name, Configuration hadoopConf, Map<String, String> properties) {
         return new GlueCatalogLoader(name, hadoopConf, properties);
+    }
+
+    static CatalogLoader rest(String name, Configuration hadoopConf, Map<String, String> properties) {
+        return new RESTCatalogLoader(name, hadoopConf, properties);
     }
 
     class GlueCatalogLoader implements CatalogLoader {
@@ -134,6 +151,34 @@ public interface CatalogLoader {
                     .add("name", name)
                     .add("catalogImpl", catalogImpl)
                     .toString();
+        }
+    }
+
+    class RESTCatalogLoader implements CatalogLoader {
+        private final String catalogName;
+        private final SerializableConfiguration hadoopConf;
+        private final String uri;
+        private final Map<String, String> properties;
+
+        private RESTCatalogLoader(String catalogName, Configuration conf, Map<String, String> properties) {
+            this.catalogName = catalogName;
+            this.hadoopConf = new SerializableConfiguration(conf);
+            this.uri = properties.get(CatalogProperties.URI);
+            this.properties = Maps.newHashMap(properties);
+        }
+
+        @Override
+        public Catalog loadCatalog() {
+            return CatalogUtil.loadCatalog(IcebergRESTCatalog.class.getName(), catalogName, properties,
+                hadoopConf.get());
+        }
+
+        @Override
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("catalogName", catalogName)
+                .add("uri", uri)
+                .toString();
         }
     }
 }

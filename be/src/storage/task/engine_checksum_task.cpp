@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/task/engine_checksum_task.cpp
 
@@ -70,18 +83,18 @@ Status EngineChecksumTask::_compute_checksum() {
 
     size_t num_columns = tablet_schema.num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-        FieldType type = tablet_schema.column(i).type();
+        LogicalType type = tablet_schema.column(i).type();
         // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
         // a fixed value, so these two types are ignored in calculating checksum.
         // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
-        if (type == OLAP_FIELD_TYPE_FLOAT || type == OLAP_FIELD_TYPE_DOUBLE || type == OLAP_FIELD_TYPE_HLL ||
-            type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE || type == OLAP_FIELD_TYPE_JSON) {
+        if (type == TYPE_FLOAT || type == TYPE_DOUBLE || type == TYPE_HLL || type == TYPE_OBJECT ||
+            type == TYPE_PERCENTILE || type == TYPE_JSON) {
             continue;
         }
         return_columns.push_back(i);
     }
 
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
 
     vectorized::TabletReader reader(tablet, Version(0, _version), schema);
 

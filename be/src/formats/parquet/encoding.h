@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <fmt/format.h>
 
 #include <functional>
 #include <memory>
@@ -70,6 +84,19 @@ public:
     // Currently, this function is only used to read dictionary values.
     virtual Status next_batch(size_t count, uint8_t* dst) {
         return Status::NotSupported("next_batch is not supported");
+    }
+
+    template <typename TC, typename TD>
+    Status check_dict_code_out_of_range(const std::vector<TC>& codes, const std::vector<TD>& dict) {
+        size_t size = dict.size();
+        size_t count = codes.size();
+        for (int i = 0; i < count; ++i) {
+            if (codes[i] >= size) {
+                return Status::InternalError(
+                        fmt::format("dict code is out of range. code = {}, size = {}", codes[i], size));
+            }
+        }
+        return Status::OK();
     }
 };
 

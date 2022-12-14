@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/column_predicate_rewriter.h"
 
@@ -13,6 +25,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/object_pool.h"
+#include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -26,13 +39,13 @@
 #include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
-constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
+constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
     // so we only need to check the first `predicate_column_size` fields
     for (size_t i = 0; i < _column_size; i++) {
-        const FieldPtr& field = _schema.field(i);
+        const VectorizedFieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         if (_need_rewrite[cid]) {
             RETURN_IF_ERROR(_rewrite_predicate(pool, field));
@@ -41,7 +54,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     return Status::OK();
 }
 
-StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPtr& field) {
+StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const VectorizedFieldPtr& field) {
     auto cid = field->id();
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
     auto iter = _predicates.find(cid);
@@ -346,7 +359,8 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
 
     DCHECK_IF_ERROR(filter->prepare(state));
     DCHECK_IF_ERROR(filter->open(state));
-    *ptr = new ColumnExprPredicate(get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc());
+    ASSIGN_OR_RETURN(*ptr, ColumnExprPredicate::make_column_expr_predicate(
+                                   get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc()))
     filter->close(state);
 
     return true;

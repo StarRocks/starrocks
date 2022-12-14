@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/json_functions.h"
 
@@ -11,11 +23,13 @@
 
 #include "butil/time.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/strings/strip.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 #include "util/json.h"
 
 namespace starrocks::vectorized {
@@ -58,117 +72,6 @@ public:
 public:
     TExprNode expr_node;
 };
-
-TEST_F(JsonFunctionsTest, get_json_intTest) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns columns;
-    auto ints = BinaryColumn::create();
-    auto ints2 = BinaryColumn::create();
-
-    std::string values[] = {R"({"k1":1, "k2":"2"})", R"({"k1":"v1", "my.key":[1, 2, 3]})"};
-    std::string strs[] = {"$.k1", "$.\"my.key\"[1]"};
-    int length_ints[] = {1, 2};
-
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ints->append(values[j]);
-        ints2->append(strs[j]);
-    }
-
-    columns.emplace_back(ints);
-    columns.emplace_back(ints2);
-
-    ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
-
-    ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
-
-    auto v = ColumnHelper::cast_to<TYPE_INT>(result);
-
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ASSERT_EQ(length_ints[j], v->get_data()[j]);
-    }
-
-    ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
-}
-
-TEST_F(JsonFunctionsTest, get_json_doubleTest) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns columns;
-    auto doubles = BinaryColumn::create();
-    auto doubles2 = BinaryColumn::create();
-
-    std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
-    std::string strs[] = {"$.k1", "$.\"my.key\"[1]"};
-    double length_doubles[] = {1.3, 2.2};
-
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        doubles->append(values[j]);
-        doubles2->append(strs[j]);
-    }
-
-    columns.emplace_back(doubles);
-    columns.emplace_back(doubles2);
-
-    ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
-
-    ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns);
-
-    auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
-
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ASSERT_EQ(length_doubles[j], v->get_data()[j]);
-    }
-
-    ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
-}
-
-TEST_F(JsonFunctionsTest, get_json_stringTest) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns columns;
-    auto strings = BinaryColumn::create();
-    auto strings2 = BinaryColumn::create();
-
-    std::string values[] = {R"({"k1":"v1", "k2":"v2"})",
-                            R"({"k1":"v1", "my.key":["e1", "e2", "e3"]})",
-                            R"({"k1.key":{"k2":["v1", "v2"]}})",
-                            R"([{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}])",
-                            R"({"key":  "qu\"ote"})",
-                            R"({"key":  "esca\\ped"})"};
-
-    std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$[*].k1", "$.key", "$.key"};
-    std::string length_strings[] = {"v1", "e2", "v1", R"(["v1", "v3", "v4"])", "qu\"ote", "esca\\ped"};
-
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        strings->append(values[j]);
-        strings2->append(strs[j]);
-    }
-
-    columns.emplace_back(strings);
-    columns.emplace_back(strings2);
-
-    ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
-
-    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
-
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
-    }
-
-    ASSERT_TRUE(JsonFunctions::native_json_path_close(
-                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                        .ok());
-}
 
 TEST_F(JsonFunctionsTest, get_json_string_casting) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -216,11 +119,11 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
     columns.emplace_back(strings);
     columns.emplace_back(strings2);
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
@@ -252,11 +155,11 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     columns.emplace_back(strings);
     columns.emplace_back(strings2);
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
@@ -287,12 +190,12 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(doubles);
         columns.emplace_back(doubles2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -322,12 +225,12 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(str_values);
         columns.emplace_back(str_values2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -357,12 +260,12 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(ints);
         columns.emplace_back(ints2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -392,12 +295,12 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         columns.emplace_back(ints);
         columns.emplace_back(ints2);
 
-        ctx.get()->impl()->set_constant_columns(columns);
+        ctx.get()->set_constant_columns(columns);
         ASSERT_TRUE(
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -447,10 +350,10 @@ TEST_P(JsonQueryTestFixture, json_query) {
 
     Columns columns{ints, builder.build(true)};
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     StripWhiteSpace(&param_result);
@@ -498,6 +401,18 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(R"( {"k1": [1,2,3]} )", "$.k1[0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [1,2,3]} )", "$.k1[3]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [1,2,3]} )", "$.k1[-1]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[0][0]", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[0][1]", R"( 2 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[0][2]", R"( 3 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[0][3]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[1][0]", R"( 4 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[1][2]", R"( 6 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[2][0]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[2]]]]]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[[[[[2]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[[1,2,3]]]} )", "$.k1[0][0][0]", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", "$.k1[0].k2[0][0]", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", "$.k1[0].k2[1][0]", R"( 3 )"),
 
                 // nested object
                 std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", "$.k1", R"( {"k2": {"k3": 1}} )"),
@@ -528,6 +443,8 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(R"( [{"k1": 1}, {"k2": 2}] )", "$[*].k1",   R"( [1] )"),
                 std::make_tuple(R"( [{"k1": 1}, {"k2": 2}] )", "$[*].k2",   R"( [2] )"),
                 std::make_tuple(R"( [{"k1": 1}, {"k2": 2}] )", "$[*]",      R"( [{"k1": 1}, {"k2": 2}] )"),
+                std::make_tuple(R"( [[[0, 1, 2]]] )", "$[0][0][0]",      R"( 0 )"),
+                std::make_tuple(R"( [[[0, 1, 2]]] )", "$[0][0][1]",      R"( 1 )"),
 
                 // array result
                 std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", "$.k1[*].k2", R"( [1, 2] )"),
@@ -561,14 +478,14 @@ TEST_P(JsonExistTestFixture, json_exists) {
 
     Columns columns{ints, builder.build(true)};
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     if (!st.ok()) {
         ASSERT_FALSE(param_exist);
         return;
     }
 
-    ColumnPtr result = JsonFunctions::json_exists(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_exists(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     if (param_exist) {
@@ -601,9 +518,9 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
                                            std::make_tuple(R"({"k1": {"k2": {"k3": 1}}})", "$.k1.k2.k4", false),
                                            std::make_tuple(R"({"k1": [{"k2": 1}]})", "$.k1[0].k3", false),
 
-                                           // TODO(mofei) nested array not supported
+                                           //  nested array
                                            std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][1]", false),
-                                           std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][0]", false),
+                                           std::make_tuple(R"({"k1": [[1]]})", "$.k1[0][0]", true),
 
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
@@ -613,44 +530,67 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
                                            // error case
                                            std::make_tuple(R"( {"k1": null} )", std::string(10, 0x1), false)));
 
-class JsonParseTestFixture : public ::testing::TestWithParam<std::tuple<std::string, bool>> {};
+class JsonParseTestFixture : public ::testing::TestWithParam<std::tuple<std::string, bool, std::string>> {};
 
 TEST_P(JsonParseTestFixture, json_parse) {
+    auto [param_json, param_ok, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
     auto ints = BinaryColumn::create();
-
-    std::string param_json = std::get<0>(GetParam());
-    bool param_ok = std::get<1>(GetParam());
     ints->append(param_json);
-
     Columns columns{ints};
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
 
-    ColumnPtr result = JsonFunctions::parse_json(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::parse_json(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     Datum datum = result->get(0);
     if (param_ok) {
         ASSERT_FALSE(datum.is_null());
-        std::string json_str = datum.get_json()->to_string().value();
+        const JsonValue* json_value = datum.get_json();
+        ASSERT_TRUE(!!json_value);
+        std::string json_str = json_value->to_string().value();
         StripWhiteSpace(&json_str);
         StripWhiteSpace(&param_json);
-        ASSERT_EQ(param_json, json_str);
+        if (!expected.empty()) {
+            ASSERT_EQ(expected, param_json);
+        } else {
+            ASSERT_EQ(param_json, json_str);
+        }
     } else {
         ASSERT_TRUE(datum.is_null());
     }
 }
 
 INSTANTIATE_TEST_SUITE_P(JsonParseTest, JsonParseTestFixture,
-                         ::testing::Values(std::make_tuple(R"( {"k1": 1} )", true), std::make_tuple(R"( 1 )", true),
-                                           std::make_tuple(R"( 2.1 )", true), std::make_tuple(R"( null )", true),
-                                           std::make_tuple(R"( true )", true), std::make_tuple(R"( "a" )", true),
+                         ::testing::Values(
+                                 // clang-format off
+                                 
+                                 // Parse as json object/array
+                                 std::make_tuple(R"( {"k1": 1} )", true, ""), 
+                                 std::make_tuple(R"( [1, 2, 3] )", true, ""), 
+                                 std::make_tuple(R"( [] )", true, ""),
+                                 std::make_tuple(R"( "a" )", true, ""),
+                                 std::make_tuple(R"( "1" )", true, ""),
 
-                                           // failure
-                                           std::make_tuple(R"( {"k1": 1 )", false),
-                                           std::make_tuple(R"( [,,,,,,] )", false), std::make_tuple(R"( [1, )", false),
-                                           std::make_tuple(R"( 1+1 )", false), std::make_tuple(R"( "1 )", false),
-                                           std::make_tuple(R"( 2.x )", false), std::make_tuple(R"( nul )", false)));
+                                 // Parse as string
+                                 std::make_tuple(R"( 2.1 )", true, R"(2.1)"), 
+                                 std::make_tuple(R"( 1 )", true, R"(1)"), 
+                                 std::make_tuple(R"( 1e5 )", true, R"(1e5)"), 
+                                 std::make_tuple(R"( a1 )", true, R"(a1)"), 
+                                 std::make_tuple(R"( 1a )", true, R"(1a)"), 
+                                 std::make_tuple(R"( 1+1 )", true, "1+1"),
+                                 std::make_tuple(R"( 2.x )", true, "2.x"),
+                                 std::make_tuple(R"( nul )", true, "nul"),
+
+                                 // failure
+                                 std::make_tuple(R"( {"k1": 1 )", false, ""),
+                                 std::make_tuple(R"( [,,,,,,] )", false, ""),
+                                 std::make_tuple(R"( [1, )", false, ""),
+                                 std::make_tuple(R"( "1 )", false, "")
+
+                                 // clang-format on
+                                 ));
 
 class JsonArrayTestFixture : public ::testing::TestWithParam<std::tuple<std::vector<std::string>, std::string>> {};
 
@@ -668,13 +608,13 @@ TEST_P(JsonArrayTestFixture, json_array) {
         columns.emplace_back(std::move(column));
     }
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
 
     ColumnPtr result;
     if (param_json.empty()) {
-        result = JsonFunctions::json_array_empty(ctx.get(), columns);
+        result = JsonFunctions::json_array_empty(ctx.get(), columns).value();
     } else {
-        result = JsonFunctions::json_array(ctx.get(), columns);
+        result = JsonFunctions::json_array(ctx.get(), columns).value();
     }
     ASSERT_TRUE(!!result);
 
@@ -689,15 +629,17 @@ TEST_P(JsonArrayTestFixture, json_array) {
 INSTANTIATE_TEST_SUITE_P(
         JsonArrayTest, JsonArrayTestFixture,
         ::testing::Values(std::make_tuple(std::vector<std::string>{}, "[]"),
-                          std::make_tuple(std::vector<std::string>{"1", "2"}, "[1, 2]"),
-                          std::make_tuple(std::vector<std::string>{"1", "\"1\""}, "[1, \"1\"]"),
-                          std::make_tuple(std::vector<std::string>{"1", R"({"a":1})"}, R"([1, {"a": 1}])"),
-                          std::make_tuple(std::vector<std::string>{"null", R"(1)"}, R"([null, 1])"),
-                          std::make_tuple(std::vector<std::string>{"null", R"(null)"}, R"([null, null])"),
-                          std::make_tuple(std::vector<std::string>{"1", "1", "1"}, "[1, 1, 1]"),
-                          std::make_tuple(std::vector<std::string>{"1.1", "1.2"}, R"([1.1, 1.2])")));
+                          std::make_tuple(std::vector<std::string>{"1", "2"}, R"(["1", "2"])"),
+                          std::make_tuple(std::vector<std::string>{"1", "\"1\""}, R"(["1", "1"])"),
+                          std::make_tuple(std::vector<std::string>{"1", R"({"a":1})"}, R"(["1", {"a": 1}])"),
+                          std::make_tuple(std::vector<std::string>{"null", R"(1)"}, R"(["null", "1"])"),
+                          std::make_tuple(std::vector<std::string>{"null", R"(null)"}, R"(["null", "null"])"),
+                          std::make_tuple(std::vector<std::string>{"1", "1", "1"}, R"(["1", "1", "1"])"),
+                          std::make_tuple(std::vector<std::string>{"1.1", "1.2"}, R"(["1.1", "1.2"])")));
 
-class JsonObjectTestFixture : public ::testing::TestWithParam<std::tuple<std::vector<std::string>, std::string>> {};
+using JsonObjectTestParam = std::tuple<std::vector<std::string>, std::string>;
+
+class JsonObjectTestFixture : public ::testing::TestWithParam<JsonObjectTestParam> {};
 
 TEST_P(JsonObjectTestFixture, json_object) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -708,18 +650,18 @@ TEST_P(JsonObjectTestFixture, json_object) {
     for (const auto& json_str : param_json) {
         auto column = JsonColumn::create();
         auto json = JsonValue::parse(json_str);
-        ASSERT_TRUE(json.ok());
+        ASSERT_TRUE(json.ok()) << "parse json failed: " << json_str;
         column->append(&json.value());
         columns.emplace_back(std::move(column));
     }
 
-    ctx.get()->impl()->set_constant_columns(columns);
+    ctx.get()->set_constant_columns(columns);
 
     ColumnPtr result;
     if (param_json.empty()) {
-        result = JsonFunctions::json_object_empty(ctx.get(), columns);
+        result = JsonFunctions::json_object_empty(ctx.get(), columns).value();
     } else {
-        result = JsonFunctions::json_object(ctx.get(), columns);
+        result = JsonFunctions::json_object(ctx.get(), columns).value();
     }
     ASSERT_TRUE(!!result);
 
@@ -735,26 +677,30 @@ TEST_P(JsonObjectTestFixture, json_object) {
     ASSERT_EQ(param_result, json_str);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-        JsonObjectTest, JsonObjectTestFixture,
-        ::testing::Values(
-                std::make_tuple(std::vector<std::string>{}, "{}"),
-                std::make_tuple(std::vector<std::string>{R"("a")"}, R"({"a": null})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", R"("a")", R"("a")"}, R"({"a": "a", "a": null})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", R"("a")"}, R"({"a": "a"})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", "1"}, R"({"a": 1})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", "1.234"}, R"({"a": 1.234})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", "null"}, R"({"a": null})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", "true"}, R"({"a": true})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", "1", R"("b")", "2"}, R"({"a": 1, "b": 2})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", "[1,2]"}, R"({"a": [1, 2]})"),
-                std::make_tuple(std::vector<std::string>{R"("a")", R"({"b": 2})"}, R"({"a": {"b": 2}})"),
+INSTANTIATE_TEST_SUITE_P(JsonObjectTest, JsonObjectTestFixture,
+                         ::testing::Values(
+                                 // clang-format off
+                          JsonObjectTestParam(std::vector<std::string>{}, "{}"),
+                          JsonObjectTestParam({R"("a")", "1", R"("b")", ""}, R"( {"a": "1", "b": ""} )"),
+                          JsonObjectTestParam({R"("a")"}, R"({"a": null})"),
+                          JsonObjectTestParam({R"("a")", R"("a")", R"("a")"}, R"({"a": "a", "a": null})"),
+                          JsonObjectTestParam({R"("a")", R"("a")"}, R"({"a": "a"})"),
+                          JsonObjectTestParam({R"("a")", "1"}, R"({"a": "1"})"),
+                          JsonObjectTestParam({R"("a")", "1.234"}, R"({"a": "1.234"})"),
+                          JsonObjectTestParam({R"("a")", "null"}, R"({"a": "null"})"),
+                          JsonObjectTestParam({R"("a")", "true"}, R"({"a": "true"})"),
+                          JsonObjectTestParam({R"("a")", "1", R"("b")", "2"}, R"({"a": "1", "b": "2"})"),
+                          JsonObjectTestParam({R"("a")", "[1,2]"}, R"({"a": [1, 2]})"),
+                          JsonObjectTestParam({R"("a")", R"({"b": 2})"}, R"({"a": {"b": 2}})"),
 
-                // illegal object
-                std::make_tuple(std::vector<std::string>{"1", "1"}, "NULL"),
-                std::make_tuple(std::vector<std::string>{"1"}, "NULL"),
-                std::make_tuple(std::vector<std::string>{R"("a")", "1", "1"}, R"(NULL)"),
-                std::make_tuple(std::vector<std::string>{R"("")"}, R"(NULL)")));
+                          // illegal object
+                          JsonObjectTestParam({"1", "1"}, R"({"1": "1"})"), 
+                          JsonObjectTestParam({"1"}, R"({"1": null})"),
+                          JsonObjectTestParam({R"("a")", "1", "1"}, R"({"1": null, "a": "1"})"),
+                          JsonObjectTestParam({R"("")"}, R"(NULL)")
+
+                                 // clang-format on
+                                 ));
 
 TEST_F(JsonFunctionsTest, extract_from_object_test) {
     std::string output;
@@ -799,11 +745,11 @@ TEST_P(JsonLengthTestFixture, json_length_test) {
         columns.push_back(path_column);
     }
 
-    // ctx.get()->impl()->set_constant_columns(columns);
+    // ctx.get()->set_constant_columns(columns);
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     ASSERT_OK(st);
 
-    ColumnPtr result = JsonFunctions::json_length(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_length(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
     EXPECT_EQ(expect_length, result->get(0).get_int32());
 
@@ -852,7 +798,7 @@ TEST_P(JsonKeysTestFixture, json_keys) {
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     ASSERT_OK(st);
 
-    ColumnPtr result = JsonFunctions::json_keys(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_keys(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     if (param_result == "NULL") {
@@ -883,5 +829,141 @@ INSTANTIATE_TEST_SUITE_P(JsonKeysTest, JsonKeysTestFixture,
                          ));
 
 // clang-format on
+
+// 1: JSON Input
+// 2. Path
+// 3. get_json_int execpted result
+// 4. get_json_string expected result
+// 5. get_json_double expected result
+using GetJsonXXXParam = std::tuple<std::string, std::string, int, std::string, double>;
+
+class GetJsonXXXTestFixture : public ::testing::TestWithParam<GetJsonXXXParam> {
+public:
+    StatusOr<Columns> setup() {
+        _ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context());
+        auto ints = JsonColumn::create();
+        ColumnBuilder<TYPE_VARCHAR> builder(1);
+
+        std::string param_json = std::get<0>(GetParam());
+        std::string param_path = std::get<1>(GetParam());
+
+        JsonValue json;
+        Status st = JsonValue::parse(param_json, &json);
+        if (!st.ok()) {
+            return st;
+        }
+        ints->append(&json);
+        if (param_path == "NULL") {
+            builder.append_null();
+        } else {
+            builder.append(param_path);
+        }
+        Columns columns{ints, builder.build(true)};
+
+        _ctx->set_constant_columns(columns);
+        JsonFunctions::native_json_path_prepare(_ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        return columns;
+    }
+
+    void tear_down() {
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            _ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
+
+public:
+    std::unique_ptr<FunctionContext> _ctx;
+};
+
+TEST_P(GetJsonXXXTestFixture, get_json_int) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    int expected = std::get<2>(GetParam());
+
+    ColumnPtr result = JsonFunctions::get_native_json_int(_ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+
+    ASSERT_EQ(1, result->size());
+    Datum datum = result->get(0);
+    if (expected == 0) {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        int64_t value = datum.get_int32();
+        ASSERT_EQ(expected, value);
+    }
+}
+
+TEST_P(GetJsonXXXTestFixture, get_json_string) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    std::string param_result = std::get<3>(GetParam());
+    StripWhiteSpace(&param_result);
+
+    ColumnPtr result = JsonFunctions::get_native_json_string(_ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+
+    ASSERT_EQ(1, result->size());
+    Datum datum = result->get(0);
+    if (param_result == "NULL") {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        auto value = datum.get_slice();
+        std::string value_str(value);
+        ASSERT_EQ(param_result, value_str);
+    }
+}
+
+TEST_P(GetJsonXXXTestFixture, get_json_double) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    double expected = std::get<4>(GetParam());
+
+    ColumnPtr result = JsonFunctions::get_native_json_double(_ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+    ASSERT_EQ(1, result->size());
+
+    Datum datum = result->get(0);
+    if (expected == 0) {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        double value = datum.get_double();
+        ASSERT_EQ(expected, value);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, GetJsonXXXTestFixture,
+                         ::testing::Values(
+                                 // clang-format: off
+
+                                 std::make_tuple(R"( {"k1":1} )", "NULL", 0, "NULL", 0.0),
+                                 std::make_tuple(R"( {"k1":1} )", "$", 0, R"( {"k1": 1} )", 0.0),
+                                 std::make_tuple(R"( {"k1":1} )", "", 0, R"( NULL )", 0.0),
+                                 std::make_tuple(R"( {"k0": null} )", "$.k1", 0, "NULL", 0.0),
+                                 std::make_tuple(R"( {"k1": 1} )", "$.k1", 1, "1", 1.0),
+                                 std::make_tuple(R"( {"k1": -1} )", "$.k1", -1, R"( -1 )", -1),
+                                 std::make_tuple(R"( {"k1": 1.1} )", "$.k1", 1, R"( 1.1 )", 1.1),
+                                 std::make_tuple(R"( {"k1": 3.14} )", "$.k1", 3, R"( 3.14 )", 3.14),
+                                 std::make_tuple(R"( {"k1": null} )", "$.k1", 0, R"( NULL )", 0.0),
+                                 std::make_tuple(R"( {"k1": "value" } )", "$.k1", 0, R"( value )", 0.0),
+                                 std::make_tuple(R"( {"k1": {"k2": 1}} )", "$.k1", 0, R"( {"k2": 1} )", 0.0),
+                                 std::make_tuple(R"( {"k1": [1,2,3] } )", "$.k1", 0, R"( [1, 2, 3] )", 0.0),
+
+                                 // nested path
+                                 std::make_tuple(R"( {"k1.k2": [1,2,3] } )", "$.\"k1.k2\"", 0, R"( [1, 2, 3] )", 0.0)
+
+                                 // clang-format: on
+                                 ));
 
 } // namespace starrocks::vectorized

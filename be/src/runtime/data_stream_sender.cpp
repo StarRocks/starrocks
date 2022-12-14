@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/data_stream_sender.cpp
 
@@ -35,11 +48,10 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
@@ -49,6 +61,7 @@
 #include "util/compression/compression_utils.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -119,10 +132,7 @@ public:
 
     int64_t num_data_bytes_sent() const { return _num_data_bytes_sent; }
 
-    std::string get_fragment_instance_id_str() {
-        UniqueId uid(_fragment_instance_id);
-        return uid.to_string();
-    }
+    std::string get_fragment_instance_id_str() { return print_id(_fragment_instance_id); }
 
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
 
@@ -284,7 +294,8 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     _chunk_closure->cntl.Reset();
     _chunk_closure->cntl.set_timeout_ms(_brpc_timeout_ms);
     _chunk_closure->cntl.request_attachment().append(attachment);
-    _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure);
+    TRY_CATCH_BAD_ALLOC(
+            _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure));
     _request_seq++;
     return Status::OK();
 }
@@ -364,7 +375,6 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
-          _row_desc(row_desc),
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
           _profile(nullptr),
@@ -403,37 +413,16 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
     _request_bytes_threshold = config::max_transmit_batched_bytes;
 }
 
-// We use the PartitionRange to compare here. It should not be a member function of PartitionInfo
-// class because there are some other member in it.
-static bool compare_part_use_range(const PartitionInfo* v1, const PartitionInfo* v2) {
-    return v1->range() < v2->range();
-}
-
-Status DataStreamSender::init(const TDataSink& tsink) {
-    RETURN_IF_ERROR(DataSink::init(tsink));
+Status DataStreamSender::init(const TDataSink& tsink, RuntimeState* state) {
+    RETURN_IF_ERROR(DataSink::init(tsink, state));
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
+                                                &_partition_expr_ctxs, state));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
-        // Range partition
-        // Partition Exprs
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs));
-        // Partition infos
-        int num_parts = t_stream_sink.output_partition.partition_infos.size();
-        if (num_parts == 0) {
-            return Status::InternalError("Empty partition info.");
-        }
-        for (int i = 0; i < num_parts; ++i) {
-            PartitionInfo* info = _pool->add(new PartitionInfo());
-            RETURN_IF_ERROR(PartitionInfo::from_thrift(_pool, t_stream_sink.output_partition.partition_infos[i], info,
-                                                       _state->chunk_size()));
-            _partition_infos.push_back(info);
-        }
-        // partitions should be in ascending order
-        std::sort(_partition_infos.begin(), _partition_infos.end(), compare_part_use_range);
+        // NOTE: should never go here
+        return Status::NotSupported("Range partition is not supported anymore.");
     } else {
     }
 
@@ -474,11 +463,6 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
-    } else {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
-        for (auto iter : _partition_infos) {
-            RETURN_IF_ERROR(iter->prepare(state, _row_desc));
-        }
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
@@ -525,9 +509,6 @@ Status DataStreamSender::open(RuntimeState* state) {
     // RETURN_IF_ERROR(DataSink::open(state));
     DCHECK(state != nullptr);
     RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
-    for (auto iter : _partition_infos) {
-        RETURN_IF_ERROR(iter->open(state));
-    }
     return Status::OK();
 }
 
@@ -658,15 +639,6 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
     for (auto& _channel : _channels) {
         _channel->close_wait(state);
     }
-    for (auto iter : _partition_infos) {
-        auto st = iter->close(state);
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to close sender partition, st=" << st.to_string();
-            if (_close_status.ok()) {
-                _close_status = st;
-            }
-        }
-    }
     Expr::close(_partition_expr_ctxs, state);
 
     return _close_status;
@@ -680,12 +652,14 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
             if (!res.ok()) return res.status();
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src));
             if (!res.ok()) return res.status();
             res->Swap(dst);
         }

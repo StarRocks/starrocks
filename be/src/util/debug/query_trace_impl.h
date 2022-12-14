@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -17,10 +29,9 @@
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
 
-namespace starrocks {
-namespace debug {
+namespace starrocks::debug {
 
-class QueryTraceContext;
+struct QueryTraceContext;
 
 struct QueryTraceEvent {
     std::string name;
@@ -33,6 +44,7 @@ struct QueryTraceEvent {
     int64_t instance_id;
     // driver pointer
     std::uintptr_t driver;
+    std::thread::id thread_id;
     std::vector<std::pair<std::string, std::string>> args;
 
     std::string to_string();
@@ -96,7 +108,7 @@ private:
 class ScopedTracer {
 public:
     ScopedTracer(std::string name, std::string category);
-    ~ScopedTracer();
+    ~ScopedTracer() noexcept;
 
 private:
     std::string _name;
@@ -106,17 +118,19 @@ private:
 };
 
 struct QueryTraceContext {
+    static constexpr int64_t DEFAULT_EVENT_ID = 0;
+
     int64_t start_ts = -1;
     int64_t fragment_instance_id = -1;
     std::uintptr_t driver = 0;
-    int64_t id = -1; // used for async event
+    int64_t id = DEFAULT_EVENT_ID; // used for async event.
     EventBuffer* event_buffer = nullptr;
 
     void reset() {
         start_ts = -1;
         fragment_instance_id = -1;
         driver = 0;
-        id = -1;
+        id = DEFAULT_EVENT_ID;
         event_buffer = nullptr;
     }
 };
@@ -124,7 +138,7 @@ struct QueryTraceContext {
 inline thread_local QueryTraceContext tls_trace_ctx;
 
 #define INTERNAL_CREATE_EVENT_WITH_CTX(name, category, phase, ctx) \
-    starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, -1, phase, ctx)
+    starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, ctx.DEFAULT_EVENT_ID, phase, ctx)
 
 #define INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(name, category, id, phase, ctx) \
     starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, id, phase, ctx)
@@ -138,5 +152,4 @@ inline thread_local QueryTraceContext tls_trace_ctx;
             buffer->add(event);                       \
         }                                             \
     } while (0);
-} // namespace debug
-} // namespace starrocks
+} // namespace starrocks::debug

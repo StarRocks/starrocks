@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "udf/java/java_data_converter.h"
 
@@ -7,6 +19,8 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "common/compiler_util.h"
+#include "common/status.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \
@@ -19,7 +33,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 jvalue cast_to_jvalue(RunTimeCppType<TYPE> data_value, JVMFunctionHelper& helper);
 
 #define DEFINE_CAST_TO_JVALUE(TYPE, APPLY_FUNC)                                                \
@@ -46,7 +60,7 @@ void release_jvalue(bool is_box, jvalue val) {
 
 // Used For UDAF
 template <bool handle_null>
-jvalue cast_to_jvalue(PrimitiveType type, bool is_boxed, const Column* col, int row_num) {
+jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num) {
     DCHECK(handle_null || !col->is_nullable());
     DCHECK(!col->is_constant());
 
@@ -112,16 +126,16 @@ jvalue cast_to_jvalue(PrimitiveType type, bool is_boxed, const Column* col, int 
     return v;
 }
 
-template jvalue cast_to_jvalue<true>(PrimitiveType type, bool is_boxed, const Column* col, int row_num);
+template jvalue cast_to_jvalue<true>(LogicalType type, bool is_boxed, const Column* col, int row_num);
 
-template jvalue cast_to_jvalue<false>(PrimitiveType type, bool is_boxed, const Column* col, int row_num);
+template jvalue cast_to_jvalue<false>(LogicalType type, bool is_boxed, const Column* col, int row_num);
 
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val) {
     DCHECK(method_type_desc.is_box);
     auto& helper = JVMFunctionHelper::getInstance();
     Column* data_col = col;
-    if (col->is_nullable() && method_type_desc.type != PrimitiveType::TYPE_VARCHAR &&
-        method_type_desc.type != PrimitiveType::TYPE_CHAR) {
+    if (col->is_nullable() && method_type_desc.type != LogicalType::TYPE_VARCHAR &&
+        method_type_desc.type != LogicalType::TYPE_CHAR) {
         auto* nullable_column = down_cast<NullableColumn*>(col);
         if (val.l == nullptr) {
             nullable_column->set_null(row_num);
@@ -220,11 +234,17 @@ Status ConvertDirectBufferVistor::do_visit(const BinaryColumn& column) {
     return Status::OK();
 }
 
-jobject JavaDataTypeConverter::convert_to_states(uint8_t** data, size_t offset, int num_rows) {
+#define RETURN_NULL_WITH_REPORT_ERROR(cond, ctx, msg) \
+    if (UNLIKELY(cond)) {                             \
+        ctx->set_error(msg);                          \
+    }
+
+jobject JavaDataTypeConverter::convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, int num_rows) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
     int inputs[num_rows];
     jintArray arr = env->NewIntArray(num_rows);
+    RETURN_NULL_WITH_REPORT_ERROR(arr == nullptr, ctx, "OOM may happened in Java Heap");
     for (int i = 0; i < num_rows; ++i) {
         inputs[i] = reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle;
     }
@@ -232,12 +252,13 @@ jobject JavaDataTypeConverter::convert_to_states(uint8_t** data, size_t offset, 
     return arr;
 }
 
-jobject JavaDataTypeConverter::convert_to_states_with_filter(uint8_t** data, size_t offset, const uint8_t* filter,
-                                                             int num_rows) {
+jobject JavaDataTypeConverter::convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
+                                                             const uint8_t* filter, int num_rows) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
     int inputs[num_rows];
     jintArray arr = env->NewIntArray(num_rows);
+    RETURN_NULL_WITH_REPORT_ERROR(arr == nullptr, ctx, "OOM may happened in Java Heap");
     for (int i = 0; i < num_rows; ++i) {
         if (filter[i] == 0) {
             inputs[i] = reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle;
@@ -249,13 +270,13 @@ jobject JavaDataTypeConverter::convert_to_states_with_filter(uint8_t** data, siz
     return arr;
 }
 
-void JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                                   const Column** columns, int num_cols, int num_rows,
-                                                   std::vector<jobject>* res) {
+Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
+                                                     const Column** columns, int num_cols, int num_rows,
+                                                     std::vector<jobject>* res) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
     ConvertDirectBufferVistor vistor(*buffers);
-    PrimitiveType types[num_cols];
+    LogicalType types[num_cols];
     for (int i = 0; i < num_cols; ++i) {
         types[i] = ctx->get_arg_type(i)->type;
         jobject arg = nullptr;
@@ -275,7 +296,14 @@ void JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::ve
                                             buffers_sz);
         }
 
+        if (arg == nullptr) {
+            std::string err_msg = "OOM may happened in Java Heap";
+            ctx->set_error(err_msg.c_str());
+            return Status::InternalError(err_msg);
+        }
+
         res->emplace_back(arg);
     }
+    return Status::OK();
 }
 } // namespace starrocks::vectorized

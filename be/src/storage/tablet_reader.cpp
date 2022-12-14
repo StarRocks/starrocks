@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/tablet_reader.h"
 
@@ -26,13 +38,21 @@
 
 namespace starrocks::vectorized {
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
           _delete_predicates_version(version) {}
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema,
+                           const std::vector<RowsetSharedPtr>& captured_rowsets)
+        : ChunkIterator(std::move(schema)),
+          _tablet(std::move(tablet)),
+          _version(version),
+          _delete_predicates_version(version),
+          _rowsets(captured_rowsets) {}
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
@@ -56,14 +76,19 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
-    std::shared_lock l(_tablet->get_header_lock());
-    auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
-    if (!st.ok()) {
-        _rowsets.clear();
-        std::stringstream ss;
-        ss << "fail to init reader. tablet=" << _tablet->full_name() << "res=" << st;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str().c_str());
+    SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
+    Status st = Status::OK();
+    // Non-empty rowsets indicate that it is captured before creating this TabletReader.
+    if (_rowsets.empty()) {
+        std::shared_lock l(_tablet->get_header_lock());
+        st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+        if (!st.ok()) {
+            _rowsets.clear();
+            std::stringstream ss;
+            ss << "fail to init reader. tablet=" << _tablet->full_name() << "res=" << st;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str().c_str());
+        }
     }
     _stats.rowsets_read_count += _rowsets.size();
     Rowset::acquire_readers(_rowsets);
@@ -371,11 +396,11 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                     MemPool* mempool) {
-    Schema schema;
+    VectorizedSchema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
+        auto f = std::make_shared<VectorizedField>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
         schema.append(f);
         values.emplace_back(Datum());
         if (input.is_null(i)) {
@@ -384,9 +409,9 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // If the type of the storage level is CHAR,
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
-        if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
-            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
-                                              input.get_value(i), mempool));
+        if (f->type()->type() == TYPE_CHAR) {
+            RETURN_IF_ERROR(
+                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
         } else {
             RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
         }

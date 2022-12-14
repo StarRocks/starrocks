@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/PrimitiveType.java
 
@@ -68,11 +81,11 @@ public enum PrimitiveType {
 
     FUNCTION("FUNCTION", 8, TPrimitiveType.FUNCTION),
 
-    // Unsupported scalar types.
     BINARY("BINARY", -1, TPrimitiveType.BINARY),
+    VARBINARY("VARBINARY", 16, TPrimitiveType.VARBINARY),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
-    UNKNOWN_TYPE("UNKNOWN_TYPE", 0, TPrimitiveType.INVALID_TYPE);
+    UNKNOWN_TYPE("UNKNOWN_TYPE", -1, TPrimitiveType.INVALID_TYPE);
 
     private static final int DATE_INDEX_LEN = 3;
     private static final int DATETIME_INDEX_LEN = 8;
@@ -104,10 +117,12 @@ public enum PrimitiveType {
                     .build();
     // TODO(mofei) support them
     public static final ImmutableList<PrimitiveType> JSON_UNCOMPATIBLE_TYPE =
-            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION);
+            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
+
+    private static final ImmutableList<PrimitiveType> BINARY_TYPE_LIST = ImmutableList.of(VARBINARY);
 
     private static final ImmutableList<PrimitiveType> BASIC_TYPE_LIST =
             ImmutableList.<PrimitiveType>builder()
@@ -116,8 +131,17 @@ public enum PrimitiveType {
                     .addAll(NUMBER_TYPE_LIST)
                     .addAll(TIME_TYPE_LIST)
                     .addAll(STRING_TYPE_LIST)
+                    .addAll(BINARY_TYPE_LIST)
                     .build();
 
+    public static final ImmutableList<PrimitiveType> BINARY_INCOMPATIBLE_TYPE_LIST =
+            ImmutableList.<PrimitiveType>builder()
+                    .add(NULL_TYPE)
+                    .add(BOOLEAN)
+                    .addAll(NUMBER_TYPE_LIST)
+                    .addAll(TIME_TYPE_LIST)
+                    .addAll(STRING_TYPE_LIST)
+                    .build();
     private static final ImmutableSortedSet<String> VARIABLE_TYPE_SET =
             ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
                     .add(PrimitiveType.CHAR.toString())
@@ -140,7 +164,7 @@ public enum PrimitiveType {
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON));
+        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY));
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);
@@ -169,6 +193,9 @@ public enum PrimitiveType {
         builder.put(HLL, HLL);
         builder.put(BITMAP, BITMAP);
         builder.put(PERCENTILE, PERCENTILE);
+
+        // BINARY
+        builder.putAll(VARBINARY, BASIC_TYPE_LIST);
 
         // JSON
         builder.putAll(JSON, JSON);
@@ -249,8 +276,8 @@ public enum PrimitiveType {
                 return DATETIME;
             case TIME:
                 return TIME;
-            case BINARY:
-                return BINARY;
+            case VARBINARY:
+                return VARBINARY;
             case JSON:
                 return JSON;
             case FUNCTION:
@@ -392,6 +419,7 @@ public enum PrimitiveType {
                 break;
             case CHAR:
             case VARCHAR:
+            case VARBINARY:
                 // use 16 as char type estimate size
                 typeSize = 16;
                 break;
@@ -419,6 +447,17 @@ public enum PrimitiveType {
                 || this == INT
                 || this == BIGINT
                 || this == LARGEINT;
+    }
+
+    public boolean isVariableLengthType() {
+        switch (this) {
+            case CHAR:
+            case VARCHAR:
+            case VARBINARY:
+            case HLL:
+                return true;
+        }
+        return false;
     }
 
     public boolean isFloatingPointType() {
@@ -465,6 +504,10 @@ public enum PrimitiveType {
         return this == FUNCTION;
     }
 
+    public boolean isBinaryType() {
+        return this == BINARY || this == VARBINARY;
+    }
+
     public boolean isCharFamily() {
         return (this == VARCHAR || this == CHAR);
     }
@@ -509,6 +552,8 @@ public enum PrimitiveType {
                 return MysqlColType.MYSQL_TYPE_NEWDECIMAL;
             case VARCHAR:
                 return MysqlColType.MYSQL_TYPE_VAR_STRING;
+            case VARBINARY:
+                return MysqlColType.MYSQL_TYPE_BLOB;
             default:
                 return MysqlColType.MYSQL_TYPE_STRING;
         }

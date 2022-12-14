@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/service/internal_service.h
 
@@ -96,13 +109,43 @@ public:
                                 const PTriggerProfileReportRequest* request, PTriggerProfileReportResult* result,
                                 google::protobuf::Closure* done) override;
 
+    void collect_query_statistics(google::protobuf::RpcController* controller,
+                                  const PCollectQueryStatisticsRequest* request, PCollectQueryStatisticsResult* result,
+                                  google::protobuf::Closure* done) override;
+
     void get_info(google::protobuf::RpcController* controller, const PProxyRequest* request, PProxyResult* response,
                   google::protobuf::Closure* done) override;
 
     void get_pulsar_info(google::protobuf::RpcController* controller, const PPulsarProxyRequest* request,
                          PPulsarProxyResult* response, google::protobuf::Closure* done) override;
 
+    void submit_mv_maintenance_task(google::protobuf::RpcController* controller,
+                                    const PMVMaintenanceTaskRequest* request, PMVMaintenanceTaskResult* response,
+                                    google::protobuf::Closure* done) override;
+
 private:
+    void _transmit_chunk(::google::protobuf::RpcController* controller,
+                         const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
+                         ::google::protobuf::Closure* done);
+
+    void _transmit_runtime_filter(::google::protobuf::RpcController* controller,
+                                  const ::starrocks::PTransmitRuntimeFilterParams* request,
+                                  ::starrocks::PTransmitRuntimeFilterResult* response,
+                                  ::google::protobuf::Closure* done);
+
+    void _exec_plan_fragment(google::protobuf::RpcController* controller, const PExecPlanFragmentRequest* request,
+                             PExecPlanFragmentResult* result, google::protobuf::Closure* done);
+
+    void _exec_batch_plan_fragments(google::protobuf::RpcController* controller,
+                                    const PExecBatchPlanFragmentsRequest* request,
+                                    PExecBatchPlanFragmentsResult* result, google::protobuf::Closure* done);
+
+    void _cancel_plan_fragment(google::protobuf::RpcController* controller, const PCancelPlanFragmentRequest* request,
+                               PCancelPlanFragmentResult* result, google::protobuf::Closure* done);
+
+    void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
+                     PFetchDataResult* result, google::protobuf::Closure* done);
+
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
                         GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
 
@@ -111,7 +154,6 @@ private:
                                int timeout_ms);
 
     Status _exec_plan_fragment(brpc::Controller* cntl);
-    Status _exec_batch_plan_fragments(brpc::Controller* cntl);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);

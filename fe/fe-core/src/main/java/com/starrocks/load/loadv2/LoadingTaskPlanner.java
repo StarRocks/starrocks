@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/load/loadv2/LoadingTaskPlanner.java
 
@@ -61,7 +74,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -86,6 +99,7 @@ public class LoadingTaskPlanner {
     private final boolean partialUpdate;
     private final int parallelInstanceNum;
     private final long startTime;
+    private String mergeConditionStr;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -107,7 +121,7 @@ public class LoadingTaskPlanner {
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
             boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, Map<String, String> sessionVariables) {
+            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -118,6 +132,7 @@ public class LoadingTaskPlanner {
         this.analyzer.setTimezone(timezone);
         this.timeoutS = timeoutS;
         this.partialUpdate = partialUpdate;
+        this.mergeConditionStr = mergeConditionStr;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
         this.sessionVariables = sessionVariables;
@@ -190,13 +205,12 @@ public class LoadingTaskPlanner {
         descTable.computeMemLayout();
 
         // 2. Olap table sink
-        TWriteQuorumType writeQuorum = table.writeQuorum();
-
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true, writeQuorum);
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+                table.writeQuorum(), table.enableReplicatedStorage());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        olapTableSink.complete();
-
+        Load.checkMergeCondition(mergeConditionStr, table);
+        olapTableSink.complete(mergeConditionStr);
 
         // 3. Plan fragment
         PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
@@ -265,13 +279,11 @@ public class LoadingTaskPlanner {
         scanFragment.setOutputPartition(dataPartition);
 
         // 4. Olap table sink
-        TWriteQuorumType writeQuorum = table.writeQuorum();
-
         List<Long> partitionIds = getAllPartitionIds();
-
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true, writeQuorum);
-        olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        olapTableSink.complete();
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+                table.writeQuorum(), table.enableReplicatedStorage());
+        Load.checkMergeCondition(mergeConditionStr, table);
+        olapTableSink.complete(mergeConditionStr);
 
         // 6. Sink plan fragment
         sinkFragment.setSink(olapTableSink);
@@ -307,6 +319,10 @@ public class LoadingTaskPlanner {
         }
 
         if (table.getDefaultReplicationNum() <= 1) {
+            return false;
+        }
+
+        if (table.enableReplicatedStorage()) {
             return false;
         }
 
@@ -348,13 +364,13 @@ public class LoadingTaskPlanner {
 
     private List<Long> getAllPartitionIds() throws LoadException, MetaNotFoundException {
         Set<Long> partitionIds = Sets.newHashSet();
-        for (BrokerFileGroup brokerFileGroup : fileGroups) {
+        if (CollectionUtils.isNotEmpty(fileGroups)) {
+            // all file group in fileGroups should have same partitions, so only need to get partition ids
+            // from one of these file groups
+            BrokerFileGroup brokerFileGroup = fileGroups.get(0);
             if (brokerFileGroup.getPartitionIds() != null) {
                 partitionIds.addAll(brokerFileGroup.getPartitionIds());
             }
-            // all file group in fileGroups should have same partitions, so only need to get partition ids
-            // from one of these file groups
-            break;
         }
 
         if (partitionIds.isEmpty()) {

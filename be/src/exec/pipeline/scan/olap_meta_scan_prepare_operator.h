@@ -1,54 +1,49 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
-#include "exec/pipeline/scan/olap_meta_scan_context.h"
+#include "exec/pipeline/scan/meta_scan_context.h"
+#include "exec/pipeline/scan/meta_scan_prepare_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
 
-namespace starrocks {
+namespace starrocks::pipeline {
 
-namespace pipeline {
-
-class OlapMetaScanPrepareOperator final : public SourceOperator {
+class OlapMetaScanPrepareOperator final : public MetaScanPrepareOperator {
 public:
     OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                vectorized::OlapMetaScanNode* const scan_node, OlapMetaScanContextPtr scan_ctx);
-    ~OlapMetaScanPrepareOperator() override;
-
-    Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
-
-    bool has_output() const override;
-    bool is_finished() const override;
-
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+                                vectorized::OlapMetaScanNode* const scan_node, MetaScanContextPtr scan_ctx);
+    ~OlapMetaScanPrepareOperator() override = default;
 
 private:
-    Status _prepare_scan_context(RuntimeState* state);
+    Status _prepare_scan_context(RuntimeState* state) override;
 
     vectorized::OlapMetaScanNode* const _scan_node;
-    OlapMetaScanContextPtr _scan_ctx;
 };
 
-class OlapMetaScanPrepareOperatorFactory final : public SourceOperatorFactory {
+class OlapMetaScanPrepareOperatorFactory final : public MetaScanPrepareOperatorFactory {
 public:
     OlapMetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, vectorized::OlapMetaScanNode* const scan_node,
-                                       std::shared_ptr<OlapMetaScanContextFactory> scan_ctx_factory);
+                                       std::shared_ptr<MetaScanContextFactory> scan_ctx_factory);
 
     ~OlapMetaScanPrepareOperatorFactory() override = default;
-
-    bool with_morsels() const override { return true; }
-
-    Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
     vectorized::OlapMetaScanNode* const _scan_node;
-    std::shared_ptr<OlapMetaScanContextFactory> _scan_ctx_factory;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

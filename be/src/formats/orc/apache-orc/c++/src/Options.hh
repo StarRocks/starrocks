@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/orc/tree/main/c++/src/Options.hh
 
@@ -135,6 +148,7 @@ std::ostream* ReaderOptions::getErrorStream() const {
 struct RowReaderOptionsPrivate {
     ColumnSelection selection;
     std::list<uint64_t> includedColumnIndexes;
+    std::list<uint64_t> lazyLoadColumnIndexes;
     std::list<std::string> includedColumnNames;
     std::list<std::string> lazyLoadColumnNames;
     uint64_t dataStart;
@@ -201,6 +215,13 @@ RowReaderOptions& RowReaderOptions::include(const std::list<std::string>& includ
 
 RowReaderOptions& RowReaderOptions::includeLazyLoadColumnNames(const std::list<std::string>& include) {
     privateBits->lazyLoadColumnNames.assign(include.begin(), include.end());
+    privateBits->lazyLoadColumnIndexes.clear();
+    return *this;
+}
+
+RowReaderOptions& RowReaderOptions::includeLazyLoadColumnIndexes(const std::list<std::uint64_t>& include) {
+    privateBits->lazyLoadColumnIndexes.assign(include.begin(), include.end());
+    privateBits->lazyLoadColumnNames.clear();
     return *this;
 }
 
@@ -239,6 +260,10 @@ const std::list<std::string>& RowReaderOptions::getIncludeNames() const {
 
 const std::list<std::string>& RowReaderOptions::getLazyLoadColumnNames() const {
     return privateBits->lazyLoadColumnNames;
+}
+
+const std::list<uint64_t>& RowReaderOptions::getLazyLoadColumnIndexes() const {
+    return privateBits->lazyLoadColumnIndexes;
 }
 
 uint64_t RowReaderOptions::getOffset() const {

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
@@ -70,7 +82,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
 
     // Take drivers from queue.
     for (auto* out_driver : out_drivers) {
-        auto maybe_driver = queue.take(0);
+        auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(out_driver, maybe_driver.value());
     }
@@ -99,8 +111,10 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
     std::vector<DriverRawPtr> in_drivers = {driver1.get(), driver2.get(), driver3.get(), driver4.get()};
 
     std::vector<std::function<void()>> ops_before_get = {
-            std::bind(cancel_operation, nullptr), std::bind(cancel_operation, driver4.get()),
-            std::bind(cancel_operation, driver3.get()), std::bind(cancel_operation, nullptr)};
+            [cancel_operation] { return cancel_operation(nullptr); },
+            [cancel_operation, capture0 = driver4.get()] { return cancel_operation(capture0); },
+            [cancel_operation, capture0 = driver3.get()] { return cancel_operation(capture0); },
+            [cancel_operation] { return cancel_operation(nullptr); }};
 
     std::vector<DriverRawPtr> out_drivers = {driver1.get(), driver4.get(), driver3.get(), driver2.get()};
 
@@ -110,7 +124,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
 
     for (size_t i = 0; i < out_drivers.size(); i++) {
         ops_before_get[i]();
-        auto maybe_driver = queue.take(0);
+        auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(out_drivers[i], maybe_driver.value());
     }
@@ -125,7 +139,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
     _set_driver_level(driver1.get(), 1);
 
     auto consumer_thread = std::make_shared<std::thread>([&queue, &driver1] {
-        auto maybe_driver = queue.take(0);
+        auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(driver1.get(), maybe_driver.value());
     });
@@ -141,7 +155,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_close) {
     QuerySharedDriverQueue queue;
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
-        auto maybe_driver = queue.take(0);
+        auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.status().is_cancelled());
     });
 
@@ -158,35 +172,26 @@ public:
                                                       workgroup::WorkGroupType::WG_NORMAL);
         _wg2 = std::make_shared<workgroup::WorkGroup>("wg200", 200, workgroup::WorkGroup::DEFAULT_VERSION, 2, 0.5, 10,
                                                       workgroup::WorkGroupType::WG_NORMAL);
-        _wg3 = std::make_shared<workgroup::WorkGroup>("wg200", 300, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
+        _wg3 = std::make_shared<workgroup::WorkGroup>("wg300", 300, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
+                                                      workgroup::WorkGroupType::WG_NORMAL);
+        _wg4 = std::make_shared<workgroup::WorkGroup>("wg400", 400, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
                                                       workgroup::WorkGroupType::WG_NORMAL);
         _wg1 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg1);
         _wg2 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg2);
         _wg3 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg3);
+        _wg4 = workgroup::WorkGroupManager::instance()->add_workgroup(_wg4);
     }
 
 protected:
     workgroup::WorkGroupPtr _wg1 = nullptr;
     workgroup::WorkGroupPtr _wg2 = nullptr;
     workgroup::WorkGroupPtr _wg3 = nullptr;
-
-    int _get_any_worker_from_owner(const workgroup::WorkGroupPtr& wg) {
-        for (int i = 0; i < workgroup::WorkGroupManager::instance()->num_total_driver_workers(); ++i) {
-            auto wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_worker(i);
-            if (wgs != nullptr && wgs->find(wg) != wgs->end()) {
-                return i;
-            }
-        }
-        return -1;
-    }
+    workgroup::WorkGroupPtr _wg4 = nullptr;
 };
 
 TEST_F(WorkGroupDriverQueueTest, test_basic) {
     QueryContext query_ctx;
     WorkGroupDriverQueue queue;
-
-    int worker_id = _get_any_worker_from_owner(_wg3);
-    ASSERT_GE(worker_id, 0);
 
     // Prepare drivers for _wg2.
     int64_t sum_wg2_time_spent = 0;
@@ -225,15 +230,30 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
     // Prepare drivers for _wg3.
     auto driver3 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, -1);
     _set_driver_level(driver3.get(), 2);
-    driver3->driver_acct().update_last_time_spent(sum_wg2_time_spent * 2);
+    driver3->driver_acct().update_last_time_spent(sum_wg2_time_spent * 2 + 1);
     driver3->set_workgroup(_wg3);
 
-    std::vector<DriverRawPtr> in_drivers = {driver271.get(), driver272.get(), driver261.get(),
-                                            driver251.get(), driver1.get(),   driver3.get()};
-    // driver3 is from owner workgroup.
-    // the workgroup of driver1 has higher priority than that of driver2xx.
-    std::vector<DriverRawPtr> out_drivers = {driver3.get(),   driver1.get(),   driver271.get(),
-                                             driver272.get(), driver251.get(), driver261.get()};
+    // Prepare drivers for _wg4.
+    auto driver4 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, -1);
+    _set_driver_level(driver4.get(), 2);
+    driver4->driver_acct().update_last_time_spent(sum_wg2_time_spent * 2 + 1);
+    driver4->set_workgroup(_wg4);
+
+    std::vector<DriverRawPtr> in_drivers = {driver271.get(), driver272.get(), driver261.get(), driver251.get(),
+                                            driver1.get(),   driver3.get(),   driver4.get()};
+    // wg1.vruntime < wg2.vruntime < wg4.vruntime = wg3.vruntime
+    std::vector<DriverRawPtr> out_drivers = {driver1.get(), driver271.get(), driver272.get(), driver251.get(),
+                                             driver261.get()};
+    // a<b = (a.vruntime!=b.vruntime) ? a.vruntime<b.vruntime : a_ptr < b_ptr
+    auto* sched_entity3 = driver3->workgroup()->driver_sched_entity();
+    auto* sched_entity4 = driver4->workgroup()->driver_sched_entity();
+    if (sched_entity3 < sched_entity4) {
+        out_drivers.emplace_back(driver3.get());
+        out_drivers.emplace_back(driver4.get());
+    } else {
+        out_drivers.emplace_back(driver4.get());
+        out_drivers.emplace_back(driver3.get());
+    }
 
     // Put back drivers to queue.
     for (auto* in_driver : in_drivers) {
@@ -259,7 +279,7 @@ TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     driver1->set_workgroup(_wg1);
 
     auto consumer_thread = std::make_shared<std::thread>([&queue, &driver1] {
-        auto maybe_driver = queue.take(0);
+        auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(driver1.get(), maybe_driver.value());
     });
@@ -275,7 +295,7 @@ TEST_F(WorkGroupDriverQueueTest, test_take_close) {
     WorkGroupDriverQueue queue;
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
-        auto maybe_driver = queue.take(0);
+        auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.status().is_cancelled());
     });
 

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -1037,6 +1050,19 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary1` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk1`)\n" +
+                "DISTRIBUTED BY HASH(`pk1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
                 "  `v_int`  bigint NULL COMMENT \"\",\n" +
                 "  `v_json` json NULL COMMENT \"\" \n" +
@@ -1068,7 +1094,7 @@ public class PlanTestBase {
         Assert.assertFalse(text, text.contains(pattern));
     }
 
-    protected static void setTableStatistics(OlapTable table, long rowCount) {
+    public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             partition.getBaseIndex().setRowCount(rowCount);
         }
@@ -1378,6 +1404,15 @@ public class PlanTestBase {
 
     protected void assertPlanContains(String sql, String... explain) throws Exception {
         String explainString = getFragmentPlan(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertLogicalPlanContains(String sql, String... explain) throws Exception {
+        String explainString = getLogicalFragmentPlan(sql);
 
         for (String expected : explain) {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,

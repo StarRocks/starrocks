@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -65,6 +77,9 @@ public:
 
     void append(const Column& src, size_t offset, size_t count) override;
 
+    // Append a single element, which is represented as a column
+    void append_array_element(const Column& elem, size_t null_elem);
+
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
@@ -122,6 +137,8 @@ public:
 
     Datum get(size_t idx) const override;
 
+    std::pair<size_t, size_t> get_element_offset_size(size_t idx) const;
+    size_t get_element_null_count(size_t idx) const;
     size_t get_element_size(size_t idx) const;
 
     bool set_null(size_t idx) override;

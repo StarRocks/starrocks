@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -10,24 +22,21 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "formats/orc/fill_function.h"
+#include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/buffered_stream.h"
 
-namespace orc {
-namespace proto {
+namespace orc::proto {
 class ColumnStatistics;
-}
-} // namespace orc
+} // namespace orc::proto
 
 namespace starrocks {
 class RandomAccessFile;
 class RuntimeState;
 } // namespace starrocks
 namespace starrocks::vectorized {
-
-using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                    const TypeDescriptor& type_desc, void* ctx);
 
 // OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
@@ -47,7 +56,7 @@ public:
     };
 
     // src slot descriptors should exactly matches columns in row readers.
-    explicit OrcChunkReader(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
+    explicit OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors);
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -57,19 +66,17 @@ public:
     // copy from cvb to chunk
     Status fill_chunk(ChunkPtr* chunk);
     // some type cast & conversion.
-    ChunkPtr cast_chunk(ChunkPtr* chunk);
+    StatusOr<ChunkPtr> cast_chunk_checked(ChunkPtr* chunk);
+    ChunkPtr cast_chunk(ChunkPtr* chunk) { return cast_chunk_checked(chunk).value(); }
     // call them before calling init.
     void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    void set_conjuncts(const std::vector<Expr*>& conjuncts);
-    void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                           const RuntimeFilterProbeCollector* rf_collector);
+    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
+    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+                                             const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
 
-    // to decode min and max value from column stats.
-    Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,
-                                ColumnPtr max_col, int64_t tz_offset_in_seconds);
     Status apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
                                         Filter* filter);
     size_t get_cvb_size();
@@ -77,12 +84,17 @@ public:
     const cctz::time_zone& tzinfo() { return _tzinfo; }
     void drop_nanoseconds_in_datetime() { _drop_nanoseconds_in_datetime = true; }
     bool use_nanoseconds_in_datetime() { return !_drop_nanoseconds_in_datetime; }
+    void set_use_orc_column_names(bool use_orc_column_names) { _use_orc_column_names = use_orc_column_names; }
     // methods related to broker load.
     void set_broker_load_mode(bool strict_mode) {
         _broker_load_mode = true;
         _strict_mode = strict_mode;
+        set_use_orc_column_names(true);
     }
-    void disable_broker_load_mode() { _broker_load_mode = false; }
+    void disable_broker_load_mode() {
+        _broker_load_mode = false;
+        set_use_orc_column_names(false);
+    }
     size_t get_num_rows_filtered() const { return _num_rows_filtered; }
     bool get_broker_load_mode() const { return _broker_load_mode; }
     bool get_strict_mode() const { return _strict_mode; }
@@ -125,10 +137,11 @@ public:
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
-    ChunkPtr _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
+    StatusOr<ChunkPtr> _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots,
+                                   const std::vector<int>* indices);
 
     bool _ok_to_add_conjunct(const Expr* conjunct);
-    void _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
@@ -137,11 +150,19 @@ private:
     std::unique_ptr<orc::RowReader> _row_reader;
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
-    const std::vector<SlotDescriptor*>& _src_slot_descriptors;
+    std::vector<SlotDescriptor*> _src_slot_descriptors;
     std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
+
+    // Access ORC columns by name. By default,
+    // columns in ORC files are accessed by their ordinal position in the Hive table definition.
+    // Only affect first level behavior, about struct subfield, we still accessed by subfield name rather than position.
+    // This value now is fixed, in future, it can be passed from FE.
+    // NOTICE: In broker mode, this value will be set true.
+    // We make the same behavior as Trino & Presto.
+    // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
+    bool _use_orc_column_names = false;
+    std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
-    // _src_slot index to position in orc
-    std::vector<int> _position_in_orc;
     // slot id to position in orc.
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
@@ -149,9 +170,9 @@ private:
     Status _slot_to_orc_column_name(const SlotDescriptor* slot,
                                     const std::unordered_map<int, std::string>& column_id_to_orc_name,
                                     std::string* orc_column_name);
-    Status _init_include_columns();
+    Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
-    Status _init_src_types();
+    Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_cast_exprs();
     Status _init_fill_functions();
     // holding Expr* in cast_exprs;
@@ -160,6 +181,11 @@ private:
     cctz::time_zone _tzinfo;
     int64_t _tzoffset_in_seconds;
     bool _drop_nanoseconds_in_datetime;
+
+    // Only used for UT, used after init reader
+    const std::vector<bool>& TEST_get_selected_column_id_list();
+    // Only used for UT, used after init reader
+    const std::vector<bool>& TEST_get_lazyload_column_id_list();
 
     // fields related to broker load.
     bool _broker_load_mode;
@@ -174,57 +200,6 @@ private:
     std::string _current_file_name;
     int _error_message_counter;
     LazyLoadContext* _lazy_load_ctx;
-};
-
-class ORCHdfsFileStream : public orc::InputStream {
-public:
-    // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length);
-
-    ~ORCHdfsFileStream() override = default;
-
-    uint64_t getLength() const override { return _length; }
-
-    // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
-    uint64_t getNaturalReadSize() const override { return config::orc_natural_read_size; }
-
-    // It's for read size after doing seek.
-    // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
-    // And if we still use NaturalReadSize we probably read many row groups
-    // after the row group we want to read, and that will amplify read IO bytes.
-
-    // So the best way is to reduce read size, hopefully we just read that row group in one shot.
-    // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
-    // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
-    // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
-
-    // Normally 256K can cover a row group of a column(like integer or double, but maybe not string)
-    // And this value can not be too small because if we can not read a row group in a single shot,
-    // we will fallback to read in normal size, and we pay cost of a extra read.
-
-    uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
-
-    void prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) override;
-    void read(void* buf, uint64_t length, uint64_t offset) override;
-
-    const std::string& getName() const override;
-
-    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
-    void clearIORanges() override;
-    void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override;
-
-    void set_enable_block_cache(bool v) { _buffer_stream.set_enable_block_cache(v); }
-
-private:
-    void doRead(void* buf, uint64_t length, uint64_t offset, bool direct);
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length);
-
-    RandomAccessFile* _file;
-    uint64_t _length;
-    std::vector<char> _cache_buffer;
-    uint64_t _cache_offset;
-    SharedBufferedInputStream _buffer_stream;
-    bool _buffer_stream_enabled = false;
 };
 
 } // namespace starrocks::vectorized

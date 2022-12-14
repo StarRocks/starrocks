@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/condition_expr.h"
 
@@ -123,11 +135,11 @@ TEST_F(VectorizedConditionExprTest, ifNullNull) {
     }
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class RandomValueExpr final : public Expr {
 public:
     RandomValueExpr(const TExprNode& t, size_t size, std::default_random_engine& re) : Expr(t), _re(re) { _init(size); }
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return col; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return col; }
 
     typename RunTimeColumnType<Type>::Container get_data() { return col->get_data(); }
 
@@ -156,11 +168,11 @@ private:
     std::default_random_engine& _re;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class MakeNullableExpr final : public Expr {
 public:
     MakeNullableExpr(const TExprNode& t, size_t size, Expr* inner) : Expr(t), _inner(inner) { init(); }
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _col; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _col; }
     Expr* clone(ObjectPool* pool) const override { return nullptr; }
 
     ColumnPtr get_col_ptr() { return _col; }

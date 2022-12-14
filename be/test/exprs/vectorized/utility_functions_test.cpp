@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/utility_functions.h"
 
@@ -8,8 +20,8 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "exprs/function_context.h"
 #include "runtime/primitive_type.h"
-#include "udf/udf.h"
 #include "util/random.h"
 #include "util/time.h"
 
@@ -31,7 +43,7 @@ TEST_F(UtilityFunctionsTest, versionTest) {
         Columns columns;
         columns.emplace_back(var1_col);
 
-        ColumnPtr result = UtilityFunctions::version(ctx, columns);
+        ColumnPtr result = UtilityFunctions::version(ctx, columns).value();
 
         ASSERT_TRUE(result->is_constant());
 
@@ -52,7 +64,7 @@ TEST_F(UtilityFunctionsTest, sleepTest) {
         Columns columns;
         columns.emplace_back(var1_col);
 
-        ColumnPtr result = UtilityFunctions::sleep(ctx, columns);
+        ColumnPtr result = UtilityFunctions::sleep(ctx, columns).value();
 
         ASSERT_EQ(1, result->size());
 
@@ -73,7 +85,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         Columns columns;
         columns.emplace_back(var1_col);
 
-        ColumnPtr result = UtilityFunctions::uuid(ctx, columns);
+        ColumnPtr result = UtilityFunctions::uuid(ctx, columns).value();
 
         ASSERT_FALSE(result->is_constant());
 
@@ -97,7 +109,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(chunk_size, 1);
         Columns columns;
         columns.emplace_back(var1_col);
-        ColumnPtr result = UtilityFunctions::uuid_numeric(ctx, columns);
+        ColumnPtr result = UtilityFunctions::uuid_numeric(ctx, columns).value();
         Int128Column* col = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(result);
         std::set<int128_t> vals;
         vals.insert(col->get_data().begin(), col->get_data().end());
@@ -106,7 +118,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
 
     {
         Columns columns;
-        ColumnPtr result = UtilityFunctions::host_name(ctx, columns);
+        ColumnPtr result = UtilityFunctions::host_name(ctx, columns).value();
         ColumnViewer<TYPE_VARCHAR> column_viewer(result);
         ASSERT_EQ(column_viewer.size(), 1);
     }

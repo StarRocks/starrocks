@@ -1,7 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.system;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.Config;
@@ -9,6 +23,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
+import com.starrocks.qe.GlobalVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -75,6 +90,15 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("starletPort")
     private volatile int starletPort;
 
+    @SerializedName("lastWriteFail")
+    private volatile boolean lastWriteFail = false;
+
+    private volatile int numRunningQueries = 0;
+    private volatile long memLimitBytes = 0;
+    private volatile long memUsedBytes = 0;
+    private volatile int cpuUsedPermille = 0;
+    private volatile long lastUpdateResourceUsageMs = 0;
+
     public ComputeNode() {
         this.host = "";
         this.version = "";
@@ -110,6 +134,14 @@ public class ComputeNode implements IComputable, Writable {
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+    }
+
+    public void setLastWriteFail(boolean lastWriteFail) {
+        this.lastWriteFail = lastWriteFail;
+    }
+
+    public boolean getLastWriteFail() {
+        return this.lastWriteFail;
     }
 
     public int getStarletPort() {
@@ -266,6 +298,38 @@ public class ComputeNode implements IComputable, Writable {
         return this.isAlive.get() && !this.isDecommissioned.get();
     }
 
+    public int getNumRunningQueries() {
+        return numRunningQueries;
+    }
+
+    public long getMemUsedBytes() {
+        return memUsedBytes;
+    }
+    public long getMemLimitBytes() {
+        return memLimitBytes;
+    }
+
+    public double getMemUsedPct() {
+        if (0 == memLimitBytes) {
+            return 0;
+        }
+        return ((double) memUsedBytes) / memLimitBytes;
+    }
+
+    public int getCpuUsedPermille() {
+        return cpuUsedPermille;
+    }
+
+    public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                       int cpuUsedPermille) {
+
+        this.numRunningQueries = numRunningQueries;
+        this.memLimitBytes = memLimitBytes;
+        this.memUsedBytes = memUsedBytes;
+        this.cpuUsedPermille = cpuUsedPermille;
+        this.lastUpdateResourceUsageMs = System.currentTimeMillis();
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String s = GsonUtils.GSON.toJson(this);
@@ -275,6 +339,11 @@ public class ComputeNode implements IComputable, Writable {
     public static ComputeNode read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, ComputeNode.class);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
     }
 
     @Override
@@ -361,8 +430,12 @@ public class ComputeNode implements IComputable, Writable {
      * return true if any port changed, or alive state is changed.
      */
     public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
+        boolean becomeDead = false;
         boolean isChanged = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
+            if (this.version == null) {
+                return false;
+            }
             if (!this.version.equals(hbResponse.getVersion())) {
                 isChanged = true;
                 this.version = hbResponse.getVersion();
@@ -418,8 +491,8 @@ public class ComputeNode implements IComputable, Writable {
                 this.heartbeatRetryTimes++;
             } else {
                 if (isAlive.compareAndSet(true, false)) {
-                    CoordinatorMonitor.getInstance().addDeadBackend(id);
-                    LOG.info("{} is dead,", this.toString());
+                    becomeDead = true;
+                    LOG.info("{} is dead due to exceed heartbeatRetryTimes", this);
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
                 lastMissingHeartbeatTime = System.currentTimeMillis();
@@ -438,10 +511,44 @@ public class ComputeNode implements IComputable, Writable {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,
                 // in which case the alive status needs to be handled according to the original logic
-                isAlive.getAndSet(hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE);
+                boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
+                if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
+                    becomeDead = !newIsAlive;
+                    LOG.info("{} alive status is changed to {}", this, newIsAlive);
+                }
                 heartbeatRetryTimes = 0;
             }
         }
+
+        if (becomeDead) {
+            CoordinatorMonitor.getInstance().addDeadBackend(id);
+        }
+
         return isChanged;
+    }
+
+    public boolean isResourceOverloaded() {
+        if (!isAvailable()) {
+            return false;
+        }
+
+        long currentMs = System.currentTimeMillis();
+        if (currentMs - lastUpdateResourceUsageMs > GlobalVariable.getQueryQueueResourceUsageIntervalMs()) {
+            // The resource usage is not fresh enough to decide whether it is overloaded.
+            return false;
+        }
+
+        if (GlobalVariable.isQueryQueueConcurrencyLimitEffective() &&
+                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyLimit()) {
+            return true;
+        }
+
+        if (GlobalVariable.isQueryQueueCpuUsedPermilleLimitEffective() &&
+                cpuUsedPermille >= GlobalVariable.getQueryQueueCpuUsedPermilleLimit()) {
+            return true;
+        }
+
+        return GlobalVariable.isQueryQueueMemUsedPctLimitEffective() &&
+                getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctLimit();
     }
 }

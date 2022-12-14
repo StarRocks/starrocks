@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -23,8 +35,8 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                  AggDataPtr __restrict state) const override {
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
+                                  size_t size) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
@@ -94,7 +106,7 @@ protected:
     }
 };
 
-template <PrimitiveType PT, typename State, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, typename State, typename T = RunTimeCppType<PT>>
 class ValueWindowFunction : public WindowFunction<State> {
 public:
     using InputColumnType = RunTimeColumnType<PT>;
@@ -116,7 +128,13 @@ public:
 
         InputColumnType* column = down_cast<InputColumnType*>(data_column);
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = value;
+            if constexpr (!is_object_type(PT)) {
+                column->get_data()[i] = value;
+            } else {
+                // For TYPE_HLL(HLL) AND and TYPE_OBJECT(BITMAP),
+                // we can't use get_data to write datas.
+                *column->get_object(i) = *value;
+            }
         }
     }
 };
@@ -139,7 +157,7 @@ class RowNumberWindowFunction final : public WindowFunction<RowNumberState> {
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         column->get_data()[start] = this->data(state).cur_positon;
     }
 
@@ -173,7 +191,7 @@ class RankWindowFunction final : public WindowFunction<RankState> {
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = this->data(state).rank;
         }
@@ -205,7 +223,7 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = this->data(state).rank;
         }
@@ -279,7 +297,7 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
     std::string get_name() const override { return "ntile"; }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct FirstValueState {
     using T = RunTimeCppType<PT>;
     T value;
@@ -287,7 +305,16 @@ struct FirstValueState {
     bool is_null = false;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT>
+struct FirstValueState<PT, StringPTGuard<PT>> {
+    Buffer<uint8_t> buffer;
+    bool has_value = false;
+    bool is_null = false;
+
+    Slice slice() const { return {buffer.data(), buffer.size()}; }
+};
+
+template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -332,14 +359,22 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct LastValueState {
     using T = RunTimeCppType<PT>;
     T value;
     bool is_null = false;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT>
+struct LastValueState<PT, StringPTGuard<PT>> {
+    Buffer<uint8_t> buffer;
+    bool is_null = false;
+
+    Slice slice() const { return {buffer.data(), buffer.size()}; }
+};
+
+template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -378,7 +413,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
     std::string get_name() const override { return "nullable_last_value"; }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct LeadLagState {
     using T = RunTimeCppType<PT>;
     T value;
@@ -387,7 +422,17 @@ struct LeadLagState {
     bool defualt_is_null = false;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT>
+struct LeadLagState<PT, StringPTGuard<PT>> {
+    Buffer<uint8_t> value;
+    Buffer<uint8_t> default_value;
+    bool is_null = false;
+    bool defualt_is_null = false;
+
+    Slice slice() const { return {value.data(), value.size()}; }
+};
+
+template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -437,16 +482,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
     std::string get_name() const override { return "lead-lag"; }
 };
 
-template <PrimitiveType PT>
-struct FirstValueState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool has_value = false;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
-};
-
-template <PrimitiveType PT>
+template <LogicalType PT>
 class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<FirstValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
@@ -470,7 +506,7 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         Slice slice = column->get_slice(frame_start);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
         this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
         this->data(state).has_value = true;
     }
@@ -483,15 +519,7 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-template <PrimitiveType PT>
-struct LastValueState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
-};
-
-template <PrimitiveType PT>
+template <LogicalType PT>
 class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LastValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
@@ -510,7 +538,7 @@ class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Windo
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         Slice slice = column->get_slice(frame_end - 1);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
         this->data(state).buffer.clear();
         this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
     }
@@ -523,17 +551,7 @@ class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Windo
     std::string get_name() const override { return "nullable_last_value"; }
 };
 
-template <PrimitiveType PT>
-struct LeadLagState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> value;
-    Buffer<uint8_t> default_value;
-    bool is_null = false;
-    bool defualt_is_null = false;
-
-    Slice slice() const { return {value.data(), value.size()}; }
-};
-
-template <PrimitiveType PT>
+template <LogicalType PT>
 class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LeadLagState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value.clear();
@@ -546,7 +564,7 @@ class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowF
         } else {
             this->data(state).default_value.clear();
             Slice slice = default_column->get(0).get<Slice>();
-            const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+            const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).default_value.insert(this->data(state).default_value.end(), p, p + slice.size);
         }
     }
@@ -573,7 +591,7 @@ class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowF
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         Slice slice = column->get_slice(frame_end - 1);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
         this->data(state).value.insert(this->data(state).value.end(), p, p + slice.size);
     }
 

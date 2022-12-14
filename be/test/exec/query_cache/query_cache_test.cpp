@@ -1,8 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <cmath>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -17,13 +30,14 @@
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "exec/query_cache/ticket_checker.h"
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::vectorized {
 struct CacheTest : public ::testing::Test {
     RuntimeState state;
-    query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(1024);
+    query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 };
 
 TEST_F(CacheTest, testLaneArbiter) {
@@ -85,28 +99,29 @@ TEST_F(CacheTest, testCacheManager) {
     auto create_cache_value = [](size_t byte_size) {
         auto chk = std::make_shared<Chunk>();
         auto col = Int8Column::create();
-        col->resize(byte_size);
+        auto payload = byte_size - sizeof(query_cache::CacheValue);
+        col->resize(payload);
         chk->append_column(col, 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
     for (auto i = 0; i < 10; ++i) {
-        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(40));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
         auto status = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
@@ -133,7 +148,7 @@ TEST_F(CacheTest, testCacheManager) {
     ASSERT_GE(cache_mgr->hit_count(), 0);
 
     for (auto i = 0; i < 10; ++i) {
-        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(40));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
     ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
     ASSERT_GE(cache_mgr->memory_usage(), 0);
@@ -469,17 +484,17 @@ static ValidateFuncGenerator eq_validator_gen = [](double expect) {
 
 static ValidateFuncGenerator approx_validator_gen = [](double expect) {
     return [expect](double actual) {
-        auto abs_value = std::max(abs(expect), abs(actual));
+        auto abs_value = std::max(std::abs(expect), std::abs(actual));
         LOG(INFO) << strings::Substitute("approx_validate: expect=$0, actual=$1", expect, actual);
-        ASSERT_TRUE(abs_value == 0.0 || abs(expect - actual) / abs_value < 0.001);
+        ASSERT_TRUE(abs_value == 0.0 || std::abs(expect - actual) / abs_value < 0.001);
     };
 };
 
-void test_framework_with_with_options(query_cache::CacheManagerPtr cache_mgr, bool force_populate,
+void test_framework_with_with_options(const query_cache::CacheManagerPtr& cache_mgr, bool force_populate,
                                       bool force_passthrough, int num_lanes, int dop, RuntimeState& state_object,
-                                      MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
-                                      const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
-                                      const ValidateFunc& validate_func) {
+                                      const MapFunc& map1, const MapFunc& map2, double init_value,
+                                      const ReduceFunc& reduce, const Actions& pre_passthrough_actions,
+                                      const Actions& post_passthrough_actions, const ValidateFunc& validate_func) {
     auto* state = &state_object;
     auto cache_param = create_test_cache_param(force_populate, force_passthrough, num_lanes);
     auto tasks = create_test_pipelines(cache_param, dop, std::move(cache_mgr), state, std::move(map1), std::move(map2),
@@ -510,7 +525,7 @@ void test_framework_with_with_options(query_cache::CacheManagerPtr cache_mgr, bo
 void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
                     MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
                     const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
-                    ValidateFunc validate_func) {
+                    const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), false, false, num_lanes, dop, state_object, std::move(map1),
                                      std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
                                      post_passthrough_actions, std::move(validate_func));
@@ -519,7 +534,7 @@ void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int d
 void test_framework_force_populate(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
                                    RuntimeState& state_object, MapFunc map1, MapFunc map2, double init_value,
                                    ReduceFunc reduce, const Actions& pre_passthrough_actions,
-                                   const Actions& post_passthrough_actions, ValidateFunc validate_func) {
+                                   const Actions& post_passthrough_actions, const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), true, false, num_lanes, dop, state_object, std::move(map1),
                                      std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
                                      post_passthrough_actions, std::move(validate_func));
@@ -530,7 +545,7 @@ void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr 
                                                    double init_value, ReduceFunc reduce,
                                                    const Actions& pre_passthrough_actions,
                                                    const Actions& post_passthrough_actions,
-                                                   ValidateFunc validate_func) {
+                                                   const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), true, true, num_lanes, dop, state_object, std::move(map1),
                                      std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
                                      post_passthrough_actions, std::move(validate_func));
@@ -1161,6 +1176,36 @@ TEST_F(CacheTest, testPartialHit) {
     };
     test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions, {},
                    eq_validator_gen(801.0 * 801.0));
+}
+
+TEST_F(CacheTest, testTicketChecker) {
+    auto test_func1 = [](int64_t id, int n) {
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        for (auto i = 0; i < n; ++i) {
+            ticket_checker->enter(1L, i + 1 == n);
+            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
+        }
+        for (auto i = 0; i < n; ++i) {
+            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
+        }
+    };
+
+    test_func1(1L, 1);
+    test_func1(1L, 10);
+    test_func1(1L, 100);
+
+    auto test_func2 = [](int64_t id, int n) {
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        for (auto i = 0; i < n; ++i) {
+            ticket_checker->enter(1L, i + 1 == n);
+            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
+            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
+        }
+    };
+
+    test_func2(1L, 1);
+    test_func2(1L, 10);
+    test_func2(1L, 100);
 }
 
 } // namespace starrocks::vectorized

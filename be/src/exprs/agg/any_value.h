@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -13,78 +25,22 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct AnyValueAggregateData {};
 
-template <PrimitiveType PT>
-struct AnyValueAggregateData<PT, IntegralPTGuard<PT>> {
+template <LogicalType PT>
+struct AnyValueAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
+    T result = RunTimeTypeLimits<PT>::max_value();
     bool has_value = false;
 
     void reset() {
-        result = std::numeric_limits<T>::max();
+        result = RunTimeTypeLimits<PT>::max_value();
         has_value = false;
     }
 };
 
-template <PrimitiveType PT>
-struct AnyValueAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
-    bool has_value = false;
-
-    void reset() {
-        result = std::numeric_limits<T>::max();
-        has_value = false;
-    }
-};
-
-template <>
-struct AnyValueAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    bool has_value = false;
-    DecimalV2Value result = DecimalV2Value::get_max_decimal();
-
-    void reset() {
-        result = DecimalV2Value::get_max_decimal();
-        has_value = false;
-    }
-};
-
-template <PrimitiveType PT>
-struct AnyValueAggregateData<PT, DecimalPTGuard<PT>> {
-    bool has_value = false;
-    using T = RunTimeCppType<PT>;
-    T result = get_max_decimal<T>();
-    void reset() {
-        result = get_max_decimal<T>();
-        has_value = false;
-    }
-};
-
-template <>
-struct AnyValueAggregateData<TYPE_DATETIME, guard::Guard> {
-    bool has_value = false;
-    TimestampValue result = TimestampValue::MAX_TIMESTAMP_VALUE;
-
-    void reset() {
-        result = TimestampValue::MAX_TIMESTAMP_VALUE;
-        has_value = false;
-    }
-};
-
-template <>
-struct AnyValueAggregateData<TYPE_DATE, guard::Guard> {
-    bool has_value = false;
-    DateValue result = DateValue::MAX_DATE_VALUE;
-
-    void reset() {
-        result = DateValue::MAX_DATE_VALUE;
-        has_value = false;
-    }
-};
-
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     Buffer<uint8_t> buffer;
@@ -99,7 +55,7 @@ struct AnyValueAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueAggregateData<PT, JsonGuard<PT>> {
     bool has_value = false;
     JsonValue value;
@@ -112,7 +68,7 @@ struct AnyValueAggregateData<PT, JsonGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct AnyValueElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, const T& right) const {
@@ -123,9 +79,9 @@ struct AnyValueElement {
     }
 };
 
-template <PrimitiveType PT>
-struct AnyValueElement<PT, AnyValueAggregateData<PT>, StringPTGuard<PT>> {
-    void operator()(AnyValueAggregateData<PT>& state, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct AnyValueElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, const Slice& right) const {
         if (UNLIKELY(!state.has_value())) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
@@ -134,9 +90,9 @@ struct AnyValueElement<PT, AnyValueAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
-struct AnyValueElement<PT, AnyValueAggregateData<PT>, JsonGuard<PT>> {
-    void operator()(AnyValueAggregateData<PT>& state, const JsonValue* right) const {
+template <LogicalType PT, typename State>
+struct AnyValueElement<PT, State, JsonGuard<PT>> {
+    void operator()(State& state, const JsonValue* right) const {
         if (UNLIKELY(!state.has_value)) {
             state.has_value = true;
             state.value = *right;
@@ -144,7 +100,7 @@ struct AnyValueElement<PT, AnyValueAggregateData<PT>, JsonGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class AnyValueAggregateFunction final
         : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, T>> {
 public:
@@ -201,7 +157,7 @@ public:
     std::string get_name() const override { return "any_value"; }
 };
 
-template <PrimitiveType PT, typename State, class OP>
+template <LogicalType PT, typename State, class OP>
 class AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
@@ -229,7 +185,7 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
-        BinaryColumn* column = down_cast<BinaryColumn*>(to);
+        auto* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
     }
 
@@ -240,14 +196,14 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
-        BinaryColumn* column = down_cast<BinaryColumn*>(to);
+        auto* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        BinaryColumn* column = down_cast<BinaryColumn*>(dst);
+        auto* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->append(this->data(state).slice());
         }
@@ -257,7 +213,7 @@ public:
 };
 
 // Specialized for JSON type
-template <PrimitiveType PT, typename State, class OP>
+template <LogicalType PT, typename State, class OP>
 class AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>, JsonGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
@@ -282,7 +238,7 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        JsonColumn* column = down_cast<JsonColumn*>(to);
+        auto* column = down_cast<JsonColumn*>(to);
         column->append(this->data(state).json());
     }
 
@@ -292,14 +248,14 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        JsonColumn* column = down_cast<JsonColumn*>(to);
+        auto* column = down_cast<JsonColumn*>(to);
         column->append(this->data(state).json());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        JsonColumn* column = down_cast<JsonColumn*>(dst);
+        auto* column = down_cast<JsonColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->append(this->data(state).json());
         }

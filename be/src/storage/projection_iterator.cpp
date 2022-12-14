@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/projection_iterator.h"
 
@@ -11,7 +23,7 @@ namespace starrocks::vectorized {
 
 class ProjectionIterator final : public ChunkIterator {
 public:
-    ProjectionIterator(Schema schema, ChunkIteratorPtr child)
+    ProjectionIterator(VectorizedSchema schema, ChunkIteratorPtr child)
             : ChunkIterator(std::move(schema), child->chunk_size()), _child(std::move(child)) {
         build_index_map(this->_schema, _child->schema());
     }
@@ -37,7 +49,7 @@ protected:
     Status do_get_next(Chunk* chunk) override;
 
 private:
-    void build_index_map(const Schema& output, const Schema& input);
+    void build_index_map(const VectorizedSchema& output, const VectorizedSchema& input);
 
     ChunkIteratorPtr _child;
     // mapping from index of column in output chunk to index of column in input chunk.
@@ -45,7 +57,7 @@ private:
     ChunkPtr _chunk;
 };
 
-void ProjectionIterator::build_index_map(const Schema& output, const Schema& input) {
+void ProjectionIterator::build_index_map(const VectorizedSchema& output, const VectorizedSchema& input) {
     DCHECK_LE(output.num_fields(), input.num_fields());
 
     std::unordered_map<ColumnId, size_t> input_indexes;
@@ -91,7 +103,7 @@ void ProjectionIterator::close() {
     }
 }
 
-ChunkIteratorPtr new_projection_iterator(const Schema& schema, const ChunkIteratorPtr& child) {
+ChunkIteratorPtr new_projection_iterator(const VectorizedSchema& schema, const ChunkIteratorPtr& child) {
     return std::make_shared<ProjectionIterator>(schema, child);
 }
 

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/delta_writer.h"
 
@@ -6,6 +18,7 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -83,15 +96,7 @@ void DeltaWriter::_garbage_collection() {
 Status DeltaWriter::_init() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
-    if (_opt.is_replicated_storage) {
-        if (_opt.replicas.size() > 0 && _opt.replicas[0].node_id() == _opt.node_id) {
-            _replica_state = Primary;
-        } else {
-            _replica_state = Secondary;
-        }
-    } else {
-        _replica_state = Peer;
-    }
+    _replica_state = _opt.replica_state;
 
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
@@ -125,8 +130,11 @@ Status DeltaWriter::_init() {
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
-        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}", _opt.tablet_id,
-                               _tablet->version_count(), config::tablet_max_versions);
+        if (config::enable_event_based_compaction_framework) {
+            StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
+        }
+        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}, replica_state: {}",
+                               _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
@@ -201,6 +209,9 @@ Status DeltaWriter::_init() {
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
+        if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
+            writer_context.merge_condition = _opt.merge_condition;
+        }
     }
 
     writer_context.rowset_id = _storage_engine->next_rowset_id();
@@ -382,8 +393,13 @@ void DeltaWriter::_reset_mem_table() {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
     }
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
-                                            _mem_table_sink.get(), _mem_tracker);
+    if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
+        _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                                _mem_table_sink.get(), _opt.merge_condition, _mem_tracker);
+    } else {
+        _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                                _mem_table_sink.get(), "", _mem_tracker);
+    }
 }
 
 Status DeltaWriter::commit() {

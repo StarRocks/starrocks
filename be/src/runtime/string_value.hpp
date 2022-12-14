@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/string_value.hpp
 
@@ -41,17 +54,15 @@ namespace starrocks {
 //   - s1/n1: ptr/len for the first string
 //   - s2/n2: ptr/len for the second string
 //   - len: min(n1, n2) - this can be more cheaply passed in by the caller
-static inline int64_t string_compare(const char* s1, int64_t n1, const char* s2, int64_t n2,
-                                     int64_t len) {
+static inline int64_t string_compare(const char* s1, int64_t n1, const char* s2, int64_t n2, int64_t len) {
     DCHECK_EQ(len, std::min(n1, n2));
 #ifdef __SSE4_2__
     if (CpuInfo::is_supported(CpuInfo::SSE4_2)) {
         while (len >= sse_util::CHARS_PER_128_BIT_REGISTER) {
             __m128i xmm0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s1));
             __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(s2));
-            int chars_match =
-                    _mm_cmpestri(xmm0, sse_util::CHARS_PER_128_BIT_REGISTER, xmm1,
-                                 sse_util::CHARS_PER_128_BIT_REGISTER, sse_util::STRCMP_MODE);
+            int chars_match = _mm_cmpestri(xmm0, sse_util::CHARS_PER_128_BIT_REGISTER, xmm1,
+                                           sse_util::CHARS_PER_128_BIT_REGISTER, sse_util::STRCMP_MODE);
             if (chars_match != sse_util::CHARS_PER_128_BIT_REGISTER) {
                 return (unsigned char)s1[chars_match] - (unsigned char)s2[chars_match];
             }

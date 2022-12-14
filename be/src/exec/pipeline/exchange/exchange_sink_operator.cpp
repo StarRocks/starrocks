@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 
@@ -74,7 +86,7 @@ public:
     // of close operation, client should call close_wait() to finish channel's close.
     // We split one close operation into two phases in order to make multiple channels
     // can run parallel.
-    void close(RuntimeState* state, FragmentContext* fragment_ctx);
+    Status close(RuntimeState* state, FragmentContext* fragment_ctx);
 
     std::string get_fragment_instance_id_str() {
         UniqueId uid(_fragment_instance_id);
@@ -242,7 +254,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
                                   attachment_physical_bytes};
-        _parent->_buffer->add_request(info);
+        RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
         *is_real_sent = true;
@@ -269,7 +281,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
                               attachment_physical_bytes};
-    _parent->_buffer->add_request(info);
+    RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
 }
@@ -279,21 +291,31 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     if (this->_fragment_instance_id.lo == -1) {
         return Status::OK();
     }
+    Status res = Status::OK();
+
+    DeferOp op([&res, &fragment_ctx]() {
+        if (!res.ok()) {
+            LOG(WARNING) << fmt::format("fragment id {} close channel error: {}",
+                                        print_id(fragment_ctx->fragment_instance_id()), res.get_error_msg());
+        }
+    });
 
     if (!fragment_ctx->is_canceled()) {
         for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
             if (_chunks[driver_sequence] != nullptr) {
-                RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
+                RETURN_IF_ERROR(res = send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
             }
         }
-        RETURN_IF_ERROR(send_one_chunk(state, nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
+        RETURN_IF_ERROR(res = send_one_chunk(state, nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
     }
 
     return Status::OK();
 }
 
-void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
-    state->log_error(_close_internal(state, fragment_ctx).get_error_msg());
+Status ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
+    auto status = _close_internal(state, fragment_ctx);
+    state->log_error(status.get_error_msg());
+    return status;
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(
@@ -435,7 +457,7 @@ bool ExchangeSinkOperator::pending_finish() const {
 }
 
 Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
-    _buffer->cancel_one_sinker();
+    _buffer->cancel_one_sinker(state);
     return Status::OK();
 }
 
@@ -602,13 +624,16 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         _current_request_bytes = 0;
         _chunk_request.reset();
     }
-
+    Status status = Status::OK();
     for (auto& [_, channel] : _instance_id2channel) {
-        channel->close(state, _fragment_ctx);
+        auto tmp_status = channel->close(state, _fragment_ctx);
+        if (!tmp_status.ok()) {
+            status = tmp_status;
+        }
     }
 
     _buffer->set_finishing();
-    return Status::OK();
+    return status;
 }
 
 void ExchangeSinkOperator::close(RuntimeState* state) {
@@ -624,12 +649,14 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src, _encode_context);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src, _encode_context));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }

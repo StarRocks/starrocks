@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -25,16 +37,18 @@ class RuntimeFilterProbeCollector;
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t num_rows_read = 0;
-    int64_t expr_filter_ns = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
     int64_t bytes_read = 0;
+
+    int64_t expr_filter_ns = 0;
     int64_t column_read_ns = 0;
     int64_t column_convert_ns = 0;
     int64_t reader_init_ns = 0;
 
     // parquet only!
     // read & decode
+    int64_t request_bytes_read = 0;
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
@@ -49,9 +63,7 @@ struct HdfsScanStats {
     int64_t skip_read_rows = 0;
 
     int64_t get_cpu_time_ns() const {
-        // TODO: make it more accurate
-        return expr_filter_ns + column_convert_ns + level_decode_ns + value_decode_ns + group_dict_filter_ns +
-               group_dict_decode_ns;
+        return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns - io_ns;
     }
 };
 
@@ -61,7 +73,6 @@ struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
-    RuntimeProfile::Counter* scan_timer = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
@@ -203,8 +214,6 @@ struct HdfsScannerContext {
 
     void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     void append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
-
-    bool enable_block_cache = false;
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)

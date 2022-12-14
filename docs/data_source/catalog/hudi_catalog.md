@@ -2,50 +2,65 @@
 
 This topic describes how to create a Hudi catalog, and how to configure your StarRocks cluster for querying data from Apache Hudi.
 
-A Hudi catalog is an external catalog, which enables you to query data from Hudi without loading data into StarRocks or creating external tables. The StarRocks interacts with the following two components of Hudi when you query data from Hudi:
-
-- **Metadata service:** used by the FEs to access Hudi metadata. The FEs generate a query execution plan based on Hudi metadata.
-- **Data storage system:** used to store Hudi data. You can use a distributed file system or object storage system as the data storage system to store the data files of Hudi in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target Hudi data in parallel, perform calculations, and then return the query result.
+A Hudi catalog is an external catalog supported in StarRocks 2.4 and later versions. It enables you to query data from Hudi without loading data into StarRocks or creating external tables.
 
 ## Usage notes
 
 - StarRocks supports querying data files of Hudi in the following formats: Parquet and ORC.
 - StarRocks supports querying compressed data files of Hudi in the following formats: gzip, Zstd, LZ4, and Snappy.
-- StarRocks supports querying Hudi data in the following types: BOOLEAN, INT, DATE, TIME, BIGINT, FLOAT, DOUBLE, DECIMAL, CHAR, and VARCHAR. Note that an error occurs when you query Hudi data in unsupported data types. The following data types are not supported: ARRAY, MAP, and STRUCT.
-- StarRocks supports querying Copy On Write tables. Merge On Read tables are not supported. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
+- StarRocks supports querying Hudi data in the following types: BOOLEAN, INTEGER, DATE, TIME, BIGINT, FLOAT, DOUBLE, DECIMAL, CHAR, VARCHAR, MAP, and STRUCT. The ARRAY type is not supported. An error occurs when you query Hudi data of the ARRAY type.
+- StarRocks supports querying Copy On Write and Merge On Read tables. Merge On Read tables are not supported. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
+- StarRocks supports the following two query types of Hudi: Snapshot Queries and Read Optimized Queries (Hudi only supports performing Read Optimized Queries on Merge On Read tables). Incremental Queries are not supported. For more information about the query types of Hudi, see [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types).
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hudi table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create a Hudi catalog, configure your StarRocks cluster so that you can access the data storage system and metadata service of your Hudi cluster. StarRocks supports two data storage systems for Hudi: HDFS and Amazon S3. StarRocks supports one metadata service for Hudi: Hive metastore. The configurations that need to be performed are the same as that before you create a Hive catalog. For information about the configurations, see [Hive catalog](../catalog/hive_catalog.md#before-you-begin).
+Before you create a Hudi catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Hudi cluster. StarRocks supports two data storage systems for Hudi: HDFS and Amazon S3. StarRocks supports two metadata services for Hudi: Hive metastore and AWS Glue. The configurations required for a Hudi catalog are the same as that required for a Hive catalog. Therefore, see [Hive catalog](../catalog/hive_catalog.md#before-you-begin) for more information about the configurations.
 
 ## Create a Hudi catalog
 
-After you complete the preceding configurations, you can create a Hudi catalog using the following syntax:
+After you complete the preceding configurations, you can create a Hudi catalog.
+
+### Syntax
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
+CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
-The parameter description is as follows:
+### Parameters
 
 - `catalog_name`: the name of the Hudi catalog. This parameter is required.<br>The naming conventions are as follows:
 
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Hudi catalog. <br> This parameter is required. You can configure the following properties:
+- `PROPERTIES`: the properties of the Hudi catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Hudi cluster.
 
-    | **Property**        | **Required** | **Description**                                              |
-    | ------------------- | ------------ | ------------------------------------------------------------ |
-    | type                | Yes          | The type of the data source. Set the value to `hudi`.        |
-    | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+#### Hive metastore
 
-> Note
+If you use Hive metastore for your Hudi cluster, configure the following properties for the Hudi catalog.
+
+| **Property**        | **Required** | **Description**                                              |
+| ------------------- | ------------ | ------------------------------------------------------------ |
+| type                | Yes          | The type of the data source. Set the value to `hudi`.        |
+| hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+
+> **Note**
 >
-> - The CREATE EXTERNAL CATALOG statement does not require any privileges for execution.
-> - Before querying Hudi data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Before querying Hudi data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+
+#### [Preview] AWS Glue
+
+If you use AWS Glue for your Hudi cluster, configure the following properties for the Hudi catalog.
+
+| **Property**                           | **Required** | **Description**                                              |
+| -------------------------------------- | ------------ | ------------------------------------------------------------ |
+| type                                   | Yes          | The type of the data source. Set the value to `hudi`.        |
+| hive.metastore.type                    | Yes          | The metadata service used by your Hudi cluster. Set the value to `glue`. |
+| aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
+| aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
+| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
 ## Caching strategy of Hudi metadata
 
@@ -83,11 +98,11 @@ To query the latest Hudi data, make sure that the metadata cached in StarRocks i
     [PARTITION ('partition_name', ...)];
     ```
 
-For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md). Note that only users with the `ALTER_PRIV` permission can manually update the metadata cached in StarRocks.
+For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
 
 ## What to do next
 
-After you complete the preceding configurations, you can use the Hudi catalog to query Hudi data. For more information, see [Query external data](../catalog/query_external_data.md).
+After you complete all the preceding operations, you can use the Hudi catalog to query Hudi data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

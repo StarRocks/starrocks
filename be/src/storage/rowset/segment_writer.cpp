@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/segment_writer.cpp
 
@@ -30,7 +43,6 @@
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
-#include "storage/field.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
@@ -70,7 +82,7 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
-    if (column.type() == OLAP_FIELD_TYPE_JSON) {
+    if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
     }
@@ -132,16 +144,14 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // now we create zone map for key columns
         // and not support zone map for array type.
         // TODO(mofei) refactor it to type specification
-        opts.need_zone_map = column.is_key() || (_tablet_schema->keys_type() == KeysType::DUP_KEYS &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_CHAR &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_VARCHAR &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_JSON);
-        if (column.type() == FieldType::OLAP_FIELD_TYPE_ARRAY) {
+        opts.need_zone_map = column.is_key() ||
+                             (_tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type()));
+        if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
         opts.need_bloom_filter = column.is_bf_column();
         opts.need_bitmap_index = column.has_bitmap_index();
-        if (column.type() == FieldType::OLAP_FIELD_TYPE_ARRAY) {
+        if (column.type() == LogicalType::TYPE_ARRAY) {
             if (opts.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
             }
@@ -150,7 +160,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
-        if (column.type() == FieldType::OLAP_FIELD_TYPE_VARCHAR && _opts.global_dicts != nullptr) {
+        if (column.type() == LogicalType::TYPE_VARCHAR && _opts.global_dicts != nullptr) {
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
                 opts.global_dict = &iter->second;

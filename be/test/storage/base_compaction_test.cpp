@@ -1,13 +1,26 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/base_compaction.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
@@ -195,6 +208,7 @@ public:
     void SetUp() override {
         config::max_compaction_concurrency = 1;
         Compaction::init(config::max_compaction_concurrency);
+        config::enable_event_based_compaction_framework = false;
 
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_base_compaction";
         fs::remove_all(config::storage_root_path);

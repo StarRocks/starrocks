@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class AuditEventProcessor {
     private static final Logger LOG = LogManager.getLogger(AuditEventProcessor.class);
-    private static final long UPDATE_PLUGIN_INTERVAL_MS = 60 * 1000; // 1min
+    private static final long UPDATE_PLUGIN_INTERVAL_MS = 60L * 1000L; // 1min
 
     private PluginMgr pluginMgr;
 

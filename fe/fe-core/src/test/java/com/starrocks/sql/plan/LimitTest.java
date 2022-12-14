@@ -1,9 +1,28 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Replica;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -141,8 +160,7 @@ public class LimitTest extends PlanTestBase {
     public void testCountStarWithLimitForOneAggStage() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(*) from (select v1 from t0 order by v2 limit 10,20) t;";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (update finalize)"));
+        assertPlanContains(sql, "4:AGGREGATE (update finalize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -415,7 +433,7 @@ public class LimitTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("limit: 8888"));
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
 
-        connectContext.getSessionVariable().setSqlSelectLimit(-100);
+        connectContext.getSessionVariable().setSqlSelectLimit(0);
         sql = "select * from test_all_type";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("limit"));
@@ -534,7 +552,7 @@ public class LimitTest extends PlanTestBase {
         String sql = "select * from t0 cross join t1 on t0.v2 != t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
@@ -739,5 +757,33 @@ public class LimitTest extends PlanTestBase {
         assertContains(plan, "3:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
+    }
+
+    // LimitPruneTabletsRule shouldn't prune tablets when totalRow less than limit
+    @Test
+    public void testLimitPrune() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+
+        // We need to let some tablets have data, some tablets don't data
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        MaterializedIndex index = t0.getPartitions().stream().findFirst().get().getBaseIndex();
+        LocalTablet tablets = (LocalTablet) index.getTablets().get(0);
+        Replica replica = tablets.getSingleReplica();
+        new Expectations(replica) {
+            {
+                replica.getRowCount();
+                result = 10;
+                minTimes = 0;
+            }
+        };
+
+        boolean flag = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from t0 limit 1000";
+        String planFragment = getFragmentPlan(sql);
+        // Shouldn't prune tablets
+        assertNotContains(planFragment, "tabletRatio=1/3");
+        assertContains(planFragment, "tabletRatio=3/3");
+        FeConstants.runningUnitTest = flag;
     }
 }

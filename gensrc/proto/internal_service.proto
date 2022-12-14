@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/proto/internal_service.proto
 
@@ -150,6 +163,7 @@ message PTabletWriterOpenRequest {
     optional bool is_replicated_storage = 23;
     optional int64 timeout_ms = 24;
     optional WriteQuorumTypePB write_quorum = 25;
+    optional string merge_condition = 26;
 };
 
 message PTabletWriterOpenResult {
@@ -207,6 +221,7 @@ message PTabletWriterAddBatchResult {
     repeated PTabletInfo tablet_vec = 2;
     optional int64 execution_time_us = 3;
     optional int64 wait_lock_time_us = 4;
+    repeated PTabletInfo failed_tablet_vec = 5;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -223,6 +238,7 @@ message PTabletWriterAddSegmentResult {
     optional StatusPB status = 1;
     optional int64 execution_time_us = 2;
     repeated PTabletInfo tablet_vec = 3;
+    repeated PTabletInfo failed_tablet_vec = 4;
 };
 
 // Tablet writer cancel.
@@ -288,6 +304,21 @@ message PTriggerProfileReportRequest {
 
 message PTriggerProfileReportResult {
     required StatusPB status = 1;
+};
+
+message PCollectQueryStatisticsRequest {
+    repeated PUniqueId query_ids = 1;
+};
+
+message PCollectQueryStatistics {
+    optional PUniqueId query_id = 1;
+    optional int64 cpu_cost_ns = 2;
+    optional int64 scan_bytes = 3;
+    optional int64 scan_rows = 4;
+}
+
+message PCollectQueryStatisticsResult {
+    repeated PCollectQueryStatistics query_statistics = 1;
 };
 
 message PStringPair {
@@ -390,6 +421,13 @@ message PPulsarProxyResult {
     optional PPulsarBacklogBatchProxyResult pulsar_backlog_batch_result = 102;
 };
 
+message PMVMaintenanceTaskRequest {
+};
+
+message PMVMaintenanceTaskResult {
+    required StatusPB status = 1;
+};
+
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -402,6 +440,7 @@ service PInternalService {
     rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
+    rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
     rpc get_info(PProxyRequest) returns (PProxyResult); 
     rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult); 
 
@@ -411,5 +450,7 @@ service PInternalService {
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
+
+    rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
 };
 

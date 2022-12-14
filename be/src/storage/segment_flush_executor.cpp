@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "storage/segment_flush_executor.h"
 
 #include <fmt/format.h>
@@ -58,6 +71,9 @@ Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddS
         }
         if (!st.ok()) {
             writer->abort(true);
+            auto* tablet_info = response->add_failed_tablet_vec();
+            tablet_info->set_tablet_id(writer->tablet()->tablet_id());
+            tablet_info->set_node_id(writer->node_id());
         }
         st.to_protobuf(response->mutable_status());
         done->Run();

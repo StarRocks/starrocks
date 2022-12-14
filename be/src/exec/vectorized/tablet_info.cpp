@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/tablet_info.h"
 
@@ -22,7 +34,7 @@ OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchema
 
 OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 
-Status OlapTablePartitionParam::init() {
+Status OlapTablePartitionParam::init(RuntimeState* state) {
     std::map<std::string, SlotDescriptor*> slots_map;
     for (auto slot_desc : _schema->tuple_desc()->slots()) {
         slots_map.emplace(slot_desc->col_name(), slot_desc);
@@ -54,7 +66,7 @@ Status OlapTablePartitionParam::init() {
     _distributed_columns.resize(_distributed_slot_descs.size());
 
     if (_t_param.__isset.partition_exprs) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
     }
 
     // initial partitions

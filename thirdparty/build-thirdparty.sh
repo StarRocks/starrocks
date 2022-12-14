@@ -328,7 +328,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" -DSIMDJSON_AVX512_ALLOWED=OFF ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -854,8 +854,8 @@ build_aws_cpp_sdk() {
 
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
-    # only build s3, s3-crt and transfer manager, you can add more components if you want.
-    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
+    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -G "${CMAKE_GENERATOR}" \
                -D_POSIX_C_SOURCE=200112L \

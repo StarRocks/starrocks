@@ -1,10 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/fragment_context.h"
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks::pipeline {
 
@@ -15,16 +29,53 @@ void FragmentContext::set_final_status(const Status& status) {
     Status* old_status = nullptr;
     if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
         _s_status = status;
-        if (_final_status.load()->is_cancelled()) {
-            LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(_query_id)
-                         << ", instance_id=" << print_id(_fragment_instance_id)
-                         << ", reason=" << final_status().to_string();
+        if (_s_status.is_cancelled()) {
+            auto detailed_message = _s_status.detailed_message();
+            std::stringstream ss;
+            ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
+               << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
+            if (detailed_message == "LimitReach" || detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << ss.str();
+            } else {
+                LOG(WARNING) << ss.str();
+            }
             DriverExecutor* executor = enable_resource_group() ? _runtime_state->exec_env()->wg_driver_executor()
                                                                : _runtime_state->exec_env()->driver_executor();
             for (auto& driver : _drivers) {
                 executor->cancel(driver.get());
             }
         }
+    }
+}
+
+void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
+    _stream_load_contexts = std::move(contexts);
+    _channel_stream_load = true;
+}
+
+void FragmentContext::cancel(const Status& status) {
+    _runtime_state->set_is_cancelled(true);
+    set_final_status(status);
+
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
+                                                                                             _fragment_instance_id);
+    }
+
+    if (_stream_load_contexts.size() > 0) {
+        for (const auto& stream_load_context : _stream_load_contexts) {
+            if (stream_load_context->body_sink) {
+                Status st;
+                stream_load_context->body_sink->cancel(st);
+            }
+            if (_channel_stream_load) {
+                _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(stream_load_context);
+            }
+        }
+        _stream_load_contexts.resize(0);
     }
 }
 
@@ -50,7 +101,13 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
         LOG(WARNING) << msg.str();
         return Status::InternalError(msg.str());
     }
-    if (fragment_ctx->runtime_state()->query_options().query_type == TQueryType::LOAD) {
+
+    // Only register profile report worker for broker load and insert into here,
+    // for stream load and routine load, currently we don't need BE to report their progress regularly.
+    const TQueryOptions& query_options = fragment_ctx->runtime_state()->query_options();
+    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
                 fragment_ctx->query_id(), fragment_id));
     }
@@ -73,9 +130,30 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
     auto it = _fragment_contexts.find(fragment_id);
     if (it != _fragment_contexts.end()) {
         it->second->_finish_promise.set_value();
-        if (it->second->runtime_state()->query_options().query_type == TQueryType::LOAD) {
+
+        const TQueryOptions& query_options = it->second->runtime_state()->query_options();
+        if (query_options.query_type == TQueryType::LOAD &&
+            (query_options.load_job_type == TLoadJobType::BROKER ||
+             query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+             query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
+            !it->second->runtime_state()->is_cancelled()) {
             starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
                                                                                                  fragment_id);
+        }
+        const auto& stream_load_contexts = it->second->_stream_load_contexts;
+
+        if (stream_load_contexts.size() > 0) {
+            for (const auto& stream_load_context : stream_load_contexts) {
+                if (stream_load_context->body_sink) {
+                    Status st;
+                    stream_load_context->body_sink->cancel(st);
+                }
+                if (it->second->_channel_stream_load) {
+                    it->second->_runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(
+                            stream_load_context);
+                }
+            }
+            it->second->_stream_load_contexts.resize(0);
         }
         _fragment_contexts.erase(it);
     }

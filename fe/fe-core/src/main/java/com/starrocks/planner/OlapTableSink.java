@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/planner/OlapTableSink.java
 
@@ -46,6 +59,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -77,7 +91,7 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.TransactionState;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -86,6 +100,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -101,15 +116,17 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
-    private boolean enablePipelineLoad;
-    private TWriteQuorumType writeQuorum;
+    private final boolean enablePipelineLoad;
+    private final TWriteQuorumType writeQuorum;
+    private final boolean enableReplicatedStorage;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         TWriteQuorumType writeQuorum) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum);
+            TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
+        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage);
     }
 
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds, boolean enablePipelineLoad, TWriteQuorumType writeQuorum) {
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
+            boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
@@ -117,6 +134,7 @@ public class OlapTableSink extends DataSink {
         this.clusterId = dstTable.getClusterId();
         this.enablePipelineLoad = enablePipelineLoad;
         this.writeQuorum = writeQuorum;
+        this.enableReplicatedStorage = enableReplicatedStorage;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -135,6 +153,7 @@ public class OlapTableSink extends DataSink {
         tSink.setIs_lake_table(dstTable.isLakeTable());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
+        tSink.setEnable_replicated_storage(enableReplicatedStorage);
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
@@ -151,6 +170,14 @@ public class OlapTableSink extends DataSink {
         tDataSink.getOlap_table_sink().setLoad_id(newLoadId);
     }
 
+    public void complete(String mergeCondition) throws UserException {
+        TOlapTableSink tSink = tDataSink.getOlap_table_sink();
+        if (mergeCondition != null && !mergeCondition.isEmpty()) {
+            tSink.setMerge_condition(mergeCondition);
+        }
+        complete();
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
@@ -159,9 +186,10 @@ public class OlapTableSink extends DataSink {
         tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
         int numReplicas = 1;
-        for (Partition partition : dstTable.getPartitions()) {
-            numReplicas = dstTable.getPartitionInfo().getReplicationNum(partition.getId());
-            break;
+        Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
+        if (optionalPartition.isPresent()) {
+            long partitionId = optionalPartition.get().getId();
+            numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
@@ -388,9 +416,11 @@ public class OlapTableSink extends DataSink {
 
     private TOlapTableLocationParam createLocation(OlapTable table) throws UserException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
-        // BE id -> path hash
+        // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         Map<Long, Long> bePrimaryMap = new HashMap<>();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState()
+                .getOrCreateSystemInfo(clusterId);
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
@@ -403,7 +433,7 @@ public class OlapTableSink extends DataSink {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
-                        Multimap<Long, Long> bePathsMap =
+                        Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
@@ -412,25 +442,43 @@ public class OlapTableSink extends DataSink {
                                             Joiner.on(",").join(localTablet.getBackends()));
                         }
 
-                        List<Long> replicas = Lists.newArrayList(bePathsMap.keySet());
-                        int lowUsageIndex = 0;
-                        for (int i = 0; i < replicas.size(); i++) {
-                            Long backendID = replicas.get(i);
-                            if (!bePrimaryMap.containsKey(backendID)) {
-                                bePrimaryMap.put(backendID, Long.valueOf(0));
+                        List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+
+                        if (enableReplicatedStorage) {
+                            int lowUsageIndex = -1;
+                            for (int i = 0; i < replicas.size(); i++) {
+                                Replica replica = replicas.get(i);
+                                if (lowUsageIndex == -1 && !replica.getLastWriteFail()
+                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                    lowUsageIndex = i;
+                                }
+                                if (lowUsageIndex != -1
+                                        && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
+                                                .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                        && !replica.getLastWriteFail()
+                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                    lowUsageIndex = i;
+                                }
                             }
-                            if (bePrimaryMap.get(backendID) < bePrimaryMap.get(replicas.get(lowUsageIndex))) {
-                                lowUsageIndex = i;
+
+                            if (lowUsageIndex != -1) {
+                                bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
+                                        bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                                + 1);
+                                // replicas[0] will be the primary replica
+                                Collections.swap(replicas, 0, lowUsageIndex);
+                            } else {
+                                LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
                             }
                         }
-                        bePrimaryMap.put(replicas.get(lowUsageIndex), bePrimaryMap.get(replicas.get(lowUsageIndex)) + 1);
-                        // replicas[0] will be the primary replica
-                        Collections.swap(replicas, 0, lowUsageIndex);
 
                         locationParam
                                 .addToTablets(
-                                        new TTabletLocation(tablet.getId(), replicas));
-                        allBePathsMap.putAll(bePathsMap);
+                                        new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                                .collect(Collectors.toList())));
+                        for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
+                            allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
+                        }
                     }
                 }
             }

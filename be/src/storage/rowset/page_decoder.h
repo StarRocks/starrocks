@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/page_decoder.h
 
@@ -23,7 +36,6 @@
 
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
-#include "storage/column_block.h" // for ColumnBlockView
 #include "storage/range.h"
 #include "storage/rowset/page_pointer.h"
 #include "types/timestamp_value.h"
@@ -81,16 +93,6 @@ public:
         seek_to_position_in_page(current_index() + step);
         return step;
     }
-
-    // Fetch the next vector of values from the page into 'column_vector_view'.
-    // The output vector must have space for up to n cells.
-    //
-    // Return the size of read entries .
-    //
-    // In the case that the values are themselves references
-    // to other memory (eg Slices), the referred-to memory is
-    // allocated in the column_vector_view's mem_pool.
-    virtual Status next_batch(size_t* n, ColumnBlockView* dst) = 0;
 
     virtual Status next_batch(size_t* n, vectorized::Column* column) {
         return Status::NotSupported("vectorized not supported yet");

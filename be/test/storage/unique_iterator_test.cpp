@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/unique_iterator.h"
 
@@ -9,7 +21,8 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {
@@ -41,10 +54,10 @@ protected:
 
         void close() override {}
 
-        static Schema new_schema() {
-            FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(OLAP_FIELD_TYPE_INT), false);
+        static VectorizedSchema new_schema() {
+            VectorizedFieldPtr f = std::make_shared<VectorizedField>(0, "c1", get_type_info(TYPE_INT), false);
             f->set_is_key(true);
-            return Schema(std::vector<FieldPtr>{f});
+            return VectorizedSchema(std::vector<VectorizedFieldPtr>{f});
         }
 
     private:

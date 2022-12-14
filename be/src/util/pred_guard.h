@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -10,20 +22,20 @@
 //
 // step#1: use DEF_PRED_GUARD produces codes as follows:
 // ```code
-// DEF_PRED_GUARD(DirectlyCopyable, is_directly_copyable, ArrowTypeId, AT, PrimitiveType, PT)
+// DEF_PRED_GUARD(DirectlyCopyable, is_directly_copyable, ArrowTypeId, AT, LogicalType, PT)
 // ```
 // produces codes as follows
 //
 // ```code
-// template <ArrowTypeId, AT, PrimitiveType, PT>
+// template <ArrowTypeId, AT, LogicalType, PT>
 // struct is_directly_copyable_struct {
 //     static constexpr bool value = false;
 // };
 //
-// template <ArrowTypeId, AT, PrimitiveType, PT>
+// template <ArrowTypeId, AT, LogicalType, PT>
 // constexpr bool is_directly_copyable = is_directly_copyable_struct<AT, PT>::value;
 //
-// template <ArrowTypeId, AT, PrimitiveType, PT>
+// template <ArrowTypeId, AT, LogicalType, PT>
 // using DirectlyCopyableGuard = std::enable_if_t<is_directly_copyable<AT, PT>, guard::Guard>;
 // ```
 //

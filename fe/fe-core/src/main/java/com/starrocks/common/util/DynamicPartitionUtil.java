@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/util/DynamicPartitionUtil.java
 
@@ -65,7 +78,8 @@ public class DynamicPartitionUtil {
 
     public static void checkTimeUnit(String timeUnit) throws DdlException {
         if (Strings.isNullOrEmpty(timeUnit)
-                || !(timeUnit.equalsIgnoreCase(TimeUnit.DAY.toString())
+                || !(timeUnit.equalsIgnoreCase(TimeUnit.HOUR.toString())
+                || timeUnit.equalsIgnoreCase(TimeUnit.DAY.toString())
                 || timeUnit.equalsIgnoreCase(TimeUnit.WEEK.toString())
                 || timeUnit.equalsIgnoreCase(TimeUnit.MONTH.toString()))) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_TIME_UNIT, timeUnit);
@@ -401,7 +415,9 @@ public class DynamicPartitionUtil {
 
     public static String getFormattedPartitionName(TimeZone tz, String formattedDateStr, String timeUnit) {
         formattedDateStr = formattedDateStr.replace("-", "").replace(":", "").replace(" ", "");
-        if (timeUnit.equalsIgnoreCase(TimeUnit.DAY.toString())) {
+        if (timeUnit.equalsIgnoreCase(TimeUnit.HOUR.toString())) {
+            return formattedDateStr.substring(0, 10);
+        } else if (timeUnit.equalsIgnoreCase(TimeUnit.DAY.toString())) {
             return formattedDateStr.substring(0, 8);
         } else if (timeUnit.equalsIgnoreCase(TimeUnit.MONTH.toString())) {
             return formattedDateStr.substring(0, 6);
@@ -429,13 +445,28 @@ public class DynamicPartitionUtil {
     public static String getPartitionRangeString(DynamicPartitionProperty property, ZonedDateTime current,
                                                  int offset, String format) {
         String timeUnit = property.getTimeUnit();
-        if (timeUnit.equalsIgnoreCase(TimeUnit.DAY.toString())) {
+        if (timeUnit.equalsIgnoreCase(TimeUnit.HOUR.toString())) {
+            return getPartitionRangeOfHour(current, offset, format);
+        } else if (timeUnit.equalsIgnoreCase(TimeUnit.DAY.toString())) {
             return getPartitionRangeOfDay(current, offset, format);
         } else if (timeUnit.equalsIgnoreCase(TimeUnit.WEEK.toString())) {
             return getPartitionRangeOfWeek(current, offset, property.getStartOfWeek(), format);
         } else { // MONTH
             return getPartitionRangeOfMonth(current, offset, property.getStartOfMonth(), format);
         }
+    }
+
+    /**
+     * return formatted string of partition range in HOUR granularity.
+     * offset: The offset from the current hour. 0 means current hour, -1 means pre hour, 1 means next hour.
+     * format: the format of the return hour string.
+     * <p>
+     * Eg:
+     * Hour is 2020-05-24 10:00:00, offset = -1
+     * It will return 2020-05-24 09:00:00
+     */
+    private static String getPartitionRangeOfHour(ZonedDateTime current, int offset, String format) {
+        return getFormattedTimeWithoutMinuteSecond(current.plusHours(offset), format);
     }
 
     /**
@@ -467,7 +498,7 @@ public class DynamicPartitionUtil {
         // 1. get the offset week
         ZonedDateTime offsetWeek = current.plusWeeks(offset);
         // 2. get the date of `startOf` week
-        int day = offsetWeek.getDayOfWeek().getValue();
+        long day = offsetWeek.getDayOfWeek().getValue();
         ZonedDateTime resultTime = offsetWeek.plusDays(startOf.dayOfWeek - day);
         return getFormattedTimeWithoutHourMinuteSecond(resultTime, format);
     }
@@ -495,6 +526,11 @@ public class DynamicPartitionUtil {
         }
         ZonedDateTime resultTime = current.plusMonths(realOffset).withDayOfMonth(startOf.day);
         return getFormattedTimeWithoutHourMinuteSecond(resultTime, format);
+    }
+
+    private static String getFormattedTimeWithoutMinuteSecond(ZonedDateTime zonedDateTime, String format) {
+        ZonedDateTime timeWithoutMinuteSecond = zonedDateTime.withMinute(0).withSecond(0);
+        return DateTimeFormatter.ofPattern(format).format(timeWithoutMinuteSecond);
     }
 
     private static String getFormattedTimeWithoutHourMinuteSecond(ZonedDateTime zonedDateTime, String format) {

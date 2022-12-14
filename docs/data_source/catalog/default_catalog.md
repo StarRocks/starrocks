@@ -34,23 +34,44 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
       USE default_catalog.db_name；
       ```
 
-4. Execute the [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query internal data.
+4. Query internal data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md).
+
+      ```SQL
+      SELECT * FROM table_name;
+      ```
+
+      If you do not specify the database in the preceding steps, you can directly specify it in a select query.
+
+      ```SQL
+      SELECT * FROM db_name.table_name;
+      ```
+
+      Or
+
+      ```SQL
+      SELECT * FROM default_catalog.db_name.table_name;
+      ```
 
 ## Examples
 
-To query data in `olap_db.olap_table`, perform the following steps:
+To query data in `olap_db.olap_table`, you can perform one of the following operations:
 
-1. Use `olap_db` as the current database.
+```SQL
+USE olap_db;
+SELECT * FROM olap_table limit 1;
+```
 
-      ```SQL
-      USE olap_db;
-      ```
+Or
 
-2. Query data from `olap_table`.
+```SQL
+SELECT * FROM olap_db.olap_table limit 1;     
+```
 
-      ```SQL
-      SELECT * FROM olap_table limit 1;
-      ```
+Or
+
+```SQL
+SELECT * FROM default_catalog.olap_db.olap_table limit 1;      
+```
 
 ## References
 

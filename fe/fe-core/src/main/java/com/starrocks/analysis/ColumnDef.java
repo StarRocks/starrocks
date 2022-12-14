@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/ColumnDef.java
 
@@ -144,6 +157,10 @@ public class ColumnDef {
         return isAllowNull;
     }
 
+    public void setAllowNull(Boolean allowNull) {
+        isAllowNull = allowNull;
+    }
+
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
     // So add a new setPrimaryKeyNonNullable() to set isAllowNull to be true for primary key columns.
     public void setPrimaryKeyNonNullable() {
@@ -200,7 +217,7 @@ public class ColumnDef {
         }
         FeNameFormat.checkColumnName(name);
 
-        // When string type length is not assigned, it need to be assigned to 1.
+        // When string type length is not assigned, it needs to be assigned to 1.
         if (typeDef.getType().isScalarType()) {
             final ScalarType targetType = (ScalarType) typeDef.getType();
             if (targetType.getPrimitiveType().isStringType()) {
@@ -232,7 +249,7 @@ public class ColumnDef {
             typeDef.setType(AggregateType.extendedPrecision(typeDef.getType()));
         }
 
-        typeDef.analyze(null);
+        typeDef.analyze(isOlap);
 
         Type type = typeDef.getType();
 

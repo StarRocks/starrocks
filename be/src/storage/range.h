@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -63,9 +75,9 @@ inline Range::Range(rowid_t begin, rowid_t end) : _begin(begin), _end(end) {
 
 inline Range Range::intersection(const Range& r) const {
     if (!has_intersection(r)) {
-        return Range();
+        return {};
     }
-    return Range(std::max(_begin, r._begin), std::min(_end, r._end));
+    return {std::max(_begin, r._begin), std::min(_end, r._end)};
 }
 
 inline std::string Range::to_string() const {
@@ -93,11 +105,10 @@ class SparseRangeIterator {
     using rowid_t = starrocks::rowid_t;
 
 public:
-    SparseRangeIterator() {}
+    SparseRangeIterator() = default;
     explicit SparseRangeIterator(const SparseRange* r);
 
-    SparseRangeIterator(const SparseRangeIterator& iter)
-            : _range(iter._range), _index(iter._index), _next_rowid(iter._next_rowid) {}
+    SparseRangeIterator(const SparseRangeIterator& iter) = default;
 
     rowid_t begin() const { return _next_rowid; }
 
@@ -296,7 +307,7 @@ inline SparseRange& SparseRange::operator|=(const SparseRange& rhs) {
     return *this;
 }
 
-inline SparseRangeIterator::SparseRangeIterator(const SparseRange* r) : _range(r), _index(0), _next_rowid(0) {
+inline SparseRangeIterator::SparseRangeIterator(const SparseRange* r) : _range(r) {
     if (!_range->_ranges.empty()) {
         _next_rowid = _range->_ranges[0].begin();
     }

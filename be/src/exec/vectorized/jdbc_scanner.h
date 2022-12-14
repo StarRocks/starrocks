@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -37,8 +51,8 @@ struct JDBCScannerProfile {
 
 class JDBCScanner {
 public:
-    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
-            : _scan_ctx(context), _slot_descs(tuple_desc->slots()), _runtime_profile(runtime_profile) {}
+    JDBCScanner(JDBCScanContext context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
+            : _scan_ctx(std::move(context)), _slot_descs(tuple_desc->slots()), _runtime_profile(runtime_profile) {}
 
     ~JDBCScanner() = default;
 
@@ -51,7 +65,7 @@ public:
 private:
     void _init_profile();
 
-    StatusOr<PrimitiveType> _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
+    StatusOr<LogicalType> _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
 
     Status _init_jdbc_bridge();
 
@@ -76,7 +90,7 @@ private:
     std::vector<SlotDescriptor*> _slot_descs;
     // java class name for each result column
     std::vector<std::string> _column_class_names;
-    std::vector<PrimitiveType> _result_column_types;
+    std::vector<LogicalType> _result_column_types;
     std::vector<ExprContext*> _cast_exprs;
     ChunkPtr _result_chunk;
 

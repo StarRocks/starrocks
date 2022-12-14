@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.catalog;
 
@@ -91,6 +104,10 @@ public class IcebergTable extends Table {
             setGlueCatalogProperties();
             return;
         }
+        if (catalogType != null && IcebergCatalogType.REST_CATALOG == IcebergCatalogType.valueOf(catalogType)) {
+            setRESTCatalogProperties();
+            return;
+        }
         String metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
         if (null != metastoreURI && !isInternalCatalog(metastoreURI)) {
             setHiveCatalogProperties(metastoreURI);
@@ -124,6 +141,11 @@ public class IcebergTable extends Table {
 
     public boolean isUnPartitioned() {
         return getPartitionColumns().size() == 0;
+    }
+
+    public List<String> getPartitionColumnNames() {
+        return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
+                .collect(Collectors.toList());
     }
 
     public String getFileIOMaxTotalBytes() {
@@ -163,6 +185,10 @@ public class IcebergTable extends Table {
         IcebergUtil.refreshTable(this.getIcebergTable());
     }
 
+    public String getTableLocation() {
+        return this.getIcebergTable().location();
+    }
+
     // icbTbl is used for caching
     public synchronized org.apache.iceberg.Table getIcebergTable() {
         try {
@@ -190,6 +216,10 @@ public class IcebergTable extends Table {
     private void setHiveCatalogProperties(String metastoreURI) {
         icebergProperties.put(ICEBERG_METASTORE_URIS, metastoreURI);
         icebergProperties.put(ICEBERG_CATALOG_TYPE, "HIVE_CATALOG");
+    }
+
+    private void setRESTCatalogProperties() {
+        icebergProperties.put(ICEBERG_CATALOG_TYPE, "REST_CATALOG");
     }
 
     private void setCustomCatalogProperties(Map<String, String> properties) {

@@ -1,8 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -14,6 +26,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,13 +45,15 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
@@ -356,8 +371,13 @@ public class Utils {
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
+                    List<ScalarOperator> predicates = Utils.extractConjuncts(operator.getPredicate());
+                    Types.StructType schema = table.getIcebergTable().schema().asStruct();
+                    ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                            new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+                    Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
                     List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
-                            new ArrayList<>(), table.getIcebergTable(),
+                            icebergPredicate, table.getIcebergTable(),
                             scanOperator.getColRefToColumnMetaMap());
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                 } catch (Exception e) {
@@ -390,12 +410,14 @@ public class Utils {
     }
 
     public static ColumnRefOperator findSmallestColumnRef(List<ColumnRefOperator> columnRefOperatorList) {
-        Preconditions.checkState(!columnRefOperatorList.isEmpty());
+        if (CollectionUtils.isEmpty(columnRefOperatorList)) {
+            return null;
+        }
         ColumnRefOperator smallestColumnRef = columnRefOperatorList.get(0);
         int smallestColumnLength = Integer.MAX_VALUE;
         for (ColumnRefOperator columnRefOperator : columnRefOperatorList) {
             Type columnType = columnRefOperator.getType();
-            if (columnType.isScalarType()) {
+            if (columnType.isScalarType() && !columnType.isInvalid() && !columnType.isUnknown()) {
                 int columnLength = columnType.getTypeSize();
                 if (columnLength < smallestColumnLength) {
                     smallestColumnRef = columnRefOperator;
@@ -476,6 +498,7 @@ public class Utils {
                 }
             }
         } catch (Exception ignored) {
+            LOG.debug("invalid value: {} to type {}", op, descType);
         }
         return Optional.empty();
     }

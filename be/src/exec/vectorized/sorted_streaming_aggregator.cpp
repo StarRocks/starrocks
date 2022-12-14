@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/sorted_streaming_aggregator.h"
 
@@ -301,7 +313,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
     // get result from aggregate values. such as count(*), sum(col)
     auto agg_result_columns = _create_agg_result_columns(chunk_size);
-    _get_agg_result_columns(chunk_size, selector, agg_result_columns);
+    RETURN_IF_ERROR(_get_agg_result_columns(chunk_size, selector, agg_result_columns));
 
     DCHECK_LE(agg_result_columns[0]->size(), _state->chunk_size());
 
@@ -394,17 +406,19 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
     return Status::OK();
 }
 
-void SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
-                                                        vectorized::Columns& agg_result_columns) {
+Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
+                                                          vectorized::Columns& agg_result_columns) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
-        _finalize_to_chunk(_last_state, agg_result_columns);
+        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_last_state, agg_result_columns));
     }
 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        _agg_functions[i]->batch_finalize_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
-                                                         _agg_states_offsets[i], agg_result_columns[i].get(), selector);
+        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize_with_selection(_agg_fn_ctxs[i], chunk_size,
+                                                                             _tmp_agg_states, _agg_states_offsets[i],
+                                                                             agg_result_columns[i].get(), selector));
     }
+    return Status::OK();
 }
 
 void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const std::vector<uint8_t>& selector) {
@@ -444,7 +458,7 @@ StatusOr<vectorized::ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     auto agg_result_columns = _create_agg_result_columns(1);
     auto group_by_columns = _last_columns;
 
-    _finalize_to_chunk(_last_state, agg_result_columns);
+    TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_last_state, agg_result_columns));
     _destroy_state(_last_state);
     _last_state = nullptr;
     _last_columns.clear();

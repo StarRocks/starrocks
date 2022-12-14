@@ -30,12 +30,12 @@ order by
     p_type,
     p_size ;
 [fragment statistics]
-PLAN FRAGMENT 0(F06)
+PLAN FRAGMENT 0(F08)
 Output Exprs:9: p_brand | 10: p_type | 11: p_size | 23: count
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-15:MERGING-EXCHANGE
+16:MERGING-EXCHANGE
 cardinality: 7119
 column statistics:
 * p_brand-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
@@ -43,13 +43,13 @@ column statistics:
 * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 * count-->[0.0, 6912000.0, 0.0, 8.0, 7119.140625] ESTIMATE
 
-PLAN FRAGMENT 1(F05)
+PLAN FRAGMENT 1(F07)
 
 Input Partition: HASH_PARTITIONED: 9: p_brand, 10: p_type, 11: p_size
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 15
+OutPut Exchange Id: 16
 
-14:SORT
+15:SORT
 |  order by: [23, BIGINT, false] DESC, [9, VARCHAR, true] ASC, [10, VARCHAR, true] ASC, [11, INT, true] ASC
 |  offset: 0
 |  cardinality: 7119
@@ -59,7 +59,7 @@ OutPut Exchange Id: 15
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |  * count-->[0.0, 6912000.0, 0.0, 8.0, 7119.140625] ESTIMATE
 |
-13:AGGREGATE (update finalize)
+14:AGGREGATE (update finalize)
 |  aggregate: count[([2: ps_suppkey, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: false]
 |  group by: [9: p_brand, VARCHAR, true], [10: p_type, VARCHAR, true], [11: p_size, INT, true]
 |  cardinality: 7119
@@ -69,7 +69,7 @@ OutPut Exchange Id: 15
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |  * count-->[0.0, 6912000.0, 0.0, 8.0, 7119.140625] ESTIMATE
 |
-12:AGGREGATE (merge serialize)
+13:AGGREGATE (merge serialize)
 |  group by: [2: ps_suppkey, INT, true], [9: p_brand, VARCHAR, true], [10: p_type, VARCHAR, true], [11: p_size, INT, true]
 |  cardinality: 6912000
 |  column statistics:
@@ -78,16 +78,16 @@ OutPut Exchange Id: 15
 |  * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |
-11:EXCHANGE
+12:EXCHANGE
 cardinality: 6912000
 
-PLAN FRAGMENT 2(F00)
+PLAN FRAGMENT 2(F04)
 
-Input Partition: RANDOM
+Input Partition: HASH_PARTITIONED: 1: ps_partkey
 OutPut Partition: HASH_PARTITIONED: 9: p_brand, 10: p_type, 11: p_size
-OutPut Exchange Id: 11
+OutPut Exchange Id: 12
 
-10:AGGREGATE (update serialize)
+11:AGGREGATE (update serialize)
 |  STREAMING
 |  group by: [2: ps_suppkey, INT, true], [9: p_brand, VARCHAR, true], [10: p_type, VARCHAR, true], [11: p_size, INT, true]
 |  cardinality: 6912000
@@ -97,7 +97,7 @@ OutPut Exchange Id: 11
 |  * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |
-9:Project
+10:Project
 |  output columns:
 |  2 <-> [2: ps_suppkey, INT, true]
 |  9 <-> [9: p_brand, VARCHAR, true]
@@ -110,7 +110,7 @@ OutPut Exchange Id: 11
 |  * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |
-8:HASH JOIN
+9:HASH JOIN
 |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)
 |  equal join conjunct: [2: ps_suppkey, INT, true] = [15: s_suppkey, INT, true]
 |  output columns: 2, 9, 10, 11
@@ -122,10 +122,10 @@ OutPut Exchange Id: 11
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
 |
-|----7:EXCHANGE
+|----8:EXCHANGE
 |       cardinality: 250000
 |
-4:Project
+5:Project
 |  output columns:
 |  2 <-> [2: ps_suppkey, INT, true]
 |  9 <-> [9: p_brand, VARCHAR, true]
@@ -138,11 +138,11 @@ OutPut Exchange Id: 11
 |  * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |
-3:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+4:HASH JOIN
+|  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [1: ps_partkey, INT, true] = [6: p_partkey, INT, true]
 |  build runtime filters:
-|  - filter_id = 0, build_expr = (6: p_partkey), remote = false
+|  - filter_id = 0, build_expr = (6: p_partkey), remote = true
 |  output columns: 2, 9, 10, 11
 |  cardinality: 9216000
 |  column statistics:
@@ -153,36 +153,26 @@ OutPut Exchange Id: 11
 |  * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 |  * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
 |
-|----2:EXCHANGE
+|----3:EXCHANGE
 |       cardinality: 2304000
 |
-0:HdfsScanNode
-TABLE: partsupp
-NON-PARTITION PREDICATES: 1: ps_partkey IS NOT NULL
-partitions=1/1
-avgRowSize=16.0
-numNodes=0
+1:EXCHANGE
 cardinality: 80000000
-probe runtime filters:
-- filter_id = 0, probe_expr = (1: ps_partkey)
-column statistics:
-* ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
-* ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 
-PLAN FRAGMENT 3(F03)
+PLAN FRAGMENT 3(F05)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 07
+OutPut Exchange Id: 08
 
-6:Project
+7:Project
 |  output columns:
 |  15 <-> [15: s_suppkey, INT, true]
 |  cardinality: 250000
 |  column statistics:
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
 |
-5:HdfsScanNode
+6:HdfsScanNode
 TABLE: supplier
 NON-PARTITION PREDICATES: 21: s_comment LIKE '%Customer%Complaints%'
 partitions=1/1
@@ -193,13 +183,13 @@ column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
 * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 250000.0] ESTIMATE
 
-PLAN FRAGMENT 4(F01)
+PLAN FRAGMENT 4(F02)
 
 Input Partition: RANDOM
-OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 02
+OutPut Partition: HASH_PARTITIONED: 6: p_partkey
+OutPut Exchange Id: 03
 
-1:HdfsScanNode
+2:HdfsScanNode
 TABLE: part
 NON-PARTITION PREDICATES: 9: p_brand != 'Brand#43', NOT (10: p_type LIKE 'PROMO BURNISHED%'), 11: p_size IN (31, 43, 9, 6, 18, 11, 25, 1)
 MIN/MAX PREDICATES: 24: p_size >= 1, 25: p_size <= 43
@@ -212,5 +202,24 @@ column statistics:
 * p_brand-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
 * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 * p_size-->[1.0, 43.0, 0.0, 4.0, 8.0] ESTIMATE
+
+PLAN FRAGMENT 5(F00)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 1: ps_partkey
+OutPut Exchange Id: 01
+
+0:HdfsScanNode
+TABLE: partsupp
+NON-PARTITION PREDICATES: 1: ps_partkey IS NOT NULL
+partitions=1/1
+avgRowSize=16.0
+numNodes=0
+cardinality: 80000000
+probe runtime filters:
+- filter_id = 0, probe_expr = (1: ps_partkey)
+column statistics:
+* ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+* ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 [end]
 

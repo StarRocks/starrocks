@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -25,7 +37,7 @@ using vectorized::SortDescs;
 class SortContext final : public ContextWithDependency {
 public:
     explicit SortContext(RuntimeState* state, const TTopNType::type topn_type, int64_t offset, int64_t limit,
-                         const int32_t num_right_sinkers, const std::vector<ExprContext*> sort_exprs,
+                         const int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
                          const SortDescs& sort_descs)
             : _state(state),
               _topn_type(topn_type),
@@ -36,6 +48,7 @@ public:
               _sort_desc(sort_descs) {
         _chunks_sorter_partitions.reserve(num_right_sinkers);
     }
+    ~SortContext() override = default;
 
     void close(RuntimeState* state) override;
 

@@ -1,5 +1,4 @@
-
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+#include <utility>
 
 #include "storage/olap_common.h"
 #include "storage/types.h"
@@ -32,8 +31,9 @@ class Column;
 // And that task is almost impossible.
 class ColumnExprPredicate : public ColumnPredicate {
 public:
-    ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
-                        const SlotDescriptor* slot_desc);
+    static StatusOr<ColumnExprPredicate*> make_column_expr_predicate(TypeInfoPtr type_info, ColumnId column_id,
+                                                                     RuntimeState* state, ExprContext* expr_ctx,
+                                                                     const SlotDescriptor* slot_desc);
 
     ~ColumnExprPredicate() override;
 
@@ -60,13 +60,16 @@ public:
                                               std::vector<const ColumnExprPredicate*>* output) const;
 
 private:
-    void _add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs);
+    ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
+                        const SlotDescriptor* slot_desc);
+
+    Status _add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs);
 
     // Take ownership of this expression, not necessary to clone
-    void _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
+    Status _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
 
     // Share the ownership, is necessary to clone it
-    void _add_expr_ctx(ExprContext* expr_ctx);
+    Status _add_expr_ctx(ExprContext* expr_ctx);
 
     ObjectPool _pool;
     RuntimeState* _state;
@@ -78,7 +81,7 @@ private:
 
 class ColumnTruePredicate : public ColumnPredicate {
 public:
-    ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(type_info, column_id) {}
+    ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(std::move(type_info), column_id) {}
     ~ColumnTruePredicate() override = default;
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
     Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;

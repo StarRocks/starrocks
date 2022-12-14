@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -45,32 +59,31 @@ enum HashJoinPhase {
 };
 struct HashJoinerParam {
     HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
-                    TPlanNodeType::type node_type, const std::vector<bool>& is_null_safes,
-                    const std::vector<ExprContext*>& build_expr_ctxs, const std::vector<ExprContext*>& probe_expr_ctxs,
-                    const std::vector<ExprContext*>& other_join_conjunct_ctxs,
-                    const std::vector<ExprContext*>& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
-                    const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor,
-                    TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
-                    bool build_conjunct_ctxs_is_empty,
-                    const std::list<RuntimeFilterBuildDescriptor*>& build_runtime_filters,
-                    const std::set<SlotId>& output_slots, const TJoinDistributionMode::type distribution_mode)
+                    TPlanNodeType::type node_type, std::vector<bool> is_null_safes,
+                    std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
+                    std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
+                    const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
+                    const RowDescriptor& row_descriptor, TPlanNodeType::type build_node_type,
+                    TPlanNodeType::type probe_node_type, bool build_conjunct_ctxs_is_empty,
+                    std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> output_slots,
+                    const TJoinDistributionMode::type distribution_mode)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _node_id(node_id),
               _node_type(node_type),
-              _is_null_safes(is_null_safes),
-              _build_expr_ctxs(build_expr_ctxs),
-              _probe_expr_ctxs(probe_expr_ctxs),
-              _other_join_conjunct_ctxs(other_join_conjunct_ctxs),
-              _conjunct_ctxs(conjunct_ctxs),
+              _is_null_safes(std::move(is_null_safes)),
+              _build_expr_ctxs(std::move(build_expr_ctxs)),
+              _probe_expr_ctxs(std::move(probe_expr_ctxs)),
+              _other_join_conjunct_ctxs(std::move(other_join_conjunct_ctxs)),
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
               _build_row_descriptor(build_row_descriptor),
               _probe_row_descriptor(probe_row_descriptor),
               _row_descriptor(row_descriptor),
               _build_node_type(build_node_type),
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
-              _build_runtime_filters(build_runtime_filters),
-              _output_slots(output_slots),
+              _build_runtime_filters(std::move(build_runtime_filters)),
+              _output_slots(std::move(output_slots)),
               _distribution_mode(distribution_mode) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
@@ -103,7 +116,7 @@ class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers);
 
-    ~HashJoiner() {
+    ~HashJoiner() override {
         if (_runtime_state != nullptr) {
             close(_runtime_state);
         }

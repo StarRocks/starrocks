@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/persist/EditLog.java
 
@@ -21,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
@@ -58,6 +72,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
@@ -66,6 +81,8 @@ import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.mv.MVEpoch;
+import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -83,7 +100,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
-import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -279,6 +295,12 @@ public class EditLog {
                     ChangeMaterializedViewRefreshSchemeLog log =
                             (ChangeMaterializedViewRefreshSchemeLog) journal.getData();
                     globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
+                    ModifyTablePropertyOperationLog log =
+                            (ModifyTablePropertyOperationLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
                     break;
                 }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
@@ -599,6 +621,11 @@ public class EditLog {
                     globalStateMgr.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
                     break;
                 }
+                case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
+                    StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
+                    globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
+                    break;
+                }
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
@@ -702,6 +729,7 @@ public class EditLog {
                 case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
+                case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -1370,6 +1398,10 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
     }
 
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
+        logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
+    }
+
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
         logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
     }
@@ -1432,6 +1464,10 @@ public class EditLog {
 
     public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_WRITE_QUORUM, info);
+    }
+
+    public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
@@ -1530,6 +1566,10 @@ public class EditLog {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 
+    public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
+    }
+
     public void logAddUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
     }
@@ -1599,5 +1639,13 @@ public class EditLog {
 
     public void logAuthUpgrade(Map<String, Long> roleNameToId) {
         logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
+    }
+
+    public void logMVJobState(MVMaintenanceJob job) {
+        logEdit(OperationType.OP_MV_JOB_STATE, job);
+    }
+
+    public void logMVEpochChange(MVEpoch epoch) {
+        logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
 }

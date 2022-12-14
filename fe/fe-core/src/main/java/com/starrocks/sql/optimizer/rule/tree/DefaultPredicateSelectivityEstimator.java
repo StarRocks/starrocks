@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.tree;
 
@@ -80,7 +93,7 @@ public class DefaultPredicateSelectivityEstimator {
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.NE)) {
                 Optional<Double> op = computeEquals(BinaryPredicateOperator.BinaryType.EQ,
                         leftChild, rightChild, leftChildStatistic, rightChildStatistic);
-                return op.isPresent() ? Optional.of(1 - op.get()) : Optional.empty();
+                return op.map(aDouble -> 1 - aDouble);
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
                 return computeLessOrGreat(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
@@ -102,7 +115,7 @@ public class DefaultPredicateSelectivityEstimator {
                 Optional<Double> leftSelectivity = predicate.getChild(0).accept(this, null);
                 Optional<Double> rightSelectivity = predicate.getChild(1).accept(this, null);
                 if (leftSelectivity.isPresent() && rightSelectivity.isPresent()) {
-                    Optional.of(leftSelectivity.get() * rightSelectivity.get());
+                    return Optional.of(leftSelectivity.get() * rightSelectivity.get());
                 }
                 return Optional.empty();
             } else if (predicate.isOr()) {

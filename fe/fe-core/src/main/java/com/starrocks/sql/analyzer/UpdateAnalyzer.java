@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
@@ -13,7 +26,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -73,16 +88,23 @@ public class UpdateAnalyzer {
             selectList.addItem(item);
         }
 
-        TableRelation tableRelation = new TableRelation(tableName);
+        Relation relation = new TableRelation(tableName);
+        if (updateStmt.getFromRelations() != null) {
+            for (Relation r : updateStmt.getFromRelations()) {
+                relation = new JoinRelation(null, relation, r, null, false);
+            }
+        }
         SelectRelation selectRelation =
-                new SelectRelation(selectList, tableRelation, updateStmt.getWherePredicate(), null, null);
+                new SelectRelation(selectList, relation, updateStmt.getWherePredicate(), null, null);
+        if (updateStmt.getCommonTableExpressions() != null) {
+            updateStmt.getCommonTableExpressions().forEach(selectRelation::addCTERelation);
+        }
         QueryStatement queryStatement = new QueryStatement(selectRelation);
         queryStatement.setIsExplain(updateStmt.isExplain(), updateStmt.getExplainLevel());
         new QueryAnalyzer(session).analyze(queryStatement);
 
         updateStmt.setTable(table);
         updateStmt.setQueryStatement(queryStatement);
-
 
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
         Preconditions.checkState(outputExpression.size() == table.getBaseSchema().size());

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/binary_plain_page.h
 
@@ -53,10 +66,7 @@ namespace starrocks {
 
 class BinaryPlainPageBuilder final : public PageBuilder {
 public:
-    explicit BinaryPlainPageBuilder(const PageBuilderOptions& options)
-            : _reserved_head_size(0), _size_estimate(0), _next_offset(0), _options(options), _finished(false) {
-        reset();
-    }
+    explicit BinaryPlainPageBuilder(const PageBuilderOptions& options) : _options(options) { reset(); }
 
     void reserve_head(uint8_t head_size) override {
         CHECK_EQ(0, _reserved_head_size);
@@ -71,7 +81,7 @@ public:
 
     uint32_t add(const uint8_t* vals, uint32_t count) override {
         DCHECK(!_finished);
-        const Slice* slices = reinterpret_cast<const Slice*>(vals);
+        const auto* slices = reinterpret_cast<const Slice*>(vals);
         for (auto i = 0; i < count; i++) {
             if (!add_slice(slices[i])) {
                 return i;
@@ -147,7 +157,7 @@ public:
         DCHECK_LT(idx, _offsets.size());
         size_t end = (idx + 1) < _offsets.size() ? _offsets[idx + 1] : _next_offset;
         size_t off = _offsets[idx];
-        return Slice(&_buffer[_reserved_head_size + off], end - off);
+        return {&_buffer[_reserved_head_size + off], end - off};
     }
 
 private:
@@ -156,19 +166,19 @@ private:
         value->assign_copy((const uint8_t*)s.data, s.size);
     }
 
-    uint8_t _reserved_head_size;
-    size_t _size_estimate;
-    size_t _next_offset;
+    uint8_t _reserved_head_size{0};
+    size_t _size_estimate{0};
+    size_t _next_offset{0};
     faststring _buffer;
     // Offsets of each entry, relative to the start of the page
     std::vector<uint32_t> _offsets;
     PageBuilderOptions _options;
     faststring _first_value;
     faststring _last_value;
-    bool _finished;
+    bool _finished{false};
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryPlainPageDecoder final : public PageDecoder {
 public:
     explicit BinaryPlainPageDecoder(Slice data) : BinaryPlainPageDecoder(data, PageDecoderOptions()) {}
@@ -203,30 +213,6 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst) override {
-        DCHECK(_parsed);
-        if (PREDICT_FALSE(*n == 0 || _cur_idx >= _num_elems)) {
-            *n = 0;
-            return Status::OK();
-        }
-        size_t max_fetch = std::min(*n, static_cast<size_t>(_num_elems - _cur_idx));
-
-        Slice* out = reinterpret_cast<Slice*>(dst->data());
-
-        for (size_t i = 0; i < max_fetch; i++, out++, _cur_idx++) {
-            Slice elem(string_at_index(_cur_idx));
-            out->size = elem.size;
-            if (elem.size != 0) {
-                out->data = reinterpret_cast<char*>(dst->pool()->allocate(elem.size * sizeof(uint8_t)));
-                RETURN_IF_UNLIKELY_NULL(out->data, Status::MemoryAllocFailed("alloc mem for binary plain page failed"));
-                memcpy(out->data, elem.data, elem.size);
-            }
-        }
-
-        *n = max_fetch;
-        return Status::OK();
-    }
-
     Status next_batch(size_t* count, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
@@ -246,7 +232,7 @@ public:
     Slice string_at_index(uint32_t idx) const {
         const uint32_t start_offset = offset(idx);
         uint32_t len = offset(static_cast<int>(idx) + 1) - start_offset;
-        return Slice(&_data[start_offset], len);
+        return {&_data[start_offset], len};
     }
 
     int find(const Slice& word) const {
@@ -286,7 +272,7 @@ private:
 
     uint32_t offset_uncheck(int idx) const {
         const uint32_t pos = _offsets_pos + idx * static_cast<uint32_t>(sizeof(uint32_t));
-        const uint8_t* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
+        const auto* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
         return decode_fixed32_le(p);
     }
 

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 // #include "exec/vectorized/file_scan_node.h"
 #include <gtest/gtest.h>
@@ -235,6 +247,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (dynamic_cast<starrocks::pipeline::ConnectorScanOperator*>(scan_operator) != nullptr) {
                         scan_operator->set_scan_executor(_exec_env->connector_scan_executor_without_workgroup());
                     } else {
@@ -344,8 +357,7 @@ class TestFileScanSinkOperator : public Operator {
 public:
     TestFileScanSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              CounterPtr counter)
-            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence),
-              _counter(std::move(counter)) {}
+            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
     ~TestFileScanSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override {

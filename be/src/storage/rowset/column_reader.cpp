@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/column_reader.cpp
 
@@ -43,7 +56,6 @@
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
 #include "storage/vectorized_column_predicate.h"
-#include "storage/wrapper_field.h"
 #include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 
@@ -89,7 +101,7 @@ ColumnReader::~ColumnReader() {
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta) {
-    _column_type = static_cast<FieldType>(meta->type());
+    _column_type = static_cast<LogicalType>(meta->type());
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
 
@@ -97,7 +109,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     if (meta->has_all_dict_encoded()) _flags |= kHasAllDictEncodedMask;
     if (meta->all_dict_encoded()) _flags |= kAllDictEncodedMask;
 
-    if (_column_type == OLAP_FIELD_TYPE_JSON && meta->has_json_meta()) {
+    if (_column_type == TYPE_JSON && meta->has_json_meta()) {
         // TODO(mofei) store format_version in ColumnReader
         const JsonMetaPB& json_meta = meta->json_meta();
         CHECK_EQ(kJsonMetaDefaultFormatVersion, json_meta.format_version()) << "Only format_version=1 is supported";
@@ -147,7 +159,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                     fmt::format("Bad file {}: missing ordinal index for column {}", file_name(), meta->column_id()));
         }
         return Status::OK();
-    } else if (_column_type == FieldType::OLAP_FIELD_TYPE_ARRAY) {
+    } else if (_column_type == LogicalType::TYPE_ARRAY) {
         _sub_readers = std::make_unique<SubReaderList>();
         if (meta->is_nullable()) {
             if (meta->children_columns_size() != 3) {
@@ -411,7 +423,7 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
     if (is_scalar_field_type(delegate_type(_column_type))) {
         *iterator = new ScalarColumnIterator(this);
         return Status::OK();
-    } else if (_column_type == FieldType::OLAP_FIELD_TYPE_ARRAY) {
+    } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
         ColumnIterator* element_iterator;
         RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&element_iterator));

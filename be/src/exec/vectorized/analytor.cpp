@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/analytor.h"
 
@@ -13,18 +25,18 @@
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
-#include "udf/udf.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
 namespace vectorized {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, starrocks_udf::FunctionContext* context);
+                               const std::string& symbol, FunctionContext* context);
 } // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
@@ -112,7 +124,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             ++node_idx;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx));
+            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -152,8 +164,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
             }
 
-            _agg_fn_ctxs[i] = FunctionContextImpl::create_context(state, _mem_pool.get(), return_typedesc,
-                                                                  arg_typedescs, 0, false);
+            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_typedesc, arg_typedescs);
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -208,7 +219,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
         _partition_columns[i] = vectorized::ColumnHelper::create_column(
@@ -216,7 +227,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 _partition_ctxs[i]->root()->is_constant(), 0);
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
     _order_columns.resize(_order_ctxs.size());
     for (size_t i = 0; i < _order_ctxs.size(); i++) {
         _order_columns[i] = vectorized::ColumnHelper::create_column(
@@ -307,12 +318,6 @@ void Analytor::close(RuntimeState* state) {
     _is_closed = true;
 
     auto agg_close = [this, state]() {
-        for (auto* ctx : _agg_fn_ctxs) {
-            if (ctx != nullptr && ctx->impl()) {
-                ctx->impl()->close();
-            }
-        }
-
         // Note: we must free agg_states before _mem_pool free_all;
         _managed_fn_states.clear();
         _managed_fn_states.shrink_to_fit();
@@ -432,8 +437,8 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
                                                                                 _agg_fn_types[i].has_nullable_child);
             // binary column cound't call resize method like Numeric Column,
             // so we only reserve it.
-            if (_agg_fn_types[i].result_type.type == PrimitiveType::TYPE_CHAR ||
-                _agg_fn_types[i].result_type.type == PrimitiveType::TYPE_VARCHAR) {
+            if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR) {
                 _result_window_columns[i]->reserve(chunk_size);
             } else {
                 _result_window_columns[i]->resize(chunk_size);

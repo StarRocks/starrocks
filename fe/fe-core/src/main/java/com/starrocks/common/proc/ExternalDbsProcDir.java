@@ -1,9 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.ProcResultUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -11,6 +25,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ExternalDbsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -37,18 +52,22 @@ public class ExternalDbsProcDir implements ProcDirInterface {
             return result;
         }
 
-        // get info
-        List<List<Comparable>> dbInfos = new ArrayList<List<Comparable>>();
+        List<List<Comparable>> dbInfos = new ArrayList<>();
+
+
+        if (Config.enable_check_db_state) {
+            // if a large number of db under the catalog, this operation is very slow
+            dbNames = dbNames.stream().filter(dbName -> {
+                Database db = metadataMgr.getDb(catalogName, dbName);
+                return db != null;
+            }).collect(Collectors.toList());
+        }
+
         for (String dbName : dbNames) {
-            Database db = metadataMgr.getDb(catalogName, dbName);
-            if (db == null) {
-                continue;
-            }
-            List<Comparable> dbInfo = new ArrayList<Comparable>();
+            List<Comparable> dbInfo = new ArrayList<>();
             dbInfo.add(dbName);
             dbInfos.add(dbInfo);
         }
-
         ProcResultUtils.convertToMetaResult(result, dbInfos);
         return result;
     }

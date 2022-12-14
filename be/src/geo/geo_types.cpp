@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/geo/geo_types.cpp
 
@@ -30,6 +43,7 @@
 #include <s2/util/coding/coder.h>
 #include <s2/util/units/length-units.h>
 
+#include <cmath>
 #include <cstdio>
 #include <iomanip>
 #include <memory>
@@ -46,7 +60,7 @@ void print_s2point(std::ostream& os, const S2Point& point) {
 }
 
 static inline bool is_valid_lng_lat(double lng, double lat) {
-    return abs(lng) <= 180 && abs(lat) <= 90;
+    return std::abs(lng) <= 180 && std::abs(lat) <= 90;
 }
 
 // Return GEO_PARSE_OK, if and only if this can be converted to a valid S2Point

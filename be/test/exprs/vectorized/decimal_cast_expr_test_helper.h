@@ -1,8 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
-
 #include <gtest/gtest.h>
+
+#include <cmath>
 
 #include "butil/time.h"
 #include "column/column_helper.h"
@@ -17,11 +30,11 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VerbatimVectorizedExpr : public MockCostExpr {
 public:
     VerbatimVectorizedExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), column(column) {}
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override { return column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override { return column; }
 
 private:
     ColumnPtr column;
@@ -52,7 +65,7 @@ enum ColumnPackedType {
     NULLABLE,
 };
 // create a packed column
-template <PrimitiveType Type, ColumnPackedType PackedType, typename... Args>
+template <LogicalType Type, ColumnPackedType PackedType, typename... Args>
 ColumnPtr create_column(RunTimeCppType<Type> value, size_t front_fill_size, size_t rear_fill_size, Args&&... args) {
     ColumnPtr column;
     auto rows_num = front_fill_size + 1 + rear_fill_size;
@@ -82,7 +95,7 @@ ColumnPtr create_column(RunTimeCppType<Type> value, size_t front_fill_size, size
 }
 
 // vectorized cast
-template <PrimitiveType FromType>
+template <LogicalType FromType>
 ColumnPtr cast(ColumnPtr from_column, TypeDescriptor const& from_type, TypeDescriptor const& to_type) {
     TExprNode from_node;
     from_node.node_type = TExprNodeType::CAST_EXPR;
@@ -97,7 +110,7 @@ ColumnPtr cast(ColumnPtr from_column, TypeDescriptor const& from_type, TypeDescr
     return cast_expr->evaluate(nullptr, nullptr);
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType, ColumnPackedType PackedType>
+template <LogicalType FromType, LogicalType ToType, ColumnPackedType PackedType>
 ColumnPtr cast(RunTimeCppType<FromType> const& value, TypeDescriptor const& from_type, TypeDescriptor const& to_type,
                [[maybe_unused]] int front_fill_size, [[maybe_unused]] int rear_fill_size) {
     TExprNode from_node;
@@ -113,7 +126,7 @@ ColumnPtr cast(RunTimeCppType<FromType> const& value, TypeDescriptor const& from
     return cast<FromType>(from_column, from_type, to_type);
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType, ColumnPackedType PackedType>
+template <LogicalType FromType, LogicalType ToType, ColumnPackedType PackedType>
 ColumnPtr cast_single_test_case(CastTestCase const& test_case, size_t front_fill_size, size_t rear_fill_size) {
     [[maybe_unused]] auto input_precision = std::get<0>(test_case);
     [[maybe_unused]] auto input_scale = std::get<1>(test_case);
@@ -135,31 +148,31 @@ ColumnPtr cast_single_test_case(CastTestCase const& test_case, size_t front_fill
     return str_column;
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <LogicalType FromType, LogicalType ToType>
 void test_cast_const_null(CastTestCase const& tc, size_t front_fill_size, size_t rear_fill_size) {
     auto column =
             cast_single_test_case<FromType, ToType, ColumnPackedType::CONST_NULL>(tc, front_fill_size, rear_fill_size);
     ASSERT_TRUE(column->is_constant() && column->only_null());
 }
 
-template <PrimitiveType Type, typename = guard::Guard>
+template <LogicalType Type, typename = guard::Guard>
 struct CastParamCppTypeTrait {
     using type = RunTimeCppType<Type>;
 };
-template <PrimitiveType Type>
+template <LogicalType Type>
 struct CastParamCppTypeTrait<Type, StringPTGuard<Type>> {
     using type = std::string;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 struct CastParamCppTypeTrait<Type, DecimalV2PTGuard<Type>> {
     using type = int128_t;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 using CastParamCppType = typename CastParamCppTypeTrait<Type>::type;
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <LogicalType FromType, LogicalType ToType>
 CastParamCppType<ToType> cast_value(CastParamCppType<FromType> const& value, int from_precision, int from_scale,
                                     int to_precision, int to_scale) {
     TypeDescriptor from_type = TypeDescriptor::from_primtive_type(FromType, 65535, from_precision, from_scale);
@@ -176,9 +189,9 @@ CastParamCppType<ToType> cast_value(CastParamCppType<FromType> const& value, int
     }
 }
 
-VALUE_GUARD(PrimitiveType, RelativeErrorPTGuard, pt_is_relative_error, TYPE_DECIMAL128, TYPE_FLOAT, TYPE_DOUBLE,
+VALUE_GUARD(LogicalType, RelativeErrorPTGuard, pt_is_relative_error, TYPE_DECIMAL128, TYPE_FLOAT, TYPE_DOUBLE,
             TYPE_DECIMALV2)
-template <PrimitiveType Type>
+template <LogicalType Type>
 void assert_equal(std::string const& expect, std::string const& actual, [[maybe_unused]] int precision,
                   [[maybe_unused]] int scale) {
     if constexpr (pt_is_boolean<Type>) {
@@ -189,13 +202,13 @@ void assert_equal(std::string const& expect, std::string const& actual, [[maybe_
         auto expect_value = cast_value<TYPE_VARCHAR, Type>(expect, -1, -1, precision, scale);
         auto actual_value = cast_value<TYPE_VARCHAR, Type>(actual, -1, -1, precision, scale);
         auto delta = (expect_value - actual_value);
-        double epsilon = abs(double(delta)) / double(expect_value + (expect_value == CppType(0)));
+        double epsilon = std::abs(double(delta)) / double(expect_value + (expect_value == CppType(0)));
         ASSERT_TRUE(epsilon < 0.0000001);
     } else {
         compare_decimal_string(expect, actual, scale);
     }
 }
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <LogicalType FromType, LogicalType ToType>
 void test_cast_const(CastTestCase const& tc, size_t front_fill_size, size_t rear_fill_size) {
     auto column = cast_single_test_case<FromType, ToType, ColumnPackedType::CONST>(tc, front_fill_size, rear_fill_size);
     ASSERT_TRUE(column->is_constant() && !column->only_null());
@@ -206,7 +219,7 @@ void test_cast_const(CastTestCase const& tc, size_t front_fill_size, size_t rear
     assert_equal<ToType>(expect, actual, precision, scale);
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <LogicalType FromType, LogicalType ToType>
 void test_cast_nullable(CastTestCase const& tc, size_t front_fill_size, size_t rear_fill_size) {
     auto column =
             cast_single_test_case<FromType, ToType, ColumnPackedType::NULLABLE>(tc, front_fill_size, rear_fill_size);
@@ -220,7 +233,7 @@ void test_cast_nullable(CastTestCase const& tc, size_t front_fill_size, size_t r
     assert_equal<ToType>(expect, actual, precision, scale);
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <LogicalType FromType, LogicalType ToType>
 void test_cast_simple(CastTestCase const& tc, size_t front_fill_size, size_t rear_fill_size) {
     auto column =
             cast_single_test_case<FromType, ToType, ColumnPackedType::SIMPLE>(tc, front_fill_size, rear_fill_size);
@@ -232,23 +245,23 @@ void test_cast_simple(CastTestCase const& tc, size_t front_fill_size, size_t rea
     std::string expect = std::get<5>(tc);
     assert_equal<ToType>(expect, actual, precision, scale);
 }
-template <PrimitiveType FromType, PrimitiveType ToType, ColumnPackedType PackedType>
+template <LogicalType FromType, LogicalType ToType, ColumnPackedType PackedType>
 void test_cast_fail(CastTestCase const& tc, size_t front_fill_size, size_t rear_fill_size) {
     auto column = cast_single_test_case<FromType, ToType, PackedType>(tc, front_fill_size, rear_fill_size);
     ASSERT_TRUE((column->is_constant() && column->only_null()) ||
                 (column->is_nullable() && ColumnHelper::count_nulls(column) == column->size()));
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <LogicalType FromType, LogicalType ToType>
 void test_cast_all(CastTestCaseArray const& test_cases) {
     size_t front_fill_size = 19;
     size_t rear_fill_size = 37;
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_const_null<FromType, ToType>(tc, front_fill_size, rear_fill_size);
         test_cast_simple<FromType, ToType>(tc, front_fill_size, rear_fill_size);
@@ -257,16 +270,16 @@ void test_cast_all(CastTestCaseArray const& test_cases) {
     }
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <LogicalType FromType, LogicalType ToType>
 void test_cast_all_fail(CastTestCaseArray const& test_cases) {
     size_t front_fill_size = 19;
     size_t rear_fill_size = 37;
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_fail<FromType, ToType, ColumnPackedType::SIMPLE>(tc, front_fill_size, rear_fill_size);
         test_cast_fail<FromType, ToType, ColumnPackedType::CONST_NULL>(tc, front_fill_size, rear_fill_size);

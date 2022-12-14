@@ -1,11 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <memory>
 #include <vector>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "segment_options.h"
@@ -19,8 +31,8 @@ namespace starrocks::vectorized {
 class SegmentChunkIteratorAdapter final : public ChunkIterator {
 public:
     // |schema| is the output fields.
-    explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<FieldType>& new_types,
-                                         const Schema& out_schema, int chunk_size);
+    explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<LogicalType>& new_types,
+                                         const VectorizedSchema& out_schema, int chunk_size);
 
     ~SegmentChunkIteratorAdapter() override = default;
 
@@ -28,17 +40,17 @@ public:
 
     void close() override;
 
-    const Schema& in_schema() const { return _in_schema; }
+    const VectorizedSchema& in_schema() const { return _in_schema; }
     const SegmentReadOptions& in_read_options() const { return _in_read_options; };
 
     void set_iterator(std::shared_ptr<ChunkIterator> iterator) { _inner_iter = std::move(iterator); }
 
-    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         _inner_iter->init_encoded_schema(dict_maps);
         ChunkIterator::init_encoded_schema(dict_maps);
         return Status::OK();
     }
-    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         _inner_iter->init_output_schema(unused_output_column_ids);
         ChunkIterator::init_output_schema(unused_output_column_ids);
         return Status::OK();
@@ -46,12 +58,12 @@ public:
 
 protected:
     Status do_get_next(Chunk* chunk) override;
-    Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;
 
     const TabletSchema& _tablet_schema;
-    const std::vector<FieldType>& _new_types;
+    const std::vector<LogicalType>& _new_types;
 
-    Schema _in_schema;
+    VectorizedSchema _in_schema;
     SegmentReadOptions _in_read_options;
     ObjectPool _obj_pool;
 

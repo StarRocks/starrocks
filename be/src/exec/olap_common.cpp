@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exec/olap_common.cpp
 
@@ -22,6 +35,7 @@
 #include "exec/olap_common.h"
 
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -95,20 +109,36 @@ inline std::string cast_to_string<vectorized::TimestampValue>(vectorized::Timest
 // for decimal32/64/128, their underlying type is int32/64/128, so the decimal point
 // depends on precision and scale when they are casted into strings
 template <class T>
-inline std::string cast_to_string(T value, [[maybe_unused]] PrimitiveType pt, [[maybe_unused]] int precision,
+inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType pt, [[maybe_unused]] int precision,
                                   [[maybe_unused]] int scale) {
+    // According to https://rules.sonarsource.com/cpp/RSPEC-5275, it is better
+    // to use static_cast to cast from integral/float/bool type to integral type, otherwise
+    // reinterpret_cast may produce undefined behavior
+    constexpr bool use_static_cast = std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, bool>;
     switch (pt) {
     case TYPE_DECIMAL32: {
         using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL32>;
-        return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
     }
     case TYPE_DECIMAL64: {
         using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL64>;
-        return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
     }
     case TYPE_DECIMAL128: {
         using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL128>;
-        return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
     }
     default:
         return cast_to_string<T>(value);
@@ -127,9 +157,6 @@ void ColumnValueRange<StringValue>::convert_to_fixed_value() {}
 
 template <>
 void ColumnValueRange<Slice>::convert_to_fixed_value() {}
-
-template <>
-void ColumnValueRange<DecimalValue>::convert_to_fixed_value() {}
 
 template <>
 void ColumnValueRange<DecimalV2Value>::convert_to_fixed_value() {}
@@ -224,7 +251,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
 
 template <class T>
 Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& values) {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return Status::InternalError("AddFixedValue failed, Invalid type");
     }
     if (op == FILTER_IN) {
@@ -355,7 +382,7 @@ void ColumnValueRange<T>::convert_to_fixed_value() {
 
 template <class T>
 Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return Status::InternalError("AddRange failed, Invalid type");
     }
 
@@ -600,7 +627,7 @@ template <class T>
 ColumnValueRange<T>::ColumnValueRange() = default;
 
 template <class T>
-ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)
+ColumnValueRange<T>::ColumnValueRange(std::string col_name, LogicalType type, T min, T max)
         : _column_name(std::move(col_name)),
           _column_type(type),
           _type_min(min),
@@ -618,7 +645,7 @@ bool ColumnValueRange<T>::is_fixed_value_range() const {
 
 template <class T>
 bool ColumnValueRange<T>::is_empty_value_range() const {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return true;
     }
     // TODO(yan): sometimes we don't have Fixed Value Range, but have
@@ -693,7 +720,6 @@ template class ColumnValueRange<__int128>;
 template class ColumnValueRange<StringValue>;
 template class ColumnValueRange<Slice>;
 template class ColumnValueRange<DateTimeValue>;
-template class ColumnValueRange<DecimalValue>;
 template class ColumnValueRange<DecimalV2Value>;
 template class ColumnValueRange<bool>;
 template class ColumnValueRange<vectorized::DateValue>;
@@ -710,8 +736,6 @@ template Status OlapScanKeys::extend_scan_key<StringValue>(ColumnValueRange<Stri
 template Status OlapScanKeys::extend_scan_key<Slice>(ColumnValueRange<Slice>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<DateTimeValue>(ColumnValueRange<DateTimeValue>& range,
                                                              int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<DecimalValue>(ColumnValueRange<DecimalValue>& range,
-                                                            int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<DecimalV2Value>(ColumnValueRange<DecimalV2Value>& range,
                                                               int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<bool>(ColumnValueRange<bool>& range, int32_t max_scan_key_num);

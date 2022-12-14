@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/rowset.h
 
@@ -49,7 +62,7 @@ class TabletSchema;
 class KVStore;
 
 namespace vectorized {
-class Schema;
+class VectorizedSchema;
 class ChunkIterator;
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 } // namespace vectorized
@@ -144,13 +157,13 @@ public:
     const TabletSchema& schema() const { return *_schema; }
     void set_schema(const TabletSchema* schema) { _schema = schema; }
 
-    StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
+    StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::VectorizedSchema& schema,
                                                         const RowsetReadOptions& options);
 
     // For each segment in this rowset, create a `ChunkIterator` for it and *APPEND* it into
     // |segment_iterators|. If segments in this rowset has no overlapping, a single `UnionIterator`,
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
-    Status get_segment_iterators(const vectorized::Schema& schema, const RowsetReadOptions& options,
+    Status get_segment_iterators(const vectorized::VectorizedSchema& schema, const RowsetReadOptions& options,
                                  std::vector<vectorized::ChunkIteratorPtr>* seg_iterators);
 
     // estimate the number of compaction segment iterator
@@ -169,9 +182,8 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
-    StatusOr<std::vector<vectorized::ChunkIteratorPtr>> get_segment_iterators2(const vectorized::Schema& schema,
-                                                                               KVStore* meta, int64_t version,
-                                                                               OlapReaderStatistics* stats);
+    StatusOr<std::vector<vectorized::ChunkIteratorPtr>> get_segment_iterators2(
+            const vectorized::VectorizedSchema& schema, KVStore* meta, int64_t version, OlapReaderStatistics* stats);
 
     // publish rowset to make it visible to read
     void make_visible(Version version);
@@ -282,8 +294,8 @@ public:
 
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;
-        for (int i = 0; i < rowsets.size(); i++) {
-            auto iterator_num_res = rowsets[i]->estimate_compaction_segment_iterator_num();
+        for (const auto& rowset : rowsets) {
+            auto iterator_num_res = rowset->estimate_compaction_segment_iterator_num();
             if (!iterator_num_res.ok()) {
                 return iterator_num_res.status();
             }

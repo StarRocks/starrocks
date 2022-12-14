@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/rowset.cpp
 
@@ -31,6 +44,7 @@
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -315,7 +329,7 @@ private:
     vectorized::ChunkIteratorPtr _iter;
 };
 
-StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Schema& schema,
+StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::VectorizedSchema& schema,
                                                             const RowsetReadOptions& options) {
     std::vector<vectorized::ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
@@ -328,7 +342,7 @@ StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Sc
     }
 }
 
-Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const RowsetReadOptions& options,
+Status Rowset::get_segment_iterators(const vectorized::VectorizedSchema& schema, const RowsetReadOptions& options,
                                      std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
 
@@ -359,6 +373,9 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
     }
     seg_options.rowid_range_option = options.rowid_range_option;
     seg_options.short_key_ranges = options.short_key_ranges;
+    if (options.runtime_state != nullptr) {
+        seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
+    }
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
@@ -368,7 +385,7 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
             auto f = ChunkHelper::convert_field_to_format_v2(cid, col);
-            segment_schema.append(std::make_shared<vectorized::Field>(std::move(f)));
+            segment_schema.append(std::make_shared<vectorized::VectorizedField>(std::move(f)));
         }
     }
 
@@ -416,9 +433,8 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
     return Status::OK();
 }
 
-StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterators2(const vectorized::Schema& schema,
-                                                                                   KVStore* meta, int64_t version,
-                                                                                   OlapReaderStatistics* stats) {
+StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterators2(
+        const vectorized::VectorizedSchema& schema, KVStore* meta, int64_t version, OlapReaderStatistics* stats) {
     RETURN_IF_ERROR(load());
 
     vectorized::SegmentReadOptions seg_options;
@@ -436,10 +452,12 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterator
     for (int64_t i = 0; i < num_segments(); i++) {
         auto& seg_ptr = segments()[i];
         if (seg_ptr->num_rows() == 0) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
         if (!res.ok()) {

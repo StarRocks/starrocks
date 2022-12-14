@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -20,6 +32,9 @@ struct BitAndOp {};
 struct BitOrOp {};
 struct BitXorOp {};
 struct BitNotOp {};
+struct BitShiftLeftOp {};
+struct BitShiftRightOp {};
+struct BitShiftRightLogicalOp {};
 
 struct MulOp64x64_128 {};
 struct MulOp32x64_128 {};
@@ -38,10 +53,14 @@ TYPE_GUARD(BitAndOpGuard, is_bitand_op, BitAndOp)
 TYPE_GUARD(BitOrOpGuard, is_bitor_op, BitOrOp)
 TYPE_GUARD(BitXorOpGuard, is_bitxor_op, BitXorOp)
 TYPE_GUARD(BitNotOpGuard, is_bitnot_op, BitNotOp)
-TYPE_GUARD(BinaryOpGuard, is_binary_op, AddOp, SubOp, MulOp, DivOp, ModOp, BitAndOp, BitOrOp, BitXorOp)
+TYPE_GUARD(BitShiftLeftOpGuard, is_bit_shift_left_op, BitShiftLeftOp)
+TYPE_GUARD(BitShiftRightOpGuard, is_bit_shift_right_op, BitShiftRightOp)
+TYPE_GUARD(BitShiftRightLogicalOpGuard, is_bit_shift_right_logical_op, BitShiftRightLogicalOp)
+TYPE_GUARD(BinaryOpGuard, is_binary_op, AddOp, SubOp, MulOp, DivOp, ModOp, BitAndOp, BitOrOp, BitXorOp, BitShiftLeftOp,
+           BitShiftRightOp, BitShiftRightLogicalOp)
 TYPE_GUARD(UnaryOpGuard, is_unary_op, BitNotOp)
 
-template <PrimitiveType Type, typename ResultType>
+template <LogicalType Type, typename ResultType>
 using ReturnType = std::enable_if_t<std::is_same_v<RunTimeCppType<Type>, ResultType>, ResultType>;
 
 TYPE_GUARD(MayCauseFPEGuard, may_cause_fpe, int32_t, int64_t)
@@ -58,7 +77,7 @@ bool check_fpe_of_min_div_by_minus_one(LType lhs, RType rhs) {
     }
 }
 
-template <typename Op, PrimitiveType Type, typename = guard::Guard, typename = guard::Guard>
+template <typename Op, LogicalType Type, typename = guard::Guard, typename = guard::Guard>
 struct ArithmeticBinaryOperator {
     template <typename LType, typename RType, typename ResultType>
     static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {
@@ -106,6 +125,22 @@ struct ArithmeticBinaryOperator {
             return l | r;
         } else if constexpr (is_bitxor_op<Op>) {
             return l ^ r;
+        } else if constexpr (is_bit_shift_left_op<Op>) {
+            return l << r;
+        } else if constexpr (is_bit_shift_right_op<Op>) {
+            return l >> r;
+        } else if constexpr (is_bit_shift_right_logical_op<Op>) {
+            if constexpr (std::is_same_v<LType, int8_t>) {
+                return uint8_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, int16_t>) {
+                return uint16_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, int32_t>) {
+                return uint32_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, int64_t>) {
+                return uint64_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, __int128_t>) {
+                return uint128_t(l) >> r;
+            }
         } else {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }
@@ -134,7 +169,7 @@ struct ArithmeticBinaryOperator<Op, TYPE_DECIMALV2, DivModOpGuard<Op>, guard::Gu
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatPTGuard<Type>> {
     template <typename LType, typename RType, typename ResultType>
     static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {
@@ -246,7 +281,7 @@ private:
     Type _value;
 };
 
-template <typename Op, PrimitiveType Type>
+template <typename Op, LogicalType Type>
 struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalPTGuard<Type>> {
     template <bool check_overflow, typename LType, typename RType, typename ResultType>
     static inline bool apply(const LType& l, const RType& r, ResultType* result) {
@@ -335,7 +370,7 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalPTGuard<Typ
     }
 };
 
-template <typename Op, PrimitiveType Type>
+template <typename Op, LogicalType Type>
 struct ArithmeticBinaryOperator<Op, Type, DecimalFastMulOpGuard<Op>, DecimalPTGuard<Type>> {
     template <bool check_overflow, bool adjust_left, typename LType, typename RType, typename ResultType>
     static inline bool apply(const LType& l, const RType& r, ResultType* result,
@@ -349,7 +384,7 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalFastMulOpGuard<Op>, DecimalPTGu
     }
 };
 
-template <typename Op, PrimitiveType Type, typename = guard::Guard, typename = guard::Guard>
+template <typename Op, LogicalType Type, typename = guard::Guard, typename = guard::Guard>
 struct ArithmeticUnaryOperator {
     template <typename UType, typename ResultType>
     static inline ReturnType<Type, ResultType> apply(const UType& l) {
@@ -361,7 +396,7 @@ struct ArithmeticUnaryOperator {
     }
 };
 
-template <PrimitiveType Type, typename = guard::Guard>
+template <LogicalType Type, typename = guard::Guard>
 struct ArithmeticRightZeroCheck {
     template <typename LType, typename RType, typename ResultType>
     static inline uint8_t apply(const LType& l, const RType& r) {

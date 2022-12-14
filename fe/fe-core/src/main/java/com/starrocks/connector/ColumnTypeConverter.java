@@ -1,11 +1,28 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -14,7 +31,9 @@ import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -23,11 +42,13 @@ import java.util.stream.Collectors;
 
 public class ColumnTypeConverter {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
-    public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),:]+)>";
-    public static final String MAP_PATTERN = "^map<([0-9a-z<>(),:]+)>";
+    public static final String COMPLEX_PATTERN = "([0-9a-z<>(),:_]+)";
+    public static final String ARRAY_PATTERN = "^array<" + COMPLEX_PATTERN + ">";
+    public static final String MAP_PATTERN = "^map<" + COMPLEX_PATTERN + ">";
+    public static final String STRUCT_PATTERN = "^struct<" + COMPLEX_PATTERN + ">";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
-    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "UNIONTYPE");
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("BINARY", "UNIONTYPE");
 
     public static Type fromHiveType(String hiveType) {
         String typeUpperCase = getTypeKeyword(hiveType).toUpperCase();
@@ -64,7 +85,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case "VARCHAR":
                 return ScalarType.createVarcharType(getVarcharLength(hiveType));
             case "CHAR":
@@ -83,6 +104,13 @@ public class ColumnTypeConverter {
                 Type mapType = fromHiveTypeToMapType(hiveType);
                 if (mapType.isMapType()) {
                     return mapType;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case  "STRUCT":
+                Type structType = fromHiveTypeToStructType(hiveType);
+                if (structType.isStructType()) {
+                    return structType;
                 } else {
                     return Type.UNKNOWN_TYPE;
                 }
@@ -136,13 +164,13 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case STRING:
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case ARRAY:
                 Type type = fromHudiTypeToArrayType(avroSchema);
                 if (type.isArrayType()) {
                     return type;
                 } else {
-                    isConvertedFailed = false;
+                    isConvertedFailed = true;
                     break;
                 }
             case FIXED:
@@ -161,6 +189,36 @@ public class ColumnTypeConverter {
                     primitiveType = PrimitiveType.VARCHAR;
                     break;
                 }
+            case RECORD:
+                // Struct type
+                List<Schema.Field> fields = avroSchema.getFields();
+                Preconditions.checkArgument(fields.size() > 0);
+                ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+                for (Schema.Field field : fields) {
+                    String fieldName = field.name();
+                    Type fieldType = fromHudiType(field.schema());
+                    if (fieldType.isUnknown()) {
+                        isConvertedFailed = true;
+                        break;
+                    }
+                    structFields.add(new StructField(fieldName, fieldType));
+                }
+
+                if (!isConvertedFailed) {
+                    return new StructType(structFields);
+                }
+            case MAP:
+                Schema value = avroSchema.getValueType();
+                Type valueType = fromHudiType(value);
+                if (valueType.isUnknown()) {
+                    isConvertedFailed = true;
+                    break;
+                }
+
+                if (!isConvertedFailed) {
+                    // Hudi map's key must be string
+                    return new MapType(ScalarType.createDefaultExternalTableString(), valueType);
+                }
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
                         .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
@@ -173,7 +231,6 @@ public class ColumnTypeConverter {
                     break;
                 }
             case ENUM:
-            case MAP:
             default:
                 isConvertedFailed = true;
                 break;
@@ -222,7 +279,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case DECIMAL:
                 int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
                 int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
@@ -247,7 +304,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
-        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
+        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()), true);
     }
 
     public static String getTypeKeyword(String type) {
@@ -282,7 +339,7 @@ public class ColumnTypeConverter {
             if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
+                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)), true);
             }
         } else {
             itemType = fromHiveType(typeStr);
@@ -290,28 +347,59 @@ public class ColumnTypeConverter {
         return itemType;
     }
 
+    public static Type fromHiveTypeToStructType(String typeStr) {
+        Matcher matcher = Pattern.compile(STRUCT_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
+        if (matcher.find()) {
+            String str = matcher.group(1);
+            String[] subfields = splitByFirstLevel(str, ',');
+            ArrayList<StructField> structFields = new ArrayList<>(subfields.length);
+            for (String subfield : subfields) {
+                String[] structField = splitByFirstLevel(subfield, ':');
+                if (structField.length != 2) {
+                    throw new StarRocksConnectorException("Error Struct Type" + typeStr);
+                }
+                structFields.add(new StructField(structField[0], fromHiveType(structField[1])));
+            }
+            return new StructType(structFields);
+        } else {
+            throw new StarRocksConnectorException("Failed to get StructType at " + typeStr);
+        }
+    }
+
+    // Like "a: int, b: struct<a: int, b: double>" => ["a: int", "b: struct<a:int, b: double>"]
+    // It will do trim operator automatically.
+    public static String[] splitByFirstLevel(String str, char splitter) {
+        int level = 0;
+        int start = 0;
+        List<String> list = new LinkedList<>();
+        char[] cStr = str.toCharArray();
+        for (int i = 0; i < cStr.length; i++) {
+            char c = cStr[i];
+            if (c == '<' || c == '(') {
+                level++;
+            } else if (c == '>' || c == ')') {
+                level--;
+            } else if (c == splitter && level == 0) {
+                list.add(str.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+
+        if (start < cStr.length) {
+            list.add(str.substring(start, cStr.length).trim());
+        }
+        return list.toArray(new String[] {});
+    }
+
     public static String[] getKeyValueStr(String typeStr) {
         Matcher matcher = Pattern.compile(MAP_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
             String kvStr = matcher.group(1);
-            int size = kvStr.length();
-            int stack = 0;
-            int index = 0;
-            for (int i = 0; i < size; i++) {
-                char c = kvStr.charAt(i);
-                if (c == '<' || c == '(') {
-                    stack++;
-                } else if (c == '>' || c == ')') {
-                    stack--;
-                } else if (c == ',' && stack == 0) {
-                    index = i;
-                    break;
-                }
-            }
-            if (index == 0 || index == size - 1) {
+            String[] kvs = splitByFirstLevel(kvStr, ',');
+            if (kvs.length != 2) {
                 throw new StarRocksConnectorException("Error Map Type" + typeStr);
             }
-            return new String[] {kvStr.substring(0, index).trim(), kvStr.substring(index + 1, size).trim()};
+            return new String[] {kvs[0], kvs[1]};
         } else {
             throw new StarRocksConnectorException("Failed to get MapType at " + typeStr);
         }
@@ -342,7 +430,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType fromHudiTypeToArrayType(Schema typeSchema) {
-        return new ArrayType(fromHudiType(typeSchema.getElementType()));
+        return new ArrayType(fromHudiType(typeSchema.getElementType()), true);
     }
 
     public static boolean validateHiveColumnType(Type type, Type otherType) {
@@ -366,6 +454,23 @@ public class ColumnTypeConverter {
             if (otherType.isMapType()) {
                 return validateHiveColumnType(((MapType) type).getKeyType(), ((MapType) otherType).getKeyType()) &&
                         validateHiveColumnType(((MapType) type).getValueType(), ((MapType) otherType).getValueType());
+            } else {
+                return false;
+            }
+        }
+
+        if (type.isStructType()) {
+            if (otherType.isStructType()) {
+                StructType structType = (StructType) type;
+                StructType otherStructType = (StructType) otherType;
+                for (int i = 0; i < structType.getFields().size(); i++) {
+                    if (!validateHiveColumnType(
+                            structType.getField(i).getType(),
+                            otherStructType.getField(i).getType())) {
+                        return false;
+                    }
+                }
+                return true;
             } else {
                 return false;
             }
@@ -395,5 +500,33 @@ public class ColumnTypeConverter {
             default:
                 return false;
         }
+    }
+
+    public static boolean columnEquals(Column base, Column other) {
+        if (base == other) {
+            return true;
+        }
+
+        if (!base.getName().equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+
+        if (!base.getType().equals(other.getType())) {
+            return false;
+        }
+
+        if (base.getStrLen() != other.getStrLen()) {
+            return false;
+        }
+
+        if (base.getPrecision() != other.getPrecision()) {
+            return false;
+        }
+
+        if (base.getScale() != other.getScale()) {
+            return false;
+        }
+
+        return true;
     }
 }

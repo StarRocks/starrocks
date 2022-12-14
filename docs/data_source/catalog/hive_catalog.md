@@ -2,34 +2,37 @@
 
 This topic describes how to create a Hive catalog, and how to configure your StarRocks cluster for querying data from Apache Hive™.
 
-A Hive catalog is an external catalog, which enables you to query data from Hive without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Hive when you query Hive data:
-
-- **Metadata service:** used by the FEs to access Hive metadata stored in a relational database, such as MySQL. The FEs generate a query execution plan based on Hive metadata.
-- **Data storage system:** used to store Hive data. You can use a distributed file system or object storage system as the data storage system to store Hive data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target Hive data in parallel, perform calculations, and then return the query result.
+A Hive catalog is an external catalog supported in StarRocks 2.3 and later versions. It enables you to query data from Hive without loading data into StarRocks or creating external tables.
 
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INT, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
+- StarRocks supports querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY, MAP, and STRUCT. The following data types are not supported: INTERVAL, BINARY, and UNION.
+
+    > **Note**
+    >
+    > - An error occurs if you query Hive data in unsupported data types.
+    > - StarRocks only supports querying data of MAP and STRUCT types in Parquet or ORC data files.
+
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create a Hive catalog, configure your StarRocks cluster so that you can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports one metadata service for Hive: Hive metastore.
+Before you create a Hive catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports two metadata services for Hive: Hive metastore and AWS Glue.
 
 ### HDFS
 
 If you use HDFS as the data storage system, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each FE and BE to make the parameter settings take effect.
-
-    > Note: You can set only one username for a StarRocks cluster.
+- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each FE and BE to make the parameter settings take effect. You can set only one username for a StarRocks cluster.
 
 - When you query Hive data, the FEs and BEs use the HDFS client to access HDFS. In general, StarRocks starts the HDFS client using the default configurations. However, in the following cases, you need to configure your StarRocks cluster:
   - If your HDFS cluster runs in HA mode, add the **hdfs-site.xml** file of your HA cluster to the **$FE_HOME/conf path** of each FE and the **$BE_HOME/conf** path of each BE.
   - If you configure View File System (ViewFs) to your HDFS cluster, add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and the **$BE_HOME/conf** path of each BE.
 
-> Note: If an error (unknown host) occurs when you send a query, configure the mapping between the host names and IP addresses of HDFS nodes under the **/etc/hosts** path.
+> **Note**
+>
+> If an error (unknown host) occurs when you send a query, configure the mapping between the host names and IP addresses of HDFS nodes under the **/etc/hosts** path.
 
 ### Kerberos authentication
 
@@ -42,8 +45,7 @@ If  Kerberos authentication is enabled for your HDFS cluster or Hive metastore, 
 
 If you use Amazon S3 as the data storage system, configure your StarRocks cluster as follows:
 
-1. Download the [dependencies](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz) and add them to the **$FE_HOME/lib/** path of each FE.
-2. Add the following configuration items to the **$FE_HOME/conf/core-site.xml** file of each FE.
+1. Add the following configuration items to the **$FE_HOME/conf/core-site.xml** file of each FE.
 
       ```XML
       <configuration>
@@ -80,10 +82,10 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
       | ------------------------- | ------------------------------------------------------------ |
       | fs.s3a.access.key         | The access key ID of the root user or an Identity and Access Management (IAM) user. For information about how to obtain the access key ID, see [Understanding and getting your AWS credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html). |
       | fs.s3a.secret.key         | The secret access key of the root user or an IAM user. For information about how to obtain the secret access key, see [Understanding and getting your AWS credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html). |
-      | fs.s3a.endpoint           | The regional endpoint of your Amazon S3 service. For example, `s3.us-west-2.amazonaws.com` is the endpoint of US East (Ohio). For information about how to obtain your regional endpoint, see [Amazon Simple Storage Service endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/s3.html). |
+      | fs.s3a.endpoint           | The regional endpoint of your Amazon S3 service. For example, `s3.us-west-2.amazonaws.com` is the endpoint of US West (Oregon). For information about how to obtain your regional endpoint, see [Amazon Simple Storage Service endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/s3.html). |
       | fs.s3a.connection.maximum | The maximum number of concurrent connections that are allowed by your Amazon S3 service. This parameter defaults to `500`.  If an error (`Timeout waiting for connection from poll`) occurs when you query Hive data, increase the value of this parameter. |
 
-3. Add the following configuration items to the **$BE_HOME/conf/be.conf** file of each BE.
+2. Add the following configuration items to the **$BE_HOME/conf/be.conf** file of each BE.
 
       | **Configuration item**           | **Description**                                              |
       | -------------------------------- | ------------------------------------------------------------ |
@@ -91,35 +93,52 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
       | object_storage_secret_access_key | The secret access key of the root user or an IAM user. The value of the parameter is the same as the value of the `fs.s3a.secret.key` parameter. |
       | object_storage_endpoint          | The regional endpoint of your Amazon S3 service. The value of the parameter is the same as the value of the `fs.s3a.endpoint` parameter. |
 
-4. Restart all BEs and FEs.
+3. Restart all BEs and FEs.
 
 ## Create a Hive catalog
 
-After you complete the preceding configurations, you can create a Hive catalog using the following syntax:
+After you complete the preceding configurations, you can create a Hive catalog.
+
+### Syntax
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
+CREATE EXTERNAL CATALOG <catalog_name> 
 PROPERTIES ("key"="value", ...);
 ```
 
-The parameter description is as follows:
+### Parameters
 
 - `catalog_name`: the name of the Hive catalog. This parameter is required.<br>The naming conventions are as follows:
 
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Hive catalog. This parameter is required.<br>You can configure the following properties:
+- `PROPERTIES`: the properties of the Hive catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Hive cluster.
 
-    | **Property**        | **Required** | **Description**                                              |
-    | ------------------- | ------------ | ------------------------------------------------------------ |
-    | type                | Yes          | The type of the data source. Set the value to `hive`.        |
-    | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+#### Hive metastore
 
-> Note
+If you use Hive metastore for your Hive cluster, configure the following properties for the Hive catalog.
+
+| **Property**        | **Required** | **Description**                                              |
+| ------------------- | ------------ | ------------------------------------------------------------ |
+| type                | Yes          | The type of the data source. Set the value to `hive`.        |
+| hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+
+> **Note**
 >
-> - The CREATE EXTERNAL CATALOG statement does not require any privileges for execution.
-> - Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+
+#### [Preview] AWS Glue
+
+If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
+
+| **Property**                           | **Required** | **Description**                                              |
+| -------------------------------------- | ------------ | ------------------------------------------------------------ |
+| type                                   | Yes          | The type of the data source. Set the value to `hive`.        |
+| hive.metastore.type                    | Yes          | The metadata service used by your Hive cluster. Set the value to `glue`. |
+| aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
+| aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
+| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
 ## Caching strategy of Hive metadata
 
@@ -162,13 +181,15 @@ To query the latest Hive data, make sure that the metadata cached in StarRocks i
     [PARTITION ('partition_name', ...)];
     ```
 
-For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md). Note that only users with the `ALTER_PRIV` permission can manually update the metadata cached in StarRocks.
+For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
 
 ### Automatic incremental update
 
 This strategy enables FEs to read the events from Hive metastore, such as adding columns, removing partitions, or updating data. Then StarRocks automatically updates the metadata cached in StarRocks based on these events. Follow the steps below to enable this strategy.
 
-> Note: After you enable this strategy, the asynchronous update strategy is disabled.
+> **Note**
+>
+> After you enable this strategy, the asynchronous update strategy is disabled.
 
 #### Step 1: Configure the event listener for your Hive metastore
 
@@ -214,14 +235,14 @@ Configure the following parameters in the **$FE_HOME/conf/fe.conf** file of each
 | **Parameter**                      | **Description**                                              |
 | ---------------------------------- | ------------------------------------------------------------ |
 | enable_hms_events_incremental_sync | Whether the automatic incremental update strategy is enabled. Valid values are:<ul><li>`TRUE`: means enabled. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means disabled. </li></ul>|
-| hms_events_polling_interval_ms     | The time interval for StarRocks to read events from Hive metastore. The parameter defaults to `5`. Unit: seconds. |
+| hms_events_polling_interval_ms     | The time interval for StarRocks to read events from Hive metastore. The parameter defaults to `5000`. Unit: milliseconds. |
 | hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
 | enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
 | hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |
 
 ## What to do next
 
-After you complete the preceding configurations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
+After you complete all the preceding operations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

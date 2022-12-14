@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.hive;
 
@@ -21,6 +34,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
@@ -193,6 +207,22 @@ public class HiveStatisticsProviderTest {
     public void testHiveColumnInit() {
         HiveColumnStats stats = new HiveColumnStats();
         ColumnStatisticsData columnStatisticsData = new ColumnStatisticsData();
+        BooleanColumnStatsData booleanColumnStatsData = new BooleanColumnStatsData();
+        booleanColumnStatsData.setNumTrues(10);
+        columnStatisticsData.setBooleanStats(booleanColumnStatsData);
+        stats.initialize(columnStatisticsData, 10);
+        Assert.assertEquals(1, stats.getMax(), 0.000001);
+        Assert.assertEquals(1, stats.getMin(), 0.000001);
+
+        booleanColumnStatsData = new BooleanColumnStatsData();
+        booleanColumnStatsData.setNumNulls(10);
+        columnStatisticsData.setBooleanStats(booleanColumnStatsData);
+        stats.initialize(columnStatisticsData, 10);
+        Assert.assertEquals(0, stats.getMax(), 0.000001);
+        Assert.assertEquals(0, stats.getMin(), 0.000001);
+
+
+        columnStatisticsData = new ColumnStatisticsData();
         LongColumnStatsData longColumnStatsData = new LongColumnStatsData();
         longColumnStatsData.setNumNulls(1);
         columnStatisticsData.setLongStats(longColumnStatsData);
@@ -220,11 +250,14 @@ public class HiveStatisticsProviderTest {
         stats.initialize(columnStatisticsData, 80);
         Assert.assertEquals(4, stats.getNumNulls());
 
+        stats = new HiveColumnStats();
         columnStatisticsData = new ColumnStatisticsData();
         StringColumnStatsData stringColumnStatsData = new StringColumnStatsData();
         stringColumnStatsData.setNumNulls(5);
         columnStatisticsData.setStringStats(stringColumnStatsData);
         stats.initialize(columnStatisticsData, 90);
         Assert.assertEquals(5, stats.getNumNulls());
+        Assert.assertEquals(Double.NEGATIVE_INFINITY, stats.getMin(), 0.000001);
+        Assert.assertEquals(Double.POSITIVE_INFINITY, stats.getMax(), 0.000001);
     }
 }

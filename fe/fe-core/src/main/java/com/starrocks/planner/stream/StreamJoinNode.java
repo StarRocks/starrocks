@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.planner.stream;
 
@@ -26,8 +39,13 @@ public class StreamJoinNode extends JoinNode {
     private IMTInfo rightIMT;
 
     public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef, List<Expr> eqJoinConjuncts,
-            List<Expr> otherJoinConjuncts) {
+                          List<Expr> otherJoinConjuncts) {
         super("StreamJoin", id, outer, inner, JoinOperator.INNER_JOIN, eqJoinConjuncts, otherJoinConjuncts);
+    }
+
+    public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
+                          List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
+        super("StreamJoin", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
     }
 
     @Override

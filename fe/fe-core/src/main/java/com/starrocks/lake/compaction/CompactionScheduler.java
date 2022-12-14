@@ -1,10 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.lake.compaction;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -40,6 +52,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -60,7 +73,7 @@ public class CompactionScheduler extends Daemon {
     private final SystemInfoService systemInfoService;
     private final GlobalTransactionMgr transactionMgr;
     private final GlobalStateMgr stateMgr;
-    private final Map<PartitionIdentifier, CompactionContext> runningCompactions;
+    private final ConcurrentHashMap<PartitionIdentifier, CompactionContext> runningCompactions;
     private long lastPartitionCleanTime;
 
     CompactionScheduler(@NotNull CompactionManager compactionManager, @NotNull SystemInfoService systemInfoService,
@@ -70,7 +83,7 @@ public class CompactionScheduler extends Daemon {
         this.systemInfoService = systemInfoService;
         this.transactionMgr = transactionMgr;
         this.stateMgr = stateMgr;
-        this.runningCompactions = Maps.newHashMap();
+        this.runningCompactions = new ConcurrentHashMap();
         this.lastPartitionCleanTime = System.currentTimeMillis();
     }
 
@@ -116,13 +129,18 @@ public class CompactionScheduler extends Daemon {
                 } catch (Exception e) {
                     iterator.remove();
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-                    LOG.error("Fail to commit compaction transaction. partition={}, error={}", partition, e.getMessage());
+                    LOG.error("Fail to commit compaction. {} error={}", context.getDebugString(), e.getMessage());
                     continue;
                 }
             }
 
             if (context.transactionHasCommitted() && context.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
+                context.setVisibleTs(System.currentTimeMillis());
                 iterator.remove();
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Removed published compaction. {} cost={}ms running={}", context.getDebugString(),
+                            (context.getVisibleTs() - context.getStartTs()), runningCompactions.size());
+                }
                 compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS);
             }
         }
@@ -139,12 +157,13 @@ public class CompactionScheduler extends Daemon {
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
             PartitionIdentifier partition = partitions.get(index++);
             CompactionContext context = startCompaction(partition);
-            if (context != null) {
-                numRunningTasks += context.getNumCompactionTasks();
-                runningCompactions.put(partition, context);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Created new compaction job. partition={} txnId={}", partition, context.getTxnId());
-                }
+            if (context == null) {
+                continue;
+            }
+            numRunningTasks += context.getNumCompactionTasks();
+            runningCompactions.put(partition, context);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Created new compaction job. partition={} txnId={}", partition, context.getTxnId());
             }
         }
     }
@@ -153,7 +172,7 @@ public class CompactionScheduler extends Daemon {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }
-        return systemInfoService.getAliveBackendNumber() * 4;
+        return systemInfoService.getAliveBackendNumber() * 16;
     }
 
     private void cleanPartition() {
@@ -239,10 +258,8 @@ public class CompactionScheduler extends Daemon {
         CompactionContext context = new CompactionContext();
         context.setTxnId(txnId);
         context.setBeToTablets(beToTablets);
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Compacting partition {}.{}.{}", db.getFullName(), table.getName(), partition.getName());
-        }
+        context.setStartTs(System.currentTimeMillis());
+        context.setFullPartitionName(String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName()));
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         try {
@@ -340,11 +357,32 @@ public class CompactionScheduler extends Daemon {
         VisibleStateWaiter waiter;
         db.writeLock();
         try {
-            waiter = transactionMgr.commitTransaction(db.getId(), context.getTxnId(), commitInfoList);
+            waiter = transactionMgr.commitTransaction(db.getId(), context.getTxnId(), commitInfoList, Lists.newArrayList());
         } finally {
             db.writeUnlock();
         }
         context.setVisibleStateWaiter(waiter);
+        context.setCommitTs(System.currentTimeMillis());
+        if (LOG.isDebugEnabled()) {
+            long numInputBytes = 0;
+            long numInputRows = 0;
+            long numOutputBytes = 0;
+            long numOutputRows = 0;
+            for (Future<CompactResponse> responseFuture : context.getResponseList()) {
+                CompactResponse response = responseFuture.get();
+                numInputBytes += response.numInputBytes;
+                numInputRows += response.numInputRows;
+                numOutputBytes += response.numOutputBytes;
+                numOutputRows += response.numOutputRows;
+            }
+            LOG.debug("Committed compaction. {} inputBytes={} inputRows={} outputBytes={} outputRows={} time={}",
+                    context.getDebugString(),
+                    numInputBytes,
+                    numInputRows,
+                    numOutputBytes,
+                    numOutputRows,
+                    (context.getCommitTs() - context.getStartTs()));
+        }
     }
 
     private void abortTransactionIgnoreError(long dbId, long txnId, String reason) {
@@ -355,58 +393,8 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private static class CompactionContext {
-        private long txnId;
-        private Map<Long, List<Long>> beToTablets;
-        private List<Future<CompactResponse>> responseList;
-        private VisibleStateWaiter visibleStateWaiter;
-
-        CompactionContext() {
-            responseList = Lists.newArrayList();
-        }
-
-        void setTxnId(long txnId) {
-            this.txnId = txnId;
-        }
-
-        long getTxnId() {
-            return txnId;
-        }
-
-        void setResponseList(@NotNull List<Future<CompactResponse>> futures) {
-            responseList = futures;
-        }
-
-        List<Future<CompactResponse>> getResponseList() {
-            return responseList;
-        }
-
-        void setVisibleStateWaiter(VisibleStateWaiter visibleStateWaiter) {
-            this.visibleStateWaiter = visibleStateWaiter;
-        }
-
-        boolean waitTransactionVisible(long timeout, TimeUnit unit) {
-            return visibleStateWaiter.await(timeout, unit);
-        }
-
-        boolean transactionHasCommitted() {
-            return visibleStateWaiter != null;
-        }
-
-        void setBeToTablets(@NotNull Map<Long, List<Long>> beToTablets) {
-            this.beToTablets = beToTablets;
-        }
-
-        Map<Long, List<Long>> getBeToTablets() {
-            return beToTablets;
-        }
-
-        boolean compactionFinishedOnBE() {
-            return responseList.stream().allMatch(Future::isDone);
-        }
-
-        int getNumCompactionTasks() {
-            return beToTablets.values().stream().mapToInt(List::size).sum();
-        }
+    @NotNull
+    ConcurrentHashMap<PartitionIdentifier, CompactionContext> getRunningCompactions() {
+        return runningCompactions;
     }
 }

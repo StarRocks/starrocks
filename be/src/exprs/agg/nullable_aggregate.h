@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -13,8 +25,8 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/agg/maxmin.h"
+#include "exprs/function_context.h"
 #include "simd/simd.h"
-#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 
@@ -214,9 +226,9 @@ public:
         }
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                  AggDataPtr __restrict state) const override {
-        for (size_t i = 0; i < chunk_size; ++i) {
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
+                                  size_t size) const override {
+        for (size_t i = start; i < start + size; ++i) {
             merge(ctx, column, state, i);
         }
     }
@@ -674,17 +686,17 @@ public:
         ColumnHelper::call_nullable_func(column, std::move(fast_call_path), std::move(slow_call_path));
     }
 
-    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
-                                  AggDataPtr __restrict state) const override {
+    void merge_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column* column, size_t start,
+                                  size_t size) const override {
         auto fast_call_path = [&](const Column* data_column) {
-            for (size_t i = 0; i < chunk_size; ++i) {
+            for (size_t i = start; i < start + size; ++i) {
                 auto& state_data = this->data(state);
                 state_data.is_null = false;
                 this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
             }
         };
         auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
-            for (size_t i = 0; i < chunk_size; ++i) {
+            for (size_t i = start; i < start + size; ++i) {
                 auto& state_data = this->data(state);
                 if (null_data[i] == 0) {
                     state_data.is_null = false;

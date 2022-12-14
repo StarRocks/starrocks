@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.service;
 
@@ -10,6 +23,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -139,6 +154,11 @@ public class InformationSchemaDataSource {
 
     private static Map<String, String> genProps(Table table) {
 
+        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+            MaterializedView mv = (MaterializedView) table;
+            return mv.getMaterializedViewPropMap();
+        }
+
         OlapTable olapTable = (OlapTable) table;
         Map<String, String> propsMap = new HashMap<>(); 
         
@@ -184,9 +204,9 @@ public class InformationSchemaDataSource {
         // compression type
         if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME || 
                 olapTable.getCompressionType() == TCompressionType.LZ4) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "LZ4");
+            propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "LZ4");
         } else {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, olapTable.getCompressionType().name());
+            propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, olapTable.getCompressionType().name());
         }
 
         // storage media
@@ -226,32 +246,36 @@ public class InformationSchemaDataSource {
             partitionKeySb.append(DEF_NULL);
         }
 
-        // keys
-        StringBuilder keysSb = new StringBuilder();
+        // PRIMARY KEYS
         List<String> keysColumnNames = Lists.newArrayList();
         for (Column column : olapTable.getBaseSchema()) {
             if (column.isKey()) {
                 keysColumnNames.add("`" + column.getName() + "`");
             }
         }
-        keysSb.append(Joiner.on(", ").join(keysColumnNames));
-
-        tableConfigInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? DEF_NULL : keysSb.toString());
+        String pkSb = Joiner.on(", ").join(keysColumnNames);
+        tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
+                                       || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEF_NULL);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
-        tableConfigInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : DEF_NULL);
+        
+        // SORT KEYS
+        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        if (index.getSortKeyIdxes() != null) {
+            List<String> sortKeysColumnNames = Lists.newArrayList();
+            for (Integer i : index.getSortKeyIdxes()) {
+                sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+            }
+            tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
+        } else {
+            tableConfigInfo.setSort_key(DEF_NULL);
+        }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
         return tableConfigInfo;
     }
 
-    private static boolean isSortKey(KeysType kType) {
-        if (kType.equals(KeysType.PRIMARY_KEYS) || kType.equals(KeysType.UNIQUE_KEYS)) {
-            return false;
-        }
-        return true;
-    }
 
     private static TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
         tableConfigInfo.setTable_engine(DEF);
@@ -297,7 +321,7 @@ public class InformationSchemaDataSource {
                         info.setAuto_increment(DEF_NULL_NUM);
                         info.setCreate_time(table.getCreateTime());
                         // UPDATE_TIME (depend on the table type)
-                        info.setCheck_time(table.getLastCheckTime());
+                        info.setCheck_time(table.getLastCheckTime() / 1000);
                         info.setTable_collation(UTF8_GENERAL_CI);
                         info.setChecksum(DEF_NULL_NUM);
                         info.setCreate_options(DEF_NULL);
@@ -345,7 +369,6 @@ public class InformationSchemaDataSource {
             case OLAP_EXTERNAL:
                 return "BASE TABLE";
             case MATERIALIZED_VIEW:
-                return "MATERIALIZED VIEW";
             case VIEW:
                 return "VIEW";
             default:
@@ -358,6 +381,7 @@ public class InformationSchemaDataSource {
 
     private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
         
+        OlapTable olapTable = (OlapTable) table;
         Collection<Partition> partitions = table.getPartitions();
         long lastUpdateTime = 0L;
         long totalRowsOfTable = 0L;
@@ -378,7 +402,7 @@ public class InformationSchemaDataSource {
             info.setAvg_row_length(totalBytesOfTable / totalRowsOfTable);
         }
         // DATA_LENGTH
-        info.setData_length(totalBytesOfTable);
+        info.setData_length(olapTable.getDataSize());
         // UPDATE_TIME
         info.setUpdate_time(lastUpdateTime / 1000);
         return info;

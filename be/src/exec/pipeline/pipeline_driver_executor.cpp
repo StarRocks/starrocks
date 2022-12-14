@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 
@@ -9,6 +21,7 @@
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/stack_util.h"
 
 namespace starrocks::pipeline {
 
@@ -199,9 +212,10 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
     }
 }
 
-void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
-    _update_profile_by_level(fragment_ctx, done);
-    auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
+void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
+                                             const Status& status, bool done) {
+    _update_profile_by_level(query_ctx, fragment_ctx, done);
+    auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
@@ -228,16 +242,16 @@ void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmuta
     _blocked_driver_poller->iterate_immutable_driver(call);
 }
 
-void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ctx, bool done) {
+void GlobalDriverExecutor::_update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done) {
     if (!done) {
         return;
     }
 
-    if (!fragment_ctx->is_report_profile()) {
+    if (!query_ctx->is_report_profile()) {
         return;
     }
 
-    if (fragment_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
+    if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return;
     }
 
@@ -255,7 +269,7 @@ void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ct
             continue;
         }
 
-        _remove_non_core_metrics(fragment_ctx, driver_profiles);
+        _remove_non_core_metrics(query_ctx, driver_profiles);
 
         RuntimeProfile::merge_isomorphic_profiles(driver_profiles);
         // all the isomorphic profiles will merged into the first profile
@@ -269,8 +283,6 @@ void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ct
         merged_driver_profile->copy_all_info_strings_from(pipeline_profile);
         merged_driver_profile->copy_all_counters_from(pipeline_profile);
 
-        _simplify_common_metrics(merged_driver_profile);
-
         merged_driver_profiles.push_back(merged_driver_profile);
     }
 
@@ -282,9 +294,9 @@ void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ct
     }
 }
 
-void GlobalDriverExecutor::_remove_non_core_metrics(FragmentContext* fragment_ctx,
+void GlobalDriverExecutor::_remove_non_core_metrics(QueryContext* query_ctx,
                                                     std::vector<RuntimeProfile*>& driver_profiles) {
-    if (fragment_ctx->profile_level() > TPipelineProfileLevel::CORE_METRICS) {
+    if (query_ctx->profile_level() > TPipelineProfileLevel::CORE_METRICS) {
         return;
     }
 
@@ -306,26 +318,4 @@ void GlobalDriverExecutor::_remove_non_core_metrics(FragmentContext* fragment_ct
     }
 }
 
-void GlobalDriverExecutor::_simplify_common_metrics(RuntimeProfile* driver_profile) {
-    std::vector<RuntimeProfile*> operator_profiles;
-    driver_profile->get_children(&operator_profiles);
-    for (auto* operator_profile : operator_profiles) {
-        RuntimeProfile* common_metrics = operator_profile->get_child("CommonMetrics");
-        DCHECK(common_metrics != nullptr);
-
-        // Remove runtime filter related counters if it's value is 0
-        static std::string counter_names[] = {"RuntimeInFilterNum",         "RuntimeBloomFilterNum",
-                                              "JoinRuntimeFilterInputRows", "JoinRuntimeFilterOutputRows",
-                                              "JoinRuntimeFilterEvaluate",  "JoinRuntimeFilterTime",
-                                              "ConjunctsInputRows",         "ConjunctsOutputRows",
-                                              "ConjunctsEvaluate",          "ConjunctsTime",
-                                              "JoinRuntimeFilterHashTime"};
-        for (auto& name : counter_names) {
-            auto* counter = common_metrics->get_counter(name);
-            if (counter != nullptr && counter->value() == 0) {
-                common_metrics->remove_counter(name);
-            }
-        }
-    }
-}
 } // namespace starrocks::pipeline

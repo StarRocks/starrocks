@@ -1,5 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/group_reader.h"
 
@@ -8,14 +19,15 @@
 #include "exec/exec_node.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::parquet {
 
-constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
-constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
+constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
+constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
     _row_group_metadata =
@@ -138,6 +150,7 @@ void GroupReader::close() {
 Status GroupReader::_init_column_readers() {
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
+    opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.sb_stream = _param.shared_buffered_stream;
@@ -229,11 +242,11 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
     // and it may not be equal to col_idx_in_chunk.
     // 3. For array type, the physical_column_index is 0, we need to iterate the children and
     // collect their io ranges.
-    if (field.type.type == TYPE_ARRAY) {
+    if (field.type.type == LogicalType::TYPE_ARRAY || field.type.type == LogicalType::TYPE_STRUCT) {
         for (auto& child : field.children) {
             _collect_field_io_range(child, ranges, end_offset);
         }
-    } else if (field.type.type == TYPE_MAP) {
+    } else if (field.type.type == LogicalType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field.children[0].type.type == TYPE_STRUCT);
         for (auto& child : field.children[0].children) {

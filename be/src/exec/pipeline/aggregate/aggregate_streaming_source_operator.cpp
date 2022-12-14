@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "aggregate_streaming_source_operator.h"
 
@@ -53,22 +65,21 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
     // Even if it is streaming mode, the purpose of reading from hash table is to
     // correctly process the state of hash table(_is_ht_eos)
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    _output_chunk_from_hash_map(&chunk, state);
+    RETURN_IF_ERROR(_output_chunk_from_hash_map(&chunk, state));
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state) {
+Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_map_variant().visit(
                 [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
-    _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-        _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, state->chunk_size(), chunk);
-    });
+    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/ClickHouse/ClickHouse/blob/master/src/Interpreters/Aggregator.h
 
@@ -452,6 +465,7 @@ struct AggHashMapVariant {
 
     detail::AggHashMapWithKeyPtr hash_map_with_key;
     auto& get_variant() { return hash_map_with_key; }
+
     template <class Vistor>
     auto visit(Vistor&& vistor) const {
         return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
@@ -461,29 +475,10 @@ struct AggHashMapVariant {
 
     void convert_to_two_level(RuntimeState* state);
 
-    size_t capacity() const {
-        return visit([](const auto& hash_map_with_key) { return hash_map_with_key->hash_map.capacity(); });
-    }
-
-    size_t size() const {
-        return visit([](const auto& hash_map_with_key) {
-            return hash_map_with_key->hash_map.size() + (hash_map_with_key->get_null_key_data() != nullptr);
-        });
-    }
-
-    size_t reserved_memory_usage(const MemPool* pool) const {
-        return visit([pool](const auto& hash_map_with_key) {
-            return hash_map_with_key->hash_map.dump_bound() + pool->total_reserved_bytes();
-        });
-    }
-
-    size_t allocated_memory_usage(const MemPool* pool) const {
-        return visit([pool](const auto& hash_map_with_key) {
-            return sizeof(typename decltype(hash_map_with_key->hash_map)::key_type) *
-                           hash_map_with_key->hash_map.capacity() +
-                   pool->total_allocated_bytes();
-        });
-    }
+    size_t capacity() const;
+    size_t size() const;
+    size_t reserved_memory_usage(const MemPool* pool) const;
+    size_t allocated_memory_usage(const MemPool* pool) const;
 
 private:
     Type _type = Type::phase1_slice;
@@ -565,6 +560,7 @@ struct AggHashSetVariant {
 
     detail::AggHashSetWithKeyPtr hash_set_with_key;
     auto& get_variant() { return hash_set_with_key; }
+
     template <class Vistor>
     auto visit(Vistor&& vistor) const {
         return std::visit(std::forward<Vistor>(vistor), hash_set_with_key);
@@ -574,37 +570,16 @@ struct AggHashSetVariant {
 
     void convert_to_two_level(RuntimeState* state);
 
-    size_t capacity() const {
-        return visit([](auto& hash_set_with_key) { return hash_set_with_key->hash_set.capacity(); });
-    }
+    size_t capacity() const;
 
-    size_t size() const {
-        return visit([](auto& hash_set_with_key) {
-            size_t sz = hash_set_with_key->hash_set.size();
-            if constexpr (std::decay_t<decltype(*hash_set_with_key)>::has_single_null_key) {
-                sz += hash_set_with_key->has_null_key ? 1 : 0;
-            }
-            return sz;
-        });
-    }
+    size_t size() const;
 
-    size_t reserved_memory_usage(const MemPool* pool) const {
-        return visit([&](auto& hash_set_with_key) {
-            return hash_set_with_key->hash_set.dump_bound() + pool->total_reserved_bytes();
-        });
-    }
+    size_t reserved_memory_usage(const MemPool* pool) const;
 
-    size_t allocated_memory_usage(const MemPool* pool) const {
-        return visit([&](auto& hash_set_with_key) {
-            return sizeof(typename decltype(hash_set_with_key->hash_set)::key_type) *
-                           hash_set_with_key->hash_set.capacity() +
-                   pool->total_allocated_bytes();
-        });
-    }
+    size_t allocated_memory_usage(const MemPool* pool) const;
 
 private:
     Type type = Type::phase1_slice;
-    AggStatistics* _agg_stat = nullptr;
 };
 
 } // namespace starrocks::vectorized

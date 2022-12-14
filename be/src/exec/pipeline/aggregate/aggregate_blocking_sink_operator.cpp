@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "aggregate_blocking_sink_operator.h"
 
@@ -69,9 +81,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
     if (!_aggregator->is_none_group_by_exprs()) {
         if (false) {
         }
-        TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _aggregator->build_hash_map(*hash_map_with_key, chunk_size, agg_group_by_with_limit);
-        }));
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, agg_group_by_with_limit));
         _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/planner/PlanFragment.java
 
@@ -47,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * PlanFragments form a tree structure via their ExchangeNodes. A tree of fragments
@@ -123,9 +137,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
 
-    // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
-    protected boolean enableSharedScan = true;
-
     // Whether to assign scan ranges to each driver sequence of pipeline,
     // for the normal backend assignment (not colocate, bucket, and replicated join).
     protected boolean assignScanRangesPerDriverSeq = false;
@@ -141,10 +152,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private boolean hasJoinNode = false;
     private boolean hasOlapScanNode = false;
 
-    private PlanNodeId cachePlanNodeId = null;
-    private ByteBuffer digest = null;
-    private Map<Integer, Integer> slotRemapping = Maps.newHashMap();
-    private Map<Long, String> rangeMap = Maps.newHashMap();
+    private TCacheParam cacheParam = null;
     private boolean hasOlapTableSink = false;
     private boolean forceSetTableSinkDop = false;
     private boolean forceAssignScanRangesPerDriverSeq = false;
@@ -241,14 +249,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.forceSetTableSinkDop = true;
     }
 
-    public void setEnableSharedScan(boolean enable) {
-        this.enableSharedScan = enable;
-    }
-
-    public boolean isEnableSharedScan() {
-        return enableSharedScan;
-    }
-
     public boolean isAssignScanRangesPerDriverSeq() {
         return assignScanRangesPerDriverSeq;
     }
@@ -289,38 +289,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setOutputExprs(List<Expr> outputExprs) {
         this.outputExprs = Expr.cloneList(outputExprs, null);
-    }
-
-    public void setCachePlanNodeId(PlanNodeId cachePlanNodeId) {
-        this.cachePlanNodeId = cachePlanNodeId;
-    }
-
-    public PlanNodeId getCachePlanNodeId() {
-        return cachePlanNodeId;
-    }
-
-    public ByteBuffer getDigest() {
-        return digest;
-    }
-
-    public void setDigest(ByteBuffer digest) {
-        this.digest = digest;
-    }
-
-    public Map<Integer, Integer> getSlotRemapping() {
-        return slotRemapping;
-    }
-
-    public void setSlotRemapping(Map<Integer, Integer> slotRemapping) {
-        this.slotRemapping = slotRemapping;
-    }
-
-    public Map<Long, String> getRangeMap() {
-        return rangeMap;
-    }
-
-    public void setRangeMap(Map<Long, String> rangeMap) {
-        this.rangeMap = rangeMap;
     }
 
     /**
@@ -380,12 +348,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!loadGlobalDicts.isEmpty()) {
             result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
         }
-        if (cachePlanNodeId != null && cachePlanNodeId.isValid()) {
-            TCacheParam cacheParam = new TCacheParam();
-            cacheParam.setId(getCachePlanNodeId().asInt());
-            cacheParam.setDigest(getDigest());
-            cacheParam.setRegion_map(getRangeMap());
-            cacheParam.setSlot_remapping(getSlotRemapping());
+        if (cacheParam != null) {
             if (ConnectContext.get() != null) {
                 SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
                 cacheParam.setForce_populate(sessionVariable.isQueryCacheForcePopulate());
@@ -400,6 +363,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Create thrift fragment with the unique fields, including
      * - output_sink (only for MultiCastDataStreamSink and ExportSink).
+     *
      * @return The thrift fragment with the unique fields.
      */
     public TPlanFragment toThriftForUniqueFields() {
@@ -629,7 +593,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     // For plan fragment has join
     public void mergeQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.queryGlobalDicts.addAll(dicts);
+        if (this.queryGlobalDicts != dicts) {
+            this.queryGlobalDicts = Stream.concat(this.queryGlobalDicts.stream(), dicts.stream()).distinct()
+                    .collect(Collectors.toList());
+        }
     }
 
     public void setLoadGlobalDicts(
@@ -659,5 +626,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public boolean hasOlapScanNode() {
         return hasOlapScanNode;
+    }
+
+    public TCacheParam getCacheParam() {
+        return cacheParam;
+    }
+
+    public void setCacheParam(TCacheParam cacheParam) {
+        this.cacheParam = cacheParam;
     }
 }

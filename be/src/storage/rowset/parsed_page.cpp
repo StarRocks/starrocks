@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/parsed_page.cpp
 
@@ -137,37 +150,6 @@ public:
         return Status::OK();
     }
 
-    Status read(ColumnBlockView* block, size_t* count) override {
-        *count = std::min(*count, remaining());
-        size_t nrows_to_read = *count;
-        if (_has_null) {
-            while (nrows_to_read > 0) {
-                bool is_null = false;
-                size_t this_run = _null_decoder.GetNextRun(&is_null, nrows_to_read);
-                // we use num_rows only for DCHECK_EQ.
-                size_t num_rows = this_run;
-                if (!is_null) {
-                    RETURN_IF_ERROR(_data_decoder->next_batch(&num_rows, block));
-                    DCHECK_EQ(this_run, num_rows);
-                }
-                block->set_null_bits(this_run, is_null);
-                block->advance(this_run);
-
-                nrows_to_read -= this_run;
-                _offset_in_page += this_run;
-            }
-        } else {
-            RETURN_IF_ERROR(_data_decoder->next_batch(&nrows_to_read, block));
-            DCHECK_EQ(nrows_to_read, *count);
-            if (block->is_nullable()) {
-                block->set_null_bits(nrows_to_read, false);
-            }
-            block->advance(nrows_to_read);
-            _offset_in_page += nrows_to_read;
-        }
-        return Status::OK();
-    }
-
     Status read_dict_codes(vectorized::Column* column, size_t* count) override {
         *count = std::min(*count, remaining());
         size_t nrows_to_read = *count;
@@ -276,26 +258,6 @@ public:
             }
             nc->update_has_null();
         }
-        return Status::OK();
-    }
-
-    Status read(ColumnBlockView* block, size_t* count) override {
-        DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
-        RETURN_IF_ERROR(_data_decoder->next_batch(count, block));
-        if (_null_flags.size() > 0) {
-            uint8_t is_null;
-            ByteIterator bi(_null_flags.data() + _offset_in_page, *count);
-            for (size_t cnt = bi.next(&is_null); cnt > 0; cnt = bi.next(&is_null)) {
-                block->set_null_bits(cnt, is_null);
-                block->advance(cnt);
-            }
-        } else if (block->is_nullable()) {
-            block->set_null_bits(*count, false);
-            block->advance(*count);
-        } else {
-            block->advance(*count);
-        }
-        _offset_in_page += *count;
         return Status::OK();
     }
 

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/subfield_expr.h"
 
@@ -14,7 +26,7 @@ class FakeConstExpr : public starrocks::Expr {
 public:
     explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
 
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool*) const override { return nullptr; }
 
@@ -56,10 +68,10 @@ private:
 
 TEST_F(SubfieldExprTest, subfield_test) {
     TypeDescriptor struct_type;
-    struct_type.type = PrimitiveType::TYPE_STRUCT;
-    struct_type.children.emplace_back(PrimitiveType::TYPE_INT);
+    struct_type.type = LogicalType::TYPE_STRUCT;
+    struct_type.children.emplace_back(LogicalType::TYPE_INT);
     struct_type.field_names.emplace_back("id");
-    struct_type.children.emplace_back(PrimitiveType::TYPE_VARCHAR);
+    struct_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
     struct_type.field_names.emplace_back("name");
     struct_type.selected_fields.push_back(true);
     struct_type.selected_fields.push_back(true);
@@ -77,7 +89,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
     column->append_datum(datum_struct_2);
 
     {
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(PrimitiveType::TYPE_INT), "id");
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), "id");
         expr->add_child(new_fake_const_expr(column, struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -89,7 +101,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
     }
 
     {
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(PrimitiveType::TYPE_INT), "name");
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), "name");
         expr->add_child(new_fake_const_expr(column, struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -103,10 +115,10 @@ TEST_F(SubfieldExprTest, subfield_test) {
 
 TEST_F(SubfieldExprTest, subfield_null_test) {
     TypeDescriptor struct_type;
-    struct_type.type = PrimitiveType::TYPE_STRUCT;
-    struct_type.children.emplace_back(PrimitiveType::TYPE_INT);
+    struct_type.type = LogicalType::TYPE_STRUCT;
+    struct_type.children.emplace_back(LogicalType::TYPE_INT);
     struct_type.field_names.emplace_back("id");
-    struct_type.children.emplace_back(PrimitiveType::TYPE_VARCHAR);
+    struct_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
     struct_type.field_names.emplace_back("name");
     struct_type.selected_fields.push_back(true);
     struct_type.selected_fields.push_back(true);
@@ -125,7 +137,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         datum_struct_3.push_back("cruise");
         column->append_datum(datum_struct_3);
 
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(PrimitiveType::TYPE_INT), "id");
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), "id");
         expr->add_child(new_fake_const_expr(column, struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -152,7 +164,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         datum_struct_3.push_back("cruise");
         column->append_datum(datum_struct_3);
 
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(PrimitiveType::TYPE_INT), "id");
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), "id");
         expr->add_child(new_fake_const_expr(column, struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());

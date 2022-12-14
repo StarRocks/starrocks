@@ -611,7 +611,7 @@ bool safe_strto32(const char* startptr, const int buffer_size, int32* value) {
     return safe_int_internal<int32>(startptr, startptr + buffer_size, 10, value);
 }
 
-bool safe_strto64(const char* startptr, const int buffer_size, int64* value) {
+bool safe_strto64(const char* startptr, const int64 buffer_size, int64* value) {
     return safe_int_internal<int64>(startptr, startptr + buffer_size, 10, value);
 }
 

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.server;
 
@@ -44,6 +57,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.ResourceMgr.NEED_MAPPING_CATALOG_RESOURCES;
+import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -147,9 +161,10 @@ public class CatalogMgr {
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
         }
-        if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(type)) {
-            // if catalog type is not supported, skip it
-            LOG.warn("Replay catalog encounter unknown catalog type: " + type);
+
+        // skip unsupport connector type
+        if (!SUPPORT_CONNECTOR_TYPE.contains(type)) {
+            LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
             return;
         }
 
@@ -173,7 +188,10 @@ public class CatalogMgr {
         String catalogName = log.getCatalogName();
         readLock();
         try {
-            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+            if (!catalogs.containsKey(catalogName)) {
+                LOG.error("Catalog [{}] doesn't exist, unsupport this catalog type, ignore it", catalogName);
+                return;
+            }
         } finally {
             readUnlock();
         }
@@ -249,6 +267,14 @@ public class CatalogMgr {
 
     public List<List<String>> getCatalogsInfo() {
         return procNode.fetchResult().getRows();
+    }
+
+    public Catalog getCatalogByName(String name) {
+        return catalogs.get(name);
+    }
+
+    public boolean checkCatalogExistsById(long id) {
+        return catalogs.entrySet().stream().anyMatch(entry -> entry.getValue().getId() == id);
     }
 
     public CatalogProcNode getProcNode() {

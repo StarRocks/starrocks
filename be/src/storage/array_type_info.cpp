@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/array_type_info.h"
 
@@ -131,13 +143,7 @@ public:
         unaligned_store<Collection>(dest, dest_value);
     }
 
-    void copy_object(void* dest, const void* src, MemPool* mem_pool) const override { deep_copy(dest, src, mem_pool); }
-
     void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override { deep_copy(dest, src, mem_pool); }
-
-    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
-        return Status::NotSupported("Not supported function");
-    }
 
     Status from_string(void* buf, const std::string& scan_key) const override {
         return Status::NotSupported("Not supported function");
@@ -180,7 +186,7 @@ public:
 
     size_t size() const override { return sizeof(Collection); }
 
-    FieldType type() const override { return OLAP_FIELD_TYPE_ARRAY; }
+    LogicalType type() const override { return TYPE_ARRAY; }
 
     const TypeInfoPtr& item_type_info() const { return _item_type_info; }
 

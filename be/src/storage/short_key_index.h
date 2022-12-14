@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/short_key_index.h
 
@@ -56,59 +69,6 @@ constexpr uint8_t KEY_NULL_LAST_MARKER = 0xFE;
 // Used to represent maximal value for that field
 constexpr uint8_t KEY_MAXIMAL_MARKER = 0xFF;
 
-// Encode one row into binary according given num_keys.
-// A cell will be encoded in the format of a marker and encoded content.
-// When function encoding row, if any cell isn't found in row, this function will
-// fill a marker and return. If padding_minimal is true, KEY_MINIMAL_MARKER will
-// be added, if padding_minimal is false, KEY_MAXIMAL_MARKER will be added.
-// If all num_keys are found in row, no marker will be added.
-template <typename RowType, bool null_first = true>
-void encode_key_with_padding(std::string* buf, const RowType& row, size_t num_keys, bool padding_minimal) {
-    for (auto cid = 0; cid < num_keys; cid++) {
-        auto field = row.schema()->column(cid);
-        if (field == nullptr) {
-            if (padding_minimal) {
-                buf->push_back(KEY_MINIMAL_MARKER);
-            } else {
-                buf->push_back(KEY_MAXIMAL_MARKER);
-            }
-            break;
-        }
-
-        auto cell = row.cell(cid);
-        if (cell.is_null()) {
-            if (null_first) {
-                buf->push_back(KEY_NULL_FIRST_MARKER);
-            } else {
-                buf->push_back(KEY_NULL_LAST_MARKER);
-            }
-            continue;
-        }
-        buf->push_back(KEY_NORMAL_MARKER);
-        field->encode_ascending(cell.cell_ptr(), buf);
-    }
-}
-
-// Encode one row into binary according given num_keys.
-// Client call this function must assure that row contains the first
-// num_keys columns.
-template <typename RowType, bool null_first = true>
-void encode_key(std::string* buf, const RowType& row, size_t num_keys) {
-    for (auto cid = 0; cid < num_keys; cid++) {
-        auto cell = row.cell(cid);
-        if (cell.is_null()) {
-            if (null_first) {
-                buf->push_back(KEY_NULL_FIRST_MARKER);
-            } else {
-                buf->push_back(KEY_NULL_LAST_MARKER);
-            }
-            continue;
-        }
-        buf->push_back(KEY_NORMAL_MARKER);
-        row.schema()->column(cid)->encode_ascending(cell.cell_ptr(), buf);
-    }
-}
-
 // Encode a segment short key indices to one ShortKeyPage. This version
 // only accepts binary key, client should assure that input key is sorted,
 // otherwise error could happens. This builder would arrange the page body in the
@@ -128,7 +88,7 @@ void encode_key(std::string* buf, const RowType& row, size_t num_keys) {
 class ShortKeyIndexBuilder {
 public:
     ShortKeyIndexBuilder(uint32_t segment_id, uint32_t num_rows_per_block)
-            : _segment_id(segment_id), _num_rows_per_block(num_rows_per_block), _num_items(0) {}
+            : _segment_id(segment_id), _num_rows_per_block(num_rows_per_block) {}
 
     Status add_item(const Slice& key);
 
@@ -139,7 +99,7 @@ public:
 private:
     uint32_t _segment_id;
     uint32_t _num_rows_per_block;
-    uint32_t _num_items;
+    uint32_t _num_items{0};
 
     faststring _key_buf;
     faststring _offset_buf;
@@ -208,7 +168,7 @@ private:
 //      auto iter = decoder.lower_bound(key);
 class ShortKeyIndexDecoder {
 public:
-    ShortKeyIndexDecoder() {}
+    ShortKeyIndexDecoder() = default;
 
     // client should assure that body is available when this class is used
     Status parse(const Slice& body, const ShortKeyFooterPB& footer);
