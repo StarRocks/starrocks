@@ -53,7 +53,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
                              ConnectorMgr connectorMgr,
                              Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> externalTableInfoMap,
                              Map<String, Map<String, ColumnStatistic>> identifyToColumnStats) {
-        super(localMetastore, connectorMgr);
+        super(localMetastore, connectorMgr, null);
         init(externalTableInfoMap, identifyToColumnStats);
     }
 

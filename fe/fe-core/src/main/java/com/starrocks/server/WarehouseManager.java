@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
@@ -22,6 +23,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -53,6 +55,15 @@ public class WarehouseManager implements ConnectorMetadata {
         return stateMgr.getNextId();
     }
 
+    public void setEditLog(EditLog editLog) {
+        this.editLog = editLog;
+    }
+
+    @Override
+    public List<String> listWhNames() {
+        return Lists.newArrayList(fullNameToWh.keySet());
+    }
+
     // these apis need lock protection
     @Override
     public void createWarehouse(String whName) throws DdlException, AlreadyExistsException {
@@ -82,8 +93,8 @@ public class WarehouseManager implements ConnectorMetadata {
         wh.writeLock();
         wh.setExist(true);
         wh.writeUnlock();
-
     }
+
 
     public void dropWarehouse(String name) {}
     public void alterWarehouse(String name) {}

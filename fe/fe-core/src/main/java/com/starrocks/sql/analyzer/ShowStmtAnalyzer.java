@@ -76,6 +76,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWhStmt;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -185,6 +186,11 @@ public class ShowStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
             }
             node.getTbl().normalization(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowWarehousesStatement(ShowWhStmt node, ConnectContext context) {
             return null;
         }
 

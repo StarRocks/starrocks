@@ -166,6 +166,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWhStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -215,6 +216,8 @@ public class ShowExecutor {
             handleShowProc();
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
+        } else if (stmt instanceof ShowWhStmt) {
+            handleShowWh();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -545,6 +548,34 @@ public class ShowExecutor {
         List<List<String>> finalRows = procNode.fetchResult().getRows();
 
         resultSet = new ShowResultSet(metaData, finalRows);
+    }
+
+    // show warehouse statement
+    private void handleShowWh() throws AnalysisException, DdlException {
+        ShowWhStmt showStmt = (ShowWhStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+        List<String> whNames = metadataMgr.listWhNames();
+
+        PatternMatcher matcher = null;
+        if (showStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.DATABASE.getCaseSensibility());
+        }
+        Set<String> whNameSet = Sets.newTreeSet();
+        for (String whName : whNames) {
+            // Filter dbname
+            if (matcher != null && !matcher.match(whName)) {
+                continue;
+            }
+
+            whNameSet.add(whName);
+        }
+
+        for (String whName : whNameSet) {
+            rows.add(Lists.newArrayList(whName));
+        }
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
     // Show databases statement

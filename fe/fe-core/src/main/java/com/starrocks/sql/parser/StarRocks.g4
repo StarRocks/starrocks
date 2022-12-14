@@ -36,7 +36,7 @@ statement
     | useWarehouseStatement
     | createWarehouseStatement
     | dropWarehouseStatement
-    | showWarehouseStatement
+    | showWarehousesStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -254,7 +254,7 @@ useWarehouseStatement
     : USE qualifiedName
     ;
 
-showWarehouseStatement
+showWarehousesStatement
     : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
     ;
 

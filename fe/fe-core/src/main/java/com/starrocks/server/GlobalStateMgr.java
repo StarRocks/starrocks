@@ -473,7 +473,7 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
-    private WarehouseManager warehouseManager;
+    private WarehouseManager warehouseMgr;
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
@@ -640,8 +640,9 @@ public class GlobalStateMgr {
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.warehouseMgr = new WarehouseManager(this);
         this.connectorMgr = new ConnectorMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, warehouseMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
@@ -854,6 +855,10 @@ public class GlobalStateMgr {
         return insertOverwriteJobManager;
     }
 
+    public WarehouseManager getWarehouseManager() {
+        return warehouseMgr;
+    }
+
     // Use tryLock to avoid potential dead lock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -987,6 +992,7 @@ public class GlobalStateMgr {
         this.globalTransactionMgr.setEditLog(editLog);
         this.idGenerator.setEditLog(editLog);
         this.localMetastore.setEditLog(editLog);
+        this.warehouseMgr.setEditLog(editLog);
     }
 
     // wait until FE is ready.

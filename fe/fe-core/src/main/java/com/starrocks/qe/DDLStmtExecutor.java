@@ -155,7 +155,7 @@ public class DDLStmtExecutor {
             boolean isSetIfNotExists = stmt.isSetIfNotExists();
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    context.getGlobalStateMgr().getMetadata().createWarehouse(fullWhName);
+                    context.getGlobalStateMgr().getWarehouseManager().createWarehouse(fullWhName);
                 } catch (AlreadyExistsException e) {
                     if (isSetIfNotExists) {
                         LOG.info("create warehouse[{}] which already exists", fullWhName);

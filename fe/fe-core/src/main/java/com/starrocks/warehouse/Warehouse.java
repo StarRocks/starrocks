@@ -73,6 +73,7 @@ public class Warehouse implements Writable {
     public Warehouse(long id, String name) {
         this.id = id;
         this.name = name;
+        this.rwLock = new QueryableReentrantReadWriteLock(true);
     }
 
     public long getId() {

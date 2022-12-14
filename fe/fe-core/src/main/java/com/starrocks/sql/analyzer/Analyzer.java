@@ -131,7 +131,7 @@ public class Analyzer {
             visit(statement, session);
         }
 
-        // ---------------------------------------- Database Statement -----------------------------------------------------
+        // ---------------------------------------- Warehouse Statement -----------------------------------------------------
         @Override
         public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
             CreateWarehouseAnalyzer.analyze(statement, context);
