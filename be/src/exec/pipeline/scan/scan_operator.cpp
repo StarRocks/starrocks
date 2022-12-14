@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/scan/scan_operator.h"
 
@@ -109,29 +121,33 @@ bool ScanOperator::has_output() const {
     // The default threshould of unpluging is BufferCapacity/DOP/4, and its range is [1, 16]
     // The overall strategy:
     // 1. If enough buffered chunks: pull_chunk, so return true
-    // 2. If not enough buffered chunks
-    //   2.1 Enough running io-tasks and buffer not full: wait some time for more chunks, so return false
-    //   2.1 Enough running io-tasks but buffer is full: pull_chunks, so return true
-    //   2.2 Not enough running io-tasks: submit io tasks, so return true
-    //   2.3 No more tasks: pull_chunk, so return true
+    // 2. If not enough buffered chunks (plug mode):
+    //   2.1 Buffer full: return true if has any chunk, else false
+    //   2.2 Enough running io-tasks: wait some time for more chunks, so return false
+    //   2.3 Not enough running io-tasks: submit io tasks, so return true
+    //   2.4 No more tasks: pull_chunk, so return true
+
+    size_t chunk_number = num_buffered_chunks();
     if (_unpluging) {
-        if (num_buffered_chunks() > 0) {
+        if (chunk_number > 0) {
             return true;
         }
         _unpluging = false;
     }
-    if (num_buffered_chunks() >= _buffer_unplug_threshold()) {
+    if (chunk_number >= _buffer_unplug_threshold()) {
         COUNTER_UPDATE(_buffer_unplug_counter, 1);
         _unpluging = true;
         return true;
     }
-    if (is_buffer_full() && num_buffered_chunks() > 0) {
-        return true;
+
+    DCHECK(!_unpluging);
+    bool buffer_full = is_buffer_full();
+    if (buffer_full) {
+        return chunk_number > 0;
     }
-    if (_num_running_io_tasks >= _io_tasks_per_scan_operator || is_buffer_full()) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return false;
     }
-
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         return true;
@@ -241,6 +257,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
+
     while (--cnt >= 0) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
@@ -288,7 +305,6 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
     _num_running_io_tasks--;
 
     DCHECK(_chunk_sources[chunk_source_index] != nullptr);
-
     {
         // - close() closes the chunk source which is not running.
         // - _finish_chunk_source_task() closes the chunk source conditionally and then make it as not running.
@@ -298,7 +314,6 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
-
         _is_io_task_running[chunk_source_index] = false;
     }
 }
@@ -346,7 +361,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
-
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
                 _set_scan_status(status);

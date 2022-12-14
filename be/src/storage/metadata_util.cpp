@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_meta.cpp
 
@@ -26,6 +39,7 @@
 #include "common/config.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
+#include "storage/aggregate_type.h"
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 
@@ -54,28 +68,28 @@ static void convert_to_new_version(TColumn* tcolumn) {
     }
 }
 
-static FieldAggregationMethod t_aggregation_type_to_field_aggregation_method(TAggregationType::type agg_type) {
+static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggregationType::type agg_type) {
     switch (agg_type) {
     case TAggregationType::NONE:
-        return OLAP_FIELD_AGGREGATION_NONE;
+        return STORAGE_AGGREGATE_NONE;
     case TAggregationType::MAX:
-        return OLAP_FIELD_AGGREGATION_MAX;
+        return STORAGE_AGGREGATE_MAX;
     case TAggregationType::MIN:
-        return OLAP_FIELD_AGGREGATION_MIN;
+        return STORAGE_AGGREGATE_MIN;
     case TAggregationType::REPLACE:
-        return OLAP_FIELD_AGGREGATION_REPLACE;
+        return STORAGE_AGGREGATE_REPLACE;
     case TAggregationType::REPLACE_IF_NOT_NULL:
-        return OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL;
+        return STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL;
     case TAggregationType::BITMAP_UNION:
-        return OLAP_FIELD_AGGREGATION_BITMAP_UNION;
+        return STORAGE_AGGREGATE_BITMAP_UNION;
     case TAggregationType::HLL_UNION:
-        return OLAP_FIELD_AGGREGATION_HLL_UNION;
+        return STORAGE_AGGREGATE_HLL_UNION;
     case TAggregationType::SUM:
-        return OLAP_FIELD_AGGREGATION_SUM;
+        return STORAGE_AGGREGATE_SUM;
     case TAggregationType::PERCENTILE_UNION:
-        return OLAP_FIELD_AGGREGATION_PERCENTILE_UNION;
+        return STORAGE_AGGREGATE_PERCENTILE_UNION;
     }
-    return OLAP_FIELD_AGGREGATION_NONE;
+    return STORAGE_AGGREGATE_NONE;
 }
 
 static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, FieldTypeVersion v) {
@@ -155,11 +169,11 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
     column_pb->set_is_key(is_key);
     column_pb->set_is_nullable(is_nullable);
     if (depth > 0 || is_key) {
-        auto agg_method = OLAP_FIELD_AGGREGATION_NONE;
-        column_pb->set_aggregation(TabletColumn::get_string_by_aggregation_type(agg_method));
+        auto agg_method = STORAGE_AGGREGATE_NONE;
+        column_pb->set_aggregation(get_string_by_aggregation_type(agg_method));
     } else {
         auto agg_method = t_aggregation_type_to_field_aggregation_method(t_column.aggregation_type);
-        column_pb->set_aggregation(TabletColumn::get_string_by_aggregation_type(agg_method));
+        column_pb->set_aggregation(get_string_by_aggregation_type(agg_method));
     }
 
     const TTypeNode& curr_type_node = types[depth];

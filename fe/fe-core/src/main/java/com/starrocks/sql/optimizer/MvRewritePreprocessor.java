@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer;
 
@@ -30,7 +43,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class MvRewritePreprocessor {
     private final ConnectContext connectContext;
@@ -145,11 +157,11 @@ public class MvRewritePreprocessor {
         List<Long> selectPartitionIds = Lists.newArrayList();
         List<Long> selectTabletIds = Lists.newArrayList();
         Set<String> excludedPartitions = mv.getPartitionNamesToRefreshForMv();
-        List<String> selectedPartitionNames = mv.getPartitionNames()
-                .stream().filter(name -> !excludedPartitions.contains(name)).collect(Collectors.toList());
+        List<String> selectedPartitionNames = Lists.newArrayList();
         for (Partition p : mv.getPartitions()) {
-            if (selectedPartitionNames.contains(p.getName())) {
+            if (!excludedPartitions.contains(p.getName()) && p.hasData()) {
                 selectPartitionIds.add(p.getId());
+                selectedPartitionNames.add(p.getName());
                 MaterializedIndex materializedIndex = p.getIndex(mv.getBaseIndexId());
                 selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
             }

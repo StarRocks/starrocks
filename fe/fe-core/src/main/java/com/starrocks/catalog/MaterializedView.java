@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -438,7 +451,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
-        if (!base.isOlapTable()) {
+        return getUpdatedPartitionNamesOfTable(base, false);
+    }
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
+        if (!base.isLocalTable()) {
             // TODO(ywb): support external table refresh according to partition later
             return Sets.newHashSet();
         }
@@ -471,6 +487,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     || basePartition.getVisibleVersion() > basePartitionInfo.getVersion()) {
                 result.add(basePartitionName);
             }
+        }
+        if (withMv && baseTable.isMaterializedView()) {
+            Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
+            result.addAll(partitionNames);
         }
         return result;
     }
@@ -784,7 +804,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (!table.isLocalTable()) {
                     return Sets.newHashSet();
                 }
-                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
                 if (!partitionNames.isEmpty()) {
                     return getPartitionNames();
                 }
@@ -815,7 +835,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
             }
-            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
             if (!partitionNames.isEmpty()) {
                 return getPartitionNames();
             }
@@ -844,7 +864,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
 
-        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable);
+        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable, true);
         if (partitionExpr instanceof SlotRef) {
             for (String basePartitionName : baseChangedPartitionNames) {
                 needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(basePartitionName));

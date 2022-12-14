@@ -4,21 +4,21 @@
 
 Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables.
 
-BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../data-definition/CANCEL%20BACKUP.md).
+BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../data-definition/CANCEL%20BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](../data-manipulation/SHOW%20SNAPSHOT.md).
 
 > **CAUTION**
 >
 > - Only users with the ADMIN privilege can back up data.
->
-> - In each database, only one running BACKUP or RESTORE job is allowed each time.
+> - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 
 ## Syntax
 
 ```SQL
 BACKUP SNAPSHOT <db_name>.<snapshot_name>
 TO <repository_name>
-[ON (<table_name> [PARTITION (<partition_name>, ...)], ...)]
-PROPERTIES ("key"="value", ...)
+[ ON ( <table_name> [ PARTITION ( <partition_name> [, ...] ) ]
+       [, ...] ) ]
+[ PROPERTIES ("key"="value" [, ...] ) ]
 ```
 
 ## Parameters
@@ -26,8 +26,8 @@ PROPERTIES ("key"="value", ...)
 | **Parameter**   | **Description**                                              |
 | --------------- | ------------------------------------------------------------ |
 | db_name         | Name of the database that stores the data to be backed up.   |
-| snapshot_name   | Specify a name for the data snapshot.                        |
-| repository_name | Repository name.                                             |
+| snapshot_name   | Specify a name for the data snapshot. Globally unique.       |
+| repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](../data-definition/CREATE%20REPOSITORY.md). |
 | ON              | Name of the tables to be backed up. The whole database is backed up if this parameter is not specified. |
 | PARTITION       | Name of the partitions to be backed up. The whole table is backed up if this parameter is not specified. |
 | PROPERTIES      | Properties of the data snapshot. Valid keys:`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.`timeout`: Task timeout. Unit: second. Default: `86400`. |

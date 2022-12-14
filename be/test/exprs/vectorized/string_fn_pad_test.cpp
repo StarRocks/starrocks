@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
@@ -227,7 +240,7 @@ void test_const_pad(size_t num_rows, TestCaseType& c) {
     auto state = std::make_unique<PadState>();
     std::shared_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto const_pad_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice{fill.data(), fill.size()}, 1);
-    ctx->impl()->set_constant_columns({nullptr, nullptr, const_pad_col});
+    ctx->set_constant_columns({nullptr, nullptr, const_pad_col});
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
@@ -308,7 +321,7 @@ void test_const_len_and_pad(size_t num_rows, TestCaseType& c) {
     std::shared_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto const_len_col = ColumnHelper::create_const_column<TYPE_INT>(len, 1);
     auto const_pad_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice{fill.data(), fill.size()}, 1);
-    ctx->impl()->set_constant_columns({nullptr, const_len_col, const_pad_col});
+    ctx->set_constant_columns({nullptr, const_len_col, const_pad_col});
     columns[1] = const_len_col;
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -16,13 +28,12 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "udf/udf.h"
-#include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
@@ -274,11 +285,11 @@ public:
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage;
         if constexpr (IsSlice<T>) {
-            mem_usage = this->data(state).update(ctx->impl()->mem_pool(), column->get_slice(row_num));
+            mem_usage = this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
         } else {
             mem_usage = this->data(state).update(column->get_data()[row_num]);
         }
-        ctx->impl()->add_mem_usage(mem_usage);
+        ctx->add_mem_usage(mem_usage);
     }
 
     // The following two functions are specialized because of performance issue.
@@ -303,7 +314,7 @@ public:
         // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
         size_t prefetch_index = 16;
 
-        MemPool* mem_pool = ctx->impl()->mem_pool();
+        MemPool* mem_pool = ctx->mem_pool();
         for (size_t i = 0; i < chunk_size; ++i) {
             if (prefetch_index < chunk_size) {
                 agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
@@ -311,7 +322,7 @@ public:
             }
             mem_usage += agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
         }
-        ctx->impl()->add_mem_usage(mem_usage);
+        ctx->add_mem_usage(mem_usage);
     }
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
@@ -338,7 +349,7 @@ public:
         // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
         size_t prefetch_index = 16;
 
-        MemPool* mem_pool = ctx->impl()->mem_pool();
+        MemPool* mem_pool = ctx->mem_pool();
         for (size_t i = 0; i < chunk_size; ++i) {
             if (prefetch_index < chunk_size) {
                 cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
@@ -346,7 +357,7 @@ public:
             }
             mem_usage += cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
         }
-        ctx->impl()->add_mem_usage(mem_usage);
+        ctx->add_mem_usage(mem_usage);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -355,8 +366,8 @@ public:
         Slice slice = input_column->get_slice(row_num);
         size_t mem_usage = 0;
         if constexpr (IsSlice<T>) {
-            mem_usage += this->data(state).deserialize_and_merge(ctx->impl()->mem_pool(), (const uint8_t*)slice.data,
-                                                                 slice.size);
+            mem_usage +=
+                    this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
         } else {
             // slice size larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`, means which is a hash set
             // that's said, size of hash set serialization data should be larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`
@@ -369,7 +380,7 @@ public:
                 mem_usage += this->data(state).update(key);
             }
         }
-        ctx->impl()->add_mem_usage(mem_usage);
+        ctx->add_mem_usage(mem_usage);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -467,7 +478,7 @@ public:
     DictMergeState fake_dict_state(FunctionContext* ctx) const {
         DictMergeState fake_state;
         for (int i = 0; i < FAKE_DICT_SIZE; ++i) {
-            fake_state.update(ctx->impl()->mem_pool(), std::to_string(i));
+            fake_state.update(ctx->mem_pool(), std::to_string(i));
         }
         return fake_state;
     }
@@ -482,7 +493,7 @@ public:
         [[maybe_unused]] size_t mem_usage = 0;
         auto& agg_state = this->data(state);
         const auto* column = down_cast<const ArrayColumn*>(columns[0]);
-        MemPool* mem_pool = ctx->impl()->mem_pool();
+        MemPool* mem_pool = ctx->mem_pool();
 
         // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
         if (agg_state.over_limit) {
@@ -521,9 +532,8 @@ public:
         Slice slice = input_column->get_slice(row_num);
 
         size_t mem_usage = 0;
-        mem_usage += this->data(state).deserialize_and_merge(ctx->impl()->mem_pool(), (const uint8_t*)slice.data,
-                                                             slice.size);
-        ctx->impl()->add_mem_usage(mem_usage);
+        mem_usage += this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
+        ctx->add_mem_usage(mem_usage);
 
         agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
     }

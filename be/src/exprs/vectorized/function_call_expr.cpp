@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/function_call_expr.h"
 
@@ -45,7 +57,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
 
     // todo: varargs use for allocate slice memory, need compute buffer size
     //  for varargs in vectorized engine?
-    _fn_context_index = context->register_func(state, return_type, args_types, 0);
+    _fn_context_index = context->register_func(state, return_type, args_types);
 
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
@@ -67,7 +79,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
             ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
             const_columns.emplace_back(std::move(child_col));
         }
-        fn_ctx->impl()->set_constant_columns(std::move(const_columns));
+        fn_ctx->set_constant_columns(std::move(const_columns));
     }
 
     if (_fn_desc->prepare_function != nullptr) {

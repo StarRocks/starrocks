@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/lake/tablet_manager.h"
 
@@ -160,11 +172,11 @@ void TabletManager::prune_metacache() {
 
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     // generate tablet metadata pb
-    TabletMetadataPB tablet_metadata_pb;
-    tablet_metadata_pb.set_id(req.tablet_id);
-    tablet_metadata_pb.set_version(1);
-    tablet_metadata_pb.set_next_rowset_id(1);
-    tablet_metadata_pb.set_cumulative_point(0);
+    auto tablet_metadata_pb = std::make_shared<TabletMetadataPB>();
+    tablet_metadata_pb->set_id(req.tablet_id);
+    tablet_metadata_pb->set_version(1);
+    tablet_metadata_pb->set_next_rowset_id(1);
+    tablet_metadata_pb->set_cumulative_point(0);
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
@@ -190,7 +202,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             }
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     } else {
         std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
@@ -199,10 +211,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-    return put_tablet_metadata(tablet_metadata_pb);
+    return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
@@ -258,9 +270,10 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
     return put_tablet_metadata(std::move(metadata_ptr));
 }
 
-StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location) {
+StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache) {
     std::string read_buf;
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(metadata_location));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, metadata_location));
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     if (UNLIKELY(size > std::numeric_limits<int>::max())) {
         return Status::Corruption("file size exceeded the int range");
@@ -284,7 +297,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     if (auto ptr = lookup_tablet_metadata(path); ptr != nullptr) {
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path));
+    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
@@ -320,9 +333,10 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     return TabletMetadataIter{this, std::move(objects)};
 }
 
-StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path) {
+StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path, bool fill_cache) {
     std::string read_buf;
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(txn_log_path));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, txn_log_path));
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     if (UNLIKELY(size > std::numeric_limits<int>::max())) {
         return Status::Corruption("file size exceeded the int range");
@@ -342,7 +356,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     if (auto ptr = lookup_txn_log(path); ptr != nullptr) {
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_txn_log(path));
+    ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
@@ -765,6 +779,10 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
     auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
     auto st = fs::delete_file(location);
     return st.is_not_found() ? Status::OK() : st;
+}
+
+std::set<int64_t> TabletManager::owned_tablets() {
+    return _location_provider->owned_tablets();
 }
 
 void TabletManager::start_gc() {

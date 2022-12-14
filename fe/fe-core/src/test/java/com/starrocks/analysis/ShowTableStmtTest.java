@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/analysis/ShowTableStmtTest.java
 
@@ -22,7 +35,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ShowTableStmt;
@@ -72,7 +85,7 @@ public class ShowTableStmtTest {
         String expect = "SELECT information_schema.tables.TABLE_NAME AS Tables_in_testDb, " +
                 "information_schema.tables.TABLE_TYPE AS Table_type FROM " +
                 "information_schema.tables WHERE (information_schema.tables.TABLE_SCHEMA = 'testDb') AND (information_schema.tables.TABLE_TYPE != 'VIEW')";
-        Assert.assertEquals(expect, AST2SQL.toString(queryStatement));
+        Assert.assertEquals(expect, AstToStringBuilder.toString(queryStatement));
     }
 
     @Test(expected = SemanticException.class)

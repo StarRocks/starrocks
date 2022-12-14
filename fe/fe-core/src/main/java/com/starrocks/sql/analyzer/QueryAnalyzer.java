@@ -1,8 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
-import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -391,9 +403,12 @@ public class QueryAnalyzer {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
-                if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
-                }
+                // check the join on predicate, example:
+                // we have col_json, we can't join on table_a.col_json = table_b.col_json,
+                // but we can join on cast(table_a.col_json->"a" as int) = cast(table_b.col_json->"a" as int)
+                // similarly, we can join on table_a.col_map['a'] = table_b.col_map['a'],
+                // and table_a.col_struct.a = table_b.col_struct.a
+                checkJoinEqual(joinEqual);
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
                     throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
@@ -764,5 +779,19 @@ public class QueryAnalyzer {
 
     private void analyzeExpression(Expr expr, AnalyzeState analyzeState, Scope scope) {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
+    }
+
+    public static void checkJoinEqual(Expr expr)  {
+        if (expr instanceof BinaryPredicate) {
+            for (Expr child : expr.getChildren()) {
+                if (!child.getType().canJoinOn()) {
+                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                }
+            }
+        } else {
+            for (Expr child : expr.getChildren()) {
+                checkJoinEqual(child);
+            }
+        }
     }
 }

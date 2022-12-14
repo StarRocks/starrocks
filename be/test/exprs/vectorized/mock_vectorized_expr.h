@@ -1,9 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
-#include <glog/logging.h>
-
-#include "butil/time.h"
-#include "exprs/expr.h"
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -15,6 +22,7 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
+#include "exprs/expr.h"
 #include "glog/logging.h"
 
 namespace starrocks {
@@ -36,7 +44,10 @@ class MockCostExpr : public Expr {
 public:
     explicit MockCostExpr(const TExprNode& t) : Expr(t) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { DCHECK(false); }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override {
+        DCHECK(false);
+        __builtin_unreachable();
+    }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockCostExpr(*this)); }
 
     int64_t cost_ns() { return _ns; }

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/column_reader.h"
 
@@ -179,6 +191,12 @@ public:
         _field = field;
         _key_reader = std::move(key_reader);
         _value_reader = std::move(value_reader);
+
+        // Check must has one valid column reader
+        if (_key_reader == nullptr && _value_reader == nullptr) {
+            return Status::InternalError("No avaliable parquet subfield column reader in MapColumn");
+        }
+
         return Status::OK();
     }
 
@@ -219,8 +237,10 @@ public:
 
         if (_key_reader != nullptr) {
             _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-        } else {
+        } else if (_value_reader != nullptr) {
             _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        } else {
+            DCHECK(false) << "Unreachable!";
         }
 
         auto& offsets = map_column->offsets_column()->get_data();
@@ -259,8 +279,10 @@ public:
         // check _value_reader
         if (_key_reader != nullptr) {
             _key_reader->get_levels(def_levels, rep_levels, num_levels);
-        } else {
+        } else if (_value_reader != nullptr) {
             _value_reader->get_levels(def_levels, rep_levels, num_levels);
+        } else {
+            DCHECK(false) << "Unreachable!";
         }
     }
 
@@ -278,6 +300,19 @@ public:
     Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers) {
         _field = field;
         _child_readers = std::move(child_readers);
+
+        // Check must has one valid column reader
+        bool has_valid_reader = false;
+        for (const auto& reader : _child_readers) {
+            if (reader != nullptr) {
+                has_valid_reader = true;
+                break;
+            }
+        }
+        if (!has_valid_reader) {
+            return Status::InternalError("No avaliable parquet subfield column reader in StructColumn");
+        }
+
         return Status::OK();
     }
 
@@ -297,9 +332,20 @@ public:
 
         DCHECK_EQ(fields_column.size(), _child_readers.size());
 
+        // Fill data for selected subfield
         for (size_t i = 0; i < fields_column.size(); i++) {
             vectorized::Column* child_column = fields_column[i].get();
-            RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
+            if (_child_readers[i] != nullptr) {
+                RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
+            }
+        }
+
+        // Append default value for not selected subfield
+        for (size_t i = 0; i < fields_column.size(); i++) {
+            vectorized::Column* child_column = fields_column[i].get();
+            if (_child_readers[i] == nullptr) {
+                child_column->append_default(*num_records);
+            }
         }
 
         if (dst->is_nullable()) {
@@ -316,7 +362,14 @@ public:
     Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
-        _child_readers[0]->get_levels(def_levels, rep_levels, num_levels);
+        for (const auto& reader : _child_readers) {
+            // Considering not selected subfield, we will not create its ColumnReader
+            // So we should pick up the first created column reader
+            if (reader != nullptr) {
+                reader->get_levels(def_levels, rep_levels, num_levels);
+                return;
+            }
+        }
     }
 
 private:
@@ -364,24 +417,28 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (!col_type.selected_fields[i]) continue;
+            if (col_type.selected_fields[i]) {
+                const std::string& subfield_name = col_type.field_names[i];
 
-            const std::string& subfield_name = col_type.field_names[i];
+                std::string required_subfield_name =
+                        opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);
 
-            std::string required_subfield_name =
-                    opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);
+                auto it = field_name_2_pos.find(required_subfield_name);
+                if (it == field_name_2_pos.end()) {
+                    return Status::NotFound("Struct subfield name: " + required_subfield_name + " not found.");
+                }
 
-            auto it = field_name_2_pos.find(required_subfield_name);
-            if (it == field_name_2_pos.end()) {
-                return Status::NotFound("Struct subfield name: " + required_subfield_name + " not found.");
+                size_t parquet_pos = it->second;
+
+                std::unique_ptr<ColumnReader> child_reader;
+                RETURN_IF_ERROR(
+                        ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i], &child_reader));
+                children_readers.emplace_back(std::move(child_reader));
+            } else {
+                // Don't create column reader, because this subfield is not be selected, so it will not load
+                // from parquet.
+                children_readers.emplace_back(nullptr);
             }
-
-            size_t parquet_pos = it->second;
-
-            std::unique_ptr<ColumnReader> child_reader;
-            RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i], &child_reader));
-            children_readers.emplace_back(std::move(child_reader));
         }
 
         std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));

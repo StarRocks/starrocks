@@ -1,58 +1,43 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/udf/udf.h
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-//   http://www.apache.org/licenses/LICENSE-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <string>
 #include <vector>
 
-#include "runtime/primitive_type.h"
-#include "runtime/types.h"
+#include "exprs/function_context.h"
+#include "types/logical_type.h"
 
-// This is the only StarRocks header required to develop UDFs and UDAs. This header
-// contains the types that need to be used and the FunctionContext object. The context
-// object serves as the interface object between the UDF/UDA and the starrocks process.
 namespace starrocks {
-class FunctionContextImpl;
-}
 
-namespace starrocks::vectorized {
+class MemPool;
+class RuntimeState;
+
+namespace vectorized {
 class Column;
-} // namespace starrocks::vectorized
+struct JavaUDAFContext;
+using ColumnPtr = std::shared_ptr<Column>;
+} // namespace vectorized
 
-namespace starrocks_udf {
-
-// The FunctionContext is passed to every UDF/UDA and is the interface for the UDF to the
-// rest of the system. It contains APIs to examine the system state, report errors
-// and manage memory.
 class FunctionContext {
 public:
-    enum StarRocksVersion {
-        V2_0,
-    };
-
-    // keep the order with LogicalType
-
     struct TypeDesc {
         ::starrocks::LogicalType type = ::starrocks::TYPE_NULL;
 
@@ -62,11 +47,6 @@ public:
 
         /// Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
         int len = 0;
-    };
-
-    struct UniqueId {
-        int64_t hi = 0;
-        int64_t lo = 0;
     };
 
     enum FunctionStateScope {
@@ -91,15 +71,13 @@ public:
         THREAD_LOCAL,
     };
 
-    // Returns the version of StarRocks that's currently running.
-    StarRocksVersion version() const;
+    /// Create a FunctionContext for a UDF. Caller is responsible for deleting it.
+    static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
+                                           const FunctionContext::TypeDesc& return_type,
+                                           const std::vector<FunctionContext::TypeDesc>& arg_types);
 
-    // Returns the user that is running the query. Returns NULL if it is not
-    // available.
-    const char* user() const;
-
-    // Returns the query_id for the current query.
-    UniqueId query_id() const;
+    ~FunctionContext();
+    FunctionContext();
 
     // Sets an error for this UDF. If this is called, this will trigger the
     // query to fail.
@@ -107,24 +85,11 @@ public:
     // ensure the function return value is null.
     void set_error(const char* error_msg);
 
-    // when you reused this FunctionContext, you maybe need clear the error status and message.
-    void clear_error_msg();
-
     // Adds a warning that is returned to the user. This can include things like
     // overflow or other recoverable error conditions.
     // Warnings are capped at a maximum number. Returns true if the warning was
     // added and false if it was ignored due to the cap.
     bool add_warning(const char* warning_msg);
-
-    // Returns true if there's been an error set.
-    bool has_error() const;
-
-    // Returns the current error message. Returns NULL if there is no error.
-    const char* error_msg() const;
-
-    // Returns the underlying opaque implementation object. The UDF/UDA should not
-    // use this. This is used internally.
-    starrocks::FunctionContextImpl* impl() { return _impl; }
 
     /// Methods for maintaining state across UDF/UDA function calls. SetFunctionState() can
     /// be used to store a pointer that can then be retrieved via GetFunctionState(). If
@@ -165,21 +130,59 @@ public:
     static FunctionContext* create_test_context();
     static FunctionContext* create_test_context(std::vector<TypeDesc>&& arg_types, const TypeDesc& return_type);
 
-    ~FunctionContext();
+    /// Returns a new FunctionContext with the same constant args, fragment-local state, and
+    /// debug flag as this FunctionContext. The caller is responsible for calling delete on
+    /// it.
+    FunctionContext* clone(MemPool* pool);
+
+    void set_constant_columns(std::vector<vectorized::ColumnPtr> columns) { _constant_columns = std::move(columns); }
+
+    MemPool* mem_pool() { return _mem_pool; }
+    size_t mem_usage() { return _mem_usage; }
+    void add_mem_usage(size_t size) { _mem_usage += size; }
+
+    RuntimeState* state() { return _state; }
+    bool has_error() const;
+    const char* error_msg() const;
+
+    vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
 private:
-    friend class starrocks::FunctionContextImpl;
-    FunctionContext();
+    friend class ExprContext;
 
-    // Disable copy ctor and assignment operator
-    FunctionContext(const FunctionContext& other);
-    FunctionContext& operator=(const FunctionContext& other);
+    MemPool* _mem_pool = nullptr;
 
+    // We use the query's runtime state to report errors and warnings. NULL for test
+    // contexts.
+    RuntimeState* _state;
+
+    // Empty if there's no error
+    mutable std::mutex _error_msg_mutex;
+    std::string _error_msg;
+
+    // The number of warnings reported.
+    int64_t _num_warnings;
+
+    /// The function state accessed via FunctionContext::Get/SetFunctionState()
+    void* _thread_local_fn_state;
+    void* _fragment_local_fn_state;
+
+    // Type descriptor for the return type of the function.
+    FunctionContext::TypeDesc _return_type;
+
+    // Type descriptors for each argument of the function.
+    std::vector<FunctionContext::TypeDesc> _arg_types;
+
+    std::vector<vectorized::ColumnPtr> _constant_columns;
+
+    // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;
 
-    // Owned by this object.
-    starrocks::FunctionContextImpl* _impl;
-};
-} // namespace starrocks_udf
+    // this is used for count memory usage of aggregate state
+    size_t _mem_usage = 0;
 
-using starrocks_udf::FunctionContext;
+    // UDAF Context
+    std::unique_ptr<vectorized::JavaUDAFContext> _jvm_udaf_ctxs;
+};
+
+} // namespace starrocks

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -30,7 +43,7 @@ public class WindowTest extends PlanTestBase {
 
         sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("The third parameter of `lag` can't not convert to DATETIME");
+        expectedEx.expectMessage("The third parameter of `lag` can't convert to DATETIME");
         getThriftPlan(sql);
     }
 
@@ -91,10 +104,10 @@ public class WindowTest extends PlanTestBase {
     @Test
     public void testLeadAndLagFunction() {
         String sql = "select LAG(k7, 3, 3) OVER () from baseall";
-        starRocksAssert.query(sql).analysisError("The third parameter of `lag` can't not convert");
+        starRocksAssert.query(sql).analysisError("The third parameter of `lag` can't convert");
 
         sql = "select lead(k7, 3, 3) OVER () from baseall";
-        starRocksAssert.query(sql).analysisError("The third parameter of `lead` can't not convert");
+        starRocksAssert.query(sql).analysisError("The third parameter of `lead` can't convert");
 
         sql = "select lead(k3, 3, 'kks') OVER () from baseall";
         starRocksAssert.query(sql)

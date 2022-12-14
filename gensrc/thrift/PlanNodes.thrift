@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/thrift/PlanNodes.thrift
 
@@ -298,6 +311,16 @@ struct THdfsScanRange {
     11: optional list<TIcebergDeleteFile> delete_files;
 }
 
+struct TBinlogScanRange {
+  1: optional string db_name
+  2: optional Types.TTableId table_id
+  3: optional Types.TPartitionId partition_id
+  4: optional Types.TTabletId tablet_id
+  
+  // Start offset of binlog consumption
+  11: optional Types.TBinlogOffset offset
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -309,6 +332,8 @@ struct TScanRange {
 
   // scan range for hdfs
   20: optional THdfsScanRange hdfs_scan_range
+  
+  30: optional TBinlogScanRange binlog_scan_range
 }
 
 struct TMySQLScanNode {
@@ -930,8 +955,18 @@ struct TConnectorScanNode {
   // 2: optional THdfsScanNode hdfs_scan_node
 }
 
-// TODO
+struct TBinlogScanNode {
+  1: optional Types.TTupleId tuple_id
+}
+
+// Union of all stream source nodes, distinguished by type
 struct TStreamScanNode {
+  // Common fields for all stream-scan nodes
+  1: optional Types.StreamSourceType source_type
+  
+  // Specific scan nodes, distinguished by source_type
+  11: optional TBinlogScanNode binlog_scan
+  // TODO: othe stream scan nodes
 }
 
 struct TStreamJoinNode {

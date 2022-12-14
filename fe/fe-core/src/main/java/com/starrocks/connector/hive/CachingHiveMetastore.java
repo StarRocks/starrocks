@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.hive;
 
@@ -44,6 +57,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
     public static final long NEVER_CACHE = 0;
     public static final long NEVER_EVICT = -1;
     public static final long NEVER_REFRESH = -1;
+    private final boolean enableListNameCache;
     protected final IHiveMetastore metastore;
 
     protected LoadingCache<String, List<String>> databaseNamesCache;
@@ -79,20 +93,18 @@ public class CachingHiveMetastore implements IHiveMetastore {
     protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, long expireAfterWriteSec,
                                    long refreshIntervalSec, long maxSize, boolean enableListNamesCache) {
         this.metastore = metastore;
+        this.enableListNameCache = enableListNamesCache;
+
+        databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
+                .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
+        tableNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
+                .build(asyncReloading(CacheLoader.from(this::loadAllTableNames), executor));
 
         // The list names interface of hive metastore latency is very low, so we default to pull the latest every time.
         if (enableListNamesCache) {
-            databaseNamesCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                    .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
-            tableNamesCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                    .build(asyncReloading(CacheLoader.from(this::loadAllTableNames), executor));
             partitionKeysCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                     .build(asyncReloading(CacheLoader.from(this::loadPartitionKeys), executor));
         } else {
-            databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
-                    .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
-            tableNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
-                    .build(asyncReloading(CacheLoader.from(this::loadAllTableNames), executor));
             partitionKeysCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                     .build(asyncReloading(CacheLoader.from(this::loadPartitionKeys), executor));
         }
@@ -289,6 +301,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         Table updatedTable = loadTable(hiveTableName);
         tableCache.put(hiveTableName, updatedTable);
+        if (enableListNameCache) {
+            partitionKeysCache.put(hiveTableName, loadPartitionKeys(hiveTableName));
+        }
 
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) updatedTable;
         if (hmsTable.isUnPartitioned()) {
@@ -340,6 +355,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
         Map<HivePartitionName, HivePartitionStats> updatePartitionStats = loadPartitionsStatistics(partitionNames);
         partitionStatsCache.putAll(updatePartitionStats);
+
+        if (enableListNameCache && !partitionNames.isEmpty()) {
+            HivePartitionName firstName = partitionNames.get(0);
+            HiveTableName hiveTableName = HiveTableName.of(firstName.getDatabaseName(), firstName.getTableName());
+            partitionKeysCache.put(hiveTableName, loadPartitionKeys(hiveTableName));
+        }
     }
 
     private static <K, V> V get(LoadingCache<K, V> cache, K key) {
@@ -385,6 +406,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
         tableCache.invalidate(hiveTableName);
         tableStatsCache.invalidate(hiveTableName);
+        partitionKeysCache.invalidate(hiveTableName);
         List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
         presentPartitions.forEach(p -> partitionCache.invalidate(p));
         List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
@@ -392,6 +414,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     public synchronized void invalidatePartition(HivePartitionName partitionName) {
+        HiveTableName hiveTableName = HiveTableName.of(partitionName.getDatabaseName(), partitionName.getTableName());
+        partitionKeysCache.invalidate(hiveTableName);
         partitionCache.invalidate(partitionName);
         partitionStatsCache.invalidate(partitionName);
     }
@@ -415,6 +439,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
             tableStatsCache.put(hiveTableName, updatedPartitionStats);
             partitionCache.put(HivePartitionName.of(dbName, tableName, Lists.newArrayList()), partition);
         } else {
+            partitionKeysCache.invalidate(hiveTableName);
             List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
             presentPartitions.forEach(p -> partitionCache.invalidate(p));
             List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
@@ -427,6 +452,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
                                                      Partition partition) {
         Map<String, HiveColumnStats> columnStats = get(partitionStatsCache, hivePartitionName).getColumnStats();
         HivePartitionStats updatedPartitionStats = createPartitionStats(commonStats, columnStats);
+        HiveTableName hiveTableName = HiveTableName.of(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
+        partitionKeysCache.invalidate(hiveTableName);
         partitionCache.put(hivePartitionName, partition);
         partitionStatsCache.put(hivePartitionName, updatedPartitionStats);
     }

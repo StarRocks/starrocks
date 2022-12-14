@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/file_reader.h"
 
@@ -1403,16 +1415,26 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f1: 0, f3: [0, 1, 2]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(0));
-    EXPECT_EQ("[1, {f1: 1, f3: [1, 2, 3]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(1));
-    EXPECT_EQ("[2, {f1: 2, f3: [2, 3, 4]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(2));
-    EXPECT_EQ("[3, {f1: 3, f3: [3, 4, 5]}, 'c', [{e2: 'c'}, {e2: 'c'}], 'C']", chunk->debug_row(3));
-    EXPECT_EQ("[4, {f1: 4, f3: [4, 5, 6]}, 'c', [{e2: 'c'}, {e2: 'c'}], 'C']", chunk->debug_row(4));
-    EXPECT_EQ("[5, {f1: 5, f3: [5, 6, 7]}, 'c', [{e2: 'c'}, {e2: 'c'}], 'C']", chunk->debug_row(5));
-    EXPECT_EQ("[6, {f1: 6, f3: [6, 7, 8]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(6));
-    EXPECT_EQ("[7, {f1: 7, f3: [7, 8, 9]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(7));
-    EXPECT_EQ("[8, {f1: 8, f3: [8, 9, 10]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(8));
-    EXPECT_EQ("[9, {f1: 9, f3: [9, 10, 11]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(9));
+    EXPECT_EQ("[0, {f1: 0, f2: NULL, f3: [0, 1, 2]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1: 1, f2: NULL, f3: [1, 2, 3]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1: 2, f2: NULL, f3: [2, 3, 4]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1: 3, f2: NULL, f3: [3, 4, 5]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
+              chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1: 4, f2: NULL, f3: [4, 5, 6]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
+              chunk->debug_row(4));
+    EXPECT_EQ("[5, {f1: 5, f2: NULL, f3: [5, 6, 7]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
+              chunk->debug_row(5));
+    EXPECT_EQ("[6, {f1: 6, f2: NULL, f3: [6, 7, 8]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(6));
+    EXPECT_EQ("[7, {f1: 7, f2: NULL, f3: [7, 8, 9]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(7));
+    EXPECT_EQ("[8, {f1: 8, f2: NULL, f3: [8, 9, 10]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(8));
+    EXPECT_EQ("[9, {f1: 9, f2: NULL, f3: [9, 10, 11]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(9));
 
     //    for (int i = 0; i < 10; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;

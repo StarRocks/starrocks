@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/exec_env.cpp
 
@@ -163,6 +176,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
     _pipeline_sink_io_pool =
             new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
+
+    int query_rpc_threads = config::internal_service_query_rpc_thread_num;
+    if (query_rpc_threads <= 0) {
+        query_rpc_threads = std::thread::hardware_concurrency();
+    }
+    _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = std::thread::hardware_concurrency();
@@ -452,6 +471,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
+    SAFE_DELETE(_query_rpc_pool);
     SAFE_DELETE(_scan_executor_without_workgroup);
     SAFE_DELETE(_scan_executor_with_workgroup);
     SAFE_DELETE(_connector_scan_executor_without_workgroup);

@@ -1,5 +1,3 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 set(EXEC_FILES
         ./test_main.cpp
         ./column/array_column_test.cpp
@@ -58,6 +56,7 @@ set(EXEC_FILES
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.scheduler.mv;
 
@@ -24,8 +37,6 @@ import java.util.Objects;
  * 6. Commit the binlog consumption LSN(be atomic with transaction commitment to make)
  */
 public class MVEpoch implements Writable {
-    public static final long MAX_EXEC_MILLIS = 1000;
-    public static final long MAX_SCAN_ROWS = 10 * 10000;
 
     @SerializedName("mvId")
     private long mvId;
@@ -94,13 +105,10 @@ public class MVEpoch implements Writable {
 
     public TMVEpoch toThrift() {
         TMVEpoch res = new TMVEpoch();
-        res.setMax_exec_millis(MAX_EXEC_MILLIS);
-        res.setMax_scan_rows(MAX_SCAN_ROWS);
         // TODO(murphy) generate an epoch id instead of txn id
         res.setEpoch_id(txnId);
+        res.setTxn_id(txnId);
         res.setStart_ts(startTimeMilli);
-        // TODO(murphy) retrieve actual binlog state
-        res.setBinlog_scan(binlogState.toThrift());
 
         return res;
     }

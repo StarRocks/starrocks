@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -17,6 +29,7 @@
 #include "column/type_traits.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
+#include "gutil/cpu.h"
 #include "runtime/primitive_type.h"
 #include "util/phmap/phmap.h"
 
@@ -312,8 +325,8 @@ public:
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
-    template <typename T>
-    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+    template <typename T, bool avx512f>
+    static size_t t_filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
         auto result_offset = from;
 
@@ -338,9 +351,48 @@ public:
                 result_offset += kBatchNums;
 
             } else {
-                phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
-                for (auto idx : bitmask) {
-                    *(data + result_offset++) = *(data + start_offset + idx);
+                // clang-format off
+#define AVX512_COPY(SHIFT, MASK, WIDTH)                                         \
+    {                                                                           \
+        auto m = (mask >> SHIFT) & MASK;                                        \
+        if (m) {                                                                \
+            __m512i dst;                                                        \
+            __m512i src = _mm512_loadu_epi##WIDTH(data + start_offset + SHIFT); \
+            dst = _mm512_mask_compress_epi##WIDTH(dst, m, src);                 \
+            _mm512_storeu_epi##WIDTH(data + result_offset, dst);                \
+            result_offset += __builtin_popcount(m);                             \
+        }                                                                       \
+    }
+
+// In theory we should put k1 in clobbers.
+// But since we compile code with AVX2, k1 register is not used.
+#define AVX512_ASM_COPY(SHIFT, MASK, WIDTH, WIDTHX)               \
+    {                                                             \
+        auto m = (mask >> SHIFT) & MASK;                          \
+        if (m) {                                                  \
+            T* src = data + start_offset + SHIFT;                 \
+            T* dst = data + result_offset;                        \
+            __asm__ volatile("vmovdqu" #WIDTH                     \
+                             " (%[s]), %%zmm1\n"                  \
+                             "kmovw %[mask], %%k1\n"              \
+                             "vpcompress" #WIDTHX                 \
+                             " %%zmm1, %%zmm0%{%%k1%}%{z%}\n"     \
+                             "vmovdqu" #WIDTH " %%zmm0, (%[d])\n" \
+                             : [s] "+r"(src), [d] "+r"(dst)       \
+                             : [mask] "r"(m)                      \
+                             : "zmm0", "zmm1", "memory");         \
+            result_offset += __builtin_popcount(m);               \
+        }                                                         \
+    }
+
+                if constexpr (avx512f && sizeof(T) == 4) {
+                    AVX512_ASM_COPY(0, 0xffff, 32, d);
+                    AVX512_ASM_COPY(16, 0xffff, 32, d);
+                } else {
+                    phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
+                    for (auto idx : bitmask) {
+                        *(data + result_offset++) = *(data + start_offset + idx);
+                    }
                 }
             }
 
@@ -377,6 +429,7 @@ public:
             f_data += kBatchNums;
         }
 #endif
+        // clang-format on
         for (auto i = start_offset; i < to; ++i) {
             if (filter[i]) {
                 *(data + result_offset) = *(data + i);
@@ -385,6 +438,15 @@ public:
         }
 
         return result_offset;
+    }
+
+    template <typename T>
+    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+        if (base::CPU::instance()->has_avx512f()) {
+            return t_filter_range<T, true>(filter, data, from, to);
+        } else {
+            return t_filter_range<T, false>(filter, data, from, to);
+        }
     }
 
     template <typename T>

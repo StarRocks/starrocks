@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_schema.cpp
 
@@ -22,7 +35,6 @@
 #include "storage/tablet_schema.h"
 
 #include <algorithm>
-#include <cctype>
 #include <vector>
 
 #include "runtime/exec_env.h"
@@ -32,49 +44,6 @@
 #include "storage/type_utils.h"
 
 namespace starrocks {
-
-FieldAggregationMethod TabletColumn::get_aggregation_type_by_string(const std::string& str) {
-    std::string upper_str = str;
-    std::transform(str.begin(), str.end(), upper_str.begin(), ::toupper);
-
-    if (upper_str == "NONE") return OLAP_FIELD_AGGREGATION_NONE;
-    if (upper_str == "SUM") return OLAP_FIELD_AGGREGATION_SUM;
-    if (upper_str == "MIN") return OLAP_FIELD_AGGREGATION_MIN;
-    if (upper_str == "MAX") return OLAP_FIELD_AGGREGATION_MAX;
-    if (upper_str == "REPLACE") return OLAP_FIELD_AGGREGATION_REPLACE;
-    if (upper_str == "REPLACE_IF_NOT_NULL") return OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL;
-    if (upper_str == "HLL_UNION") return OLAP_FIELD_AGGREGATION_HLL_UNION;
-    if (upper_str == "BITMAP_UNION") return OLAP_FIELD_AGGREGATION_BITMAP_UNION;
-    if (upper_str == "PERCENTILE_UNION") return OLAP_FIELD_AGGREGATION_PERCENTILE_UNION;
-    LOG(WARNING) << "invalid aggregation type string. [aggregation='" << str << "']";
-    return OLAP_FIELD_AGGREGATION_UNKNOWN;
-}
-
-std::string TabletColumn::get_string_by_aggregation_type(FieldAggregationMethod type) {
-    switch (type) {
-    case OLAP_FIELD_AGGREGATION_NONE:
-        return "NONE";
-    case OLAP_FIELD_AGGREGATION_SUM:
-        return "SUM";
-    case OLAP_FIELD_AGGREGATION_MIN:
-        return "MIN";
-    case OLAP_FIELD_AGGREGATION_MAX:
-        return "MAX";
-    case OLAP_FIELD_AGGREGATION_REPLACE:
-        return "REPLACE";
-    case OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL:
-        return "REPLACE_IF_NOT_NULL";
-    case OLAP_FIELD_AGGREGATION_HLL_UNION:
-        return "HLL_UNION";
-    case OLAP_FIELD_AGGREGATION_BITMAP_UNION:
-        return "BITMAP_UNION";
-    case OLAP_FIELD_AGGREGATION_PERCENTILE_UNION:
-        return "PERCENTILE_UNION";
-    case OLAP_FIELD_AGGREGATION_UNKNOWN:
-        return "UNKNOWN";
-    }
-    return "";
-}
 
 size_t TabletColumn::estimate_field_size(size_t variable_length) const {
     return TypeUtils::estimate_field_size(_type, variable_length);
@@ -137,15 +106,15 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
 
 TabletColumn::TabletColumn() = default;
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type) : _aggregation(agg), _type(type) {}
+TabletColumn::TabletColumn(StorageAggregateType agg, LogicalType type) : _aggregation(agg), _type(type) {}
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable)
+TabletColumn::TabletColumn(StorageAggregateType agg, LogicalType type, bool is_nullable)
         : _aggregation(agg), _type(type) {
     _length = get_type_info(type)->size();
     _set_flag(kIsNullableShift, is_nullable);
 }
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable, int32_t unique_id,
+TabletColumn::TabletColumn(StorageAggregateType agg, LogicalType type, bool is_nullable, int32_t unique_id,
                            size_t length)
         : _unique_id(unique_id), _length(length), _aggregation(agg), _type(type) {
     _set_flag(kIsNullableShift, is_nullable);

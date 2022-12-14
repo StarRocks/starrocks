@@ -15,7 +15,7 @@ For detailed instructions on deleting a repository, see [DROP REPOSITORY](../dat
 ```SQL
 CREATE [READ ONLY] REPOSITORY <repository_name>
 WITH BROKER
-ON LOCATION <repository_location>
+ON LOCATION "<repository_location>"
 PROPERTIES ("key"="value", ...)
 ```
 
@@ -34,7 +34,7 @@ Example 1: creates a repository named `oss_repo` using the remote storage direct
 
 ```SQL
 CREATE REPOSITORY `oss_repo`
-WITH BROKER `oss_broker`
+WITH BROKER
 ON LOCATION "oss://starRocks_backup"
 PROPERTIES
 (
@@ -48,7 +48,7 @@ Example 2: creates a read-only repository named `oss_repo` using the remote stor
 
 ```SQL
 CREATE READ ONLY REPOSITORY `oss_repo`
-WITH BROKER `oss_broker`
+WITH BROKER
 ON LOCATION "oss://starRocks_backup"
 PROPERTIES
 (
@@ -62,7 +62,7 @@ Example 3: creates a repository named `hdfs_repo` using the remote storage direc
 
 ```SQL
 CREATE REPOSITORY `hdfs_repo`
-WITH BROKER `hdfs_broker`
+WITH BROKER
 ON LOCATION "hdfs://hadoop-name-node:xxxxx/path/to/repo/"
 PROPERTIES
 (

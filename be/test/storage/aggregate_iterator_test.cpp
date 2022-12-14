@@ -1,9 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/aggregate_iterator.h"
 
 #include "column/column_pool.h"
 #include "gtest/gtest.h"
+#include "storage/aggregate_type.h"
 #include "storage/vector_chunk_iterator.h"
 
 namespace starrocks::vectorized {
@@ -41,15 +54,15 @@ TEST_F(AggregateIteratorTest, agg_max) {
     auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
-    c2->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
-    c3->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
-    c4->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
-    c5->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
-    c6->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
-    c7->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
-    c8->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
+    c2->set_aggregate_method(STORAGE_AGGREGATE_MAX);
+    c3->set_aggregate_method(STORAGE_AGGREGATE_MAX);
+    c4->set_aggregate_method(STORAGE_AGGREGATE_MAX);
+    c5->set_aggregate_method(STORAGE_AGGREGATE_MAX);
+    c6->set_aggregate_method(STORAGE_AGGREGATE_MAX);
+    c7->set_aggregate_method(STORAGE_AGGREGATE_MAX);
+    c8->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
@@ -120,15 +133,15 @@ TEST_F(AggregateIteratorTest, agg_min) {
     auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
-    c2->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
-    c3->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
-    c4->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
-    c5->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
-    c6->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
-    c7->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
-    c8->set_aggregate_method(OLAP_FIELD_AGGREGATION_MIN);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MIN);
+    c2->set_aggregate_method(STORAGE_AGGREGATE_MIN);
+    c3->set_aggregate_method(STORAGE_AGGREGATE_MIN);
+    c4->set_aggregate_method(STORAGE_AGGREGATE_MIN);
+    c5->set_aggregate_method(STORAGE_AGGREGATE_MIN);
+    c6->set_aggregate_method(STORAGE_AGGREGATE_MIN);
+    c7->set_aggregate_method(STORAGE_AGGREGATE_MIN);
+    c8->set_aggregate_method(STORAGE_AGGREGATE_MIN);
 
     VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
@@ -199,15 +212,15 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_DECIMALV2, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    c2->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    c3->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    c4->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    c5->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    c6->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    c7->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    c8->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
+    c2->set_aggregate_method(STORAGE_AGGREGATE_SUM);
+    c3->set_aggregate_method(STORAGE_AGGREGATE_SUM);
+    c4->set_aggregate_method(STORAGE_AGGREGATE_SUM);
+    c5->set_aggregate_method(STORAGE_AGGREGATE_SUM);
+    c6->set_aggregate_method(STORAGE_AGGREGATE_SUM);
+    c7->set_aggregate_method(STORAGE_AGGREGATE_SUM);
+    c8->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
     VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
     auto pk = std::vector<int64_t>{1, 1, 1, 2, 2};
@@ -273,15 +286,15 @@ TEST_F(AggregateIteratorTest, agg_replace) {
     auto c8 = std::make_shared<VectorizedField>(8, "c8", TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-    c2->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-    c3->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-    c4->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-    c5->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-    c6->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-    c7->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-    c8->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+    c2->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+    c3->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+    c4->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+    c5->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+    c6->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+    c7->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
+    c8->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
 
     VectorizedSchema schema({k1, c1, c2, c3, c4, c5, c6, c7, c8});
 
@@ -345,8 +358,8 @@ TEST_F(AggregateIteratorTest, agg_max_no_duplicate) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -396,8 +409,8 @@ TEST_F(AggregateIteratorTest, agg_max_empty) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -425,8 +438,8 @@ TEST_F(AggregateIteratorTest, agg_max_small_chunk) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -470,8 +483,8 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -513,8 +526,8 @@ TEST_F(AggregateIteratorTest, agg_boolean_key) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -557,8 +570,8 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -655,8 +668,8 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -750,8 +763,8 @@ TEST_F(AggregateIteratorTest, agg_decimal_key) {
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, c1});
 
@@ -847,9 +860,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
 
     k1->set_is_key(true);
     k2->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    k2->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    k2->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({k1, k2, c1});
 
@@ -980,9 +993,9 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
 
     k1->set_is_key(true);
     k2->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    k2->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    k2->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
     VectorizedSchema schema({k1, k2, c1});
 
@@ -1032,7 +1045,7 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
 
     auto k1 = std::make_shared<VectorizedField>(0, "k1", TYPE_BIGINT, false);
     k1->set_is_key(true);
-    k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
+    k1->set_aggregate_method(STORAGE_AGGREGATE_NONE);
 
     VectorizedSchema schema({k1});
 
@@ -1068,7 +1081,7 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
     config::vector_chunk_size = 2;
 
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_SUM);
 
     VectorizedSchema schema({c1});
 
@@ -1113,7 +1126,7 @@ TEST_F(AggregateIteratorTest, max_from_source_masks) {
     config::vector_chunk_size = 2;
 
     auto c1 = std::make_shared<VectorizedField>(1, "c1", TYPE_SMALLINT, false);
-    c1->set_aggregate_method(OLAP_FIELD_AGGREGATION_MAX);
+    c1->set_aggregate_method(STORAGE_AGGREGATE_MAX);
 
     VectorizedSchema schema({c1});
 

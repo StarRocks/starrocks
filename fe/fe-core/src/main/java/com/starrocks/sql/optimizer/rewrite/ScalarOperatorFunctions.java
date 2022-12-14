@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/sql/optimizer/rewrite/ScalarOperatorFunctions.java
 
@@ -33,6 +46,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.commons.lang.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -178,7 +192,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
-        String dateStr = date.getVarchar().trim();
+        String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt;
             try {
@@ -201,8 +215,8 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
-        LocalDate ld = LocalDate.from(
-                builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar().trim()));
+        LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                StringUtils.strip(date.getVarchar(), "\r\n\t ")));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
@@ -637,6 +651,85 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createLargeInt(first.getLargeInt().xor(second.getLargeInt()));
     }
 
+    @ConstantFunction(name = "bitShiftLeft", argTypes = {TINYINT, BIGINT}, returnType = TINYINT)
+    public static ConstantOperator bitShiftLeftTinyInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createTinyInt((byte) (first.getTinyInt() << second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftLeft", argTypes = {SMALLINT, BIGINT}, returnType = SMALLINT)
+    public static ConstantOperator bitShiftLeftSmallInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createSmallInt((short) (first.getSmallint() << second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftLeft", argTypes = {INT, BIGINT}, returnType = INT)
+    public static ConstantOperator bitShiftLeftInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createInt(first.getInt() << second.getBigint());
+    }
+
+    @ConstantFunction(name = "bitShiftLeft", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
+    public static ConstantOperator bitShiftLeftBigint(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createBigint(first.getBigint() << second.getBigint());
+    }
+
+    @ConstantFunction(name = "bitShiftLeft", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
+    public static ConstantOperator bitShiftLeftLargeInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createLargeInt(first.getLargeInt().shiftLeft((int) second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftRight", argTypes = {TINYINT, BIGINT}, returnType = TINYINT)
+    public static ConstantOperator bitShiftRightTinyInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createTinyInt((byte) (first.getTinyInt() >> second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftRight", argTypes = {SMALLINT, BIGINT}, returnType = SMALLINT)
+    public static ConstantOperator bitShiftRightSmallInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createSmallInt((short) (first.getSmallint() >> second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftRight", argTypes = {INT, BIGINT}, returnType = INT)
+    public static ConstantOperator bitShiftRightInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createInt(first.getInt() >> second.getBigint());
+    }
+
+    @ConstantFunction(name = "bitShiftRight", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
+    public static ConstantOperator bitShiftRightBigint(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createBigint(first.getBigint() >> second.getBigint());
+    }
+
+    @ConstantFunction(name = "bitShiftRight", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
+    public static ConstantOperator bitShiftRightLargeInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createLargeInt(first.getLargeInt().shiftRight((int) second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftRightLogical", argTypes = {TINYINT, BIGINT}, returnType = TINYINT)
+    public static ConstantOperator bitShiftRightLogicalTinyInt(ConstantOperator first, ConstantOperator second) {
+        byte b = first.getTinyInt();
+        int i = b >= 0 ? b : (((int) b) + 256);
+        return ConstantOperator.createTinyInt((byte) (i >>> second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftRightLogical", argTypes = {SMALLINT, BIGINT}, returnType = SMALLINT)
+    public static ConstantOperator bitShiftRightLogicalSmallInt(ConstantOperator first, ConstantOperator second) {
+        short s = first.getSmallint();
+        int i = s >= 0 ? s : (((int) s) + 65536);
+        return ConstantOperator.createSmallInt((short) (i >>> second.getBigint()));
+    }
+
+    @ConstantFunction(name = "bitShiftRightLogical", argTypes = {INT, BIGINT}, returnType = INT)
+    public static ConstantOperator bitShiftRightLogicalInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createInt(first.getInt() >>> second.getBigint());
+    }
+
+    @ConstantFunction(name = "bitShiftRightLogical", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
+    public static ConstantOperator bitShiftRightLogicalBigint(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createBigint(first.getBigint() >>> second.getBigint());
+    }
+
+    @ConstantFunction(name = "bitShiftRightLogical", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
+    public static ConstantOperator bitShiftRightLogicalLargeInt(ConstantOperator first, ConstantOperator second) {
+        return ConstantOperator.createLargeInt(bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
+    }
+
     @ConstantFunction(name = "concat", argTypes = {VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator concat(ConstantOperator... values) {
         Preconditions.checkArgument(values.length > 0);
@@ -680,5 +773,28 @@ public class ScalarOperatorFunctions {
         }
 
         return ConstantOperator.createDecimal(result, type);
+    }
+
+    private static final int CONSTANT_128 = 128;
+    private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
+    private static final BigInteger []INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
+    static {
+        for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
+            INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
+        }
+    }
+
+    private static BigInteger bitShiftRightLogicalForInt128(BigInteger l, int shiftBy) {
+        if (shiftBy <= 0) {
+            return l.shiftRight(shiftBy);
+        }
+        if (shiftBy >= CONSTANT_128) {
+            shiftBy = shiftBy & 127;
+        }
+        if (l.signum() >= 0) {
+            return l.shiftRight(shiftBy);
+        }
+        BigInteger opened = l.subtract(INT_128_OPENER);
+        return opened.shiftRight(shiftBy).and(INT_128_MASK1_ARR1[shiftBy]);
     }
 }

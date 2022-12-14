@@ -58,7 +58,8 @@
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Build in Docker](./administration/Build_in_docker.md)
+    + [Deploy StarRocks in Docker](./administration/deploy_with_docker.md)
+    + [Compile StarRocks](./administration/Build_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
@@ -246,7 +247,7 @@
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
-        + [ARRAY](./sql-reference/sql-statements/data-types/ARRAY.md)
+        + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
@@ -441,6 +442,9 @@
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
       + [least](./sql-reference/sql-functions/math-functions/least.md)
+      + [log](./sql-reference/sql-functions/math-functions/log.md)
+      + [log2](./sql-reference/sql-functions/math-functions/log2.md)
+      + [log10](./sql-reference/sql-functions/math-functions/log10.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
       + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)

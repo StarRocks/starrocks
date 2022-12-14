@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/StructType.java
 
@@ -37,6 +50,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
@@ -80,6 +94,32 @@ public class StructType extends Type {
             size += structField.getType().getTypeSize();
         }
         return size;
+    }
+
+    @Override
+    public boolean matchesType(Type t) {
+        if (t.isPseudoType()) {
+            return t.matchesType(this);
+        }
+        if (!t.isStructType()) {
+            return false;
+        }
+
+        if (((StructType) t).getFields().size() != fields.size()) {
+            return false;
+        }
+
+        for (Map.Entry<String, StructField> field : fieldMap.entrySet()) {
+            StructField tField = ((StructType) t).getField(field.getValue().getName());
+            if (tField == null) {
+                return false;
+            }
+            if (!tField.getType().matchesType(field.getValue().getType())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Override
@@ -140,6 +180,16 @@ public class StructType extends Type {
                 structField.getType().selectAllFields();
             }
         }
+    }
+
+    /**
+     * @return 33 (utf8_general_ci) if type is array
+     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
+     * character_set (2) -- is the column character set and is defined in Protocol::CharacterSet.
+     */
+    @Override
+    public int getMysqlResultSetFieldCharsetIndex() {
+        return CHARSET_UTF8;
     }
 
     @Override

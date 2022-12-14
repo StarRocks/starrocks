@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -32,6 +45,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
@@ -47,6 +61,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -58,6 +73,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
@@ -96,6 +112,7 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
@@ -631,6 +648,37 @@ public class PrivilegeCheckerV2 {
                     context, statement.getResourceName(), PrivilegeType.ResourceAction.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
             }
+            return null;
+        }
+
+        // --------------------------------- Resource Group Statement -------------------------------------
+        public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(
+                    context, PrivilegeType.SystemAction.CREATE_RESOURCE_GROUP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE_RESOURCE_GROUP");
+            }
+            return null;
+        }
+
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.ResourceGroupAction.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkResourceGroupAction(
+                    context, statement.getName(), PrivilegeType.ResourceGroupAction.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
+        }
+
+        public Void visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
+            // we don't check privilege for `show resource groups` statement
             return null;
         }
 

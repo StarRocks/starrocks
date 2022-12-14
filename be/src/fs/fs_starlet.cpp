@@ -1,7 +1,18 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifdef USE_STAROS
-
 #include "fs/fs_starlet.h"
 
 DIAGNOSTIC_PUSH
@@ -259,8 +270,10 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        // TODO: translate WritableFileOptions to fslib::WriteOptions
-        auto file_st = (*fs_st)->create(pair.first, WriteOptions());
+        staros::starlet::fslib::WriteOptions fslib_opts;
+        fslib_opts.create_missing_parent = true;
+        fslib_opts.skip_fill_local_cache = opts.skip_fill_local_cache;
+        auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }

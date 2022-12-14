@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
@@ -291,21 +304,21 @@ public class AnalyzeSingleTest {
          * In a double-quoted string, two double-quotes are combined into one double-quote
          */
         QueryStatement statement = (QueryStatement) analyzeSuccess("select '\"\"' ");
-        Assert.assertEquals("'\"\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("'\"\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"\"\"\" ");
-        Assert.assertEquals("'\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("'\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"7\\\"\\\"\"");
-        Assert.assertEquals("'7\"\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("'7\"\"'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select '7'''");
-        Assert.assertEquals("'7\\''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("'7\\''", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("SELECT '7\\'\\''");
-        Assert.assertEquals("'7\\'\\''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("'7\\'\\''", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"Hello ' World ' !\"");
         Assert.assertEquals("'Hello \\' World \\' !'",
-                AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+                AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select 'Hello \" World \" !'");
         Assert.assertEquals("'Hello \" World \" !'",
-                AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+                AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeSuccess("select @@`sql_mode`");
     }
@@ -313,12 +326,12 @@ public class AnalyzeSingleTest {
     @Test
     public void testBinaryLiteral() {
         QueryStatement statement = (QueryStatement) analyzeSuccess("select x'0ABC' ");
-        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"0ABC\" ");
-        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         // mysql client will output binary format in the outputs.
         statement = (QueryStatement) analyzeSuccess("select '0ABC' ");
-        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("\'0ABC\'", AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeFail("select x'0AB' ", "Binary literal must contain an even number of digits");
         analyzeFail("select x\"0AB\" ", "Binary literal must contain an even number of digits");
@@ -434,21 +447,21 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals("SELECT TRUE OR FALSE FROM test.t0",
-                AST2SQL.toString(statementBase));
+                AstToStringBuilder.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals("SELECT concat('a', 'b') FROM test.t0",
-                AST2SQL.toString(statementBase));
+                AstToStringBuilder.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
                 "SELECT * FROM test.tall WHERE test.tall.ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
-                AST2SQL.toString(statementBase));
+                AstToStringBuilder.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")|| true",
@@ -456,7 +469,7 @@ public class AnalyzeSingleTest {
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
                 "SELECT * FROM test.tall WHERE (test.tall.ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
-                AST2SQL.toString(statementBase));
+                AstToStringBuilder.toString(statementBase));
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 "LIKE (concat('h', 'a', 'i'))) OR '%'' part of predicate ''%'' should return type 'BOOLEAN'");
@@ -466,14 +479,14 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals("SELECT * FROM test.tall ORDER BY test.tall.ta ASC NULLS LAST ",
-                AST2SQL.toString(statementBase));
+                AstToStringBuilder.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  test.tall order by test.tall.ta desc",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
                 "SELECT * FROM test.tall ORDER BY test.tall.ta DESC NULLS FIRST ",
-                AST2SQL.toString(statementBase));
+                AstToStringBuilder.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
         statementBase = SqlParser.parse("select * from  test.tall order by test.tall.ta",
@@ -481,7 +494,7 @@ public class AnalyzeSingleTest {
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
                 "SELECT * FROM test.tall ORDER BY test.tall.ta ASC ",
-                AST2SQL.toString(statementBase));
+                AstToStringBuilder.toString(statementBase));
     }
 
     @Test

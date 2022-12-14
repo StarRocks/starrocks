@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -145,7 +157,7 @@ class Aggregator : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    virtual ~Aggregator() noexcept {
+    virtual ~Aggregator() noexcept override {
         if (_state != nullptr) {
             close(_state);
         }
@@ -161,7 +173,7 @@ public:
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
     const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
-    const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
+    const std::vector<FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
     int64_t limit() { return _limit; }
     bool needs_finalize() { return _needs_finalize; }
@@ -300,7 +312,7 @@ protected:
     // The max align size for all aggregate state
     size_t _max_agg_state_align_size = 1;
     // The followings are aggregate function information:
-    std::vector<starrocks_udf::FunctionContext*> _agg_fn_ctxs;
+    std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const vectorized::AggregateFunction*> _agg_functions;
     // agg state when no group by columns
     vectorized::AggDataPtr _single_agg_state = nullptr;
@@ -350,6 +362,7 @@ protected:
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
+    void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
     void build_hash_set(size_t chunk_size);

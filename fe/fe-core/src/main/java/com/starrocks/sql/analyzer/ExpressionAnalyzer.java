@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
@@ -393,7 +406,7 @@ public class ExpressionAnalyzer {
                 if (!type.isBoolean() && !type.isNull()) {
                     throw new SemanticException("Operand '%s' part of predicate " +
                             "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-                            AST2SQL.toString(node), AST2SQL.toString(node.getChild(i)), type.toSql());
+                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)), type.toSql());
                 }
             }
 
@@ -493,6 +506,11 @@ public class ExpressionAnalyzer {
                         if (!commonType.isFixedPointType()) {
                             commonType = Type.BIGINT;
                         }
+                        break;
+                    case BIT_SHIFT_LEFT:
+                    case BIT_SHIFT_RIGHT:
+                    case BIT_SHIFT_RIGHT_LOGICAL:
+                        commonType = t1;
                         break;
                     default:
                         // the programmer forgot to deal with a case
@@ -635,13 +653,13 @@ public class ExpressionAnalyzer {
             if (!type1.isStringType() && !type1.isNull()) {
                 throw new SemanticException(
                         "left operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AST2SQL.toString(node));
+                                AstToStringBuilder.toString(node));
             }
 
             if (!type2.isStringType() && !type2.isNull()) {
                 throw new SemanticException(
                         "right operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AST2SQL.toString(node));
+                                AstToStringBuilder.toString(node));
             }
 
             // check pattern
@@ -649,7 +667,7 @@ public class ExpressionAnalyzer {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
-                    throw new SemanticException("Invalid regular expression in '" + AST2SQL.toString(node) + "'");
+                    throw new SemanticException("Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
                 }
             }
 
@@ -663,8 +681,8 @@ public class ExpressionAnalyzer {
 
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
-                        (expr.getType() instanceof ArrayType && !(node instanceof IsNullPredicate))) {
-                    throw new SemanticException("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
+                        (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
+                    throw new SemanticException("HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
                 }
             }
         }
@@ -681,7 +699,7 @@ public class ExpressionAnalyzer {
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + castType.toSql() + " in sql `" +
-                        AST2SQL.toString(cast.getChild(0)).replace("%", "%%") + "`");
+                        AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`");
             }
 
             cast.setType(castType);
@@ -710,6 +728,17 @@ public class ExpressionAnalyzer {
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
+            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
+                // This must before test for DecimalV3.
+                if (!(node.getChild(1) instanceof IntLiteral)) {
+                    throw new SemanticException(
+                            fnName + " requires second parameter must be a constant interval");
+                }
+                if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                    throw new SemanticException(
+                            fnName + " requires second parameter must be greater than 0");
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
@@ -766,16 +795,6 @@ public class ExpressionAnalyzer {
                 if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
                     throw new SemanticException("The second input of " + fnName +
                             " should be an array or a lambda function.");
-                }
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
-                if (!(node.getChild(1) instanceof IntLiteral)) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be a constant interval");
-                }
-                if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {

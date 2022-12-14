@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
@@ -228,14 +240,25 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
     };
 
-    if (agg_node.need_finalize && !sorted_streaming_aggregate) {
-        // If finalize aggregate with group by clause, then it can be parallelized
-        if (has_group_by_keys) {
-            if (could_local_shuffle) {
+    if (!sorted_streaming_aggregate) {
+        // 1. Finalize aggregation:
+        //   - Without group by clause, it cannot be parallelized and need local passthough.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+        // 2. Non-finalize aggregation:
+        //   - Without group by clause, it can be parallelized and needn't local shuffle.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+        if (agg_node.need_finalize) {
+            if (!has_group_by_keys) {
+                ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+            } else if (could_local_shuffle) {
                 ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
             }
         } else {
-            ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+            if (!has_group_by_keys) {
+                // Do nothing.
+            } else if (could_local_shuffle) {
+                ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+            }
         }
     }
 

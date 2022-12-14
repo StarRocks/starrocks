@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
@@ -1530,10 +1543,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
-                inputFragment.setEnableSharedScan(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
@@ -1810,6 +1822,26 @@ public class PlanFragmentBuilder {
                     .collect(Collectors.toList());
         }
 
+        private void setNullableForJoin(JoinOperator joinOperator,
+                                        PlanFragment leftFragment, PlanFragment rightFragment, ExecPlan context) {
+            Set<TupleId> nullableTupleIds = new HashSet<>();
+            nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
+            nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
+            if (joinOperator.isLeftOuterJoin()) {
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isRightOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isFullOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            }
+            for (TupleId tupleId : nullableTupleIds) {
+                TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(tupleId);
+                tupleDescriptor.getSlots().forEach(slot -> slot.setIsNullable(true));
+                tupleDescriptor.computeMemLayout();
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
@@ -1829,6 +1861,8 @@ public class PlanFragmentBuilder {
                         getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
                                 context);
             }
+
+            setNullableForJoin(node.getJoinType(), leftFragment, rightFragment, context);
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
@@ -1954,20 +1988,7 @@ public class PlanFragmentBuilder {
             List<Expr> otherJoinConjuncts = joinExpr.otherJoin;
             List<Expr> conjuncts = joinExpr.conjuncts;
 
-            List<PlanFragment> nullablePlanFragments = new ArrayList<>();
-            if (joinOperator.isLeftOuterJoin()) {
-                nullablePlanFragments.add(rightFragment);
-            } else if (joinOperator.isRightOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
-            } else if (joinOperator.isFullOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
-                nullablePlanFragments.add(rightFragment);
-            }
-            for (PlanFragment planFragment : nullablePlanFragments) {
-                for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
-                    context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                }
-            }
+            setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
 
             JoinNode joinNode;
             if (node instanceof PhysicalHashJoinOperator) {
@@ -2670,10 +2691,6 @@ public class PlanFragmentBuilder {
                 context.getFragments().add(leftFragment);
 
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-
-                if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                    leftFragment.setEnableSharedScan(false);
-                }
 
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {

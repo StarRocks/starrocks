@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -279,6 +292,77 @@ public class PrivilegeCheckerV2Test {
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx)).execute();
         Assert.assertEquals(1, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(0).get(0));
+    }
+
+    @Test
+    public void testResourceGroupStmt() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createRg3Sql = "create resource group rg3\n" +
+                "to\n" +
+                "    (query_type in ('select'), source_ip='192.168.6.1/24'),\n" +
+                "    (query_type in ('select'))\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '1',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createRg3Sql, ctx), ctx);
+        ctxToTestUser();
+
+        // test no authorization on show resource groups
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("show resource groups", ctx);
+        PrivilegeCheckerV2.check(statement, ctx);
+
+        // test drop resource group
+        verifyGrantRevoke(
+                "drop resource group rg3",
+                "grant DROP on resource_group rg3 to test",
+                "revoke DROP on resource_group rg3 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        // test drop resource group
+        verifyGrantRevoke(
+                "drop resource group rg3",
+                "grant DROP on resource_group rg3 to test",
+                "revoke DROP on resource_group rg3 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        String sql = "" +
+                "ALTER RESOURCE GROUP rg3 \n" +
+                "ADD \n" +
+                "   (user='rg1_user5', role='rg1_role5', source_ip='192.168.4.1/16')";
+        // test drop resource group
+        verifyGrantRevoke(
+                sql,
+                "grant ALTER on resource_group rg3 to test",
+                "revoke ALTER on resource_group rg3 from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+
+        // test create resource group
+        String createRg4Sql = "create resource group rg4\n" +
+                "to\n" +
+                "    (query_type in ('select'), source_ip='192.168.6.1/24'),\n" +
+                "    (query_type in ('select'))\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '1',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+        verifyGrantRevoke(
+                createRg4Sql,
+                "grant create_resource_group on system to test",
+                "revoke create_resource_group on system from test",
+                "Access denied; you need (at least one of) the CREATE_RESOURCE_GROUP privilege(s) for this operation");
+
+        // test grant/revoke on all resource_groups
+        verifyGrantRevoke(
+                sql,
+                "grant ALTER on all resource_groups to test",
+                "revoke ALTER on all resource_groups from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
     }
 
     @Test

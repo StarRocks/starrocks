@@ -305,7 +305,7 @@ MySQL > DESC sales_records ALL;
 
 ### Check the refresh tasks of materialized views
 
-You can check the refresh tasks of all single-table sync materialized views in the database.
+A single-table sync materialized view updates simultaneously when data is loaded into its base table. You can check the refresh tasks of all single-table sync materialized views in the database.
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW;
@@ -418,6 +418,8 @@ When a query is executed with a materialized view, the original query statement 
 - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all materialized views of the base table contain the dropped column, otherwise the drop operation cannot be performed. If you have to drop the column, you need to first drop all materialized views that do not contain the column, and then drop the column.
 
 - Creating too many materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in materialized view and base table will be updated synchronously. If a base table contains `n` materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
+
+- You must use the GROUP BY clause when using aggregate functions and specify the GROUP BY column in your SELECT list.
 
 ## Model data warehouse with multi-table async materialized view
 

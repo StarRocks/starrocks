@@ -16,11 +16,11 @@ From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to
 
 > **NOTE**
 >
-> Loading without brokers may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using brokers.
+> Loading without the broker process may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using the broker process.
 
 If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -159,13 +159,14 @@ WITH BROKER
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )
 ```
 
 > **NOTE**
 >
-> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> - The S3A protocol is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
 
 #### Load data from Google GCS
 
@@ -262,7 +263,7 @@ The following table describes the parameters in `jobInfo`.
 | dbName        | The name of the database into which data is loaded           |
 | tblNames      | The name of the table into which data is loaded.             |
 | label         | The label of the load job.                                   |
-| state         | The status of the load job. Valid values:<ul><li>`PENDING`: The load job is in queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see the "Asynchronous loading" section in [Overview of data loading](../loading/Loading_intro.md). |
+| state         | The status of the load job. Valid values:<ul><li>`PENDING`: The load job is in queue waiting to be scheduled.</li><li>`QUEUEING`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see the "Asynchronous loading" section in [Overview of data loading](../loading/Loading_intro.md). |
 | failMsg       | The reason why the load job failed. If the `state` value for the load job is `PENDING`, `LOADING`, or `FINISHED`, `NULL` is returned for the `failMsg` parameter. If the `state` value for the load job is `CANCELLED`, the value returned for the `failMsg` parameter consists of two parts: `type` and `msg`.<ul><li>The `type` part can be any of the following values:</li><ul><li>`USER_CANCEL`: The load job was manually canceled.</li><li>`ETL_SUBMIT_FAIL`: The load job failed to be submitted.</li><li>`ETL-QUALITY-UNSATISFIED`: The load job failed because the percentage of unqualified data exceeds the value of the `max-filter-ratio` parameter.</li><li>`LOAD-RUN-FAIL`: The load job failed in the `LOADING` stage.</li><li>`TIMEOUT`: The load job failed to finish within the specified timeout period.</li><li>`UNKNOWN`: The load job failed due to an unknown error.</li></ul><li>The `msg` part provides the detailed cause of the load failure.</li></ul> |
 | trackingUrl   | The URL that is used to access the unqualified data detected in the load job. You can use the `curl` or `wget` command to access the URL and obtain the unqualified data. If no unqualified data is detected, `NULL` is returned for the `trackingUrl` parameter. |
 | status        | The status of the HTTP request for the load job. Valid values: `OK` and `Fail`. |

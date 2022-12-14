@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
@@ -21,23 +34,29 @@ import java.util.Map;
 
 import static java.util.stream.Collectors.toList;
 
-public class ViewDefBuilder {
+/**
+ * AstToSQLBuilder inherits AstToStringBuilder and rewrites some special AST logic to
+ * ensure that the generated SQL must be a legal SQL,
+ * which can be used in some scenarios that require serialization and deserialization.
+ * Such as string serialization of views
+ */
+public class AstToSQLBuilder {
 
     public static String buildSimple(StatementBase statement) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
-        return new ViewDefBuilderVisitor(sameCatalogDb).visit(statement);
+        return new AST2SQLBuilderVisitor(sameCatalogDb).visit(statement);
     }
 
-    public static String build(StatementBase statement) {
-        return new ViewDefBuilderVisitor(false).visit(statement);
+    public static String toSQL(StatementBase statement) {
+        return new AST2SQLBuilderVisitor(false).visit(statement);
     }
 
-    private static class ViewDefBuilderVisitor extends AST2SQL.SQLBuilder {
+    private static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
 
         private final boolean simple;
 
-        public ViewDefBuilderVisitor(boolean simple) {
+        public AST2SQLBuilderVisitor(boolean simple) {
             this.simple = simple;
         }
 

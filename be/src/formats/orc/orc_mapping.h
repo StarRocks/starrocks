@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -28,7 +40,7 @@ struct OrcMappingOrOrcColumnId {
 // Why we need this?
 // One reason is that in orc, field name is not unique, different nested level may have the same field name.
 // But luckily, orc provide a global unique column id, so we can do
-// subfield materlizied, subfield lazy materlizied according global unique column id.
+// subfield materialized, subfield lazy materialized according global unique column id.
 // Another reason is that in orc, struct subfield position may different from position in create table sql.
 // So we need to find specific column by subfield name rather than column position.
 // And considering that we will frequently access this mapping relationship, we need to maintain an OrcMapping globally.
@@ -74,8 +86,8 @@ struct OrcMappingOrOrcColumnId {
 class OrcMapping {
 public:
     // Only Array, Map, Struct contains child mapping, other primitive types will return nullptr directly.
-    // src_pos is origin column position in table defination.
-    const OrcMappingOrOrcColumnId& get_column_id_or_child_mapping(size_t original_pos_in_table_defination);
+    // src_pos is origin column position in table definition.
+    const OrcMappingOrOrcColumnId& get_column_id_or_child_mapping(size_t original_pos_in_table_definition);
 
     void add_mapping(size_t pos_in_src, size_t orc_column_id, const OrcMappingPtr& child_mapping);
 
@@ -98,9 +110,10 @@ private:
 class OrcMappingFactory {
 public:
     // NOTICE: orc_use_column_names will only control first level behavior, but struct subfield will still use
-    // column name rather than position in table defination.
+    // column name rather than position in table definition.
     static StatusOr<std::unique_ptr<OrcMapping>> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
-                                                               const orc::Type& root_orc_type, const bool case_sensitve,
+                                                               const orc::Type& root_orc_type,
+                                                               const bool case_sensitive,
                                                                const bool orc_use_column_names,
                                                                const std::vector<std::string>* hive_column_names);
 
@@ -110,11 +123,11 @@ private:
 
     static Status _init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                           const std::vector<SlotDescriptor*>& slot_descs,
-                                                          const orc::Type& orc_root_type, const bool case_sensitve);
+                                                          const orc::Type& orc_root_type, const bool case_sensitive);
 
     static Status _init_orc_mapping_with_hive_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                            const std::vector<SlotDescriptor*>& slot_descs,
-                                                           const orc::Type& orc_root_type, const bool case_sensitve,
+                                                           const orc::Type& orc_root_type, const bool case_sensitive,
                                                            const std::vector<std::string>* hive_column_names);
 
     static Status _set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,

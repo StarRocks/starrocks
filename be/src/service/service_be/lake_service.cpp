@@ -1,5 +1,3 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 #include "service/service_be/lake_service.h"
 
 #include <brpc/controller.h>

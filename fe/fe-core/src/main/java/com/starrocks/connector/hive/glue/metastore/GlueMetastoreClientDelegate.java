@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.hive.glue.metastore;
 
@@ -37,7 +50,6 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.CompactionResponse;
 import org.apache.hadoop.hive.metastore.api.CompactionType;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
-import org.apache.hadoop.hive.metastore.api.DataOperationType;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.FireEventRequest;
@@ -87,6 +99,7 @@ import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.starrocks.connector.hive.glue.util.AWSGlueConfig.CUSTOM_EXECUTOR_FACTORY_CONF;
 import static org.apache.hadoop.hive.metastore.HiveMetaStore.PUBLIC;
 import static org.apache.hadoop.hive.metastore.TableType.EXTERNAL_TABLE;
 import static org.apache.hadoop.hive.metastore.TableType.MANAGED_TABLE;
@@ -105,11 +118,7 @@ public class GlueMetastoreClientDelegate {
     public static final Long NO_MAX = -1L;
     public static final String MATCH_ALL = ".*";
 
-    public static final String INDEX_PREFIX = "index_prefix";
-
     private static final int BATCH_CREATE_PARTITIONS_MAX_REQUEST_SIZE = 100;
-
-    public static final String CUSTOM_EXECUTOR_FACTORY_CONF = "hive.metastore.executorservice.factory.class";
 
     static final String GLUE_METASTORE_DELEGATE_THREADPOOL_NAME_FORMAT = "glue-metastore-delegate-%d";
 
@@ -120,7 +129,6 @@ public class GlueMetastoreClientDelegate {
     private final String catalogId;
 
     public static final String CATALOG_ID_CONF = "hive.metastore.glue.catalogid";
-    public static final String NUM_PARTITION_SEGMENTS_CONF = "aws.glue.partition.num.segments";
 
     protected ExecutorService getExecutorService() {
         Class<? extends ExecutorServiceFactory> executorFactoryClass = this.conf
@@ -1066,9 +1074,21 @@ public class GlueMetastoreClientDelegate {
     public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStatistics(
             String dbName,
             String tableName,
-            List<String> partitionNames, List<String> columnNames
+            List<String> partitionNames, List<String> colNames
     ) throws TException {
-        throw new UnsupportedOperationException("getPartitionColumnStatistics is not supported");
+        checkArgument(StringUtils.isNotEmpty(dbName), "databaseName cannot be null or empty");
+        checkArgument(StringUtils.isNotEmpty(tableName), "tableName cannot be null or empty");
+        checkNotNull(partitionNames, "colNames cannot be null");
+        checkNotNull(colNames, "colNames cannot be null");
+        try {
+            return glueMetastore.getPartitionColumnStatistics(dbName, tableName, partitionNames, colNames);
+        } catch (AmazonServiceException e) {
+            throw CatalogToHiveConverter.wrapInHiveException(e);
+        } catch (Exception e) {
+            String msg = String.format("Unable to get table column statistics, %s.%s", dbName, tableName);
+            LOGGER.error(msg, e);
+            throw new MetaException(msg + e);
+        }
     }
 
     public List<ColumnStatisticsObj> getTableColumnStatistics(
@@ -1076,7 +1096,18 @@ public class GlueMetastoreClientDelegate {
             String tableName,
             List<String> colNames
     ) throws TException {
-        throw new UnsupportedOperationException("getTableColumnStatistics is not supported");
+        checkArgument(StringUtils.isNotEmpty(dbName), "databaseName cannot be null or empty");
+        checkArgument(StringUtils.isNotEmpty(tableName), "tableName cannot be null or empty");
+        checkNotNull(colNames, "colNames cannot be null");
+        try {
+            return glueMetastore.getTableColumnStatistics(dbName, tableName, colNames);
+        } catch (AmazonServiceException e) {
+            throw CatalogToHiveConverter.wrapInHiveException(e);
+        } catch (Exception e) {
+            String msg = String.format("Unable to get table column statistics, %s.%s", dbName, tableName);
+            LOGGER.error(msg, e);
+            throw new MetaException(msg + e);
+        }
     }
 
     public boolean updatePartitionColumnStatistics(
@@ -1313,25 +1344,6 @@ public class GlueMetastoreClientDelegate {
 
     public ShowCompactResponse showCompactions() throws TException {
         throw new UnsupportedOperationException("showCompactions is not supported");
-    }
-
-    public void addDynamicPartitions(
-            long txnId,
-            String dbName,
-            String tblName,
-            List<String> partNames
-    ) throws TException {
-        throw new UnsupportedOperationException("addDynamicPartitions is not supported");
-    }
-
-    public void addDynamicPartitions(
-            long txnId,
-            String dbName,
-            String tblName,
-            List<String> partNames,
-            DataOperationType operationType
-    ) throws TException {
-        throw new UnsupportedOperationException("addDynamicPartitions is not supported");
     }
 
     public void insertTable(org.apache.hadoop.hive.metastore.api.Table table, boolean overwrite) throws MetaException {

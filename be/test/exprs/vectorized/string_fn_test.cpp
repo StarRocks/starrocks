@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -561,7 +574,7 @@ PARALLEL_TEST(VecStringFunctionsTest, split) {
     columns.clear();
     columns.push_back(str_const);
     columns.push_back(delim_const);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     result = StringFunctions::split(ctx.get(), columns).value();
     ASSERT_EQ("['a', 'bc', 'd', 'eeee', 'f']", result->debug_string());
@@ -579,7 +592,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst1) {
     columns.clear();
     columns.push_back(str_const);
     columns.push_back(delim_const);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
     ASSERT_EQ("['a,bc', 'eeee,f']", result->debug_string());
@@ -602,7 +615,7 @@ PARALLEL_TEST(VecStringFunctionsTest, splitConst2) {
     columns.clear();
     columns.push_back(str_binary_column);
     columns.push_back(delim_const);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::split_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     ColumnPtr result = StringFunctions::split(ctx.get(), columns).value();
     ASSERT_EQ("['a', 'b', 'c'], ['aa', 'bb', 'cc'], ['eeeeeeeeee'], ['', '']", result->debug_string());
@@ -1506,7 +1519,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractNullablePattern) {
     columns.push_back(NullableColumn::create(pattern, null));
     columns.push_back(index);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1551,7 +1564,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractOnlyNullPattern) {
     columns.push_back(pattern);
     columns.push_back(index);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1590,7 +1603,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractConstPattern) {
     columns.push_back(pattern);
     columns.push_back(index);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1634,7 +1647,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtract) {
     columns.push_back(pattern);
     columns.push_back(index);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1681,7 +1694,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceNullablePattern) {
     columns.emplace_back(NullableColumn::create(pattern, null));
     columns.emplace_back(replace);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1721,7 +1734,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceOnlyNullPattern) {
     columns.emplace_back(pattern);
     columns.emplace_back(replace);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1760,7 +1773,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
     columns.emplace_back(ptn);
     columns.emplace_back(replace);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1787,7 +1800,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
         auto par0 = BinaryColumn::create();
         auto par1 = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(binary_datas.get(), binary_size), 1);
 
-        ctx0->impl()->set_constant_columns({par0, par1});
+        ctx0->set_constant_columns({par0, par1});
 
         ASSERT_ERROR(StringFunctions::regexp_replace_prepare(ctx0.get(), scope));
         ASSERT_OK(StringFunctions::regexp_close(ctx0.get(), scope));
@@ -1820,7 +1833,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {
     columns.emplace_back(ptn);
     columns.emplace_back(replace);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1862,7 +1875,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceWithEmptyPattern) {
     columns.emplace_back(ptn);
     columns.emplace_back(replace);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(
             StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -1996,7 +2009,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlNullable) {
     columns.emplace_back(str);
     columns.emplace_back(NullableColumn::create(data, null));
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
@@ -2032,7 +2045,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlOnlyNull) {
     columns.emplace_back(str);
     columns.emplace_back(part);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
@@ -2070,7 +2083,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
         columns.emplace_back(str);
         columns.emplace_back(part);
 
-        context->impl()->set_constant_columns(columns);
+        context->set_constant_columns(columns);
 
         ASSERT_TRUE(
                 StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
@@ -2109,7 +2122,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
         columns.emplace_back(str);
         columns.emplace_back(part);
 
-        context->impl()->set_constant_columns(columns);
+        context->set_constant_columns(columns);
 
         ASSERT_TRUE(
                 StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
@@ -2157,7 +2170,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrl) {
     columns.emplace_back(str);
     columns.emplace_back(part);
 
-    context->impl()->set_constant_columns(columns);
+    context->set_constant_columns(columns);
 
     ASSERT_TRUE(StringFunctions::parse_url_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 

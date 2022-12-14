@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
@@ -183,8 +195,13 @@ DriverRawPtr SubQuerySharedDriverQueue::take() {
 
 /// WorkGroupDriverQueue.
 bool WorkGroupDriverQueue::WorkGroupDriverSchedEntityComparator::operator()(
-        const WorkGroupDriverSchedEntityPtr& lhs, const WorkGroupDriverSchedEntityPtr& rhs) const {
-    return lhs->vruntime_ns() < rhs->vruntime_ns();
+        const WorkGroupDriverSchedEntityPtr& lhs_ptr, const WorkGroupDriverSchedEntityPtr& rhs_ptr) const {
+    int64_t lhs_val = lhs_ptr->vruntime_ns();
+    int64_t rhs_val = rhs_ptr->vruntime_ns();
+    if (lhs_val != rhs_val) {
+        return lhs_val < rhs_val;
+    }
+    return lhs_ptr < rhs_ptr;
 }
 
 void WorkGroupDriverQueue::close() {

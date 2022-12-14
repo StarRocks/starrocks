@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.privilege;
 
@@ -230,6 +243,7 @@ public class PrivilegeManager {
             case DATABASE:
             case RESOURCE:
             case CATALOG:
+            case RESOURCE_GROUP:
                 objects.add(provider.generateObject(
                         type.name(),
                         Arrays.asList(type.getPlural()),
@@ -623,6 +637,18 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkResourceGroupAction(ConnectContext context, String name,
+                                                   PrivilegeType.ResourceGroupAction action) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            return manager.checkResourceGroupAction(collection, name, action);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check action[{}] on resource group {}", action, name, e);
+            return false;
+        }
+    }
+
     public static boolean checkCatalogAction(ConnectContext context, String name,
                                              PrivilegeType.CatalogAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -768,6 +794,12 @@ public class PrivilegeManager {
     protected boolean checkResourceAction(PrivilegeCollection collection, String name, PrivilegeType.ResourceAction action)
             throws PrivilegeException {
         return checkAction(collection, PrivilegeType.RESOURCE, action.name(), Arrays.asList(name));
+    }
+
+    protected boolean checkResourceGroupAction(PrivilegeCollection collection, String name,
+                                               PrivilegeType.ResourceGroupAction action)
+            throws PrivilegeException {
+        return checkAction(collection, PrivilegeType.RESOURCE_GROUP, action.name(), Arrays.asList(name));
     }
 
     protected boolean checkCatalogAction(PrivilegeCollection collection, String name,
