@@ -17,6 +17,7 @@
 #include <type_traits>
 
 #include "column/type_traits.h"
+#include "gutil/strings/fastmem.h"
 #include "runtime/primitive_type.h"
 #include "types/logical_type.h"
 
@@ -61,7 +62,7 @@ struct AggDataTypeTraits<lt, StringPTGuard<lt>> {
 
     static void assign_value(ValueType& value, const RefType& ref) {
         value.resize(ref.size);
-        memcpy(value.data(), ref.data, ref.size);
+        strings::memcpy_inlined(value.data(), ref.data, ref.size);
     }
 
     static void append_value(ColumnType* column, const ValueType& value) {
