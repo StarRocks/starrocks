@@ -262,7 +262,7 @@ public class TrinoTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-        connectContext.getSessionVariable().setUseParserDialect("trino");
+        connectContext.getSessionVariable().setSqlDialect("trino");
     }
 
     public String getFragmentPlan(String sql) throws Exception {

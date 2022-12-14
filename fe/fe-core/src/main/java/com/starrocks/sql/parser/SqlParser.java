@@ -33,7 +33,7 @@ import java.util.Objects;
 public class SqlParser {
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
-        if (sessionVariable.getUseParserDialect().equalsIgnoreCase("trino")) {
+        if (sessionVariable.getSqlDialect().equalsIgnoreCase("trino")) {
             return parseWithTrinoDialect(sql, sessionVariable);
         } else {
             return parseWithStarRocksDialect(sql, sessionVariable);
