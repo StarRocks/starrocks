@@ -62,6 +62,7 @@ add_library(Storage STATIC
     utils.cpp
     compaction_utils.cpp
     rowset/array_column_iterator.cpp
+    rowset/array_column_writer.cpp
     rowset/binary_plain_page.cpp
     rowset/bitmap_index_reader.cpp
     rowset/bitmap_index_writer.cpp

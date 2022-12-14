@@ -257,42 +257,4 @@ private:
     uint64_t _total_mem_footprint = 0;
 };
 
-class ArrayColumnWriter final : public ColumnWriter {
-public:
-    explicit ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
-                               std::unique_ptr<ScalarColumnWriter> null_writer,
-                               std::unique_ptr<ScalarColumnWriter> offset_writer,
-                               std::unique_ptr<ColumnWriter> element_writer);
-    ~ArrayColumnWriter() override = default;
-
-    Status init() override;
-
-    Status append(const vectorized::Column& column) override;
-
-    uint64_t estimate_buffer_size() override;
-
-    Status finish() override;
-    Status write_data() override;
-    Status write_ordinal_index() override;
-
-    Status finish_current_page() override;
-
-    Status write_zone_map() override { return Status::OK(); }
-
-    Status write_bitmap_index() override { return Status::OK(); }
-
-    Status write_bloom_filter_index() override { return Status::OK(); }
-
-    ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
-
-    uint64_t total_mem_footprint() const override;
-
-private:
-    ColumnWriterOptions _opts;
-
-    std::unique_ptr<ScalarColumnWriter> _null_writer;
-    std::unique_ptr<ScalarColumnWriter> _array_size_writer;
-    std::unique_ptr<ColumnWriter> _element_writer;
-};
-
 } // namespace starrocks
