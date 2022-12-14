@@ -193,6 +193,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
+    public static final String RESOURCE_GROUP_ID_V2 = "resource_group_id";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -568,7 +569,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
-    @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, flag = VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
+            show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
     private int resourceGroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
