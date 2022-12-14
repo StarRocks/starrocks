@@ -1052,7 +1052,10 @@ public abstract class Type implements Cloneable {
             return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {
             return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
-        } else if ((from.isStringType() || from.isJsonType()) && to.isArrayType()) {
+        } else if (from.isStringType() && to.isArrayType()) {
+            return true;
+        } else if (from.isJsonType() && ARRAY_VARCHAR.equals(to)) {
+            // now we only support cast json to one dimensional array
             return true;
         } else {
             return false;
