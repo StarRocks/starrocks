@@ -768,47 +768,40 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     return Status::OK();
 }
 
-#define DEFINE_TIME_SLICE_FN(UNIT)                                                                 \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_start_##UNIT##Impl, v, period) {          \
-        TimestampValue result = v;                                                                 \
-        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
-            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
-        }                                                                                          \
-        result.template floor_to_##UNIT##_period<false>(period);                                   \
-        return result;                                                                             \
-    }                                                                                              \
-                                                                                                   \
-    DEFINE_TIME_CALC_FN(time_slice_datetime_start_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME); \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_end_##UNIT##Impl, v, period) {            \
-        TimestampValue result = v;                                                                 \
-        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
-            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
-        }                                                                                          \
-        result.template floor_to_##UNIT##_period<true>(period);                                    \
-        return result;                                                                             \
-    }                                                                                              \
-                                                                                                   \
-    DEFINE_TIME_CALC_FN(time_slice_datetime_end_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);   \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_start_##UNIT##Impl, v, period) {              \
-        TimestampValue result = v;                                                                 \
-        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
-            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
-        }                                                                                          \
-        result.template floor_to_##UNIT##_period<false>(period);                                   \
-        return result;                                                                             \
-    }                                                                                              \
-                                                                                                   \
-    DEFINE_TIME_CALC_FN(time_slice_date_start_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);             \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_end_##UNIT##Impl, v, period) {                \
-        TimestampValue result = v;                                                                 \
-        if (result.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                     \
-            throw std::runtime_error(TimeFunctions::info_reported_by_time_slice);                  \
-        }                                                                                          \
-        result.template floor_to_##UNIT##_period<true>(period);                                    \
-        return result;                                                                             \
-    }                                                                                              \
-                                                                                                   \
-    DEFINE_TIME_CALC_FN(time_slice_date_end_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
+#define DEFINE_TIME_SLICE_FN_CALL(TypeName, UNIT, LType, RType, ResultType)                   \
+    StatusOr<ColumnPtr> TimeFunctions::time_slice_##TypeName##_start_##UNIT(                  \
+            FunctionContext* context, const starrocks::vectorized::Columns& columns) {        \
+        return time_slice_function_##UNIT<LType, RType, ResultType, true>(context, columns);  \
+    }                                                                                         \
+    StatusOr<ColumnPtr> TimeFunctions::time_slice_##TypeName##_end_##UNIT(                    \
+            FunctionContext* context, const starrocks::vectorized::Columns& columns) {        \
+        return time_slice_function_##UNIT<LType, RType, ResultType, false>(context, columns); \
+    }
+
+#define DEFINE_TIME_SLICE_FN(UNIT)                                                                     \
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType, bool is_start>             \
+    StatusOr<ColumnPtr> time_slice_function_##UNIT(FunctionContext* context, const Columns& columns) { \
+        auto time_viewer = ColumnViewer<LType>(columns[0]);                                            \
+        auto period_viewer = ColumnViewer<RType>(columns[1]);                                          \
+        auto size = columns[0]->size();                                                                \
+        ColumnBuilder<ResultType> results(size);                                                       \
+        for (int row = 0; row < size; row++) {                                                         \
+            if (time_viewer.is_null(row) || period_viewer.is_null(row)) {                              \
+                results.append_null();                                                                 \
+                continue;                                                                              \
+            }                                                                                          \
+            TimestampValue time_value = time_viewer.value(row);                                        \
+            auto period_value = period_viewer.value(row);                                              \
+            if (time_value.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                 \
+                return Status::InvalidArgument(TimeFunctions::info_reported_by_time_slice);            \
+            }                                                                                          \
+            time_value.template floor_to_##UNIT##_period<!is_start>(period_value);                     \
+            results.append(time_value);                                                                \
+        }                                                                                              \
+        return date_valid<ResultType>(results.build(ColumnHelper::is_all_const(columns)));             \
+    }                                                                                                  \
+    DEFINE_TIME_SLICE_FN_CALL(datetime, UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);                 \
+    DEFINE_TIME_SLICE_FN_CALL(date, UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
 
 // time_slice_to_second
 DEFINE_TIME_SLICE_FN(second);
