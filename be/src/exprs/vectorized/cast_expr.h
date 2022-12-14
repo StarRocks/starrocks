@@ -50,17 +50,22 @@ private:
 // Cast string to array<ANY>
 class CastStringToArray final : public Expr {
 public:
-    CastStringToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
-            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
+    CastStringToArray(const TExprNode& node, Expr* cast_element, TypeDescriptor type_desc, bool throw_exception_if_err)
+            : Expr(node),
+              _cast_elements_expr(cast_element),
+              _cast_to_type_desc(std::move(type_desc)),
+              _throw_exception_if_err(throw_exception_if_err) {}
     ~CastStringToArray() override = default;
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
 
 private:
-    Slice _unquote(Slice slice);
+    Slice _unquote(Slice slice) const;
+    Slice _trim(Slice slice) const;
 
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;
+    bool _throw_exception_if_err;
 };
 
 // Cast JsonArray to array<ANY>
