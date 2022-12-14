@@ -50,7 +50,7 @@ inline bool CSVReader::is_column_separator(bool expandBuffer) {
                *(base_ptr + p) == _parse_options.column_separator[i]) {
             i++;
             p++;
-            if (_buff.limit_offset() - p < 1) {
+            if (UNLIKELY(_buff.limit_offset() - p < 1)) {
                 Status s = readMore(expandBuffer);
                 if (!s.ok()) {
                     return false;
@@ -82,7 +82,7 @@ inline bool CSVReader::is_row_delimiter(bool expandBuffer) {
                *(base_ptr + p) == _parse_options.row_delimiter[i]) {
             i++;
             p++;
-            if (_buff.limit_offset() - p < 1) {
+            if (UNLIKELY(_buff.limit_offset() - p < 1)) {
                 Status s = readMore(expandBuffer);
                 if (!s.ok()) {
                     return false;
