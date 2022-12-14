@@ -77,7 +77,7 @@ public class LambdaFunctionExpr extends Expr {
         StringBuilder commonSubOp = new StringBuilder();
         for (int i = realChildrenNum; i < realChildrenNum + commonSubOperatorNum; ++i) {
             commonSubOp.append("[").append(getChild(i).toSql()).append(" <-> ")
-                    .append(getChild(i + commonSubOperatorNum).explain()).append("]");
+                    .append(getChild(i + commonSubOperatorNum).toSql()).append("]");
         }
         return String.format("%s -> %s%s", names, getChild(0).toSql(), commonSubOp.toString());
     }
