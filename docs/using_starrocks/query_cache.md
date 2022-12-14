@@ -64,7 +64,7 @@ You need to configure the following parameter in the BE configuration file **be.
 
 ### Semantic equivalence
 
-When two queries are similar, do not need to be literally equivallent, and contain semantically equivalent snippets in their execution plans, they are semantically equivalent and can reuse each other's computation results. In a broad sense, two queries are semantically equivalent if they query data from the same source, use the same computation method, and have the same execution plan. StarRocks applies the following rules to evaluate whether two queries are semantically equivalent:
+When two queries are similar, do not need to be literally equivalent, and contain semantically equivalent snippets in their execution plans, they are semantically equivalent and can reuse each other's computation results. In a broad sense, two queries are semantically equivalent if they query data from the same source, use the same computation method, and have the same execution plan. StarRocks applies the following rules to evaluate whether two queries are semantically equivalent:
 
 - If the two queries contain multiple aggregations, they are evaluated as semantically equivalent as long as their first aggregations are semantically equivalent. For example, the following two queries, Q1 and Q2, both contain multiple aggregations, but their first aggregations are semantically equivalent. Therefore, Q1 and Q2 are evaluated as semantically equivalent.
 
@@ -257,7 +257,7 @@ The following two queries, Q1 and Q2, on the table `lineorder_flat` are semantic
 - Q2
 
   ```SQL
-  SELECT year(lo_orderdate) AS year, p_brand，sum(lo_revenue))
+  SELECT year(lo_orderdate) AS year, p_brand, sum(lo_revenue))
   FROM lineorder_flat
   WHERE s_region = 'AMERICA' AND p_category = 'MFGR#12' AND 
      lo_orderdate >= '1993-01-01' AND lo_orderdate <= '1993-12-31'
@@ -268,7 +268,7 @@ Semantic equivalence is evaluated based on the physical plans of queries. Theref
 
 ### Predicate-based query splitting
 
-Splitting queries based on predicate semantics help implement reuse of partial computation results. When a query contains a predicate that references the partitioning clumn of a table and the predicate specifies a value range, StarRocks can split the range into multiple intervals based on table partitioning. The computation results from each individual interval can be separately reused by other queries.
+Splitting queries based on predicate semantics help implement reuse of partial computation results. When a query contains a predicate that references the partitioning column of a table and the predicate specifies a value range, StarRocks can split the range into multiple intervals based on table partitioning. The computation results from each individual interval can be separately reused by other queries.
 
 Use the following table `t0` as an example:
 
@@ -296,7 +296,7 @@ PROPERTIES
 );
 ```
 
-The table `t0` is partitioned by day, and the column `ts` is the table's partitioning column. Among the following four queries, Q2, Q3, and Q4 can resue portions of the computation results cached for Q1:
+The table `t0` is partitioned by day, and the column `ts` is the table's partitioning column. Among the following four queries, Q2, Q3, and Q4 can reuse portions of the computation results cached for Q1:
 
 - Q1
 
@@ -394,7 +394,7 @@ The impact of data update types on multi-version caching is as follows:
 
 - Data deletions
 
-  Multi-version caching can not work if incremental versions of tablets contain delete operations.
+  Multi-version caching cannot work if incremental versions of tablets contain delete operations.
 
 - Data insertions
 
