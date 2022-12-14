@@ -14,7 +14,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"];
 [partition_desc]
-[distribution_desc]
+distribution_desc
 [rollup_index]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
@@ -272,7 +272,9 @@ PARTITION BY RANGE (datekey) (
 
 ### **distribution_desc**
 
-Hash 分桶
+假设存在列同时满足高基数和经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
+如果不存在这些同时满足两个条件的列，则需要根据查询进行判断。如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
+并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
 
 语法：
 
@@ -280,8 +282,12 @@ Hash 分桶
 DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 ```
 
-说明：
-使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](/table_design/Data_distribution.md#确定分桶数量)。建议使用 Hash 分桶方式。
+**注意**
+
+* **建表时，必须指定分桶键**。
+* 作为分桶键的列，该列的值不支持更新。
+* 分桶键指定后不支持修改。
+* 自 2.5 版本起，建表时您**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，则请参见[确定分桶数量](/table_design/Data_distribution.md#确定分桶数量)。
 
 ### **PROPERTIES**
 
@@ -362,17 +368,14 @@ PROPERTIES (
 )
 ```
 
-dynamic_partition.enable: 用于指定表级别的动态分区功能是否开启。默认为 true。
-
-dynamic_partition.time_unit: 用于指定动态添加分区的时间单位，可选择为 DAY（天），WEEK(周)，MONTH（月）。
-
-dynamic_partition.start: 用于指定向前删除多少个分区。值必须小于 0。默认为 Integer.MIN_VALUE。
-
-dynamic_partition.end: 用于指定提前创建的分区数量。值必须大于 0。
-
-dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名前缀为 p，则自动创建分区名为 p20200108。
-
-dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
+| 参数                          | 是否必填 | 说明                                                         |
+| ----------------------------- | -------- | ------------------------------------------------------------ |
+| `dynamic_partition.enable`    | 否       | 开启动态分区特性，取值为 `TRUE`（默认）或 `FALSE`。       |
+| `dynamic_partition.time_unit` | 是       | 动态分区的时间粒度，取值为 `DAY`、`WEEK` 或 `MONTH`。时间粒度会决定动态创建的分区名后缀格式。  <br>取值为 `DAY` 时，动态创建的分区名后缀格式为 yyyyMMdd，例如 `20200321`。<br>取值为 `WEEK` 时，动态创建的分区名后缀格式为 yyyy_ww，例如 `2020_13` 代表 2020 年第 13 周。<br>取值为 `MONTH` 时，动态创建的分区名后缀格式为 yyyyMM，例如 `202003`。 |
+| `dynamic_partition.start`：   | 否       | 保留的动态分区的起始偏移，取值范围为负整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，分区范围在此偏移之前的分区将会被删除。比如设置为`-3`，并且`dynamic_partition.time_unit`为`day`，则表示 3 天前的分区会被删掉。<br>如果不填写，则默认为 `Integer.MIN_VALUE`，即 `-2147483648`，表示不删除历史分区。 |
+| `dynamic_partition.end`       | 是       | 提前创建的分区数量，取值范围为正整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，提前创建对应范围的分区。 |
+| `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
+| dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
 
 #### 【公测中】设置数据压缩算法
 

@@ -279,7 +279,15 @@ SHOW PARTITIONS FROM site_access;
 
 ### 选择分桶键
 
-选择高基数的列（例如唯一 ID）来作为分桶键，可以保证数据在各个分桶中尽可能均衡。如果数据倾斜情况严重，您可以使用多个列作为数据的分桶键，但是不建议超过 3 个列。**建表时，必须指定分桶键**。
+假设存在列同时满足高基数和经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
+如果不存在这些同时满足两个条件的列，则需要根据查询进行判断。如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
+并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
+
+**注意**
+
+- **建表时，必须指定分桶键**。
+- 作为分桶键的列，该列的值不能够更新。
+- 分桶键指定后不支持修改。
 
 还是以上述 Range+Hash 组合分布的建表语句为例：
 
@@ -301,9 +309,7 @@ PARTITION p3 VALUES LESS THAN ("2020-03-31")
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
 
-如上示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于，针对 `site_access` 表的查询请求，基本上都以站点（高基数列）作为查询过滤条件。采用 `site_id` 作为分桶键，可以在查询时裁剪掉大量无关分桶。
-
-如下查询中，10 个分桶中的 9 个分桶被裁减，因而系统只需要扫描 `site_access` 表中 1/10 的数据：
+如上示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于， `site_id` 为高基数列。此外，针对 `site_access` 表的查询请求，基本上都以站点作为查询过滤条件，采用 `site_id` 作为分桶键，还可以在查询时裁剪掉大量无关分桶。如下查询中，10 个分桶中的 9 个分桶被裁减，因而系统只需要扫描 `site_access` 表中 1/10 的数据：
 
 ```SQL
 select sum(pv)
@@ -335,11 +341,25 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
 
 ### 确定分桶数量
 
-在 StarRocks 中，分桶是实际物理文件组织的单元。自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分桶数量的设定。简化后的分桶方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分桶数量。
+在 StarRocks 中，分桶是实际物理文件组织的单元。自 2.5 版本起，建表时您无需手动设置分桶数量，StarRocks 自动设置分桶数量。
 
-> 注意：
-> 您需要确保系统变量 `SET GLOBAL enable_tablet_internal_parallel`为 `true`，以开启并行扫描 Tablet。
-> 不支持修改已创建的分区的分桶数量，支持在增加分区时为新增分区设置新的分桶数量。
+```SQL
+CREATE TABLE site_access(
+    site_id INT DEFAULT '10',
+    city_code SMALLINT,
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(site_id, city_code, user_name)
+DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分桶数量
+```
+
+如果您需要手动设置分桶数量。自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分桶数量的设置。简化后，确定分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分桶数量。
+
+> **注意**
+>
+> - 您需要确保系统变量 `GLOBAL enable_tablet_internal_parallel`为 `true`，已经开启并行扫描 Tablet。
+> - 不支持修改已创建的分区的分桶数量，支持在增加分区时为新增分区设置新的分桶数量。
 
 ## 最佳实践
 
