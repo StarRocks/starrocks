@@ -25,8 +25,7 @@
 
 namespace starrocks::vectorized {
 
-LambdaFunction::LambdaFunction(const TExprNode& node)
-        : Expr(node, false), _common_sub_expr_num(node.output_column) {}
+LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
@@ -72,7 +71,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
                     captured_mask[_captured_slot_id] = true;
                 }
             }
-            if(!captured_mask[_captured_slot_id] && _common_sub_expr_num > 0) {
+            if (!captured_mask[_captured_slot_id] && _common_sub_expr_num > 0) {
                 for (int arg_id = 0; arg_id < _common_sub_expr_ids.size(); ++arg_id) {
                     if (_captured_slot_id == _common_sub_expr_ids[arg_id]) {
                         captured_mask[_captured_slot_id] = true;
@@ -96,8 +95,8 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 
 StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
-        auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], chunk);
-        chunk->append_column(tmp_col, _common_sub_expr_ids[i]);
+        auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], chunk);
+        chunk->append_column(sub_col, _common_sub_expr_ids[i]);
     }
     return get_child(0)->evaluate_checked(context, chunk);
 }
