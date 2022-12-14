@@ -103,8 +103,6 @@ public:
 
     virtual Status append(const vectorized::Column& column) = 0;
 
-    virtual Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) = 0;
-
     virtual Status finish_current_page() = 0;
 
     virtual uint64_t estimate_buffer_size() = 0;
@@ -156,8 +154,6 @@ public:
     Status init() override;
 
     Status append(const vectorized::Column& column) override;
-
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override;
 
     // Write offset data, it's only used in ArrayColumn
     Status append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
@@ -220,6 +216,8 @@ private:
         _data_size += 20;
     }
 
+    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+
     Status _write_data_page(Page* page);
 
     ColumnWriterOptions _opts;
@@ -270,8 +268,6 @@ public:
     Status init() override;
 
     Status append(const vectorized::Column& column) override;
-
-    Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) override;
 
     uint64_t estimate_buffer_size() override;
 
