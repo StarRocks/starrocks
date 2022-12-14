@@ -43,7 +43,7 @@ public:
         _remain_length = file_length;
         _file_length = file_length;
         _row_delimiter_length = row_delimiter.size();
-        _column_separator_length = column_separator.size();
+        _field_delimiter_length = column_separator.size();
     }
 
     Status reset(size_t offset, size_t remain_length);

@@ -89,7 +89,15 @@ private:
     char* _end;
 };
 
-enum ParseState { START = 0, ORDINARY = 1, DELIMITER = 2, NEWLINE = 3, ESCAPE = 4, ENCLOSE = 5, ENCLOSE_ESCAPE = 6 };
+enum ParseState {
+    START = 0,
+    ORDINARY = 1,
+    FIELD_DELIMITER = 2,
+    NEWLINE = 3,
+    ESCAPE = 4,
+    ENCLOSE = 5,
+    ENCLOSE_ESCAPE = 6
+};
 
 struct CSVField {
     size_t start_pos;
@@ -120,15 +128,15 @@ struct CSVLine {
 
 struct CSVParseOptions {
     std::string row_delimiter;
-    std::string column_separator;
+    std::string field_delimiter;
     int64_t skip_header;
     bool trim_space;
     char escape;
     char enclose;
-    CSVParseOptions(const std::string row_delimiter_, const std::string column_separator_, int64_t skip_header_ = 0,
+    CSVParseOptions(const std::string row_delimiter_, const std::string field_delimiter_, int64_t skip_header_ = 0,
                     bool trim_space_ = false, char escape_ = 0, char enclose_ = 0) {
         row_delimiter = row_delimiter_;
-        column_separator = column_separator_;
+        field_delimiter = field_delimiter_;
         skip_header = skip_header_;
         trim_space = trim_space_;
         escape = escape_;
@@ -136,7 +144,7 @@ struct CSVParseOptions {
     }
     CSVParseOptions() {
         row_delimiter = '\n';
-        column_separator = ',';
+        field_delimiter = ',';
         skip_header = false;
         trim_space = false;
         escape = 0;
@@ -161,7 +169,7 @@ public:
     CSVReader(const CSVParseOptions& parse_options, const size_t bufferSize = kMinBufferSize)
             : _parse_options(parse_options), _storage(bufferSize), _buff(_storage.data(), _storage.size()) {
         _row_delimiter_length = parse_options.row_delimiter.size();
-        _column_separator_length = parse_options.column_separator.size();
+        _field_delimiter_length = parse_options.field_delimiter.size();
     }
 
     virtual ~CSVReader() = default;
@@ -178,7 +186,7 @@ public:
 
     bool is_row_delimiter(bool expandBuffer);
 
-    bool is_column_separator(bool expandBuffer);
+    bool is_field_delimiter(bool expandBuffer);
 
     Status readMore(bool expandBuffer);
 
@@ -194,7 +202,7 @@ public:
 protected:
     CSVParseOptions _parse_options;
     size_t _row_delimiter_length;
-    size_t _column_separator_length;
+    size_t _field_delimiter_length;
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;

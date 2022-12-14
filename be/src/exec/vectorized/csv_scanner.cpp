@@ -67,9 +67,9 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
                        ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {
     if (scan_range.params.__isset.multi_column_separator) {
-        _parse_options.column_separator = scan_range.params.multi_column_separator;
+        _parse_options.field_delimiter = scan_range.params.multi_column_separator;
     } else {
-        _parse_options.column_separator = scan_range.params.column_separator;
+        _parse_options.field_delimiter = scan_range.params.column_separator;
     }
     if (scan_range.params.__isset.multi_row_delimiter) {
         _parse_options.row_delimiter = scan_range.params.multi_row_delimiter;

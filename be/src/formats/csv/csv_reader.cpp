@@ -36,9 +36,9 @@ static std::pair<const char*, size_t> trim(const char* value, size_t len) {
     return std::make_pair(value + begin, end - begin + 1);
 }
 
-inline bool CSVReader::is_column_separator(bool expandBuffer) {
-    if (LIKELY(_column_separator_length == 1)) {
-        if (*(_buff.position()) == _parse_options.column_separator[0]) {
+inline bool CSVReader::is_field_delimiter(bool expandBuffer) {
+    if (LIKELY(_field_delimiter_length == 1)) {
+        if (*(_buff.position()) == _parse_options.field_delimiter[0]) {
             _buff.skip(1);
             return true;
         }
@@ -46,8 +46,8 @@ inline bool CSVReader::is_column_separator(bool expandBuffer) {
         int i = 0;
         const char* base_ptr = _buff.base_ptr();
         size_t p = _buff.position_offset();
-        while (i < _column_separator_length && p < _buff.limit_offset() &&
-               *(base_ptr + p) == _parse_options.column_separator[i]) {
+        while (i < _field_delimiter_length && p < _buff.limit_offset() &&
+               *(base_ptr + p) == _parse_options.field_delimiter[i]) {
             i++;
             p++;
             if (UNLIKELY(_buff.limit_offset() - p < 1)) {
@@ -60,8 +60,8 @@ inline bool CSVReader::is_column_separator(bool expandBuffer) {
                 }
             }
         }
-        if (i == _column_separator_length) {
-            _buff.skip(_column_separator_length);
+        if (i == _field_delimiter_length) {
+            _buff.skip(_field_delimiter_length);
             return true;
         }
     }
@@ -185,7 +185,7 @@ Status CSVReader::more_lines() {
     _fields.clear();
     while (true) {
         // At the end of a row, or the end of a field, no new data is read.
-        if (LIKELY(curState != NEWLINE && curState != DELIMITER)) {
+        if (LIKELY(curState != NEWLINE && curState != FIELD_DELIMITER)) {
             READ_MORE()
         }
         // Advance to the next state each time based on the current state + the current character stream.
@@ -207,8 +207,8 @@ Status CSVReader::more_lines() {
             }
 
             // delimiter
-            if (UNLIKELY(is_column_separator(notGetLine))) {
-                curState = DELIMITER;
+            if (UNLIKELY(is_field_delimiter(notGetLine))) {
+                curState = FIELD_DELIMITER;
                 break;
             }
 
@@ -244,9 +244,9 @@ Status CSVReader::more_lines() {
                     }
 
                     // ""delimiter
-                    if (is_column_separator(notGetLine)) {
+                    if (is_field_delimiter(notGetLine)) {
                         is_enclose_field = true;
-                        curState = DELIMITER;
+                        curState = FIELD_DELIMITER;
                         break;
                     }
 
@@ -313,13 +313,13 @@ Status CSVReader::more_lines() {
                 _buff.skip(1);
                 break;
             }
-            // escape row DELIMITER
+            // escape row FIELD_DELIMITER
             if (is_row_delimiter(notGetLine)) {
                 curState = preState;
                 break;
             }
-            // escape column separator
-            if (is_column_separator(notGetLine)) {
+            // escape field separator
+            if (is_field_delimiter(notGetLine)) {
                 curState = preState;
                 break;
             }
@@ -332,8 +332,8 @@ Status CSVReader::more_lines() {
             }
 
             // delimiter
-            if (UNLIKELY(is_column_separator(notGetLine))) {
-                curState = DELIMITER;
+            if (UNLIKELY(is_field_delimiter(notGetLine))) {
+                curState = FIELD_DELIMITER;
                 break;
             }
 
@@ -359,7 +359,7 @@ Status CSVReader::more_lines() {
             curState = ORDINARY;
             break;
 
-        case DELIMITER:
+        case FIELD_DELIMITER:
             field_end = _buff.position_offset();
             // The field has an escape and needs to be stripped of the escape character and copied to a separate storage space.
             if (UNLIKELY(_escape_pos.size() > 0)) {
@@ -383,11 +383,11 @@ Status CSVReader::more_lines() {
                         basePtr = _escape_data.data();
                     }
                     std::pair<const char*, size_t> newPos =
-                            trim(basePtr + field_start, field_end - _column_separator_length - field_start - 1);
+                            trim(basePtr + field_start, field_end - _field_delimiter_length - field_start - 1);
                     _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
                     // Remove the last enclose character.
-                    _fields.emplace_back(field_start, field_end - _column_separator_length - field_start - 1,
+                    _fields.emplace_back(field_start, field_end - _field_delimiter_length - field_start - 1,
                                          is_escape_field);
                 }
 
@@ -398,10 +398,10 @@ Status CSVReader::more_lines() {
                         basePtr = _escape_data.data();
                     }
                     std::pair<const char*, size_t> newPos =
-                            trim(basePtr + field_start, field_end - _column_separator_length - field_start);
+                            trim(basePtr + field_start, field_end - _field_delimiter_length - field_start);
                     _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
-                    _fields.emplace_back(field_start, field_end - _column_separator_length - field_start,
+                    _fields.emplace_back(field_start, field_end - _field_delimiter_length - field_start,
                                          is_escape_field);
                 }
             }
@@ -584,9 +584,9 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
     const char* ptr = record.data;
     const size_t size = record.size;
 
-    if (_column_separator_length == 1) {
+    if (_field_delimiter_length == 1) {
         for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _parse_options.column_separator[0]) {
+            if (*ptr == _parse_options.field_delimiter[0]) {
                 if (_parse_options.trim_space) {
                     std::pair<const char*, size_t> newPos = trim(value, ptr - value);
                     fields->emplace_back(newPos.first, newPos.second);
@@ -600,8 +600,8 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
         const auto* const base = ptr;
 
         do {
-            ptr = static_cast<char*>(memmem(value, size - (value - base), _parse_options.column_separator.data(),
-                                            _column_separator_length));
+            ptr = static_cast<char*>(memmem(value, size - (value - base), _parse_options.field_delimiter.data(),
+                                            _field_delimiter_length));
             if (ptr != nullptr) {
                 if (_parse_options.trim_space) {
                     std::pair<const char*, size_t> newPos = trim(value, ptr - value);
@@ -609,7 +609,7 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
                 } else {
                     fields->emplace_back(value, ptr - value);
                 }
-                value = ptr + _column_separator_length;
+                value = ptr + _field_delimiter_length;
             }
         } while (ptr != nullptr);
 
