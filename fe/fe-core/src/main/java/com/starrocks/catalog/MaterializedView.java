@@ -532,10 +532,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 return;
             }
         }
-        // Do not set the active, it would be checked in MVActiveChecker
+
         for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
             if (table != null) {
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                            baseTableInfo.getTableName(), id);
+                    active = false;
+                    continue;
+                }
                 MvId mvId = new MvId(db.getId(), id);
                 table.addRelatedMaterializedView(mvId);
             }
