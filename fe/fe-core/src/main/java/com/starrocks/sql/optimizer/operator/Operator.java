@@ -106,7 +106,7 @@ public abstract class Operator {
 
         if (projection != null) {
             rowInfo = new RowInfoImpl(projection.getColumnRefMap());
-        } else if (rowInfo == null) {
+        } else {
             rowInfo = deriveRowInfo(inputs);
         }
         return rowInfo;
