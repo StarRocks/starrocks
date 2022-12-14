@@ -134,24 +134,22 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
-        Bytes& bytes = dst_column->get_bytes();
-        size_t old_size = bytes.size();
-
         if (chunk_size <= 0) {
             return;
         }
-
+        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
         InputColumnType src_column = *down_cast<const InputColumnType*>(src[0].get());
-        pdqsort(false, src_column.get_data().begin(), src_column.get_data().end());
-
-        bytes.resize(old_size + sizeof(double) + sizeof(size_t) + chunk_size * sizeof(InputCppType));
-
-        memcpy(bytes.data() + old_size, &rate, sizeof(double));
-        memcpy(bytes.data() + old_size + sizeof(double), &chunk_size, sizeof(size_t));
-        memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), src_column.get_data().data(),
-               chunk_size * sizeof(InputCppType));
+        InputCppType* src_data = src_column.get_data().data();
+        for (auto i = 0; i < chunk_size; ++i) {
+            size_t old_size = bytes.size();
+            bytes.resize(old_size + sizeof(double) + sizeof(size_t) + sizeof(InputCppType));
+            memcpy(bytes.data() + old_size, &rate, sizeof(double));
+            *reinterpret_cast<size_t*>(bytes.data() + old_size + sizeof(double)) = 1UL;
+            memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), &src_data[i], sizeof(InputCppType));
+            dst_column->get_offset().push_back(bytes.size());
+        }
     }
 
     std::string get_name() const override { return "percentile_cont"; }
