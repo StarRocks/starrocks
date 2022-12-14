@@ -257,7 +257,7 @@ PROPERTIES
 - Q2
 
   ```SQL
-  SELECT year(lo_orderdate) AS year, p_brand，sum(lo_revenue))
+  SELECT year(lo_orderdate) AS year, p_brand, sum(lo_revenue))
   FROM lineorder_flat
   WHERE s_region = 'AMERICA' AND p_category = 'MFGR#12' AND 
      lo_orderdate >= '1993-01-01' AND lo_orderdate <= '1993-12-31'
