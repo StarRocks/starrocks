@@ -4266,7 +4266,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
             // solution.
             if (!isReplay) {
-                GlobalStateMgr.getCurrentInvertedIndex().markTabletTruncated(tabletId);
+                GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(tabletId);
             }
         }
 
