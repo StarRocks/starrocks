@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowInfo;

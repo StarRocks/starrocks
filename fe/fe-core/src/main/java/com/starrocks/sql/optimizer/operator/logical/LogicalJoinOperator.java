@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;

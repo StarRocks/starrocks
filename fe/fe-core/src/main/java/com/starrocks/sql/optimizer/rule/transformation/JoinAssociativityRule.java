@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
