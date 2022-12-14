@@ -191,10 +191,12 @@ public class MVMaintenanceJob implements Writable {
         try {
             // TODO(murphy) fill current user
             // Build connection context
-            Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
             this.connectContext = StatisticUtils.buildConnectContext();
-            this.connectContext.setDatabase(db.getFullName());
+            Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
             this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
+            if (db != null) {
+                this.connectContext.setDatabase(db.getFullName());
+            }
             TUniqueId queryId = connectContext.getExecutionId();
 
             // Build  query coordinator
