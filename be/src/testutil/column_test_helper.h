@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef STARROCKS_COLUMN_BUILDER_H
-#define STARROCKS_COLUMN_BUILDER_H
+#pragma once
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
@@ -65,4 +64,3 @@ public:
 };
 
 } // namespace starrocks::vectorized
-#endif //STARROCKS_COLUMN_BUILDER_H

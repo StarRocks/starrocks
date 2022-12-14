@@ -14,9 +14,6 @@
 
 #pragma once
 
-#ifndef STARROCKS_STREAM_FDW_H
-#define STARROCKS_STREAM_FDW_H
-
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -43,5 +40,3 @@ using StreamRowOp = vectorized::StreamRowOp;
 using StreamRowOps = vectorized::StreamRowOps;
 
 } // namespace starrocks::stream
-
-#endif //STARROCKS_STREAM_FDW_H

@@ -26,7 +26,7 @@ namespace starrocks::stream {
 class MemStateTableTest : public StreamTestBase {
 public:
     MemStateTableTest() = default;
-    ~MemStateTableTest() = default;
+    ~MemStateTableTest() override = default;
 
     void SetUp() override {
         _runtime_state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
