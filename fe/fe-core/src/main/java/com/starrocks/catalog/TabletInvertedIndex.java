@@ -89,7 +89,7 @@ public class TabletInvertedIndex {
     // replica id -> tablet id
     private Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
 
-    private Set<Long> truncatedTablets = Sets.newHashSet();
+    private Set<Long> forceDeleteTablets = Sets.newHashSet();
 
     // tablet id -> (backend id -> replica)
     private Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
@@ -422,16 +422,16 @@ public class TabletInvertedIndex {
         }
     }
 
-    public boolean tabletTruncated(long tabletId) {
-        return truncatedTablets.contains(tabletId);
+    public boolean tabletForceDelete(long tabletId) {
+        return forceDeleteTablets.contains(tabletId);
     }
 
-    public void markTabletTruncated(long tabletId) {
-        truncatedTablets.add(tabletId);
+    public void markTabletForceDelete(long tabletId) {
+        forceDeleteTablets.add(tabletId);
     }
     
-    public void eraseTabletTruncated(long tabletId) {
-        truncatedTablets.remove(tabletId);
+    public void eraseTabletForceDelete(long tabletId) {
+        forceDeleteTablets.remove(tabletId);
     }
 
     public void deleteTablet(long tabletId) {
