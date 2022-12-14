@@ -237,14 +237,14 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     time ${BUILD_SYSTEM} -j${PARALLEL}
     ${BUILD_SYSTEM} install
 
-    # Build JDBC Bridge
-    echo "Build Java Extensions"
-    cd ${STARROCKS_HOME}/java-extensions
-    if [ ${CLEAN} -eq 1 ]; then
-        ${MVN_CMD} clean
-    fi
-    ${MVN_CMD} package -DskipTests
-    cd ${STARROCKS_HOME}
+    # # Build JDBC Bridge
+    # echo "Build Java Extensions"
+    # cd ${STARROCKS_HOME}/java-extensions
+    # if [ ${CLEAN} -eq 1 ]; then
+    #     ${MVN_CMD} clean
+    # fi
+    # ${MVN_CMD} package -DskipTests
+    # cd ${STARROCKS_HOME}
 fi
 
 cd ${STARROCKS_HOME}

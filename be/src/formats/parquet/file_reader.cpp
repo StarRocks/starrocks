@@ -345,9 +345,9 @@ void FileReader::_prepare_read_columns() {
         column.col_idx_in_chunk = materialized_column.col_idx;
         column.col_type_in_chunk = materialized_column.col_type;
         column.slot_id = materialized_column.slot_id;
-        _read_cols.emplace_back(column);
+        _group_reader_param.read_cols.emplace_back(column);
     }
-    _is_only_partition_scan = _read_cols.empty();
+    _is_only_partition_scan = _group_reader_param.read_cols.empty();
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
@@ -370,7 +370,6 @@ Status FileReader::_init_group_readers() {
     GroupReaderParam& param = _group_reader_param;
     param.tuple_desc = fd_scanner_ctx.tuple_desc;
     param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
-    param.read_cols = _read_cols;
     param.timezone = fd_scanner_ctx.timezone;
     param.stats = fd_scanner_ctx.stats;
     param.shared_buffered_stream = nullptr;
