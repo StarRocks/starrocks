@@ -723,6 +723,9 @@ public class FunctionSet {
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         addBuiltin(AggregateFunction.createBuiltin(AVG,
+                Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
+                false, true, false));
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.BOOLEAN), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin(AVG,
@@ -745,9 +748,6 @@ public class FunctionSet {
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.VARCHAR,
-                false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin(AVG,
-                Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.VARCHAR,
