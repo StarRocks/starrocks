@@ -4,7 +4,18 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 
 本文介绍导入任务的操作流程（包括相关客户端配置、创建和查看任务等）、系统配置、最佳实践和常见问题。
 
----
+## 背景信息
+
+在 StarRocks v2.4 及以前版本，Spark Load 需要借助 Broker 进程访问外部存储系统。配置执行 ETL 任务的 Spark 集群时需要指定 Broker 组。Broker 是一个独立的无状态进程，封装了文件系统接口。通过 Broker 进程，StarRocks 能够访问和读取外部存储系统上的数据文件。
+自 StarRocks v2.5 起，Spark Load 不再需要借助 Broker 进程即可访问外部存储系统。
+> **说明**
+>
+> 使用无 Broker 进程的方式导入在某些场景下会受限。如果您配置了多套 HA 或者多个 Kerberos 配置时，暂时还不支持使用无 Broker 进程的方式导入。这种情况下，您必须继续通过 Broker 进程执行导入。
+
+## 使用说明
+
+如果您继续通过 Broker 进程执行导入，则必须确保您的 StarRocks 集群中已部署 Broker。
+您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据格式
 
@@ -22,8 +33,10 @@ Spark Load 任务的执行主要分为以下几个阶段：
 2. FE 调度提交 ETL 任务到 Spark 集群执行。
 3. Spark 集群执行 ETL 完成对导入数据的预处理。包括全局字典构建（BITMAP类型）、分区、排序、聚合等。预处理后的数据落盘 HDFS。
 4. ETL 任务完成后，FE 获取预处理过的每个分片的数据路径，并调度相关的 BE 执行 Push 任务。
-5. BE 通过 Broker 读取 HDFS 数据，转化为 StarRocks 存储格式。
-    > 如果选择不借助 Broker，则 BE 直接读取 HDFS 数据。
+5. BE 通过 Broker 进程读取 HDFS 数据，转化为 StarRocks 存储格式。
+    > **说明**
+    >
+    > 如果选择不使用 Broker 进程，则 BE 直接读取 HDFS 数据。
 6. FE 调度生效版本，完成导入任务。
 
 下图展示了 Spark Load 的主要流程：
@@ -107,30 +120,37 @@ PROPERTIES
 
 `spark0`、`spark1` 和 `spark2` 为 StarRocks 中配置的 Spark 资源的名字。
 
-PROPERTIES 是 Spark 资源相关参数，如下：
+PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
+> Spark 资源的全部参数和说明，请参见 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md/#spark-资源)。
 
-* `type`：资源类型，必填，目前仅支持 spark。
-* `spark.master`: 必填，目前支持 yarn。
-* `spark.submit.deployMode`: Spark 程序的部署模式，必填，支持 cluster，client 两种。
-* `spark.hadoop.fs.defaultFS`: master 为 yarn 时必填。
-* yarn resource manager 相关参数，master 为 yarn 时需要填写。
+* Spark 集群相关参数
+  * `type`：必填，资源类型，取值为 `spark`。
+  * `spark.master`: 必填，Spark 的 cluster manager。当前仅支持 YARN，所以取值为 `yarn`。
+  * `spark.submit.deployMode`: 必填，Spark driver 的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。
+  * `spark.hadoop.fs.defaultFS`: 必填，HDFS 中 NameNode 的地址。格式为 `hdfs://namenode_host:port`。
+  * YARN ResourceManager 相关参数。
+    * 如果 Spark 为单点 ResourceManager，则需要配置`spark.hadoop.yarn.resourcemanager.address`，表示单点 ResourceManager 地址。
+    * 如果 Spark 为 ResourceManager HA，则需要配置（其中 hostname 和 address 任选一个配置）：
+      * `spark.hadoop.yarn.resourcemanager.ha.enabled`: ResourceManager 启用 HA，设置为 `true`。
+      * `spark.hadoop.yarn.resourcemanager.ha.rm-ids`: ResourceManager 逻辑 ID 列表。
+      * `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: 对于每个 rm-id，指定 ResourceManager 对应的主机名。
+      * `spark.hadoop.yarn.resourcemanager.address.rm-id`: 对于每个 rm-id，指定 `host:port` 以供客户端提交作业。
+* Broker 相关参数
+  * `broker`: Broker 组的名称。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
+  * `broker.property_key`: Broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD)。
+* 其他参数
+  * `working_dir`: 必填，一个 HDFS 文件路径，用于存放 ETL 作业生成的文件。例如`hdfs://host: port/tmp/starrocks`。
 
-   单点 resource manager 需要配置：
-* `spark.hadoop.yarn.resourcemanager.address`: 单点 resource manager 地址。
+**注意**
 
-   HA resource manager 需要配置（其中 hostname 和 address 任选一个配置）：
-* `spark.hadoop.yarn.resourcemanager.ha.enabled`: resource manager 启用 HA，设置为 true。
-* `spark.hadoop.yarn.resourcemanager.ha.rm-ids`: resource manager 逻辑 id 列表。
-* `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: 对于每个 rm-id，指定 resource manager 对应的主机名。
-* `spark.hadoop.yarn.resourcemanager.address.rm-id`: 对于每个 rm-id，指定 host: port 以供客户端提交作业。
+以上为通过 Broker 进程执行导入时的参数说明，如果使用无 Broker 进程的方式导入，则需要注意如下事项：
 
-   其他参数为可选，参考 [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)。
+* 无需传入 `broker`。
+* 如果您需要配置用户身份认证、NameNode 节点的 HA，则需要在 HDFS 集群中的 **hdfs-site.xml** 文件中配置参数，具体参数和说明，请参见 [broker_properties](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs)。并且将 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
 
-* `working_dir`: ETL 使用的目录。spark 作为 ETL 资源使用时必填。例如：hdfs://host: port/tmp/starrocks。
-* `broker`: broker 名字。spark 作为 ETL 资源使用时必填。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
-* `broker.property_key`: broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD)。
-
-   其他 Resource 详细参数请参考 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md)。
+    > **说明**
+    >
+    > 如果 HDFS 文件只能由特定用户访问，则您仍然需要传入 HDFS 用户名 `broker.name`和 HDFS 用户密码`broker.password`。
 
 #### 查看资源
 
