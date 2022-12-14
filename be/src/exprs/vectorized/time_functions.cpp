@@ -801,12 +801,12 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
             TimestampValue time_value = time_viewer.value(row);                                        \
             auto period_value = period_viewer.value(row);                                              \
             if (time_value.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                 \
-                return Status::InternalError(TimeFunctions::info_reported_by_time_slice);              \
+                return Status::InvalidArgument(TimeFunctions::info_reported_by_time_slice);            \
             }                                                                                          \
             time_value.template floor_to_##UNIT##_period<!is_start>(period_value);                     \
             results.append(time_value);                                                                \
         }                                                                                              \
-        return results.build(ColumnHelper::is_all_const(columns));                                     \
+        return date_valid<ResultType>(results.build(ColumnHelper::is_all_const(columns)));             \
     }                                                                                                  \
     DEFINE_TIME_SLICE_FN_CALL(datetime, UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);                 \
     DEFINE_TIME_SLICE_FN_CALL(date, UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
