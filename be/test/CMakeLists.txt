@@ -231,6 +231,8 @@ set(EXEC_FILES
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/storage_engine_test.cpp
+        ./storage/binlog_file_test.cpp
+        ./storage/binlog_reader_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp

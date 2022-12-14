@@ -16,39 +16,39 @@
 
 #include <utility>
 
-#include "column/schema.h"
 #include "storage/binlog_manager.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_options.h"
 
 namespace starrocks {
 
-BinlogReader::BinlogReader(std::shared_ptr<BinlogManager> binlog_manager, vectorized::Schema& schema, int64_t reader_id,
-                           int64_t expire_time_in_ms, int chunk_size)
-        : _binlog_manager(std::move(binlog_manager)),
+BinlogReader::BinlogReader(int64_t reader_id, std::shared_ptr<BinlogManager> binlog_manager, vectorized::VectorizedSchema& schema, int chunk_size)
+        : _reader_id(reader_id),
+          _binlog_manager(std::move(binlog_manager)),
           _schema(std::move(schema)),
-          _reader_id(reader_id),
-          _expire_time_in_ms(expire_time_in_ms),
           _chunk_size(chunk_size) {}
 
 BinlogReader::~BinlogReader() {
     _reset();
 }
 
-Status BinlogReader::seek(int64_t version, int64_t changelog_id) {
-    if (_next_version == version && _next_changelog_id == changelog_id) {
+Status BinlogReader::seek(int64_t version, int64_t seq_id) {
+    if (version < _next_version || (version == _next_version && seq_id > _next_seq_id)) {
+        return Status::InternalError(strings::Substitute("Binlog can only be read forward, next position"
+            " <$0, $1>, seek to <$2, $3>", _next_version, _next_seq_id, version, seq_id));
+    }
+
+    if (_next_version == version && _next_seq_id == seq_id) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_seek_to_file_meta(version, changelog_id));
-    RETURN_IF_ERROR(_seek_to_segment_row(changelog_id));
-    LOG(INFO) << "Binlog reader " << _reader_id << ", seek to version " << version << ", changelog_id " << changelog_id;
+    RETURN_IF_ERROR(_seek_to_file_meta(version, seq_id));
+    RETURN_IF_ERROR(_seek_to_segment_row(seq_id));
+    LOG(INFO) << "Binlog reader " << _reader_id << ", seek to version " << version << ", seq_id " << seq_id;
     return Status::OK();
 }
 
-// TODO currently only consider duplicate key
 Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_exclusive) {
-    _last_read_time_in_ms = UnixMillis();
     if (_next_version >= max_version_exclusive) {
         return Status::EndOfFile("End of max version " + max_version_exclusive);
     }
@@ -56,7 +56,7 @@ Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_e
     chunk->get()->reset();
     if (_log_entry_info->log_entry->entry_type() == EMPTY) {
         _next_version += 1;
-        _next_changelog_id = 0;
+        _next_seq_id = 0;
         return Status::OK();
     }
 
@@ -65,13 +65,13 @@ Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_e
         return status;
     }
 
-    // TODO append _op column
+    // TODO append binlog meta columns
     if (status.ok()) {
         int num_rows = chunk->get()->num_rows();
-        _next_changelog_id += num_rows;
-        if (_next_changelog_id == _log_entry_info->end_changelog_id + 1 && _log_entry_info->last_log_entry_in_version) {
+        _next_seq_id += num_rows;
+        if (_next_seq_id == _log_entry_info->end_seq_id + 1 && _log_entry_info->end_of_version) {
             _next_version += 1;
-            _next_changelog_id = 0;
+            _next_seq_id = 0;
         }
         return status;
     }
@@ -83,37 +83,37 @@ Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_e
     }
 
     if (status.is_end_of_file()) {
-        RETURN_IF_ERROR(_seek_to_file_meta(_next_version, _next_changelog_id));
+        RETURN_IF_ERROR(_seek_to_file_meta(_next_version, _next_seq_id));
     }
-    RETURN_IF_ERROR(_seek_to_segment_row(_next_changelog_id));
+    RETURN_IF_ERROR(_seek_to_segment_row(_next_seq_id));
 
     return get_next(chunk, max_version_exclusive);
 }
 
-Status BinlogReader::_seek_to_file_meta(int64_t version, int64_t changelog_id) {
-    auto status_or = _binlog_manager->seek_binlog_file(version, changelog_id);
+Status BinlogReader::_seek_to_file_meta(int64_t version, int64_t seq_id) {
+    auto status_or = _binlog_manager->find_binlog_file(version, seq_id);
     if (!status_or.ok()) {
         return status_or.status();
     }
     _file_meta = status_or.value();
-    std::string file_name = _binlog_manager->_binlog_file_name(_file_meta->id());
+    std::string file_name = _binlog_manager->binlog_file_name(_file_meta->id());
     _binlog_file_reader = std::make_shared<BinlogFileReader>(file_name, _file_meta);
-    RETURN_IF_ERROR(_binlog_file_reader->seek(version, changelog_id));
+    RETURN_IF_ERROR(_binlog_file_reader->seek(version, seq_id));
     return Status::OK();
 }
 
-Status BinlogReader::_seek_to_segment_row(int64_t changelog_id) {
+Status BinlogReader::_seek_to_segment_row(int64_t seq_id) {
     _log_entry_info = _binlog_file_reader->log_entry();
     LogEntryTypePB log_entry_type = _log_entry_info->log_entry->entry_type();
     if (log_entry_type == EMPTY) {
         return Status::OK();
     }
     CHECK_EQ(log_entry_type, INSERT_RANGE) << "currently only support INSERT_RANGE";
-    _next_changelog_id = changelog_id;
-    CHECK(_log_entry_info->start_changelog_id <= _next_changelog_id)
-            << "Seek to invalid changelog, start_changelog_id " << _log_entry_info->start_changelog_id
-            << ", target changelog_id " << _next_changelog_id;
-    int32_t start_row_id = changelog_id - _log_entry_info->start_changelog_id + _log_entry_info->start_row_id;
+    _next_seq_id = seq_id;
+    CHECK(_log_entry_info->start_seq_id <= _next_seq_id)
+            << "Seek to invalid seq, start_seq_id " << _log_entry_info->start_seq_id
+            << ", target seq_id " << _next_seq_id;
+    int32_t start_row_id = seq_id - _log_entry_info->start_seq_id + _log_entry_info->start_row_id;
     return _init_segment_iterator(start_row_id);
 }
 

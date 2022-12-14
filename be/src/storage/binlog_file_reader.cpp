@@ -24,149 +24,163 @@
 namespace starrocks {
 
 BinlogFileReader::BinlogFileReader(std::string file_name, std::shared_ptr<BinlogFileMetaPB> file_meta)
-        : _file_name(std::move(file_name)), _file_meta(file_meta) {}
+        : _file_path(std::move(file_name)), _file_meta(file_meta) {}
 
-Status BinlogFileReader::seek(int64_t version, int64_t changelog_id) {
+Status BinlogFileReader::seek(int64_t version, int64_t seq_id) {
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_name))
-    ASSIGN_OR_RETURN(_file, fs->new_random_access_file(_file_name));
-    Status status = _parse_file_header();
+    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
+    ASSIGN_OR_RETURN(_file, fs->new_random_access_file(_file_path))
+    ASSIGN_OR_RETURN(_file_size, _file->get_size())
+    Status status = _read_file_header();
     if (!status.ok()) {
-        LOG(WARNING) << "Fail to parse file header " << _file_name << ", " << status;
-        return Status::InternalError("Fail to parse file header " + _file_name);
+        LOG(WARNING) << "Fail to parse file header " << _file_path << ", " << status;
+        return Status::InternalError("Fail to parse file header " + _file_path);
     }
-    _current_log_entry_info = std::make_unique<LogEntryInfo>();
+    _next_page_index = 0;
+    _current_page_context = std::make_unique<PageContext>();
+    _current_log_entry = std::make_unique<LogEntryInfo>();
 
-    return _seek(version, changelog_id);
+    return _seek(version, seq_id);
 }
 
 Status BinlogFileReader::next() {
-    if (_is_last_page && _log_entry_index + 1 >= _current_page_content->entries_size()) {
+    if (_is_end_of_file()) {
         return Status::EndOfFile("There is no left entries");
     }
 
-    if (_log_entry_index + 1 >= _current_page_content->entries_size()) {
-        RETURN_IF_ERROR(_read_page_header());
-        RETURN_IF_ERROR(_read_page());
+    PageContext* page_context = _current_page_context.get();
+    if (page_context->next_log_entry_index >= page_context->page_header.num_log_entries()) {
+        // end of current page and read the next
+        RETURN_IF_ERROR(_read_next_page());
     }
-
     _advance_log_entry();
     return Status::OK();
 }
 
 LogEntryInfo* BinlogFileReader::log_entry() {
-    LogEntryInfo* log_entry_info = _current_log_entry_info.get();
-    log_entry_info->log_entry = _current_page_content->mutable_entries(_log_entry_index);
-    log_entry_info->version = _current_page_header->tablet_version();
-    log_entry_info->start_changelog_id = _log_entry_start_changelog_id;
-    log_entry_info->end_changelog_id = _log_entry_start_changelog_id + _log_entry_num_changelogs - 1;
-    log_entry_info->file_id = _log_entry_file_id;
-    log_entry_info->start_row_id = _log_entry_start_row_id;
-    log_entry_info->last_log_entry_in_version =
-            _current_page_header->end_page() && _log_entry_index + 1 == _current_page_content->entries_size();
-    return log_entry_info;
+   return _current_log_entry.get();
 }
 
-Status BinlogFileReader::_seek_to_page(int64_t version, int64_t changelog_id) {
-    _current_page_index = 0;
-    _current_page_header = std::make_unique<PageHeaderPB>();
-    _current_page_content = std::make_unique<PageContentPB>();
+Status BinlogFileReader::_seek(int64_t version, int64_t seq_id) {
+    RETURN_IF_ERROR(_seek_to_page(version, seq_id));
+    RETURN_IF_ERROR(_seek_to_log_entry(seq_id));
+    return Status::OK();
+}
+
+Status BinlogFileReader::_seek_to_page(int64_t version, int64_t seq_id) {
+    _reset_current_page_context();
     do {
-        RETURN_IF_ERROR(_read_page_header());
-        if (_current_page_header->tablet_version() > version) {
+        _reset_current_page_context();
+        PageHeaderPB& page_header_pb = _current_page_context->page_header;
+        RETURN_IF_ERROR(_read_page_header(_next_page_index, &page_header_pb));
+        if (page_header_pb.version() > version) {
             return Status::NotFound(strings::Substitute("Can't find version $0", version));
         }
 
-        // find the page contains the target changelog
-        if (_current_page_header->tablet_version() == version &&
-            _current_page_header->end_change_log_id() >= changelog_id) {
-            RETURN_IF_ERROR(_read_page());
+        // find the page containing the target change event
+        if (page_header_pb.version() == version && page_header_pb.end_seq_id() >= seq_id) {
+            RETURN_IF_ERROR(_read_page_content(_next_page_index, &page_header_pb, &(_current_page_context->page_content)));
             break;
         }
 
         // reach the last page of the file
-        if (_is_last_page) {
-            return Status::NotFound(
-                    strings::Substitute("Can't find version $0, changelog_id $1 "
-                                        "in file $2, largest version $3, seq_id $4, and changelog_id $5",
-                                        version, changelog_id, _file_name, _file_meta->end_tablet_version(),
-                                        _file_meta->end_seq_id(), _file_meta->end_changelog_id()));
+        if (_next_page_index == _file_meta->num_pages()) {
+            return Status::NotFound(strings::Substitute("Can't find version $0, changelog_id $1 "
+                                    "in file $2, largest version $3, seq_id $4, and changelog_id $5",
+                                    version, seq_id, _file_path, _file_meta->end_version(),
+                                    _file_meta->end_seq_id(), _file_meta->end_seq_id()));
         }
 
         // skip to read page content
-        _current_file_pos += _current_page_header->compressed_size();
+        _current_file_pos += page_header_pb.compressed_size();
+        _next_page_index++;
     } while (true);
+    _init_current_log_entry();
     return Status::OK();
 }
 
-Status BinlogFileReader::_seek_to_log_entry(int64_t changelog_id) {
-    int32_t num_log_entries = _current_page_content->entries_size();
-    while (_log_entry_index < num_log_entries) {
+Status BinlogFileReader::_read_next_page() {
+    _reset_current_page_context();
+    RETURN_IF_ERROR(_read_page_header(_next_page_index, &page_header_pb));
+    RETURN_IF_ERROR(_read_page_content(_next_page_index, &page_header_pb, &(_current_page_context->page_content)));
+    _next_page_index++;
+    _init_current_log_entry();
+    return Status::OK();
+}
+
+Status BinlogFileReader::_seek_to_log_entry(int64_t seq_id) {
+    PageContentPB& page_content = _current_page_context->page_content;
+    int32_t num_log_entries = page_content.entries_size();
+    while (_current_page_context->next_log_entry_index < num_log_entries) {
         _advance_log_entry();
-        int32_t next_changelog_id = _log_entry_start_changelog_id + _log_entry_num_changelogs;
-        if (changelog_id < next_changelog_id) {
+        if (_current_log_entry->end_seq_id >= seq_id) {
             return Status::OK();
         }
-        _log_entry_index++;
     }
 
-    return Status::NotFound("Can't find log entry containing changelog " + changelog_id);
+    return Status::NotFound(strings::Substitute("Can't find log entry containing the change event <$0, $1>",
+                        _current_page_context->page_header.version(), seq_id));
 }
 
 void BinlogFileReader::_advance_log_entry() {
-    _log_entry_index++;
-    _log_entry_start_changelog_id += _log_entry_num_changelogs;
-    _log_entry_start_row_id += _log_entry_num_rows;
-
-    LogEntryPB* next_log_entry = _current_page_content->mutable_entries(_log_entry_index);
+    int next_log_entry_index = _current_page_context->next_log_entry_index;
+    LogEntryPB* next_log_entry = _current_page_context->page_content.mutable_entries(next_log_entry_index);
+    int64_t next_start_seq_id =  _current_log_entry->end_seq_id + 1;
+    int num_change_events = 0;
+    // assume next log entry share file id with the current first
+    FileIdPB* next_file_id = _current_log_entry->file_id;
+    // assume rows in next log entry are continuous with current log entry first
+    int next_start_row_id = _current_log_entry->start_row_id + _current_log_entry->num_rows;
+    int num_rows = 0;
     switch (next_log_entry->entry_type()) {
-    case INSERT_RANGE: {
-        InsertRangeEntryDataPB* entry_data = next_log_entry->mutable_insert_range_entry_data();
-        _log_entry_num_changelogs = entry_data->num_rows();
-        if (entry_data->has_file_id()) {
-            _log_entry_file_id = entry_data->mutable_file_id();
+        case INSERT_RANGE: {
+            InsertRangePB* entry_data = next_log_entry->mutable_insert_range_data();
+            num_rows = entry_data->num_rows();
+            num_change_events = num_rows;
+            if (entry_data->has_file_id()) {
+                next_file_id = entry_data->mutable_file_id();
+            }
+            if (entry_data->has_start_row_id()) {
+                next_start_row_id = entry_data->start_row_id();
+            }
+            break;
         }
-        if (entry_data->has_start_row_id()) {
-            _log_entry_start_row_id = entry_data->start_row_id();
+        case UPDATE: {
+            UpdatePB* entry_data = next_log_entry->mutable_update_data();
+            num_rows = 1;
+            num_change_events = 2;
+            if (entry_data->has_after_file_id()) {
+                next_file_id = entry_data->mutable_after_file_id();
+            }
+            if (entry_data->has_after_row_id()) {
+                next_start_row_id = entry_data->after_row_id();
+            }
+            break;
         }
-        _log_entry_num_rows = entry_data->num_rows();
-        break;
+        case DELETE:
+            num_change_events = 1;
+            break;
+        case EMPTY:
+        default:
+            break;
     }
-    case UPDATE: {
-        UpdateEntryDataPB* entry_data = next_log_entry->mutable_update_entry_data();
-        _log_entry_num_changelogs = 2;
-        if (entry_data->has_after_file_id()) {
-            _log_entry_file_id = entry_data->mutable_after_file_id();
-        }
-        if (entry_data->has_after_row_id()) {
-            _log_entry_start_row_id = entry_data->after_row_id();
-        }
-        _log_entry_num_rows = 1;
-        break;
-    }
-    case DELETE:
-        _log_entry_num_changelogs = 1;
-        _log_entry_num_rows = 1;
-        break;
-    case EMPTY:
-    default:
-        break;
-    }
+    _current_log_entry->log_entry = next_log_entry;
+    _current_log_entry->start_seq_id = next_start_seq_id;
+    _current_log_entry->end_seq_id = next_start_seq_id + num_change_events - 1;
+    _current_log_entry->file_id = next_file_id;
+    _current_log_entry->start_row_id = next_start_row_id;
+    _current_log_entry->num_rows = num_rows;
+    _current_log_entry->end_of_version = _current_page_context->page_header.end_of_version()
+                && (next_log_entry_index + 1 == _current_page_context->page_header.num_log_entries());
+    _current_page_context->next_log_entry_index += 1;
 }
 
-Status BinlogFileReader::_seek(int64_t version, int64_t changelog_id) {
-    RETURN_IF_ERROR(_seek_to_page(version, changelog_id));
-    RETURN_IF_ERROR(_seek_to_log_entry(version, changelog_id));
-    return Status::OK();
-}
-
-Status BinlogFileReader::_parse_file_header() {
+Status BinlogFileReader::_read_file_header() {
     // Header: magic_number + header_pb_size(uint32_t) + header_pb_checksum(uint32_t) + header_pb
     size_t header_base_size = k_binlog_magic_number_length + 8;
-    ASSIGN_OR_RETURN(_file_size, _file->get_size());
     if (_file_size < header_base_size) {
         return Status::Corruption(
-                strings::Substitute("Bad binlog file $0: file size $1 < $2", _file_name, _file_size, header_base_size));
+                strings::Substitute("Bad binlog file $0: file size $1 < $2", _file_path, _file_size, header_base_size));
     }
 
     // currently header is small
@@ -177,7 +191,7 @@ Status BinlogFileReader::_parse_file_header() {
 
     // validate magic number
     if (memcmp(header_buff.data(), k_binlog_magic_number, k_binlog_magic_number_length) != 0) {
-        return Status::Corruption(strings::Substitute("Bad binlog file $0: magic number not match", _file_name));
+        return Status::Corruption(strings::Substitute("Bad binlog file $0: magic number not match", _file_path));
     }
 
     // TODO why not use decode_fixed32_le
@@ -187,7 +201,7 @@ Status BinlogFileReader::_parse_file_header() {
     size_t header_size = header_base_size + header_pb_size;
     if (_file_size < header_size) {
         return Status::Corruption(
-                strings::Substitute("Bad binlog file $0: file size $1 < $2", _file_name, _file_size, header_size));
+                strings::Substitute("Bad binlog file $0: file size $1 < $2", _file_path, _file_size, header_size));
     }
 
     std::string_view header_pb_buffer;
@@ -204,33 +218,31 @@ Status BinlogFileReader::_parse_file_header() {
     if (actual_checksum != checksum) {
         return Status::Corruption(
                 strings::Substitute("Bad segment file $0: header checksum not match, actual=$1 vs expect=$2",
-                                    _file_name, actual_checksum, checksum));
+                                    _file_path, actual_checksum, checksum));
     }
 
     if (!_file_header->ParseFromArray(header_pb_buffer.data(), header_pb_buffer.size())) {
         return Status::Corruption(
-                strings::Substitute("Bad binlog file $0: failed to parse file header pb ", _file_name));
+                strings::Substitute("Bad binlog file $0: failed to parse file header pb ", _file_path));
     }
 
     if (k_binlog_format_version != _file_header->format_version()) {
         return Status::Corruption(
-                strings::Substitute("Bad binlog file $0: unknown format version $1, current version $2 ", _file_name,
+                strings::Substitute("Bad binlog file $0: unknown format version $1, current version $2 ", _file_path,
                                     _file_header->format_version(), k_binlog_format_version));
     }
-
     _current_file_pos = header_size;
 
     return Status::OK();
 }
 
-Status BinlogFileReader::_read_page_header() {
-    _current_page_index += 1;
+Status BinlogFileReader::_read_page_header(int page_index, PageHeaderPB* page_header_pb) {
     // Page Header: page_header_pb_size(int32_t) + checksum(int32_t)
     size_t header_base_size = 8;
     if (_file_size < _current_file_pos + header_base_size) {
         return Status::Corruption(
-                strings::Substitute("Bad binlog file page header $0: file size $1 < $2, page index $3", _file_name,
-                                    _file_size, _current_file_pos + header_base_size, _current_page_index));
+                strings::Substitute("Bad binlog file page header $0: file size $1 < $2, page index $3", _file_path,
+                                    _file_size, _current_file_pos + header_base_size, page_index));
     }
 
     uint8_t fixed_buf[8];
@@ -243,7 +255,7 @@ Status BinlogFileReader::_read_page_header() {
     if (_file_size < _current_file_pos + page_header_pb_size) {
         int64_t expect_size = _current_file_pos + page_header_pb_size;
         return Status::Corruption(strings::Substitute("Bad binlog file page $0: file size $1 < $2, page index $3",
-                                                      _file_name, _file_size, expect_size, _current_page_index));
+                                                      _file_path, _file_size, expect_size, page_index));
     }
 
     std::string page_header_pb_buffer;
@@ -255,44 +267,40 @@ Status BinlogFileReader::_read_page_header() {
     uint32_t actual_checksum = crc32c::Value(page_header_pb_buffer.data(), page_header_pb_buffer.size());
     if (actual_checksum != page_header_pb_checksum) {
         return Status::Corruption(strings::Substitute(
-                "Bad binlog file $0: page header checksum not match, actual=$1 vs expect=$2, page index $3", _file_name,
-                actual_checksum, page_header_pb_checksum, _current_page_index));
+                "Bad binlog file $0: page header checksum not match, actual=$1 vs expect=$2, page index $3",
+                    _file_path, actual_checksum, page_header_pb_checksum, page_index));
     }
 
-    _current_page_header->Clear();
-    if (!_current_page_header->ParseFromString(page_header_pb_buffer)) {
+    page_header_pb->Clear();
+    if (!page_header_pb->ParseFromString(page_header_pb_buffer)) {
         return Status::Corruption(
                 strings::Substitute("Bad binlog file page $0: failed to parse page header pb, page index $1",
-                                    _file_name, _current_page_index));
-    }
-
-    if (_current_page_header->tablet_version() == _file_meta->end_tablet_version() &&
-        _current_page_header->end_change_log_id() == _file_meta->end_changelog_id()) {
-        _is_last_page = true;
+                                    _file_path, page_index));
     }
 
     return Status::OK();
 }
 
-Status BinlogFileReader::_read_page() {
-    int32_t compressed_size = _current_page_header->compressed_size();
-    int32_t uncompressed_size = _current_page_header->uncompressed_size();
+Status BinlogFileReader::_read_page_content(int page_index, PageHeaderPB* page_header_pb, PageContentPB* page_content_pb) {
+    int32_t compressed_size = page_header_pb->compressed_size();
+    int32_t uncompressed_size = page_header_pb->uncompressed_size();
 
     // TODO Refer to PageIO::read_and_decompress_page, but why allocate APPEND_OVERFLOW_MAX_SIZE
     // hold compressed page at first, reset to decompressed page later
     // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
     std::unique_ptr<char[]> page(new char[compressed_size + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
     Slice page_slice(page.get(), compressed_size);
-    RETURN_IF_ERROR(_file->read_at_fully(_current_file_pos, page_slice.data, page_slice.size));
+    RETURN_IF_ERROR(_file->read_at_fully(_current_file_pos, page_slice.get_data(), page_slice.get_size()));
+    _current_file_pos += page_slice.get_size();
 
-    uint32_t actual_checksum = crc32c::Value(page_slice.data, page_slice.size);
-    if (_current_page_header->compressed_page_crc() != actual_checksum) {
+    uint32_t actual_checksum = crc32c::Value(page_slice.get_data(), page_slice.get_size());
+    if (page_header_pb->compressed_page_crc() != actual_checksum) {
         return Status::Corruption(strings::Substitute(
                 "Bad binlog file $0: page content checksum not match, actual=$1 vs expect=$2, page index $3",
-                _file_name, actual_checksum, _current_page_header->compressed_page_crc(), _current_page_index));
+                _file_path, actual_checksum, page_header_pb->compressed_page_crc(), page_index));
     }
 
-    CompressionTypePB compress_type = _current_page_header->compress_type();
+    CompressionTypePB compress_type = page_header_pb->compress_type();
     if (compress_type != NO_COMPRESSION) {
         const BlockCompressionCodec* compress_codec;
         RETURN_IF_ERROR(get_block_compression_codec(compress_type, &compress_codec));
@@ -300,29 +308,22 @@ Status BinlogFileReader::_read_page() {
                 new char[uncompressed_size + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
         Slice decompress_page_slice(page.get(), uncompressed_size);
         RETURN_IF_ERROR(compress_codec->decompress(page_slice, &decompress_page_slice));
-        if (decompress_page_slice.size != uncompressed_size) {
+        if (decompress_page_slice.get_size() != uncompressed_size) {
             return Status::Corruption(strings::Substitute(
                     "Bad binlog file $0: page content decompress failed, expect uncompressed size=$1"
                     " vs real decompressed size=$2, page index $3",
-                    _file_name, uncompressed_size, decompress_page_slice.size, _current_page_index));
+                    _file_path, uncompressed_size, decompress_page_slice.get_size(), page_index));
         }
         page = std::move(decompressed_page);
         page_slice = Slice(page.get(), uncompressed_size);
     }
 
-    _current_page_content->Clear();
-    if (!_current_page_content->ParseFromArray(page_slice.data, page_slice.size)) {
+    page_content_pb->Clear();
+    if (!page_content_pb->ParseFromArray(page_slice.get_data(), page_slice.get_size())) {
         return Status::Corruption(
                 strings::Substitute("Bad binlog file page $0: failed to parse page content pb, page index $1",
-                                    _file_name, _current_page_index));
+                                    _file_path, page_index));
     }
-
-    _log_entry_index = -1;
-    _log_entry_start_changelog_id = _current_page_header->start_changelog_id();
-    _log_entry_num_changelogs = 0;
-    _log_entry_file_id = nullptr;
-    _log_entry_start_row_id = -1;
-    _log_entry_num_rows = 0;
 
     return Status::OK();
 }

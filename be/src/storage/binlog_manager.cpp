@@ -36,28 +36,28 @@ BinlogManager::BinlogManager(std::string path, int64_t max_file_size, int32_t ma
           _max_page_size(max_page_size),
           _compression_type(compression_type) {}
 
+BinlogManager::~BinlogManager() {
+    std::lock_guard lock(_write_lock);
+    if (_active_binlog_writer != nullptr) {
+        _active_binlog_writer->close();
+    }
+}
+
 Status BinlogManager::init(Tablet& tablet) {
     // TODO init binlog manager
-    // 1. load wal mate and binlog file metas
-    // 2. initialize _shared_rowsets and _private_rowsets
-    //    2.1 for duplicate model, iterate _rs_version_map,
-    //        _inc_rs_version_map and _stale_rs_version_map in Tablet
-    //    2.2 for primary key model, iterate _rowsets, _pending_commits
-    //        and _unused_rowsets in TabletUpdates
-    // 3. load binlog metas
-    // 4. rollback unused tablet version
-    // 5. reuse last binlog file
+    // 1. restore binlog file meta
+    // 2. initialize metas about rowset
 }
 
 Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
-    // TODO maybe block publish RPC
+    // TODO can block publish RPC
     std::lock_guard lock(_write_lock);
     if (!_binlog_file_metas.empty()) {
         BinlogFileMetaPBSharedPtr file_meta = _binlog_file_metas.rbegin()->second;
-        if (file_meta->end_tablet_version() >= rowset->start_version()) {
+        if (file_meta->end_version() >= rowset->start_version()) {
             LOG(INFO) << "Skip to generate binlog for rowset " << rowset->rowset_id() << ", version "
-                      << rowset->start_version() << ", binlog max version " << file_meta->end_tablet_version()
-                      << ". This maybe happen if versions are published out of order.";
+                      << rowset->start_version() << ", binlog max version " << file_meta->end_version()
+                      << ". This maybe happen if versions are published out of order or retried.";
             return Status::OK();
         }
     }
@@ -81,7 +81,8 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
     int64_t next_file_id = _binlog_file_metas.empty() ? 0 : _binlog_file_metas.rbegin()->second->id() + 1;
     Status status = Status::OK();
     if (current_writer != nullptr) {
-        status = current_writer->prepare(rowset->start_version(), rowset->rowset_id(), 0, 0, rowset->creation_time());
+        status = current_writer->prepare(rowset->start_version(), rowset->rowset_id(), 0,
+                                         rowset->creation_time() * 1000000);
         if (!status.ok()) {
             current_writer->abort();
             LOG(WARNING) << "Fail to prepare binlog writer for rowset " << rowset->rowset_id() << ", version "
@@ -99,19 +100,19 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
             continue;
         }
 
-        if (current_writer == nullptr || current_writer->pending_file_size() > _max_file_size) {
+        // TODO maybe should include the segment file size
+        if (current_writer == nullptr || current_writer->file_size() > _max_file_size) {
             StatusOr<std::shared_ptr<BinlogFileWriter>> status_or = _create_binlog_writer(next_file_id);
             status = status_or.status();
             if (!status.ok()) {
                 break;
             }
             int64_t next_seq_id = current_writer == nullptr ? 0 : current_writer->pending_end_seq_id() + 1;
-            int64_t next_changelog_id = current_writer == nullptr ? 0 : current_writer->pending_end_changelog_id() + 1;
             current_writer = status_or.value();
             pending_writers.emplace_back(current_writer);
             next_file_id += 1;
             status = current_writer->prepare(rowset->start_version(), rowset->rowset_id(), next_seq_id,
-                                             next_changelog_id, rowset->creation_time());
+                                             rowset->creation_time() * 1000000);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to prepare binlog writer for rowset " << rowset->rowset_id() << ", segment index "
                              << seg_index << ", number of rows " << num_rows << ", version " << rowset->start_version()
@@ -120,7 +121,7 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
             }
         }
 
-        status = current_writer->add_insert_range(seg_index, 0, num_rows - 1);
+        status = current_writer->add_insert_range(seg_index, 0, num_rows);
         if (!status.ok()) {
             LOG(WARNING) << "Fail to add_insert_range for rowset " << rowset->rowset_id() << ", segment index "
                          << seg_index << ", number of rows " << num_rows << ", version " << rowset->start_version()
@@ -179,10 +180,11 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
                 writer->copy_file_meta(file_meta.get());
                 new_file_metas.emplace_back(file_meta);
             }
-            _update_metas_after_new_commit(new_file_metas);
+            _update_metas_after_commit(new_file_metas);
             for (int i = 0; i < pending_writers.size() - 1; i++) {
                 Status st = pending_writers[i]->close();
                 if (!st.ok()) {
+                    // just ignore close failure because data has been committed
                     LOG(WARNING) << "Fail to close binlog writer after committed " << pending_writers[i]->file_name();
                 }
             }
@@ -242,13 +244,12 @@ void BinlogManager::delete_expired_binlog() {
     // 4. if rowset use_count == 1, delete rowset, otherwise just remove from meta
 }
 
-StatusOr<BinlogFileMetaPBSharedPtr> BinlogManager::seek_binlog_file(int64_t version, int64_t changelog_id) {
+StatusOr<BinlogFileMetaPBSharedPtr> BinlogManager::find_binlog_file(int64_t version, int64_t seq_id) {
     std::shared_lock lock(_meta_lock);
-    int128_t lsn = _changelog_lsn(version, changelog_id);
+    int128_t lsn = _get_lsn(version, seq_id);
     auto upper = _binlog_file_metas.upper_bound(lsn);
     if (upper == _binlog_file_metas.begin()) {
-        return Status::NotFound(
-                strings::Substitute("Can't find file meta for version $0, changelog_id $1", version, changelog_id));
+        return Status::NotFound(strings::Substitute("Can't find file meta for version $0, seq_id $1", version, seq_id));
     }
 
     BinlogFileMetaPBSharedPtr file_meta;
@@ -258,9 +259,8 @@ StatusOr<BinlogFileMetaPBSharedPtr> BinlogManager::seek_binlog_file(int64_t vers
         file_meta = (--upper)->second;
     }
 
-    if (file_meta->end_tablet_version() < version) {
-        return Status::NotFound(
-                strings::Substitute("Can't find file meta for version $0, changelog_id $1", version, changelog_id));
+    if (file_meta->end_version() < version) {
+        return Status::NotFound(strings::Substitute("Can't find file meta for version $0, seq_id $1", version, seq_id));
     }
 
     return file_meta;
@@ -268,52 +268,52 @@ StatusOr<BinlogFileMetaPBSharedPtr> BinlogManager::seek_binlog_file(int64_t vers
 
 StatusOr<std::shared_ptr<BinlogFileWriter>> BinlogManager::_create_binlog_writer(int64_t file_id) {
     // TODO sync parent dir after create new file writer
-    std::string file_name = _binlog_file_name(file_id);
+    std::string file_path = BinlogFileWriter::binlog_file_path(_path, file_id);
     std::shared_ptr<BinlogFileWriter> binlog_writer =
-            std::make_shared<BinlogFileWriter>(file_id, file_name, _max_page_size, _compression_type);
+            std::make_shared<BinlogFileWriter>(file_id, file_path, _max_page_size, _compression_type);
     Status status = binlog_writer->init();
     if (status.ok()) {
         return binlog_writer;
     }
-    LOG(WARNING) << "Fail to initialize binlog writer, file id " << file_id << ", file name " << file_name << ", "
+    LOG(WARNING) << "Fail to initialize binlog writer, file id " << file_id << ", file name " << file_path << ", "
                  << status;
     Status st = binlog_writer->close();
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to close binlog writer, file id " << file_id << ", file name " << file_name << ", "
+        LOG(WARNING) << "Fail to close binlog writer, file id " << file_id << ", file name " << file_path << ", "
                      << status;
     }
 
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_name))
-    st = fs->delete_file(file_name);
+    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
+    st = fs->delete_file(file_path);
     if (st.ok()) {
-        LOG(INFO) << "Delete binlog file after creating failed " << file_name;
+        LOG(INFO) << "Delete binlog file after creating failed " << file_path;
     } else {
-        LOG(WARNING) << "Fail to delete binlog file after creating failed " << file_name << ", " << st;
+        LOG(WARNING) << "Fail to delete binlog file after creating failed " << file_path << ", " << st;
     }
 
     return status;
 }
 
-Status BinlogManager::_delete_binlog_files(std::vector<std::string>& file_names) {
-    if (file_names.empty()) {
+Status BinlogManager::_delete_binlog_files(std::vector<std::string>& file_paths) {
+    if (file_paths.empty()) {
         return Status::OK();
     }
 
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_names[0]))
-    for (auto& file_name : file_names) {
-        Status st = fs->delete_file(file_name);
+    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_paths[0]))
+    for (auto& file_path : file_paths) {
+        Status st = fs->delete_file(file_path);
         if (st.ok()) {
-            LOG(INFO) << "Delete binlog file " << file_name;
+            LOG(INFO) << "Delete binlog file " << file_path;
         } else {
-            LOG(WARNING) << "Fail to delete binlog file " << file_name << ", " << st;
+            LOG(WARNING) << "Fail to delete binlog file " << file_path << ", " << st;
         }
     }
     return Status::OK();
 }
 
-void BinlogManager::_update_metas_after_new_commit(std::vector<BinlogFileMetaPBSharedPtr> new_file_metas) {
+void BinlogManager::_update_metas_after_commit(RowsetSharedPtr new_rowset, std::vector<BinlogFileMetaPBSharedPtr> new_file_metas) {
     std::shared_lock lock(_meta_lock);
 
     RowsetId reused_rowset_id;
@@ -329,12 +329,16 @@ void BinlogManager::_update_metas_after_new_commit(std::vector<BinlogFileMetaPBS
     }
 
     for (BinlogFileMetaPBSharedPtr& file_meta : new_file_metas) {
-        int128_t lsn = _changelog_lsn(file_meta->start_tablet_version(), file_meta->start_changelog_id());
+        int128_t lsn = _get_lsn(file_meta->start_version(), file_meta->start_seq_id());
         _binlog_file_metas.emplace(lsn, file_meta);
         for (auto& rowset_id_pb : file_meta->rowsets()) {
             _convert_rowset_id_pb(rowset_id_pb, &reused_rowset_id);
             _rowset_count_map[reused_rowset_id]++;
         }
+    }
+
+    if (new_rowset->num_rows() > 0) {
+        _rowsets.emplace(new_rowset->rowset_id(), new_rowset);
     }
 }
 

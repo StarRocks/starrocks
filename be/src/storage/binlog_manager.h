@@ -20,7 +20,6 @@
 #include <memory>
 #include <unordered_set>
 
-#include "column/schema.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_file_writer.h"
@@ -75,11 +74,22 @@ class Tablet;
 using BinlogFileMetaPBSharedPtr = std::shared_ptr<BinlogFileMetaPB>;
 using BinlogReaderSharedPtr = std::shared_ptr<BinlogReader>;
 
+// Binlog records the change events when loading data to the table. The types of change events
+// include INSERT, UPDATE_BEFORE, UPDATE_AFTER, and DELETE. For duplicate key table, there is
+// only INSERT change event, and for primary key table, there are all types of change events.
+// Each tablet will maintain its own binlog, and each change event has a unique, int128_t LSN
+// (log sequence number). The LSN composites of an int64_t *version* and an int64_t *seq_id*.
+// The *version* indicates which load generates the change event, and it's same as the publish
+// version for the load. The *seq_id* is the sequence number of the change event in this load.
+// The information of these change events will be written to binlog files, and BinlogManager will
+// manage these binlog files, including generating, reading, and deleting after expiration.
 class BinlogManager : public enable_shared_from_this<BinlogManager> {
 public:
     static Status create_and_init(Tablet& tablet, std::shared_ptr<BinlogManager>* binlog_manager);
 
     BinlogManager(std::string path, int64_t max_file_size, int32_t max_page_size, CompressionTypePB compression_type);
+
+    ~BinlogManager();
 
     Status init(Tablet& tablet);
 
@@ -91,27 +101,35 @@ public:
 
     void delete_expired_binlog();
 
-    std::shared_ptr<BinlogReader> create_reader(vectorized::Schema& schema, int64_t expire_time_in_ms, int chunk_size) {
+    std::shared_ptr<BinlogReader> create_reader(vectorized::VectorizedSchema& schema,int chunk_size) {
         std::shared_lock lock(_meta_lock);
         int64_t reader_id = _next_reader_id++;
-        return std::make_shared<BinlogReader>(shared_from_this(), schema, reader_id, expire_time_in_ms, chunk_size);
+        return std::make_shared<BinlogReader>(reader_id, shared_from_this(), schema, chunk_size);
     }
 
-    // Find the binlog file which may contain a given changelog
-    StatusOr<BinlogFileMetaPBSharedPtr> seek_binlog_file(int64_t version, int64_t changelog_id);
+    // Find the meta of binlog file which may contain a given <version, seq_id>.
+    // Return Status::NotFound if there is no such file.
+    StatusOr<BinlogFileMetaPBSharedPtr> find_binlog_file(int64_t version, int64_t seq_id);
+
+    RowsetSharedPtr get_rowset(const RowsetId& rowset_id) {
+        std::shared_lock lock(_meta_lock);
+        return _rowsets.find(rowset_id)->second;
+    }
+
+    std::string binlog_file_name(int32_t file_id) {
+        return BinlogFileWriter::binlog_file_path(_path, file_id);
+    }
 
 private:
     friend class BinlogReader;
 
-    int128_t _changelog_lsn(int64_t version, int64_t changelogid) { return (((int128_t)version) << 64) | changelogid; }
-
-    std::string _binlog_file_name(int64_t file_id) { return strings::Substitute("$0/$1.binlog", _path, file_id); }
+    int128_t _get_lsn(int64_t version, int64_t seq_id) { return (((int128_t)version) << 64) | seq_id; }
 
     StatusOr<std::shared_ptr<BinlogFileWriter>> _create_binlog_writer(int64_t file_id);
 
     Status _delete_binlog_files(std::vector<std::string>& file_names);
 
-    void _update_metas_after_new_commit(std::vector<BinlogFileMetaPBSharedPtr> new_file_metas);
+    void _update_metas_after_commit(RowsetSharedPtr new_rowset, std::vector<BinlogFileMetaPBSharedPtr> new_file_metas);
 
     void _convert_rowset_id_pb(const RowsetIdPB& rowset_id_pb, RowsetId* rowset_id) {
         rowset_id->hi = rowset_id_pb.hi();
@@ -123,11 +141,10 @@ private:
     // 1. publish/apply will generate new binlog, and modify metas
     // 2. TTL and capacity control will delete binlog, and modify metas
     // 3. when the basic table remove a rowset, modify shared rowsets information
-    // 4. binlog consumers will read metas
-    // TODO more fine-grained concurrency control
+    // 4. binlog reader will read metas
     std::shared_mutex _meta_lock;
 
-    // protect that there can be only one insert at the same time
+    // ensure binlog will not generate concurrently from multiple loads
     std::mutex _write_lock;
 
     // binlog storage directory
@@ -136,14 +153,16 @@ private:
     int32_t _max_page_size;
     CompressionTypePB _compression_type;
 
-    // mapping from start LSN of a binlog file to the file meta. LSN is int128_t, and
-    // composites of tablet_version(int64_t) and changelog_id(int64_t). A binlog file
+    // mapping from start LSN of a binlog file to the file meta. A binlog file
     // with a smaller start LSN also has a smaller file id. The file with the biggest
-    // start LSN is the meta of _active_binlog_writer if the writer is opening for write.
+    // start LSN is the meta of _active_binlog_writer if it's not null.
     std::map<int128_t, BinlogFileMetaPBSharedPtr> _binlog_file_metas;
     std::shared_ptr<BinlogFileWriter> _active_binlog_writer;
 
+    // mapping from rowset id to the number of binlog files using it
     std::unordered_map<RowsetId, int32_t, HashOfRowsetId> _rowset_count_map;
+    // mapping from rowset id to the Rowset
+    std::unordered_map<RowsetId, RowsetSharedPtr, HashOfRowsetId> _rowsets;
 
     // Allocate an id for each binlog reader
     int64_t _next_reader_id;
