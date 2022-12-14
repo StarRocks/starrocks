@@ -218,16 +218,6 @@ public:
 
     Status append(const vectorized::Column& column) override;
 
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override {
-        // if column is Array<String>, encoding maybe not set
-        // check _is_speculated again to avoid _page_builder is not initialized
-        if (!_is_speculated) {
-            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
-            _is_speculated = true;
-        }
-        return _scalar_column_writer->append(data, null_flags, count, has_null);
-    };
-
     // Speculate char/varchar encoding and reset encoding
     void speculate_column_and_set_encoding(const vectorized::Column& column);
 
@@ -812,35 +802,6 @@ Status ArrayColumnWriter::append(const vectorized::Column& column) {
     // 3. writer elements column recursively
     RETURN_IF_ERROR(_element_writer->append(array_column->elements()));
 
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) {
-    const auto* collection = reinterpret_cast<const Collection*>(data);
-    // 1. Write null column when necessary
-    if (is_nullable()) {
-        _null_writer->append(null_map, nullptr, count, false);
-    }
-
-    // 2. Write offset column
-    uint32_t array_size = collection->length;
-    RETURN_IF_ERROR(_array_size_writer->append_array_offsets(reinterpret_cast<const uint8_t*>(&array_size), nullptr,
-                                                             count, false));
-
-    // 3. writer elements column one by one
-    const auto* element_data = reinterpret_cast<const uint8_t*>(collection->data);
-    if (collection->has_null) {
-        for (size_t i = 0; i < collection->length; ++i) {
-            RETURN_IF_ERROR(
-                    _element_writer->append(element_data, &(collection->null_signs[i]), 1, collection->has_null));
-            element_data += _element_writer->type_info()->size();
-        }
-    } else {
-        for (size_t i = 0; i < collection->length; ++i) {
-            RETURN_IF_ERROR(_element_writer->append(element_data, nullptr, 1, false));
-            element_data = element_data + _element_writer->type_info()->size();
-        }
-    }
     return Status::OK();
 }
 
