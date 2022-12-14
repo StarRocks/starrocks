@@ -2061,7 +2061,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // storage cache property
                 boolean enableStorageCache =
                         PropertyAnalyzer.analyzeBooleanProp(properties,
-                                PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+                                PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
                 long storageCacheTtlS = 0;
                 try {
                     storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
