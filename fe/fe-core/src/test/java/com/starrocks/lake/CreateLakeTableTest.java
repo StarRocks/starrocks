@@ -234,23 +234,24 @@ public class CreateLakeTableTest {
                         "engine = starrocks unique key (key1, key2)\n" +
                         "partition by range(key1)\n" +
                         "(partition p1 values less than (\"10\"),\n" +
-                        " partition p2 values less than (\"20\") ('enable_storage_cache' = 'true'))\n" +
+                        " partition p2 values less than (\"20\") ('enable_storage_cache' = 'false'))\n" +
                         "distributed by hash(key2) buckets 1\n" +
                         "properties('replication_num' = '1');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_unique_key_cache");
             // check table property
             StorageInfo storageInfo = lakeTable.getTableProperty().getStorageInfo();
-            Assert.assertFalse(storageInfo.isEnableStorageCache());
+            // enabled by default if property key `enable_storage_cache` is absent
+            Assert.assertTrue(storageInfo.isEnableStorageCache());
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
             StorageCacheInfo partition1StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
-            Assert.assertFalse(partition1StorageCacheInfo.isEnableStorageCache());
+            Assert.assertTrue(partition1StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds, partition1StorageCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
             StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
-            Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
+            Assert.assertFalse(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds,
                     partition2StorageCacheInfo.getStorageCacheTtlS());
         }
