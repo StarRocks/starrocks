@@ -574,31 +574,33 @@ public class ExpressionTest extends PlanTestBase {
         // with lambda arguments
         sql = "select array_map(x -> x*2 + x*2, [1,3])";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("array_map(<slot 2> -> <slot 7> + <slot 7>[<slot 5> <-> " +
-                "CAST(<slot 2> AS SMALLINT)][<slot 6> <-> <slot 5> * 2][<slot 7> <-> CAST(<slot 6> AS INT)], " +
+        Assert.assertTrue(plan.contains("array_map(<slot 2> -> <slot 7> + <slot 7>:common expressions:{<slot 5> <-> " +
+                "CAST(<slot 2> AS SMALLINT)}{<slot 6> <-> <slot 5> * 2}{<slot 7> <-> CAST(<slot 6> AS INT)}, " +
                 "ARRAY<tinyint(4)>[1,3])"));
 
         sql = "select array_map((x,y) -> x*2 + y  + x*2, [1,3],[4,5])";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("array_map((<slot 2>, <slot 3>) -> CAST(CAST(<slot 7> AS INT) + " +
-                "CAST(<slot 3> AS INT) AS BIGINT) + CAST(<slot 7> AS BIGINT)[<slot 6> <-> CAST(<slot 2> AS SMALLINT)]" +
-                "[<slot 7> <-> <slot 6> * 2], ARRAY<tinyint(4)>[1,3], ARRAY<tinyint(4)>[4,5])"));
+                "CAST(<slot 3> AS INT) AS BIGINT) + CAST(<slot 7> AS BIGINT):common expressions:{<slot 6> <-> " +
+                "CAST(<slot 2> AS SMALLINT)}{<slot 7> <-> <slot 6> * 2}, ARRAY<tinyint(4)>[1,3], " +
+                "ARRAY<tinyint(4)>[4,5])"));
 
         sql = "select array_map((x,y) -> x*2 + y  + x*2, [1,3],[4,5]) from test_array";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("array_map((<slot 4>, <slot 5>) -> CAST(CAST(<slot 9> AS INT) + " +
-                "CAST(<slot 5> AS INT) AS BIGINT) + CAST(<slot 9> AS BIGINT)[<slot 8> <-> CAST(<slot 4> AS SMALLINT)]" +
-                "[<slot 9> <-> <slot 8> * 2], ARRAY<tinyint(4)>[1,3], ARRAY<tinyint(4)>[4,5])"));
+                "CAST(<slot 5> AS INT) AS BIGINT) + CAST(<slot 9> AS BIGINT):common expressions:{<slot 8> <-> " +
+                "CAST(<slot 4> AS SMALLINT)}{<slot 9> <-> <slot 8> * 2}, ARRAY<tinyint(4)>[1,3], " +
+                "ARRAY<tinyint(4)>[4,5])"));
 
         sql = "select array_map(x -> x*2  + abs(c1) + x*2+ abs(c1), c2) from test_array";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 9> + 6: abs + <slot 9> + 6: abs[<slot 8> <-> " +
-                "CAST(<slot 4> AS BIGINT)][<slot 9> <-> <slot 8> * 2]"));
+        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 9> + 6: abs + <slot 9> + 6: abs:" +
+                "common expressions:{<slot 8> <-> CAST(<slot 4> AS BIGINT)}{<slot 9> <-> <slot 8> * 2}"));
 
         sql = "select array_map(x -> x*2  + abs(c1) + (x*2+ abs(c1)), c2) from test_array";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 10> + <slot 10>[<slot 8> <-> " +
-                "CAST(<slot 4> AS BIGINT)][<slot 9> <-> <slot 8> * 2][<slot 10> <-> <slot 9> + 6: abs]"));
+        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 10> + <slot 10>common expressions:" +
+                "{<slot 8> <-> CAST(<slot 4> AS BIGINT)}{<slot 9> <-> <slot 8> * 2}{<slot 10> <-> <slot 9> + 6: abs}"));
 
     }
 
