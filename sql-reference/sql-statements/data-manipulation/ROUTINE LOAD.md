@@ -148,21 +148,29 @@ FROM data_source
 
         指定导入作业所使用的时区。默认为使用 Session 的 `timezone` 参数。该参数会影响所有导入涉及的和时区有关的函数结果。
 
-    6. `format`
+    6. `merge_condition`
+
+        用于指定作为更新生效条件的列名。只有当导入的数据中该列的值大于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/PrimaryKeyLoad.md)。
+        比如一个表包含 `id`, `timestamp` 等列，如果您希望同一主键的数据行，根据 `timestamp` 字段更新，即只有最新导入数据行的时间戳（timestamp 列的值）大于 StarRocks 中当前数据行的时间戳，该数据行才能更新，则您可以设置 `"merge_condition" = "timestamp"`。
+        > **说明**
+        >
+        > 指定的列必须为非主键列，且仅主键模型表支持条件更新。
+
+    7. `format`
 
         指定导入数据的格式，默认是 CSV，支持 JSON 格式。
 
-    7. `jsonpaths`
+    8. `jsonpaths`
 
-        指定导入 JSON 数据的方式，分为简单模式和匹配模式。如果设置了 `jsonpaths`参数，则为匹配模式导入，否则为简单模式导入，具体可参考示例。
+        指定导入 JSON 数据的方式，分为简单模式和匹配模式。如果设置了 `jsonpaths` 参数，则为匹配模式导入，否则为简单模式导入，具体可参考示例。
 
-    8. `strip_outer_array`
+    9. `strip_outer_array`
 
         BOOLEAN 类型。取值为 `true` 表示 JSON 数据以数组对象开始且将数组对象进行展平，默认值为 `false`。
 
-    9. `json_root`
+    10. `json_root`
 
-        `json_root` 为合法的 `jsonpaths` 字符串，用于指定 json document 的根节点，默认值为 ""。
+        `json_root` 为合法的 `jsonpaths` 字符串，用于指定 JSON Document 的根节点，默认值为 ""。
 
 5. **data_source**
 
