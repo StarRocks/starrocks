@@ -14,6 +14,8 @@ ARRAY_SORT(array)
 
 `array`：需要排序的数组。支持的数据类型为 ARRAY。
 
+数组元素可以是以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、DECIMALV2、DATETIME、DATE、JSON。**从 2.5 版本开始，该函数支持 JSON 类型的数组元素。**
+
 ## 返回值说明
 
 返回的数据类型为 ARRAY。
@@ -23,7 +25,7 @@ ARRAY_SORT(array)
 * 只支持升序。
 * `null` 会排在前面。
 * 如果需要降序排列，可以对排序后的结果，调用 `reverse` 函数。
-* 返回结果数组的中的元素类型和参数 `array` 中的元素类型一致。
+* 返回的数组元素类型和参数 `array` 中的元素类型一致。
 
 ## 示例
 

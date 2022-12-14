@@ -14,13 +14,13 @@ array_concat(input0, input1, ...)
 
 ## 参数说明
 
-`input`：表示不限数量、具有相同元素类型的数组。数组支持的元素数据类型，请参见[ARRAY](/sql-reference/sql-statements/data-types/Array.md)。
+`input`：表示不限数量、具有相同元素类型的数组。数组元素可以是以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMALV2、VARCHAR、DATETIME、DATE、JSON。**从 2.5 版本开始，该函数支持 JSON 类型的数组元素。**
 
 ## 返回值说明
 
-返回(input0, input1, ...)中所有元素有序拼接后的数组。
+返回 (input0, input1, ...) 中所有元素有序拼接后的数组。
 
-返回的数组元素类型与`input`中数组的元素类型一致。
+返回的数组元素类型与 `input` 中数组的元素类型一致。
 
 ## 示例
 
