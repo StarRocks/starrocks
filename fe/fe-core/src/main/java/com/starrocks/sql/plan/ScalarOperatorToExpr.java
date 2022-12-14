@@ -205,7 +205,7 @@ public class ScalarOperatorToExpr {
                 } else if (type.isDatetime()) {
                     LocalDateTime ldt = literal.getDatetime();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), ldt.getHour(),
-                            ldt.getMinute(), ldt.getSecond());
+                            ldt.getMinute(), ldt.getSecond(), ldt.getNano() / 1000);
                 } else if (type.isTime()) {
                     return new FloatLiteral(literal.getTime(), Type.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {

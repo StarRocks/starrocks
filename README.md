@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://starrocks.io/index">
-    <img  width="526" src="images/logo.png">
+    <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png">
    </a>
 </p>
 <p align="center">
@@ -38,7 +38,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 
 <br>
  <p align="center">
-    <img src="images/banner.png">
+    <img src="https://cdn.starrocks.io/static/github/community.gif">
    </a>
 </p>
 </br>

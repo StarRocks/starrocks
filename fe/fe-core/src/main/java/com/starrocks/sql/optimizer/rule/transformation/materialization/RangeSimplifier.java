@@ -123,7 +123,7 @@ public class RangeSimplifier {
                         BinaryPredicateOperator binary = (BinaryPredicateOperator) columnPredicates.get(0);
                         BinaryPredicateOperator eqBinary = new BinaryPredicateOperator(
                                 BinaryPredicateOperator.BinaryType.EQ,
-                                binary.getChild(0), binary.getChild(1));
+                                binary.getChild(0), columnRange.lowerEndpoint());
                         result.set(Utils.compoundAnd(result.get(), eqBinary));
                     } else {
                         List<ScalarOperator> columnScalars = srcPredicates.stream().filter(

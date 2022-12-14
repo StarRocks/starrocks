@@ -68,7 +68,7 @@ inline bool is_type_compatible(LogicalType lhs, LogicalType rhs) {
     return lhs == rhs;
 }
 
-inline bool is_scalar_primitive_type(LogicalType ptype) {
+constexpr bool is_scalar_primitive_type(LogicalType ptype) {
     switch (ptype) {
     case TYPE_BOOLEAN:  /* 2 */
     case TYPE_TINYINT:  /* 3 */
@@ -117,6 +117,7 @@ VALUE_GUARD(LogicalType, StringPTGuard, pt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(LogicalType, BinaryPTGuard, pt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
 VALUE_GUARD(LogicalType, JsonGuard, pt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
+VALUE_GUARD(LogicalType, ObjectFamilyPTGuard, pt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
 
 VALUE_GUARD(LogicalType, DatePTGuard, pt_is_date, TYPE_DATE)
 VALUE_GUARD(LogicalType, DateTimePTGuard, pt_is_datetime, TYPE_DATETIME)

@@ -730,9 +730,15 @@ public class Explain {
         public String visitConstant(ConstantOperator literal, Void context) {
             if (literal.getType().isDatetime()) {
                 LocalDateTime time = (LocalDateTime) Optional.ofNullable(literal.getValue()).orElse(LocalDateTime.MIN);
-                return String.format("%04d-%02d-%02d %02d:%02d:%02d",
-                        time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
-                        time.getHour(), time.getMinute(), time.getSecond());
+                if (time.getNano() > 0) {
+                    return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d",
+                            time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
+                            time.getHour(), time.getMinute(), time.getSecond(), time.getNano() / 1000);
+                } else {
+                    return String.format("%04d-%02d-%02d %02d:%02d:%02d",
+                            time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
+                            time.getHour(), time.getMinute(), time.getSecond());
+                }
             } else if (literal.getType().isDate()) {
                 LocalDateTime time = (LocalDateTime) Optional.ofNullable(literal.getValue()).orElse(LocalDateTime.MIN);
                 return String.format("%04d-%02d-%02d", time.getYear(), time.getMonthValue(), time.getDayOfMonth());

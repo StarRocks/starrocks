@@ -41,6 +41,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -427,7 +428,11 @@ public class Roaring64Map {
 
             @Override
             public Long next() {
-                return it.next();
+                if (!this.hasNext()) {
+                    throw new NoSuchElementException();
+                } else {
+                    return it.next();
+                }
             }
 
             @Override

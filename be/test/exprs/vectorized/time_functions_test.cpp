@@ -2848,11 +2848,9 @@ TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        try {
-            ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns).value();
-        } catch (std::runtime_error const& e) {
-            ASSERT_EQ("time used with time_slice can't before 0001-01-01 00:00:00", std::string(e.what()));
-        }
+        StatusOr<ColumnPtr> result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(result.status().is_invalid_argument());
+        ASSERT_EQ(result.status().get_error_msg(), "time used with time_slice can't before 0001-01-01 00:00:00");
 
         ASSERT_TRUE(
                 TimeFunctions::time_slice_close(time_slice_context.get(),

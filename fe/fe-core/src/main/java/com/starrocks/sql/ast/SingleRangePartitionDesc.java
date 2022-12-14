@@ -148,7 +148,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         // analyze enable storage cache and cache ttl, and whether allow async write back
         boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
-                properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+                properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
                 properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.lake_default_storage_cache_ttl_seconds);
         boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(

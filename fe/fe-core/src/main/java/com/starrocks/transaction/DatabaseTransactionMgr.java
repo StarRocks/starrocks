@@ -71,7 +71,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -843,10 +843,10 @@ public class DatabaseTransactionMgr {
                                 return false;
                             }
                             // quorum publish will make table unstable
-                            // so that we wait quorom_publish_wait_time_ms util all backend publish finish
+                            // so that we wait quorum_publish_wait_time_ms util all backend publish finish
                             // before quorum publish
                             if (successHealthyReplicaNum != replicaNum
-                                    && !unfinishedBackends.isEmpty()
+                                    && CollectionUtils.isNotEmpty(unfinishedBackends)
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
 

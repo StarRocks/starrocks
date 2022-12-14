@@ -38,10 +38,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.TimeUtils;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TDateLiteral;
@@ -56,7 +53,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
-import java.util.Date;
 import java.util.Objects;
 import java.util.TimeZone;
 
@@ -64,10 +60,11 @@ public class DateLiteral extends LiteralExpr {
 
     private static final DateLiteral MIN_DATE = new DateLiteral(0, 1, 1);
     private static final DateLiteral MAX_DATE = new DateLiteral(9999, 12, 31);
-    private static final DateLiteral MIN_DATETIME = new DateLiteral(0, 1, 1, 0, 0, 0);
-    private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59);
+    private static final DateLiteral MIN_DATETIME = new DateLiteral(0, 1, 1, 0, 0, 0, 0);
+    private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59, 999999);
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER;
+    private static final DateTimeFormatter DATE_TIME_WITH_MS_FORMATTER;
     private static final DateTimeFormatter DATE_FORMATTER;
     private static final DateTimeFormatter DATE_NO_SPLIT_FORMATTER;
     /*
@@ -77,14 +74,19 @@ public class DateLiteral extends LiteralExpr {
      * Year values in the range 00-69 are converted to 2000-2069.
      * */
     private static final DateTimeFormatter DATE_TIME_FORMATTER_TWO_DIGIT;
+    private static final DateTimeFormatter DATE_TIME_WITH_MS_FORMATTER_TWO_DIGIT;
     private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
 
     static {
         DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
+        DATE_TIME_WITH_MS_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s.%f", false)
+                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
         DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
         DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s", false)
+                .toFormatter().withResolverStyle(ResolverStyle.STRICT);
+        DATE_TIME_WITH_MS_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s.%f", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
         DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
@@ -138,22 +140,24 @@ public class DateLiteral extends LiteralExpr {
     }
 
     public DateLiteral(long year, long month, long day) {
+        this.year = year;
+        this.month = month;
+        this.day = day;
         this.hour = 0;
         this.minute = 0;
         this.second = 0;
-        this.year = year;
-        this.month = month;
-        this.day = day;
+        this.microsecond = 0;
         this.type = Type.DATE;
     }
 
-    public DateLiteral(long year, long month, long day, long hour, long minute, long second) {
-        this.hour = hour;
-        this.minute = minute;
-        this.second = second;
+    public DateLiteral(long year, long month, long day, long hour, long minute, long second, long microsecond) {
         this.year = year;
         this.month = month;
         this.day = day;
+        this.hour = hour;
+        this.minute = minute;
+        this.second = second;
+        this.microsecond = microsecond;
         this.type = Type.DATETIME;
     }
 
@@ -164,6 +168,7 @@ public class DateLiteral extends LiteralExpr {
         this.hour = dateTime.getHour();
         this.minute = dateTime.getMinute();
         this.second = dateTime.getSecond();
+        this.microsecond = dateTime.getNano() / 1000;
         this.type = type;
 
         if (isNullable()) {
@@ -187,10 +192,6 @@ public class DateLiteral extends LiteralExpr {
         return new DateLiteral(type, false);
     }
 
-    public static DateLiteral createMaxValue(Type type) throws AnalysisException {
-        return new DateLiteral(type, true);
-    }
-
     private void init(String s, Type type) throws AnalysisException {
         try {
             Preconditions.checkArgument(type.isDateType());
@@ -207,11 +208,23 @@ public class DateLiteral extends LiteralExpr {
                     dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER);
                 }
             } else {
-                if (s.split("-")[0].length() == 2) {
-                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_TIME_FORMATTER_TWO_DIGIT);
+                boolean isTwoDigit = s.split("-")[0].length() == 2;
+                boolean withMs = s.contains(".");
+                DateTimeFormatter formatter;
+                if (isTwoDigit) {
+                    if (withMs) {
+                        formatter = DATE_TIME_WITH_MS_FORMATTER_TWO_DIGIT;
+                    } else {
+                        formatter = DATE_TIME_FORMATTER_TWO_DIGIT;
+                    }
                 } else {
-                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_TIME_FORMATTER);
+                    if (withMs) {
+                        formatter = DATE_TIME_WITH_MS_FORMATTER;
+                    } else {
+                        formatter = DATE_TIME_FORMATTER;
+                    }
                 }
+                dateTime = DateUtils.parseStringWithDefaultHSM(s, formatter);
             }
 
             year = dateTime.getYear();
@@ -220,6 +233,7 @@ public class DateLiteral extends LiteralExpr {
             hour = dateTime.getHour();
             minute = dateTime.getMinute();
             second = dateTime.getSecond();
+            microsecond = dateTime.getNano() / 1000;
             this.type = type;
         } catch (Exception ex) {
             throw new AnalysisException("date literal [" + s + "] is invalid");
@@ -276,8 +290,12 @@ public class DateLiteral extends LiteralExpr {
         if (expr == MaxLiteral.MAX_VALUE) {
             return -1;
         }
-        // date time will not overflow when doing addition and subtraction
-        return Long.signum(getLongValue() - expr.getLongValue());
+        if (getDoubleValue() < expr.getDoubleValue()) {
+            return -1;
+        } else if (getDoubleValue() > expr.getDoubleValue()) {
+            return 1;
+        }
+        return 0;
     }
 
     @Override
@@ -291,7 +309,7 @@ public class DateLiteral extends LiteralExpr {
             return LocalDateTime.of((int) getYear(), (int) getMonth(), (int) getDay(), 0, 0);
         } else if (type.isDatetime()) {
             return LocalDateTime.of((int) getYear(), (int) getMonth(), (int) getDay(),
-                    (int) getHour(), (int) getMinute(), (int) getSecond());
+                    (int) getHour(), (int) getMinute(), (int) getSecond(), (int) microsecond * 1000);
         } else {
             throw new StarRocksPlannerException("Invalid date type: " + type, ErrorType.INTERNAL_ERROR);
         }
@@ -305,8 +323,10 @@ public class DateLiteral extends LiteralExpr {
     private String convertToString(PrimitiveType type) {
         if (type == PrimitiveType.DATE) {
             return String.format("%04d-%02d-%02d", year, month, day);
-        } else {
+        } else if (microsecond == 0) {
             return String.format("%04d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
+        } else {
+            return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d", year, month, day, hour, minute, second, microsecond);
         }
     }
 
@@ -317,7 +337,11 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public double getDoubleValue() {
-        return getLongValue();
+        if (microsecond > 0) {
+            return getLongValue() + ((double)microsecond / 1000000);
+        } else {
+            return getLongValue();
+        }
     }
 
     @Override
@@ -335,7 +359,7 @@ public class DateLiteral extends LiteralExpr {
             if (targetType.isDate()) {
                 return new DateLiteral(this.year, this.month, this.day);
             } else if (targetType.isDatetime()) {
-                return new DateLiteral(this.year, this.month, this.day, this.hour, this.minute, this.second);
+                return new DateLiteral(this.year, this.month, this.day, this.hour, this.minute, this.second, this.microsecond);
             } else {
                 throw new AnalysisException("Error date literal type : " + type);
             }
@@ -353,10 +377,11 @@ public class DateLiteral extends LiteralExpr {
         hour = 0;
         minute = 0;
         second = 0;
+        microsecond = 0;
     }
 
     public java.time.LocalDateTime toLocalDateTime() {
-        return java.time.LocalDateTime.of((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second);
+        return java.time.LocalDateTime.of((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second, (int) microsecond * 1000);
     }
 
     private long makePackedDatetime() {
@@ -400,24 +425,14 @@ public class DateLiteral extends LiteralExpr {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_60) {
-            short date_literal_type = in.readShort();
-            fromPackedDatetime(in.readLong());
-            if (date_literal_type == DateLiteralType.DATETIME.value()) {
-                this.type = Type.DATETIME;
-            } else if (date_literal_type == DateLiteralType.DATE.value()) {
-                this.type = Type.DATE;
-            } else {
-                throw new IOException("Error date literal type : " + type);
-            }
+        short date_literal_type = in.readShort();
+        fromPackedDatetime(in.readLong());
+        if (date_literal_type == DateLiteralType.DATETIME.value()) {
+            this.type = Type.DATETIME;
+        } else if (date_literal_type == DateLiteralType.DATE.value()) {
+            this.type = Type.DATE;
         } else {
-            Date date = new Date(in.readLong());
-            String date_str = TimeUtils.format(date, Type.DATETIME);
-            try {
-                init(date_str, Type.DATETIME);
-            } catch (AnalysisException ex) {
-                throw new IOException(ex.getMessage());
-            }
+            throw new IOException("Error date literal type : " + type);
         }
     }
 
@@ -454,6 +469,10 @@ public class DateLiteral extends LiteralExpr {
 
     public long getSecond() {
         return second;
+    }
+
+    public long getMicrosecond() {
+        return microsecond;
     }
 
     private long year;
