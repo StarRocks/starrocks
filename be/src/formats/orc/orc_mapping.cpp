@@ -167,8 +167,8 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
     std::unordered_map<std::string, size_t> slot_descriptor_name_2_slot_descriptor_pos;
     for (size_t i = 0; i < slot_descs.size(); i++) {
         if (slot_descs[i] == nullptr) continue;
-        slot_descriptor_name_2_slot_descriptor_pos.emplace(format_column_name(slot_descs[i]->col_name(), case_sensitive),
-                                                           i);
+        slot_descriptor_name_2_slot_descriptor_pos.emplace(
+                format_column_name(slot_descs[i]->col_name(), case_sensitive), i);
     }
 
     // build hive column names index.

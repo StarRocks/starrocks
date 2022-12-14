@@ -100,7 +100,8 @@ public:
     // NOTICE: orc_use_column_names will only control first level behavior, but struct subfield will still use
     // column name rather than position in table definition.
     static StatusOr<std::unique_ptr<OrcMapping>> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
-                                                               const orc::Type& root_orc_type, const bool case_sensitive,
+                                                               const orc::Type& root_orc_type,
+                                                               const bool case_sensitive,
                                                                const bool orc_use_column_names,
                                                                const std::vector<std::string>* hive_column_names);
 
