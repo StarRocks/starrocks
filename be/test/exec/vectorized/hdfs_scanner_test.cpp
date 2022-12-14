@@ -1685,7 +1685,7 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
-        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
@@ -1694,7 +1694,7 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     {
         std::vector<TExprNode> nodes;
         TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
-        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
