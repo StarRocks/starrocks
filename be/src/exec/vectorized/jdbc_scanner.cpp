@@ -383,8 +383,10 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
             auto st =
                     helper.get_result_from_boxed_array(_result_column_types[i], result_column.get(), jcolumn, num_rows);
             RETURN_IF_ERROR(st);
-            // check data's length for varchar type
-            if (_slot_descs[i]->type().type == TYPE_VARCHAR) {
+            // check data's length for string type
+            auto origin_type = _slot_descs[i]->type().type;
+            if (origin_type == TYPE_VARCHAR || origin_type == TYPE_CHAR) {
+                DCHECK_EQ(_result_column_types[i], TYPE_VARCHAR);
                 int max_len = _slot_descs[i]->type().len;
                 ColumnViewer<TYPE_VARCHAR> viewer(result_column);
                 for (int row = 0; row < viewer.size(); row++) {

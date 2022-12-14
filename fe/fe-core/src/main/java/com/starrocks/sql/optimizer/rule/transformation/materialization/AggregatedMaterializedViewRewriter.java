@@ -15,6 +15,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
@@ -33,7 +34,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -247,7 +247,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // generate group keys against scan mv plan
         List<ColumnRefOperator> newGroupKeys = rewriteGroupKeys(
                 swappedQueryGroupingKeys, normalizedViewMap, rewriteContext.getOutputMapping(),
-                rewriteContext.getQueryColumnSet());
+                new ColumnRefSet(rewriteContext.getQueryColumnSet()));
         if (newGroupKeys == null) {
             return null;
         }
@@ -268,7 +268,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // generate new agg exprs(rollup functions)
         Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregates(
                 queryAggregation, normalizedViewMap, rewriteContext.getOutputMapping(),
-                rewriteContext.getQueryColumnSet(), aggregateMapping);
+                new ColumnRefSet(rewriteContext.getQueryColumnSet()), aggregateMapping);
         if (newAggregations == null) {
             return null;
         }
@@ -276,13 +276,13 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     @Override
-    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
+    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
         ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
                 Utils.compoundAnd(
                         rewriteContext.getQueryPredicateSplit().toScalarOperator(),
-                        CompoundPredicateOperator.not(compensationPredicates.toScalarOperator())));
+                        CompoundPredicateOperator.not(compensationPredicates)));
         // add filter above input and put filter under aggExpr
         OptExpression input = queryExpression.inputAt(0);
         if (!ConstantOperator.TRUE.equals(queryCompensationPredicate)) {
@@ -415,7 +415,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     private List<ColumnRefOperator> rewriteGroupKeys(List<ScalarOperator> groupKeys,
                                                      Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
                                                      Map<ColumnRefOperator, ColumnRefOperator> mapping,
-                                                     Set<ColumnRefOperator> queryColumnSet) {
+                                                     ColumnRefSet queryColumnSet) {
         List<ColumnRefOperator> rewrittens = Lists.newArrayList();
         for (ScalarOperator key : groupKeys) {
             ScalarOperator targetColumn = replaceExprWithTarget(key, normalizedViewMap, mapping);
@@ -431,7 +431,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     private Map<ColumnRefOperator, CallOperator> rewriteAggregates(Map<ColumnRefOperator, ScalarOperator> aggregates,
                                                                    Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
                                                                    Map<ColumnRefOperator, ColumnRefOperator> mapping,
-                                                                   Set<ColumnRefOperator> queryColumnSet,
+                                                                   ColumnRefSet queryColumnSet,
                                                                    Map<ColumnRefOperator, ScalarOperator> aggregateMapping) {
         Map<ColumnRefOperator, CallOperator> rewrittens = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : aggregates.entrySet()) {

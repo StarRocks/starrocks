@@ -3,9 +3,11 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
@@ -21,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import static com.starrocks.catalog.Type.ARRAY_TINYINT;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class BaseScalarOperatorShuttleTest {
@@ -103,5 +106,32 @@ class BaseScalarOperatorShuttleTest {
         CaseWhenOperator operator = new CaseWhenOperator(INT, null, null, ImmutableList.of());
         ScalarOperator newOperator = shuttle.visitCaseWhenOperator(operator, null);
         assertEquals(operator, newOperator);
+    }
+
+    @Test
+    void visitCaseWhenOperator_1() {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
+        BinaryPredicateOperator whenOperator1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                        ConstantOperator.createInt(1));
+        ConstantOperator constantOperator1 = ConstantOperator.createChar("1");
+        BinaryPredicateOperator whenOperator2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRefOperator,
+                        ConstantOperator.createInt(2));
+        ConstantOperator constantOperator2 = ConstantOperator.createChar("2");
+
+        CaseWhenOperator operator =
+                new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
+                        ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+
+        BaseScalarOperatorShuttle testShuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
+                return ConstantOperator.createChar("3");
+            }
+        };
+        ScalarOperator newOperator = testShuttle.visitCaseWhenOperator(operator, null);
+        assertNotEquals(operator, newOperator);
+
     }
 }
