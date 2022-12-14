@@ -38,6 +38,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.thrift.TCounter;
@@ -327,77 +330,13 @@ public class RuntimeProfile {
     //  3. Counters
     //  4. Children
     public void prettyPrint(StringBuilder builder, String prefix) {
-        Pair<Counter, String> pair = this.counterMap.get("TotalTime");
-        Preconditions.checkState(pair != null);
-        // 1. profile name
-        builder.append(prefix).append(name).append(":");
-        // total time
-        if (pair.first.getValue() != 0) {
-            try (Formatter fmt = new Formatter()) {
-                builder.append("(Active: ")
-                        .append(this.printCounter(pair.first.getValue(), pair.first.getType()));
-                if (DebugUtil.THOUSAND < pair.first.getValue()) {
-                    // TotalTime in nanosecond concated if it's larger than 1000ns
-                    builder.append("[").append(pair.first.getValue()).append("ns]");
-                }
-                builder.append(", % non-child: ").append(fmt.format("%.2f", localTimePercent))
-                        .append("%)");
-            }
-        }
-        builder.append("\n");
-
-        // 2. info String
-        for (Map.Entry<String, String> infoPair : this.infoStrings.entrySet()) {
-            String key = infoPair.getKey();
-            builder.append(prefix).append("   - ").append(key).append(": ")
-                    .append(this.infoStrings.get(key)).append("\n");
-        }
-
-        // 3. counters
-        printChildCounters(prefix, ROOT_COUNTER, builder);
-
-        // 4. children
-        for (Pair<RuntimeProfile, Boolean> childPair : childList) {
-            boolean indent = childPair.second;
-            RuntimeProfile profile = childPair.first;
-            profile.prettyPrint(builder, prefix + (indent ? "  " : ""));
-        }
+        ProfileFormater formater = new DefaultProfileFormater(builder);
+        formater.format(this, prefix);
     }
 
     public String toString() {
-        StringBuilder builder = new StringBuilder();
-        prettyPrint(builder, "");
-        return builder.toString();
-    }
-
-    private void printChildCounters(String prefix, String counterName, StringBuilder builder) {
-        if (childCounterMap.get(counterName) == null) {
-            return;
-        }
-        List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
-        childNames.sort(String::compareTo);
-
-        // Keep MIN/MAX metrics head of other child counters
-        List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
-        List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
-        for (String childName : childNames) {
-            if (childName.startsWith(MERGED_INFO_PREFIX_MIN) || childName.startsWith(MERGED_INFO_PREFIX_MAX)) {
-                minMaxChildNames.add(childName);
-            } else {
-                otherChildNames.add(childName);
-            }
-        }
-        List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
-        reorderedChildNames.addAll(minMaxChildNames);
-        reorderedChildNames.addAll(otherChildNames);
-
-        for (String childName : reorderedChildNames) {
-            Pair<Counter, String> pair = this.counterMap.get(childName);
-            Preconditions.checkState(pair != null);
-            builder.append(prefix).append("   - ").append(childName).append(": ")
-                    .append(printCounter(pair.first.getValue(), pair.first.getType())).append("\n");
-            this.printChildCounters(prefix + "  ", childName, builder);
-        }
+        ProfileFormater formater = new DefaultProfileFormater();
+        return formater.format(this);
     }
 
     private String printCounter(long value, TUnit type) {
@@ -548,6 +487,18 @@ public class RuntimeProfile {
 
     public String getName() {
         return name;
+    }
+
+    public Map<String, String> getInfoStrings() {
+        return infoStrings;
+    }
+
+    public Map<String, Set<String>> getChildCounterMap() {
+        return childCounterMap;
+    }
+
+    public double getLocalTimePercent() {
+        return localTimePercent;
     }
 
     // Returns the value to which the specified key is mapped;
@@ -749,5 +700,197 @@ public class RuntimeProfile {
         }
 
         profile.getChildList().forEach(pair -> removeRedundantMinMaxMetrics(pair.first));
+    }
+
+    interface ProfileFormater {
+
+        // Print the profile:
+        //  1. Profile Name
+        //  2. Info Strings
+        //  3. Counters
+        //  4. Children
+        String format(RuntimeProfile profile, String prefix);
+
+        String format(RuntimeProfile profile);
+    }
+
+    static class DefaultProfileFormater implements ProfileFormater {
+
+        private final StringBuilder builder;
+        DefaultProfileFormater(StringBuilder builder) {
+            this.builder = builder;
+        }
+
+        DefaultProfileFormater() {
+            this.builder = new StringBuilder();
+        }
+
+        @Override
+        public String format(RuntimeProfile profile, String prefix) {
+            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
+            Preconditions.checkState(totalTimeCounter != null);
+            // 1. profile name
+            builder.append(prefix).append(profile.getName()).append(":");
+            // total time
+            if (totalTimeCounter.getValue() != 0) {
+                try (Formatter fmt = new Formatter()) {
+                    builder.append("(Active: ")
+                            .append(profile.printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
+                    if (DebugUtil.THOUSAND < totalTimeCounter.getValue()) {
+                        // TotalTime in nanosecond concated if it's larger than 1000ns
+                        builder.append("[").append(totalTimeCounter.getValue()).append("ns]");
+                    }
+                    builder.append(", % non-child: ").append(fmt.format("%.2f", profile.getLocalTimePercent()))
+                            .append("%)");
+                }
+            }
+            builder.append("\n");
+
+            // 2. info String
+            for (Map.Entry<String, String> infoPair : profile.getInfoStrings().entrySet()) {
+                String key = infoPair.getKey();
+                builder.append(prefix).append("   - ").append(key).append(": ")
+                        .append(profile.getInfoString(key)).append("\n");
+            }
+
+            // 3. counters
+            printChildCounters(profile, prefix, RuntimeProfile.ROOT_COUNTER);
+
+            // 4. children
+            for (Pair<RuntimeProfile, Boolean> childPair : profile.getChildList()) {
+                boolean indent = childPair.second;
+                RuntimeProfile childProfile = childPair.first;
+                format(childProfile, prefix + (indent ? "  " : ""));
+            }
+            return builder.toString();
+        }
+
+        @Override
+        public String format(RuntimeProfile profile) {
+            return this.format(profile, "");
+        }
+
+        private void printChildCounters(RuntimeProfile profile, String prefix, String counterName) {
+            Map<String, Set<String>> childCounterMap = profile.getChildCounterMap();
+            if (childCounterMap.get(counterName) == null) {
+                return;
+            }
+            List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
+            childNames.sort(String::compareTo);
+
+            // Keep MIN/MAX metrics head of other child counters
+            List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
+            List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            for (String childName : childNames) {
+                if (childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                        || childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
+                    minMaxChildNames.add(childName);
+                } else {
+                    otherChildNames.add(childName);
+                }
+            }
+            List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            reorderedChildNames.addAll(minMaxChildNames);
+            reorderedChildNames.addAll(otherChildNames);
+
+            for (String childName : reorderedChildNames) {
+                Counter childCounter = profile.getCounterMap().get(childName);
+                Preconditions.checkState(childCounter != null);
+                builder.append(prefix).append("   - ").append(childName).append(": ")
+                        .append(profile.printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
+                this.printChildCounters(profile, prefix + "  ", childName);
+            }
+        }
+    }
+
+    static class JsonProfileFormater implements ProfileFormater {
+        private final JsonObject builder;
+
+        JsonProfileFormater() {
+            this.builder = new JsonObject();
+        }
+        @Override
+        public String format(RuntimeProfile profile, String prefix) {
+            //may parse prefix to json
+            return this.format(profile);
+        }
+
+        @Override
+        public String format(RuntimeProfile profile) {
+            addRuntimeProfile(profile, builder);
+            Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
+            return gson.toJson(builder);
+        }
+
+
+        public void addRuntimeProfile(RuntimeProfile profile, JsonObject jsonObject) {
+            Counter totalTimeCounter = profile.getCounterMap().get("TotalTime");
+            Preconditions.checkState(totalTimeCounter != null);
+            // 1. profile name
+            JsonObject innerJsonObject = new JsonObject();
+            jsonObject.add(profile.getName(), innerJsonObject);
+            // total time
+            if (totalTimeCounter.getValue() != 0) {
+                try (Formatter fmt = new Formatter()) {
+                    innerJsonObject.addProperty("Active",
+                            profile.printCounter(totalTimeCounter.getValue(), totalTimeCounter.getType()));
+                    if (DebugUtil.THOUSAND < totalTimeCounter.getValue()) {
+                        innerJsonObject.addProperty("Active_ns", totalTimeCounter.getValue());
+                    }
+                    innerJsonObject.addProperty("non-child", fmt.format("%.2f", profile.getLocalTimePercent()) + "%");
+                }
+            }
+            if (profile.getInfoStrings().size() > 0) {
+                // 2. info String
+                for (Map.Entry<String, String> infoPair : profile.getInfoStrings().entrySet()) {
+                    String key = infoPair.getKey();
+                    innerJsonObject.addProperty(key, profile.getInfoString(key));
+                }
+            }
+
+            // 3. counters
+            addChildCounters(profile, RuntimeProfile.ROOT_COUNTER, innerJsonObject);
+
+            // 4. children
+            if (profile.getChildList().size() > 0) {
+                for (Pair<RuntimeProfile, Boolean> childPair : profile.getChildList()) {
+                    RuntimeProfile childProfile = childPair.first;
+                    addRuntimeProfile(childProfile, innerJsonObject);
+                }
+            }
+        }
+
+
+        private void addChildCounters(RuntimeProfile profile, String counterName, JsonObject childJsonObject) {
+            Map<String, Set<String>> childCounterMap = profile.getChildCounterMap();
+
+            if (childCounterMap.get(counterName) == null) {
+                return;
+            }
+            List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
+            childNames.sort(String::compareTo);
+
+            // Keep MIN/MAX metrics head of other child counters
+            List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
+            List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            for (String childName : childNames) {
+                if (childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                        || childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
+                    minMaxChildNames.add(childName);
+                } else {
+                    otherChildNames.add(childName);
+                }
+            }
+            List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            reorderedChildNames.addAll(minMaxChildNames);
+            reorderedChildNames.addAll(otherChildNames);
+
+            for (String childName : reorderedChildNames) {
+                Counter childCounter = profile.getCounterMap().get(childName);
+                Preconditions.checkState(childCounter != null);
+                childJsonObject.addProperty(childName, profile.printCounter(childCounter.getValue(), childCounter.getType()));
+                this.addChildCounters(profile, childName, childJsonObject);
+            }
+        }
     }
 }
