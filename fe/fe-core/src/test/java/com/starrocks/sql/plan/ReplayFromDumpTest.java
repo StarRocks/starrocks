@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
@@ -329,7 +328,8 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(1);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("1:AGGREGATE (update finalize)"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                "aggregate: multi_distinct_count[([1: LO_ORDERKEY, INT, false])"));
     }
 
     @Test
