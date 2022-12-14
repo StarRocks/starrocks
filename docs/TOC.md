@@ -49,6 +49,7 @@
   + [Materialized view](./using_starrocks/Materialized_view.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
+  + [Query Cache](./using_starrocks/query_cache.md)
   + Index
     + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
     + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
