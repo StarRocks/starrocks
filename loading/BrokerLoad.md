@@ -167,7 +167,8 @@ WITH BROKER
 
 > **说明**
 >
-> 从 Amazon S3 导入数据使用的是 S3A 协议，因此文件路径的前缀必须为 `s3a://`。
+> - 从 Amazon S3 导入数据使用的是 S3A 协议，因此文件路径的前缀必须为 `s3a://`。
+> - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
 
 #### 从 Google GCS 导入
 
