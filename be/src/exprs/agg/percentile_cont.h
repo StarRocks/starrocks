@@ -11,6 +11,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "gutil/strings/fastmem.h"
 #include "util/orlp/pdqsort.h"
 
 namespace starrocks::vectorized {
@@ -60,11 +61,6 @@ public:
         size_t second_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
         auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
 
-<<<<<<< HEAD
-        vector<InputCppType> res;
-        vector<InputCppType>& vec = this->data(state).items;
-        res.resize(vec.size() + items_size);
-=======
         auto second_start = reinterpret_cast<InputCppType*>(data_ptr);
         auto second_end = reinterpret_cast<InputCppType*>(data_ptr + second_size * sizeof(InputCppType));
 
@@ -76,7 +72,6 @@ public:
         std::copy(second_start, second_end, first_end);
         // TODO: optimize it with SIMD bitonic merge
         std::inplace_merge(output.begin(), first_end, output.end());
->>>>>>> 4e3418cab ([Enhancement] optimize performance of percentile_cont function (#14609))
 
         this->data(state).rate = rate;
     }
@@ -91,10 +86,10 @@ public:
         size_t new_size = old_size + sizeof(double) + sizeof(size_t) + items_size * sizeof(InputCppType);
         bytes.resize(new_size);
 
-        memcpy(bytes.data() + old_size, &(this->data(state).rate), sizeof(double));
-        memcpy(bytes.data() + old_size + sizeof(double), &items_size, sizeof(size_t));
-        memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), this->data(state).items.data(),
-               items_size * sizeof(InputCppType));
+        strings::memcpy_inlined(bytes.data() + old_size, &(this->data(state).rate), sizeof(double));
+        strings::memcpy_inlined(bytes.data() + old_size + sizeof(double), &items_size, sizeof(size_t));
+        strings::memcpy_inlined(bytes.data() + old_size + sizeof(double) + sizeof(size_t),
+                                this->data(state).items.data(), items_size * sizeof(InputCppType));
         pdqsort(false, reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t)),
                 reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t) +
                                                 items_size * sizeof(InputCppType)));
@@ -146,26 +141,16 @@ public:
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
         InputColumnType src_column = *down_cast<const InputColumnType*>(src[0].get());
-<<<<<<< HEAD
         InputCppType* src_data = src_column.get_data().data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             bytes.resize(old_size + sizeof(double) + sizeof(size_t) + sizeof(InputCppType));
-            memcpy(bytes.data() + old_size, &rate, sizeof(double));
+            strings::memcpy_inlined(bytes.data() + old_size, &rate, sizeof(double));
             *reinterpret_cast<size_t*>(bytes.data() + old_size + sizeof(double)) = 1UL;
-            memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), &src_data[i], sizeof(InputCppType));
+            strings::memcpy_inlined(bytes.data() + old_size + sizeof(double) + sizeof(size_t), &src_data[i],
+                                    sizeof(InputCppType));
             dst_column->get_offset().push_back(bytes.size());
         }
-=======
-        pdqsort(false, src_column.get_data().begin(), src_column.get_data().end());
-
-        bytes.resize(old_size + sizeof(double) + sizeof(size_t) + chunk_size * sizeof(InputCppType));
-
-        memcpy(bytes.data() + old_size, &rate, sizeof(double));
-        memcpy(bytes.data() + old_size + sizeof(double), &chunk_size, sizeof(size_t));
-        memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), src_column.get_data().data(),
-               chunk_size * sizeof(InputCppType));
->>>>>>> 4e3418cab ([Enhancement] optimize performance of percentile_cont function (#14609))
     }
 
     std::string get_name() const override { return "percentile_cont"; }
