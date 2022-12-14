@@ -31,63 +31,73 @@ PROPERTIES ("key"="value"[, ...]);
 
 #### Spark 资源
 
-Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spark Load 仅支持从 cluster manager 为 YARN 且文件系统为 HDFS 的集群中导入数据，且 YARN 和 HDFS 均支持 HA（高可用）。具体可分为以下三种情况：
+Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spark Load 仅支持 Spark 的 cluster manager 为 YARN 且数据存储系统为 HDFS，且 YARN 和 HDFS 均支持 HA（高可用）。具体可分为以下几种情况：
 
-- 如您使用 YARN 作为 Spark 的 cluster manager，HDFS 来存储数据，则需添加如下配置项：
+- 如果选择使用Broker 进程的方式导入
 
-| **配置项**                                | **必选** | **说明**                                                     |
-| ----------------------------------------- | -------- | ------------------------------------------------------------ |
-| type                                      | 是       | 资源类型，取值为 `spark`。                                   |
-| spark.master                              | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为 `yarn`。 |
-| spark.submit.deployMode                   | 是       | Spark driver 的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。 |
-| spark.executor.memory                     | 否       | Spark executor 占用的内存量，单位为 KB、MB、GB 或 TB。       |
-| spark.yarn.queue                          | 否       | YARN 队列名称。                                              |
-| spark.hadoop.yarn.resourcemanager.address | 是       | YARN ResourceManager 地址。                                  |
-| spark.hadoop.fs.defaultFS                 | 是       | HDFS 中 NameNode 的地址。格式为：`hdfs://namenode_host:port`。 |
-| working_dir                               | 是       | 一个 HDFS 文件路径，用于存放 ETL 作业生成的文件。例如：`hdfs://host: port/tmp/starrocks`。 |
-| broker                                    | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
-| broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
-| broker.password                           | 否       | HDFS 用户密码。                                              |
+  - 如果 Spark 的 cluster manager 为 YARN，数据存储系统为 HDFS，则需添加如下配置项：
 
-- 如您使用 YARN HA 作为 Spark 的 cluster manager，HDFS 来存储数据，则需添加如下配置项：
+    | **配置项**                                | **必选** | **说明**                                                     |
+    | ----------------------------------------- | -------- | ------------------------------------------------------------ |
+    | type                                      | 是       | 资源类型，取值为 `spark`。                                   |
+    | spark.master                              | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为 `yarn`。 |
+    | spark.submit.deployMode                   | 是       | Spark driver 的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。 |
+    | spark.executor.memory                     | 否       | Spark executor 占用的内存量，单位为 KB、MB、GB 或 TB。       |
+    | spark.yarn.queue                          | 否       | YARN 队列名称。                                              |
+    | spark.hadoop.yarn.resourcemanager.address | 是       | YARN ResourceManager 地址。                                  |
+    | spark.hadoop.fs.defaultFS                 | 是       | HDFS 中 NameNode 的地址。格式为：`hdfs://namenode_host:port`。 |
+    | working_dir                               | 是       | 一个 HDFS 文件路径，用于存放 ETL 作业生成的文件。例如：`hdfs://host: port/tmp/starrocks`。 |
+    | broker                                    | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
+    | broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
+    | broker.password                           | 否       | HDFS 用户密码。                                              |
 
-| **配置项**                                       | **必选** | **说明**                                                     |
-| ------------------------------------------------ | -------- | ------------------------------------------------------------ |
-| type                                             | 是       | 资源类型，取值为`spark`。                                    |
-| spark.master                                     | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为`yarn`。 |
-| spark.submit.deployMode                          | 是       | Spark 驱动程序的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。 |
-| spark.hadoop.yarn.resourcemanager.ha.enabled     | 是       | YARN ResourceManager 是否启用 HA。需设置该参数为`true`，即启用 HA。 |
-| spark.hadoop.yarn.resourcemanager.ha.rm-ids      | 是       | YARN ResourceManager 的逻辑 ID 列表。多个逻辑 ID 之间用逗号 (`,`) 隔开。 |
-| spark.hadoop.yarn.resourcemanager.hostname.rm-id | 是       | 对于每个 rm-id，需指定 ResourceManager 对应的主机名。如已添加该配置项，则不需要再添加`spark.hadoop.yarn.resourcemanager.address.rm-id`。 |
-| spark.hadoop.yarn.resourcemanager.address.rm-id  | 是       | 对于每个rm-id，需指定 ResourceManager 对应 `host:port`。如已添加该配置项，则不需要再添加`spark.hadoop.yarn.resourcemanager.hostname.rm-id`。 |
-| spark.hadoop.fs.defaultFS                        | 是       | Spark 使用的 HDFS 中 NameNode 节点地址。格式为：`hdfs://namenode_host:port`。 |
-| working_dir                                      | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
-| broker                                           | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
-| broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
-| broker.password                           | 否       | HDFS 用户密码。                                              |
+  - 如果 Spark 的 cluster manager 为 YARN，并且为 YARN ResourceManager HA，数据存储系统为 HDFS，则需添加如下配置项：
 
-- 如您使用 YARN 作为 Spark 的cluster manager，HDFS HA来存储数据，则需添加如下配置项：
+    | **配置项**                                       | **必选** | **说明**                                                     |
+    | ------------------------------------------------ | -------- | ------------------------------------------------------------ |
+    | type                                             | 是       | 资源类型，取值为`spark`。                                    |
+    | spark.master                                     | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为`yarn`。 |
+    | spark.submit.deployMode                          | 是       | Spark 驱动程序的部署模式。取值包括`cluster`和`client`。关于取值说明，参考 [Launching Spark on YARN](https://spark.apache.org/docs/3.3.0/running-on-yarn.html#launching-spark-on-yarn)。 |
+    | spark.hadoop.yarn.resourcemanager.ha.enabled     | 是       | YARN ResourceManager 是否启用 HA。需设置该参数为`true`，即启用 HA。 |
+    | spark.hadoop.yarn.resourcemanager.ha.rm-ids      | 是       | YARN ResourceManager 的逻辑 ID 列表。多个逻辑 ID 之间用逗号 (`,`) 隔开。 |
+    | spark.hadoop.yarn.resourcemanager.hostname.rm-id | 是       | 对于每个 rm-id，需指定 ResourceManager 对应的主机名。如已添加该配置项，则不需要再添加`spark.hadoop.yarn.resourcemanager.address.rm-id`。 |
+    | spark.hadoop.yarn.resourcemanager.address.rm-id  | 是       | 对于每个rm-id，需指定 ResourceManager 对应 `host:port`。如已添加该配置项，则不需要再添加`spark.hadoop.yarn.resourcemanager.hostname.rm-id`。 |
+    | spark.hadoop.fs.defaultFS                        | 是       | Spark 使用的 HDFS 中 NameNode 节点地址。格式为：`hdfs://namenode_host:port`。 |
+    | working_dir                                      | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
+    | broker                                           | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
+    | broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
+    | broker.password                           | 否       | HDFS 用户密码。                                              |
 
-| **配置项**                                                   | **必选** | **说明**                                                     |
-| ------------------------------------------------------------ | -------- | ------------------------------------------------------------ |
-| type                                                         | 是       | 资源类型，取值为`spark`。                                    |
-| spark.master                                                 | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为 `yarn`。 |
-| spark.hadoop.yarn.resourcemanager.address                    | 是       | YARN ResourceManager 地址。                                  |
-| spark.hadoop.fs.defaultFS                                    | 是       | Spark 使用的 HDFS 中 NameNode 节点地址。格式为：`hdfs://namenode_host:port`。 |
-| spark.hadoop.dfs.nameservices                                | 是       | HDFS nameservice 的 ID。该配置项供 Spark 使用。              |
-| spark.hadoop.dfs.ha.namenodes.[nameservice ID]               | 是       | HDFS NameNode 的 ID。您可配置多个 NameNode ID。多个 NameNode ID 之间要用逗号 (`,`) 隔开。该配置项供 Spark 使用。 |
-| spark.hadoop.dfs.namenode.rpc-address.[nameservice ID].[name node ID] | 是       | 每个 HDFS NameNode 监听的 RPC 地址。注意需配置完全限定的 RPC 地址。该配置项供 Spark 使用。 |
-| spark.hadoop.dfs.client.failover.proxy.provider              | 是       | HDFS 的 Java 类，其用来联系 Active 状态的 NameNode。该配置项供 Spark 使用。 |
-| working_dir                                                  | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
-| broker                                                       | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
-| broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问，则不需要传入该参数。 |
-| broker.password                           | 否       | HDFS 用户密码。                                              |
-| broker.dfs.nameservices                                      | 是       | HDFS nameservice 的 ID。该配置项供 Broker 使用。             |
-| broker.dfs.ha.namenodes. [nameservice ID]                    | 是       | HDFS NameNode 的 ID。您可配置多个 NameNode ID。多个 NameNode ID 之间要用逗号 (`,`) 隔开。该配置项供 Broker 使用。 |
-| broker.dfs.namenode.rpc-address. [nameservice ID].[name node ID] | 是       | 每个 HDFS NameNode 监听的 RPC 地址。注意需配置完全限定的 RPC 地址。该配置项供 Broker 使用。 |
-| broker.dfs.client.failover.proxy.provider                    | 是       | HDFS 的 Java 类，其用来联系 Active 状态的 NameNode。该配置项供 Broker 使用。 |
+  - 如果 Spark 的 cluster manager 为 YARN，数据存储系统为 HDFS HA，则需添加如下配置项：
 
-> 说明：在以上三种情况中，如要添加除表格以外的配置项，可参考 [Spark Configuration](https://spark.apache.org/docs/latest/configuration.html) 和 [Running Spark on YARN](https://spark.apache.org/docs/latest/running-on-yarn.html)。
+    | **配置项**                                                   | **必选** | **说明**                                                     |
+    | ------------------------------------------------------------ | -------- | ------------------------------------------------------------ |
+    | type                                                         | 是       | 资源类型，取值为`spark`。                                    |
+    | spark.master                                                 | 是       | Spark 的 cluster manager。当前仅支持 YARN，所以取值为 `yarn`。 |
+    | spark.hadoop.yarn.resourcemanager.address                    | 是       | YARN ResourceManager 地址。                                  |
+    | spark.hadoop.fs.defaultFS                                    | 是       | Spark 使用的 HDFS 中 NameNode 节点地址。格式为：`hdfs://namenode_host:port`。 |
+    | spark.hadoop.dfs.nameservices                                | 是       | HDFS nameservice 的 ID。该配置项供 Spark 使用。              |
+    | spark.hadoop.dfs.ha.namenodes.[nameservice ID]               | 是       | HDFS NameNode 的 ID。您可配置多个 NameNode ID。多个 NameNode ID 之间要用逗号 (`,`) 隔开。该配置项供 Spark 使用。 |
+    | spark.hadoop.dfs.namenode.rpc-address.[nameservice ID].[name node ID] | 是       | 每个 HDFS NameNode 监听的 RPC 地址。注意需配置完全限定的 RPC 地址。该配置项供 Spark 使用。 |
+    | spark.hadoop.dfs.client.failover.proxy.provider              | 是       | HDFS 的 Java 类，其用来联系 Active 状态的 NameNode。该配置项供 Spark 使用。 |
+    | working_dir                                                  | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
+    | broker                                                       | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
+    | broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问，则不需要传入该参数。 |
+    | broker.password                           | 否       | HDFS 用户密码。                                              |
+    | broker.dfs.nameservices                                      | 是       | HDFS nameservice 的 ID。该配置项供 Broker 使用。             |
+    | broker.dfs.ha.namenodes. [nameservice ID]                    | 是       | HDFS NameNode 的 ID。您可配置多个 NameNode ID。多个 NameNode ID 之间要用逗号 (`,`) 隔开。该配置项供 Broker 使用。 |
+    | broker.dfs.namenode.rpc-address. [nameservice ID].[name node ID] | 是       | 每个 HDFS NameNode 监听的 RPC 地址。注意需配置完全限定的 RPC 地址。该配置项供 Broker 使用。 |
+    | broker.dfs.client.failover.proxy.provider                    | 是       | HDFS 的 Java 类，其用来联系 Active 状态的 NameNode。该配置项供 Broker 使用。 |
+
+- 如果使用无 Broker 进程的方式导入，则在创建资源时参数设置与使用Broker 进程的方式导入稍有差异，具体差异如下：
+
+  - 无需传入 `broker`。
+  - 如果您需要配置用户身份认证、NameNode 节点的 HA，则需要在 HDFS 集群中的 **hdfs-site.xml** 文件中配置参数，具体参数和说明，请参见 [broker_properties](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs)。并且将 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
+
+> **说明**
+>
+> - 使用无 Broker 进程的方式导入时，如果 HDFS 文件只能由特定用户访问，则您仍然需要传入 HDFS 用户名 `broker.name`和 HDFS 用户密码`broker.password`。
+> - 在以上几种情况中，如要添加除表格以外的配置项，可参考 [Spark Configuration](https://spark.apache.org/docs/latest/configuration.html) 和 [Running Spark on YARN](https://spark.apache.org/docs/latest/running-on-yarn.html)。
 
 #### Hive 资源
 

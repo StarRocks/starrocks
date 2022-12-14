@@ -115,12 +115,11 @@ WHERE:
 
 3.resource_name
 
-所使用的 spark 资源名称，可以通过 `SHOW RESOURCES` 命令查看。
+所使用的 Spark 资源名称，可以通过 `SHOW RESOURCES` 命令查看。
 
 4.resource_properties
 
-当用户有临时性的需求，比如增加任务使用的资源而修改 Spark configs，可以在这里设置，设置仅对本次任务生效，并不影响 StarRocks 集群中已有的配置。
-另外不同的 broker，以及不同的访问方式，需要提供的信息不同。可以查看 broker 使用文档。
+[Spark 资源的配置](../data-definition/CREATE%20RESOURCE.md#spark-资源)。当用户有临时性的需求，比如增加任务使用的资源而修改 Spark 和 HDFS 配置，可以在这里设置，设置仅对本次任务生效，并不影响 StarRocks 集群中已有的配置。
 
 5.opt_properties
 
