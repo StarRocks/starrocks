@@ -59,6 +59,7 @@
     + [使用 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
     + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
+  + [Query Cache](/using_starrocks/query_cache.md)
 + 管理手册
   + 部署集群
     + [通过 StarGo 部署](/administration/stargo.md)
