@@ -48,13 +48,20 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             return null;
         }
 
+        // lambda functions include lambda arguments and captured column, the former should be evaluate with lambda
+        // local context with arguments, the latter may not, called lambda argument non-related expressions which can
+        // be evaluated in the projection's context. These two classes expressions reuse common sub expressions in
+        // different evaluation context. Lambda argument non-related expressions can be reused as non-lambda
+        // expressions, ignoring lambda argument related expressions. After theses, the lambda argument related
+        // expressions are processed in another process.
+        // NOTE: lambda functions cannot reuse common sub expressions across each other.
         Projection rewriteProject(OptExpression input, TaskContext context) {
             Projection projection = input.getOp().getProjection();
 
             projection = ScalarOperatorsReuse.getNewProjection(projection,
                     context.getOptimizerContext().getColumnRefFactory(), false);
 
-            // rewrite lambda functions
+            // rewrite lambda functions with lambda arguments
             rewriteLambdaFunction(projection.getCommonSubOperatorMap(),
                     context.getOptimizerContext().getColumnRefFactory());
             rewriteLambdaFunction(projection.getColumnRefMap(), context.getOptimizerContext().getColumnRefFactory());
@@ -65,8 +72,8 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             if (operatorMap.isEmpty()) {
                 return;
             }
-            ScalarOperatorsReuse.LambdaOperatorRewriter rewriter =
-                    new ScalarOperatorsReuse.LambdaOperatorRewriter(factory);
+            ScalarOperatorsReuse.LambdaFunctionOperatorRewriter rewriter =
+                    new ScalarOperatorsReuse.LambdaFunctionOperatorRewriter(factory);
 
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : operatorMap.entrySet()) {
                 kv.getValue().accept(rewriter, null);

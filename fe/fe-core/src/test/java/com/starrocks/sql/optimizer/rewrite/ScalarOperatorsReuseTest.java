@@ -21,10 +21,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.*;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -199,4 +196,69 @@ public class ScalarOperatorsReuseTest {
         assertEquals(2, commonSubScalarOperators.size());
     }
 
+    @Test
+    public void testLambdaFunctionWithoutLambdaArguments() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator arg = columnRefFactory.create("x", ScalarType.INT, true, true);
+
+
+        CallOperator multi = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(column1, ConstantOperator.createInt(2)));
+
+        CallOperator multi1 = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(column1, ConstantOperator.createInt(2)));
+
+        CallOperator add1 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(multi, multi1));
+
+        CallOperator add2 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(arg, add1));
+        // x-> t1 * 2 + t1 *2 + x
+        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(arg), add2, Type.BOOLEAN);
+
+        List<ScalarOperator> oldOperators = Lists.newArrayList(lambda);
+
+        // reuse lambda argument non-related sub expressions : t1, t1*2
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, false);
+        assertEquals(commonSubScalarOperators.size(), 2);
+
+        // reuse lambda argument related sub expressions : no
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators1 =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, true);
+        assertEquals(commonSubScalarOperators1.size(), 0);
+    }
+
+    @Test
+    public void testLambdaFunctionScalarOperatorsWithLambdaArguments() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator arg = columnRefFactory.create("x", ScalarType.INT, true, true);
+
+
+        CallOperator multi = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(arg, ConstantOperator.createInt(2)));
+
+        CallOperator multi1 = new CallOperator("multi", Type.INT,
+                Lists.newArrayList(arg, ConstantOperator.createInt(2)));
+
+        CallOperator add1 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(multi, multi1));
+
+        CallOperator add2 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(column1, add1));
+        // x-> x * 2 + x *2 + t1
+        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(arg), add2, Type.BOOLEAN);
+
+        List<ScalarOperator> oldOperators = Lists.newArrayList(lambda);
+
+        // reuse lambda argument related sub expressions : x, x*2
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, true);
+        assertEquals(commonSubScalarOperators.size(), 2);
+
+        // reuse lambda argument non-related sub expressions : no
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators1 =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory, false);
+        assertEquals(commonSubScalarOperators1.size(), 0);
+    }
 }
