@@ -532,7 +532,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 return;
             }
         }
-        // do not check the state of the base table, it would be checked in MVActiveChecker
+        // Do not set the active, it would be checked in MVActiveChecker
+        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table table = baseTableInfo.getTable();
+            if (table != null) {
+                MvId mvId = new MvId(db.getId(), id);
+                table.addRelatedMaterializedView(mvId);
+            }
+        }
         analyzePartitionInfo();
     }
 
