@@ -119,6 +119,11 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             return false;
         }
 
+        // check limit
+        if (aggregate.hasLimit()) {
+            return false;
+        }
+
         groupBy.add(distinctColumns.get(0).getId());
         return groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns());
     }
