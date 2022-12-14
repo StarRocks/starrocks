@@ -523,7 +523,6 @@ Status CSVReader::next_record(CSVLine& line) {
     line.parsed_start = newLine.parsed_start;
     line.parsed_end = newLine.parsed_end;
 
-    // std::cout << line.debug_string(buffBasePtr(), escapeDataPtr());
     return Status::OK();
 }
 
