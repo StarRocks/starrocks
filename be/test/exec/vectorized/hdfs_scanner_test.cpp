@@ -310,6 +310,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
                 std::cout << "status not ok: " << status.get_error_msg() << std::endl; \
                 break;                                                                 \
             }                                                                          \
+            chunk->check_or_die();                                                     \
             if (chunk->num_rows() > 0) {                                               \
                 std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
                 EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
@@ -1378,4 +1379,72 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
+
+// =============================================================================
+
+/*
+file schema: schema
+--------------------------------------------------------------------------------
+id:          OPTIONAL INT64 R:0 D:1
+f00:         OPTIONAL F:1
+.list:       REPEATED F:1
+..item:      OPTIONAL INT64 R:1 D:3
+f01:         OPTIONAL F:1
+.list:       REPEATED F:1
+..item:      OPTIONAL INT64 R:1 D:3
+
+row group 1: RC:1500 TS:52144 OFFSET:4
+--------------------------------------------------------------------------------
+id:           INT64 UNCOMPRESSED DO:4 FPO:12023 SZ:14162/14162/1.00 VC:1500 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+f00:
+.list:
+..item:       INT64 UNCOMPRESSED DO:14264 FPO:26307 SZ:18991/18991/1.00 VC:4500 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+f01:
+.list:
+..item:       INT64 UNCOMPRESSED DO:33367 FPO:45410 SZ:18991/18991/1.00 VC:4500 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+
+python code to generate this file.
+
+def array2_parquet():
+    def fn():
+        records = []
+        N = 1500
+        for i in range(N):
+            x = {'id': i}
+            for f in range(2):
+                key = 'f%02d' % f
+                x[key] = [(j + i) for j in range(5)]
+                if i % 2 == 0:
+                    x[key] = None
+
+            records.append(x)
+        return records
+
+    name = 'array2.parquet'
+    write_parquet_file(name, fn)
+*/
+
+TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    SlotDesc parquet_descs[] = {
+            {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)}, {"f00", array_type}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/array_decode.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1500);
+    EXPECT_EQ(scanner->raw_rows_read(), 1500);
+    scanner->close(_runtime_state);
+}
+
 } // namespace starrocks::vectorized
