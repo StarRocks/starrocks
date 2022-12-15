@@ -38,11 +38,7 @@ PROPERTIES("<key>" = "<value>");
 | table_name       | 是       | 文件外部表名称。命名要求如下：<ul><li>必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。</li><li>总长度不能超过 64 个字符。</li></ul> |
 | col_name         | 是       | 文件外部表列名。列名大小写不敏感，需和数据文件中的保持一致，列的顺序无需保持一致。 |
 | col_type         | 是       | 文件外部表列类型，需要根据其与数据文件列类型的映射关系来填写。详细请参见[列类型映射](#列类型映射)。 |
-<<<<<<< HEAD
-| NULL \| NOT NULL | 否       | 文件外部表中的列是否允许为 `NULL`。<ul><li>`NULL`: 允许为 `NULL`。</li><li>`NOT NULL`: 不允许为 `NULL`。</li></ul>您需要按照如下规则指定该参数：<ul><li>如数据文件中的列没有指定 `NULL \| NOT NULL` ，则文件外部表中的列可以不指定 `NULL  \| NOT NULL` 或指定为 `NULL`。</li><li>如数据文件中的列指定为 `NULL`，则文件外部表中的列可以不指定 `NULL  \| NOT NULL` 或指定为 `NULL`。</li><li>如数据文件中的列指定为 `NOT NULL`，则文件外部表列必须指定为 `NOT NULL`。</li></ul> |
-=======
 | NULL \| NOT NULL | 否       | 文件外部表中的列是否允许为 `NULL`。<ul><li>`NULL`: 允许为 `NULL`。</li><li>`NOT NULL`: 不允许为 `NULL`。</li></ul>您需要按照如下规则指定该参数：<ul><li>如数据文件中的列没有指定 `NULL \| NOT NULL` ，则文件外部表中的列可以不指定 `NULL \| NOT NULL` 或指定为 `NULL`。</li><li>如数据文件中的列指定为 `NULL`，则文件外部表中的列可以不指定 `NULL \| NOT NULL` 或指定为 `NULL`。</li><li>如数据文件中的列指定为 `NOT NULL`，则文件外部表列必须指定为 `NOT NULL`。</li></ul> |
->>>>>>> 130904d (Update file_external_table.md (#3635))
 | comment          | 否       | 文件外部表的列备注。                                         |
 | ENGINE           | 是       | ENGINE 类型，取值为 `file`。                                 |
 | PROPERTIES       | 是       | 表属性。具体配置见下表 **PROPERTIES**。                      |
