@@ -102,9 +102,6 @@ int TypeInfo::cmp(const Datum& left, const Datum& right) const {
 class ScalarTypeInfo final : public TypeInfo {
 public:
     virtual ~ScalarTypeInfo() = default;
-    bool equal(const void* left, const void* right) const override { return _equal(left, right); }
-
-    int cmp(const void* left, const void* right) const override { return _cmp(left, right); }
 
     void shallow_copy(void* dest, const void* src) const override { _shallow_copy(dest, src); }
 
@@ -121,7 +118,6 @@ public:
     void set_to_max(void* buf) const override { _set_to_max(buf); }
     void set_to_min(void* buf) const override { _set_to_min(buf); }
 
-    uint32_t hash_code(const void* data, uint32_t seed) const override { return _hash_code(data, seed); }
     size_t size() const override { return _size; }
 
     LogicalType type() const override { return _field_type; }
@@ -130,9 +126,6 @@ protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
 
 private:
-    bool (*_equal)(const void* left, const void* right);
-    int (*_cmp)(const void* left, const void* right);
-
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
     void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
@@ -142,8 +135,6 @@ private:
 
     void (*_set_to_max)(void* buf);
     void (*_set_to_min)(void* buf);
-
-    uint32_t (*_hash_code)(const void* data, uint32_t seed);
 
     // Datum based methods.
     int (*_datum_cmp)(const Datum& left, const Datum& right);
@@ -204,8 +195,6 @@ struct ScalarTypeInfoImplBase {
     static void set_to_max(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::max()); }
 
     static void set_to_min(void* buf) { unaligned_store<CppType>(buf, std::numeric_limits<CppType>::lowest()); }
-
-    static uint32_t hash_code(const void* data, uint32_t seed) { return HashUtil::hash(data, sizeof(CppType), seed); }
 
     static std::string to_string(const void* src) {
         std::stringstream stream;
@@ -268,16 +257,13 @@ private:
 
 template <typename TypeInfoImpl>
 ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
-        : _equal(TypeInfoImpl::equal),
-          _cmp(TypeInfoImpl::cmp),
-          _shallow_copy(TypeInfoImpl::shallow_copy),
+        : _shallow_copy(TypeInfoImpl::shallow_copy),
           _deep_copy(TypeInfoImpl::deep_copy),
           _direct_copy(TypeInfoImpl::direct_copy),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
           _set_to_max(TypeInfoImpl::set_to_max),
           _set_to_min(TypeInfoImpl::set_to_min),
-          _hash_code(TypeInfoImpl::hash_code),
           _datum_cmp(TypeInfoImpl::datum_cmp),
           _size(TypeInfoImpl::size),
           _field_type(TypeInfoImpl::type) {}
@@ -905,16 +891,6 @@ struct ScalarTypeInfoImpl<TYPE_DATETIME> : public ScalarTypeInfoImplBase<TYPE_DA
 
 template <>
 struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> {
-    static bool equal(const void* left, const void* right) {
-        auto l_slice = unaligned_load<Slice>(left);
-        auto r_slice = unaligned_load<Slice>(right);
-        return l_slice == r_slice;
-    }
-    static int cmp(const void* left, const void* right) {
-        auto l_slice = unaligned_load<Slice>(left);
-        auto r_slice = unaligned_load<Slice>(right);
-        return l_slice.compare(r_slice);
-    }
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
         if (value_len > OLAP_STRING_MAX_LENGTH) {
@@ -966,10 +942,6 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
     static void set_to_min(void* buf) {
         auto slice = unaligned_load<Slice>(buf);
         memset(slice.data, 0, slice.size);
-    }
-    static uint32_t hash_code(const void* data, uint32_t seed) {
-        auto slice = unaligned_load<Slice>(data);
-        return HashUtil::hash(slice.data, slice.size, seed);
     }
 
     static int datum_cmp(const vectorized::Datum& left, const vectorized::Datum& right) {
