@@ -182,7 +182,9 @@ public class LoadManager implements Writable {
         addLoadJob(loadJob);
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        if (!loadJob.isCompleted()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        }
     }
 
     private void addLoadJob(LoadJob loadJob) {
