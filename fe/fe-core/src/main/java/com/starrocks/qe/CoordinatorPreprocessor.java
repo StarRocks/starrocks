@@ -289,6 +289,7 @@ public class CoordinatorPreprocessor {
 
     public void prepareExec() throws Exception {
         // prepare information
+        resetFragmentState();
         prepareFragments();
 
         // prepare workgroup
@@ -300,6 +301,20 @@ public class CoordinatorPreprocessor {
         computeFragmentExecParams();
         traceInstance();
         computeBeInstanceNumbers();
+    }
+
+    /**
+     * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
+     */
+    private void resetFragmentState() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment instanceof MultiCastPlanFragment) {
+                MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+                for (List<TPlanFragmentDestination> destination : multiSink.getDestinations()) {
+                    destination.clear();
+                }
+            }
+        }
     }
 
     private void prepareFragments() {
