@@ -148,7 +148,7 @@ Specify the time zone used by the import job. The default is to use the timezone
 
 Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).
 
-For example, a table contains columns `id`, `timestamp` and so on. And you want to update data rows with the same primary key based on the `timestamp` field. To be more specific, the data will be updated only if the timestamp of the latest loaded data (the value of the timestamp column) is greater than the timestamp of the current data in StarRocks, then you can set `"merge_condition" = "timestamp"`.
+For example, a table contains columns `id`, `timestamp` and so on. And you want to update data rows with the same primary key based on the `timestamp` column. The data row with the same primary key will be updated only if the value of the timestamp column of the newly loaded data is greater than the value of the current data in StarRocks. Then you can set `"merge_condition" = "timestamp"`.
 
 > **NOTE**
 >
