@@ -6,7 +6,7 @@ This topic describes how to export data from specified tables or partitions in y
 
 Brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
