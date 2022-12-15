@@ -1,0 +1,61 @@
+[build-system]
+requires = [
+    "hatchling>=0.13.0",
+    "setuptools<61",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "datadog-starrocks-fe"
+description = "The StarRocks FE check"
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+requires-python = ">=3.8"
+keywords = [
+    "datadog",
+    "datadog agent",
+    "datadog check",
+    "starrocks_fe",
+]
+authors = [
+    { name = "Datadog", email = "packages@datadoghq.com" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: BSD License",
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: System :: Monitoring",
+]
+dependencies = [
+    "datadog-checks-base>=25.1.0",
+]
+dynamic = [
+    "version",
+]
+
+[project.optional-dependencies]
+deps = []
+
+[project.urls]
+Source = "https://github.com/DataDog/integrations-core"
+
+[tool.hatch.version]
+path = "datadog_checks/starrocks_fe/__about__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/datadog_checks",
+    "/tests",
+    "/manifest.json",
+]
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "/datadog_checks/starrocks_fe",
+]
+dev-mode-dirs = [
+    ".",
+]
