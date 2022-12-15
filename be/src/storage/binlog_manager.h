@@ -101,7 +101,7 @@ public:
 
     void delete_expired_binlog();
 
-    std::shared_ptr<BinlogReader> create_reader(vectorized::VectorizedSchema& schema,int chunk_size) {
+    std::shared_ptr<BinlogReader> create_reader(vectorized::VectorizedSchema& schema, int chunk_size) {
         std::shared_lock lock(_meta_lock);
         int64_t reader_id = _next_reader_id++;
         return std::make_shared<BinlogReader>(reader_id, shared_from_this(), schema, chunk_size);
@@ -116,9 +116,7 @@ public:
         return _rowsets.find(rowset_id)->second;
     }
 
-    std::string binlog_file_name(int32_t file_id) {
-        return BinlogFileWriter::binlog_file_path(_path, file_id);
-    }
+    std::string binlog_file_name(int32_t file_id) { return BinlogFileWriter::binlog_file_path(_path, file_id); }
 
 private:
     friend class BinlogReader;

@@ -22,7 +22,8 @@
 
 namespace starrocks {
 
-BinlogReader::BinlogReader(int64_t reader_id, std::shared_ptr<BinlogManager> binlog_manager, vectorized::VectorizedSchema& schema, int chunk_size)
+BinlogReader::BinlogReader(int64_t reader_id, std::shared_ptr<BinlogManager> binlog_manager,
+                           vectorized::VectorizedSchema& schema, int chunk_size)
         : _reader_id(reader_id),
           _binlog_manager(std::move(binlog_manager)),
           _schema(std::move(schema)),
@@ -34,8 +35,10 @@ BinlogReader::~BinlogReader() {
 
 Status BinlogReader::seek(int64_t version, int64_t seq_id) {
     if (version < _next_version || (version == _next_version && seq_id > _next_seq_id)) {
-        return Status::InternalError(strings::Substitute("Binlog can only be read forward, next position"
-            " <$0, $1>, seek to <$2, $3>", _next_version, _next_seq_id, version, seq_id));
+        return Status::InternalError(
+                strings::Substitute("Binlog can only be read forward, next position"
+                                    " <$0, $1>, seek to <$2, $3>",
+                                    _next_version, _next_seq_id, version, seq_id));
     }
 
     if (_next_version == version && _next_seq_id == seq_id) {
@@ -48,6 +51,7 @@ Status BinlogReader::seek(int64_t version, int64_t seq_id) {
     return Status::OK();
 }
 
+// TODO what if there are missing versions in the binlog
 Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_exclusive) {
     if (_next_version >= max_version_exclusive) {
         return Status::EndOfFile("End of max version " + max_version_exclusive);
@@ -83,7 +87,11 @@ Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_e
     }
 
     if (status.is_end_of_file()) {
-        RETURN_IF_ERROR(_seek_to_file_meta(_next_version, _next_seq_id));
+        status = _seek_to_file_meta(_next_version, _next_seq_id);
+        if (status.is_not_found()) {
+            return Status::EndOfFile("Read out of all binlog");
+        }
+        RETURN_IF_ERROR(status);
     }
     RETURN_IF_ERROR(_seek_to_segment_row(_next_seq_id));
 
@@ -111,8 +119,8 @@ Status BinlogReader::_seek_to_segment_row(int64_t seq_id) {
     CHECK_EQ(log_entry_type, INSERT_RANGE) << "currently only support INSERT_RANGE";
     _next_seq_id = seq_id;
     CHECK(_log_entry_info->start_seq_id <= _next_seq_id)
-            << "Seek to invalid seq, start_seq_id " << _log_entry_info->start_seq_id
-            << ", target seq_id " << _next_seq_id;
+            << "Seek to invalid seq, start_seq_id " << _log_entry_info->start_seq_id << ", target seq_id "
+            << _next_seq_id;
     int32_t start_row_id = seq_id - _log_entry_info->start_seq_id + _log_entry_info->start_row_id;
     return _init_segment_iterator(start_row_id);
 }

@@ -164,7 +164,7 @@ void verify_file_meta(BinlogFileMetaPB* expect_file_meta, std::shared_ptr<Binlog
 
 // Test for duplicate key, and there is only insert range
 TEST_F(BinlogFileTest, test_duplicate_key) {
-    CompressionTypePB compression_type = SNAPPY;
+    CompressionTypePB compression_type = LZ4_FRAME;
     int32_t page_size = 100;
     int64_t file_id = 1;
 

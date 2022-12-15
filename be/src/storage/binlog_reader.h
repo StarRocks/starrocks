@@ -75,17 +75,21 @@ public:
 
     ~BinlogReader();
 
-    // Seek to the position at <version, seq_id> to read. The position is inclusive.
+    // Seek to the position at <version, seq_id>. The position is inclusive.
+    // Returns Status::OK() if find the change event, Status::NotFound() if
+    // there is no such event, and other status if error happens
     Status seek(int64_t version, int64_t seq_id);
 
     // Get a chunk of change events less than the *max_version_exclusive*.
-    // The size of chunk is no more than the *_chunk_size*.
+    // Return Status::OK() if there is at least one change event in the chunk,
+    // Status::EndOfFile() if there is no more change events, and other status
+    // if error happens
     Status get_next(vectorized::ChunkPtr* chunk, int64_t max_version_exclusive);
 
     // The version of next binlog to read, and will update after seek/get_next is called.
     int64_t next_version() { return _next_version; }
 
-    // The sequence number of next change events to read, and will update after seek/get_next is called.
+    // The sequence number of next change event to read, and will update after seek/get_next is called.
     int64_t next_seq_id() { return _next_seq_id; }
 
 private:
