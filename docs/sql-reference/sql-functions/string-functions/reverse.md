@@ -2,15 +2,27 @@
 
 ## Description
 
-This function returns a string with the characters in reverse order.
+Reverses a string or array. Returns a string or array with the characters in the string or array elements in reverse order.
 
 ## Syntax
 
 ```Haskell
-VARCHAR reverse(VARCHAR str)
+reverse(param)
 ```
 
+## Parameters
+
+`param`: the string or array to reverse. It can be of the VARCHAR, CHAR, or ARRAY type.
+
+Currently, this function supports only one-dimensional arrays and the array elements cannot be of the DECIMAL type. This function supports the following types of array elements: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, and JSON. **JSON is supported from 2.5.**
+
+## Return value
+
+The return type is the same as `param`.
+
 ## Examples
+
+Example 1: Reverse a string.
 
 ```Plain Text
 MySQL > SELECT REVERSE('hello');
@@ -20,16 +32,15 @@ MySQL > SELECT REVERSE('hello');
 | olleh            |
 +------------------+
 1 row in set (0.00 sec)
-
-MySQL > SELECT REVERSE('你好');
-+------------------+
-| REVERSE('你好')  |
-+------------------+
-| 好你             |
-+------------------+
-1 row in set (0.00 sec)
 ```
 
-## keyword
+Example 2: Reverse an array.
 
-REVERSE
+```Plain Text
+MYSQL> SELECT REVERSE([4,1,5,8]);
++--------------------+
+| REVERSE([4,1,5,8]) |
++--------------------+
+| [8,5,1,4]          |
++--------------------+
+```
