@@ -190,6 +190,12 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.scheduler.mv.MVActiveChecker;
+import com.starrocks.scheduler.mv.MVJobExecutor;
+import com.starrocks.scheduler.mv.MVManager;
+>>>>>>> 3c2f6ea39 ([BugFix] Fix wrong state of active in  materialized view (#15163))
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -404,7 +410,12 @@ public class GlobalStateMgr {
 
     private RoutineLoadScheduler routineLoadScheduler;
 
+<<<<<<< HEAD
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
+=======
+    private MVJobExecutor mvMVJobExecutor;
+    private MVActiveChecker mvActiveChecker;
+>>>>>>> 3c2f6ea39 ([BugFix] Fix wrong state of active in  materialized view (#15163))
 
     private SmallFileMgr smallFileMgr;
 
@@ -587,6 +598,11 @@ public class GlobalStateMgr {
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+<<<<<<< HEAD
+=======
+        this.mvMVJobExecutor = new MVJobExecutor();
+        this.mvActiveChecker = new MVActiveChecker();
+>>>>>>> 3c2f6ea39 ([BugFix] Fix wrong state of active in  materialized view (#15163))
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -1152,6 +1168,11 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+<<<<<<< HEAD
+=======
+        mvMVJobExecutor.start();
+        mvActiveChecker.start();
+>>>>>>> 3c2f6ea39 ([BugFix] Fix wrong state of active in  materialized view (#15163))
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();

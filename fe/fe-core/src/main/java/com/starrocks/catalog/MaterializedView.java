@@ -502,28 +502,27 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 return;
             }
         }
-        // register materialized view to base tables
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            if (!isInternalCatalog(baseTableInfo.catalogName)) {
-                // External catalogs have not finished load from image when loading mv, do not check the table exists
-                continue;
-            }
+
+        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
-            if (table == null) {
-                LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
-                        baseTableInfo.tableName, id);
-                active = false;
-                continue;
+            if (table != null) {
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                            baseTableInfo.getTableName(), id);
+                    active = false;
+                    continue;
+                }
+                MvId mvId = new MvId(db.getId(), id);
+                table.addRelatedMaterializedView(mvId);
             }
-            if (table instanceof MaterializedView && !((MaterializedView) table).active) {
-                LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
-                        baseTableInfo.tableName, id);
-                active = false;
-                continue;
-            }
-            MvId mvId = new MvId(db.getId(), id);
-            table.addRelatedMaterializedView(mvId);
         }
+        analyzePartitionInfo();
+    }
+
+    private void analyzePartitionInfo() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
         }
