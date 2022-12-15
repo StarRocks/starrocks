@@ -79,6 +79,7 @@ Status BinlogFileWriter::init() {
     _pending_page_context = std::make_unique<PendingPageContext>();
 
     LOG(INFO) << "Init binlog file writer, file id " << _file_id << ", file name " << _file_path;
+    return Status::OK();
 }
 
 Status BinlogFileWriter::prepare(int64_t version, const RowsetId& rowset_id, int64_t start_seq_id,
@@ -125,6 +126,7 @@ Status BinlogFileWriter::add_empty() {
     page_context->num_log_entries += 1;
     // TODO reduce estimation cost
     page_context->estimated_page_size += log_entry->ByteSizeLong();
+    return Status::OK();
 }
 
 Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_id, int32_t num_rows) {
@@ -157,6 +159,7 @@ Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_i
     page_context->last_row_id = start_row_id + num_rows - 1;
     // TODO reduce estimation cost
     page_context->estimated_page_size += log_entry->ByteSizeLong();
+    return Status::OK();
 }
 
 Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t before_row_id, int32_t after_seg_index,
@@ -192,6 +195,7 @@ Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t be
     page_context->estimated_page_size += log_entry->ByteSizeLong();
     _pending_version_context->rowsets.emplace(before_info.rowset_id);
     page_context->rowsets.emplace(before_info.rowset_id);
+    return Status::OK();
 }
 
 Status BinlogFileWriter::add_delete(const RowsetSegInfo& delete_info, int32_t row_id) {
@@ -211,6 +215,7 @@ Status BinlogFileWriter::add_delete(const RowsetSegInfo& delete_info, int32_t ro
     page_context->estimated_page_size += log_entry->ByteSizeLong();
     _pending_version_context->rowsets.emplace(delete_info.rowset_id);
     page_context->rowsets.emplace(delete_info.rowset_id);
+    return Status::OK();
 }
 
 Status BinlogFileWriter::commit(bool end_of_version) {
@@ -292,6 +297,7 @@ Status BinlogFileWriter::abort() {
     WritableFileOptions write_option;
     write_option.mode = FileSystem::CREATE_OR_OPEN;
     ASSIGN_OR_RETURN(_file, fs->new_writable_file(write_option, _file_path))
+    return Status::OK();
 }
 
 Status BinlogFileWriter::close() {

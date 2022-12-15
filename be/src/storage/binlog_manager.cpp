@@ -47,6 +47,7 @@ Status BinlogManager::init(Tablet& tablet) {
     // TODO init binlog manager
     // 1. restore binlog file meta
     // 2. initialize metas about rowset
+    return Status::OK();
 }
 
 Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
@@ -63,7 +64,7 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
     }
 
     std::vector<std::shared_ptr<BinlogFileWriter>> pending_writers;
-    shared_ptr<BinlogFileWriter> current_writer;
+    std::shared_ptr<BinlogFileWriter> current_writer;
     if (_active_binlog_writer != nullptr && _active_binlog_writer->committed_file_size() < _max_file_size) {
         current_writer = _active_binlog_writer;
         pending_writers.emplace_back(current_writer);
@@ -180,7 +181,7 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
                 writer->copy_file_meta(file_meta.get());
                 new_file_metas.emplace_back(file_meta);
             }
-            _update_metas_after_commit(new_file_metas);
+            _update_metas_after_commit(rowset, new_file_metas);
             for (int i = 0; i < pending_writers.size() - 1; i++) {
                 Status st = pending_writers[i]->close();
                 if (!st.ok()) {
@@ -313,7 +314,8 @@ Status BinlogManager::_delete_binlog_files(std::vector<std::string>& file_paths)
     return Status::OK();
 }
 
-void BinlogManager::_update_metas_after_commit(RowsetSharedPtr new_rowset, std::vector<BinlogFileMetaPBSharedPtr> new_file_metas) {
+void BinlogManager::_update_metas_after_commit(RowsetSharedPtr new_rowset,
+                                               std::vector<BinlogFileMetaPBSharedPtr> new_file_metas) {
     std::shared_lock lock(_meta_lock);
 
     RowsetId reused_rowset_id;

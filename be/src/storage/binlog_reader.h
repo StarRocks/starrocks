@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma
+#pragma once
 
 #include "column/chunk.h"
 #include "fs/fs.h"
@@ -98,9 +98,9 @@ private:
     Status _init_segment_iterator(int32_t start_row_id);
     void _reset();
 
+    uint64_t _reader_id;
     std::shared_ptr<BinlogManager> _binlog_manager;
     vectorized::VectorizedSchema _schema;
-    uint64_t _reader_id;
     int32_t _chunk_size;
 
     BinlogFileMetaPBSharedPtr _file_meta;

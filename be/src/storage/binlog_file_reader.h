@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma
+#pragma once
 
+#include "common/status.h"
+#include "fs/fs.h"
 #include "gen_cpp/binlog.pb.h"
 
 namespace starrocks {
@@ -54,19 +56,19 @@ struct PageContext {
 //      // do something
 //      st = file_reader->next();
 //  }
-class BinlogFileReader final {
+class BinlogFileReader {
 public:
     BinlogFileReader(std::string file_name, std::shared_ptr<BinlogFileMetaPB> file_meta);
 
-    // Seek to the log entry containing the <version, seq_id>.
-    // This method only can be called once for a file reader.
-    // Return Status::Ok() if find the entry, Status::NotFound
-    // if not found, and other status if there is other error
+    // Seek to the log entry containing the <version, seq_id>. This method
+    // only can be called once for a file reader. Return Status::Ok() if find
+    // the entry, Status::NotFound if there is no such change event, and other
+    // status if there is other errors
     Status seek(int64_t version, int64_t seq_id);
 
     // Move to the next log entry.
     // Return Status::Ok() if find the entry, Status::EndOfFile
-    // if there is no next, and other status if there is other error
+    // if there is no next, and other status if there is other errors
     Status next();
 
     // Get the information of the current log entry
@@ -100,13 +102,13 @@ private:
     }
 
     bool _is_end_of_file() {
-        PageContext* page_context;
+        PageContext* page_context = _current_page_context.get();
         return _next_page_index == _file_meta->num_pages() &&
                page_context->next_log_entry_index == page_context->page_header.num_log_entries();
     }
 
-    std::shared_ptr<BinlogFileMetaPB> _file_meta;
     std::string _file_path;
+    std::shared_ptr<BinlogFileMetaPB> _file_meta;
     std::unique_ptr<RandomAccessFile> _file;
     int64_t _file_size;
     int64_t _current_file_pos;

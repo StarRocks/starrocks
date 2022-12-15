@@ -67,7 +67,7 @@ protected:
     std::shared_ptr<TestLogEntryInfo> _build_empty_rowset_log_entry(int64_t version) {
         std::shared_ptr<TestLogEntryInfo> entry_info = std::make_shared<TestLogEntryInfo>();
         LogEntryPB& log_entry = entry_info->log_entry;
-        log_entry.set_entry_type(EMPTY);
+        log_entry.set_entry_type(EMPTY_PB);
         entry_info->version = version;
         entry_info->start_seq_id = 0;
         entry_info->end_seq_id = 0;
@@ -147,16 +147,16 @@ void verify_file_meta(BinlogFileMetaPB* expect_file_meta, std::shared_ptr<Binlog
     ASSERT_EQ(expect_file_meta->end_seq_id(), actual_file_meta->end_seq_id());
     ASSERT_EQ(expect_file_meta->end_timestamp_in_us(), actual_file_meta->end_timestamp_in_us());
 
-    unordered_set<RowsetId, HashOfRowsetId> rowset_set;
+    std::unordered_set<RowsetId, HashOfRowsetId> rowset_set;
     for (int i = 0; i < expect_file_meta->rowsets_size(); i++) {
         RowsetId rowset = pb_to_rowset_id(expect_file_meta->rowsets(i));
         auto pair = rowset_set.emplace(rowset);
         ASSERT_FALSE(pair.second);
     }
 
+    ASSERT_EQ(expect_file_meta->rowsets_size(), actual_file_meta->rowsets_size());
     for (int i = 0; i < actual_file_meta->rowsets_size(); i++) {
-        RowsetId rowset = pb_to_rowset_id(expect_file_meta->rowsets(i));
-        auto pair = rowset_set.emplace(rowset);
+        RowsetId rowset = pb_to_rowset_id(actual_file_meta->rowsets(i));
         ASSERT_EQ(1, rowset_set.erase(rowset));
     }
     ASSERT_TRUE(rowset_set.empty());
