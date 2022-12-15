@@ -112,8 +112,8 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
   
   用于设置多阶段聚合时，group-by 第一阶段的预聚合方式。如果第一阶段本地预聚合效果不好，则可以关闭预聚合，走流式方式，把数据简单序列化之后发出去。取值含义如下：
   * `auto`：先探索本地预聚合，如果预聚合效果好，则进行本地预聚合；否则切换成流式。默认值，建议保留。
-  * `force_preaggregation`: 不进行探索，直接进行本地预聚合.
-  * `force_streaming`: 不进行探索，直接做流式.
+  * `force_preaggregation`: 不进行探索，直接进行本地预聚合。
+  * `force_streaming`: 不进行探索，直接做流式。
 
 * disable_streaming_preaggregations
 
