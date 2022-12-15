@@ -39,10 +39,6 @@ public:
         static_assert(!ft_is_invalid<DelegateType<TYPE>>);
     }
 
-    bool equal(const void* left, const void* right) const override { return _delegate->equal(left, right); }
-
-    int cmp(const void* left, const void* right) const override { return _delegate->cmp(left, right); }
-
     void shallow_copy(void* dest, const void* src) const override { return _delegate->shallow_copy(dest, src); }
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override {
@@ -169,8 +165,6 @@ public:
         auto* data = reinterpret_cast<CppType*>(buf);
         *data = 1 - get_scale_factor<CppType>(_precision);
     }
-
-    uint32_t hash_code(const void* data, uint32_t seed) const override { return _delegate->hash_code(data, seed); }
 
     size_t size() const override { return _delegate->size(); }
 

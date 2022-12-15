@@ -57,29 +57,21 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
         typename TypeTraits<field_type>::CppType dst_val;
         MemPool pool;
         type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
-        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
     }
     {
         typename TypeTraits<field_type>::CppType dst_val;
         type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
-        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
     }
     // test min
     {
         typename TypeTraits<field_type>::CppType dst_val;
         type->set_to_min((char*)&dst_val);
-
-        ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) > 0);
     }
     // test max
     {
         typename TypeTraits<field_type>::CppType dst_val;
         type->set_to_max((char*)&dst_val);
         // NOTE: bool input is true, this will return 0
-        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) <= 0);
     }
 }
 
@@ -94,33 +86,23 @@ void test_char(Slice src_val) {
         Slice dst_val(buf, sizeof(buf));
         MemPool pool;
         type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
-        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
     }
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
         type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
-        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
     }
     // test min
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
         dst_val.size = 0;
-
-        ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) > 0);
     }
     // test max
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
         memset(buf, 0xFF, 64);
-
-        ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) < 0);
     }
 }
 
