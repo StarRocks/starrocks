@@ -117,7 +117,7 @@ Status BinlogFileWriter::add_empty() {
             << _file_path << ", actual number of entries " << _pending_page_context->num_log_entries;
 
     LogEntryPB* log_entry = _pending_page_context->page_content.add_entries();
-    log_entry->set_entry_type(EMPTY);
+    log_entry->set_entry_type(EMPTY_PB);
 
     // No need to refer an empty rowset
     _pending_version_context->rowsets.clear();
@@ -133,7 +133,7 @@ Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_i
 
     PendingPageContext* page_context = _pending_page_context.get();
     LogEntryPB* log_entry = page_context->page_content.add_entries();
-    log_entry->set_entry_type(INSERT_RANGE);
+    log_entry->set_entry_type(INSERT_RANGE_PB);
     InsertRangePB* entry_data = log_entry->mutable_insert_range_data();
     bool in_one_segment = false;
     // if the last and current log entries are in the same segment, no need to set file id.
@@ -166,7 +166,7 @@ Status BinlogFileWriter::add_update(const RowsetSegInfo& before_info, int32_t be
 
     PendingPageContext* page_context = _pending_page_context.get();
     LogEntryPB* log_entry = page_context->page_content.add_entries();
-    log_entry->set_entry_type(UPDATE);
+    log_entry->set_entry_type(UPDATE_PB);
     UpdatePB* entry_data = log_entry->mutable_update_data();
 
     // set update before
@@ -200,7 +200,7 @@ Status BinlogFileWriter::add_delete(const RowsetSegInfo& delete_info, int32_t ro
 
     PendingPageContext* page_context = _pending_page_context.get();
     LogEntryPB* log_entry = page_context->page_content.add_entries();
-    log_entry->set_entry_type(DELETE);
+    log_entry->set_entry_type(DELETE_PB);
     DeletePB* entry_data = log_entry->mutable_delete_data();
     _set_file_id_pb(delete_info.rowset_id, delete_info.seg_index, entry_data->mutable_file_id());
     entry_data->set_row_id(row_id);

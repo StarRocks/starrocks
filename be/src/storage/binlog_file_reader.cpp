@@ -133,7 +133,7 @@ void BinlogFileReader::_advance_log_entry() {
     int next_start_row_id = _current_log_entry->start_row_id + _current_log_entry->num_rows;
     int num_rows = 0;
     switch (next_log_entry->entry_type()) {
-        case INSERT_RANGE: {
+        case INSERT_RANGE_PB: {
             InsertRangePB* entry_data = next_log_entry->mutable_insert_range_data();
             num_rows = entry_data->num_rows();
             num_change_events = num_rows;
@@ -145,7 +145,7 @@ void BinlogFileReader::_advance_log_entry() {
             }
             break;
         }
-        case UPDATE: {
+        case UPDATE_PB: {
             UpdatePB* entry_data = next_log_entry->mutable_update_data();
             num_rows = 1;
             num_change_events = 2;
@@ -160,7 +160,7 @@ void BinlogFileReader::_advance_log_entry() {
         case DELETE:
             num_change_events = 1;
             break;
-        case EMPTY:
+        case EMPTY_PB:
         default:
             break;
     }

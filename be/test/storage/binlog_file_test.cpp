@@ -47,7 +47,7 @@ protected:
                                                                       int64_t num_rows, bool end_of_version) {
         std::shared_ptr<TestLogEntryInfo> entry_info = std::make_shared<TestLogEntryInfo>();
         LogEntryPB& log_entry = entry_info->log_entry;
-        log_entry.set_entry_type(INSERT_RANGE);
+        log_entry.set_entry_type(INSERT_RANGE_PB);
         InsertRangePB* data = log_entry.mutable_insert_range_data();
         FileIdPB* file_id = data->mutable_file_id();
         RowsetIdPB* rowset_id_pb = file_id->mutable_rowset_id();
@@ -91,7 +91,7 @@ void verify_file_id(FileIdPB* expect_file_id, FileIdPB* actual_file_id) {
 
 void verify_log_entry(LogEntryPB* expect, LogEntryPB* actual) {
     ASSERT_EQ(expect->entry_type(), actual->entry_type());
-    ASSERT_EQ(INSERT_RANGE, expect->entry_type());
+    ASSERT_EQ(INSERT_RANGE_PB, expect->entry_type());
     ASSERT_TRUE(expect->has_insert_range_data());
     ASSERT_TRUE(actual->has_insert_range_data());
     InsertRangePB* expect_data = expect->mutable_insert_range_data();

@@ -31,10 +31,10 @@ message FileIdPB {
 }
 
 enum LogEntryTypePB {
-  INSERT_RANGE = 0;
-  UPDATE = 1;
-  DELETE = 2;
-  EMPTY = 3;
+  INSERT_RANGE_PB = 0;
+  UPDATE_PB = 1;
+  DELETE_PB = 2;
+  EMPTY_PB = 3;
 }
 
 message InsertRangePB {

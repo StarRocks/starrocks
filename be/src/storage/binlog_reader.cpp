@@ -58,7 +58,7 @@ Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_e
     }
 
     chunk->get()->reset();
-    if (_log_entry_info->log_entry->entry_type() == EMPTY) {
+    if (_log_entry_info->log_entry->entry_type() == EMPTY_PB) {
         _next_version += 1;
         _next_seq_id = 0;
         return Status::OK();
@@ -113,10 +113,10 @@ Status BinlogReader::_seek_to_file_meta(int64_t version, int64_t seq_id) {
 Status BinlogReader::_seek_to_segment_row(int64_t seq_id) {
     _log_entry_info = _binlog_file_reader->log_entry();
     LogEntryTypePB log_entry_type = _log_entry_info->log_entry->entry_type();
-    if (log_entry_type == EMPTY) {
+    if (log_entry_type == EMPTY_PB) {
         return Status::OK();
     }
-    CHECK_EQ(log_entry_type, INSERT_RANGE) << "currently only support INSERT_RANGE";
+    CHECK_EQ(log_entry_type, INSERT_RANGE_PB) << "currently only support INSERT_RANGE_PB";
     _next_seq_id = seq_id;
     CHECK(_log_entry_info->start_seq_id <= _next_seq_id)
             << "Seek to invalid seq, start_seq_id " << _log_entry_info->start_seq_id << ", target seq_id "
