@@ -78,10 +78,15 @@ Data in a partitioned table is divided based on partitioning columns, also calle
 
 ### Choose bucketing columns
 
-Data in partitions can be subdivided into buckets based on the hash values of the bucketing columns. We recommend that you follow the suggestions below to decide the bucketing column:
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
 
-- The column with high cardinality such as ID.
-- The column that is often used as a filter in queries.
+- high cardinality column such as ID
+- column that often used as a filter in queries
+
+But if the column that satisfies both requirements does not exist, you need to determine the buckting column according to the complexity of queries.
+
+- If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
+- If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
 
 If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns. You can decide on the number of bucketing columns based on the following scenarios:
 
@@ -92,7 +97,7 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 - **When  a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
-- Modification is not supported after the bucketing columns is specified.
+- Bucketing columns cannot be modified after they are specified.
 
 #### Examples
 
@@ -155,7 +160,7 @@ AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id,city_code); --do not need to set the number of buckets
 ```
 
-If you intend to set the number of buckets, StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contains about 10 GB of raw data. You can estimate the amount of data in each partition of a table and then decide the number of tablets. To enable the parallel scanning on tablets, run the `SET GLOBAL enable_tablet_internal_parallel;` command.
+If you intend to set the number of buckets, StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contains about 10 GB of raw data. You can estimate the amount of data in each partition of a table and then decide the number of tablets. To enable the parallel scanning on tablets, make sure the `GLOBAL enable_tablet_internal_parallel` is enabled.
 
 > Note: You cannot modify the number of tablets for an existing partition. You can only modify the number of tablets when you add a partition.
 
