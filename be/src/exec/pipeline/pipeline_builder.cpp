@@ -96,7 +96,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
                                                                 kLocalExchangeBufferChunks);
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
-    local_exchange_source->set_need_local_shuffle(false);
+    local_shuffle_source->set_need_local_shuffle(false);
     local_shuffle_source->set_runtime_state(state);
     auto local_shuffle =
             std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs,
