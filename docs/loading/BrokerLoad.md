@@ -10,17 +10,7 @@ Broker Load also supports data transformation at data loading. For more informat
 
 ## Background information
 
-In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
-
-From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
-
-> **NOTE**
->
-> Loading without the broker process may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using the broker process.
-
-If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
-
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
+Broker Load requires a broker to set up a connection between your StarRocks cluster and your storage system. A broker is an independent, stateless service that is integrated with a file-system interface. With a broker, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
 
 ## Supported data file formats
 
@@ -45,6 +35,14 @@ Broker Load supports the following storage systems:
 - Amazon S3
 
 - Google GCS
+
+## Prerequisites
+
+Brokers are deployed in your StarRocks cluster.
+
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
+
+In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
 ## Principles
 
