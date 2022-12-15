@@ -78,7 +78,7 @@ Data in a partitioned table is divided based on partitioning columns, also calle
 
 ### Choose bucketing columns
 
-Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns and the number of buckets. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
 
 - high cardinality column such as ID
 - column that often used as a filter in queries
