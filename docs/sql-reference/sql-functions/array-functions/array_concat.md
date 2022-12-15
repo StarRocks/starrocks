@@ -16,7 +16,7 @@ array_concat(input0, input1, ...)
 
 ## Parameters
 
-`input`: one or more arrays that you want to concatenate. Specify arrays in the `(input0, input1, ...)` format.
+`input`: one or more arrays that you want to concatenate. Specify arrays in the `(input0, input1, ...)` format. This function supports the following types of array elements: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, and JSON. **JSON is supported from 2.5.**
 
 ## Return value
 
