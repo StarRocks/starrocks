@@ -249,9 +249,11 @@ public class ScalarOperatorsReuse {
         private final Map<Integer, Set<ScalarOperator>> commonOperatorsByDepth = new HashMap<>();
 
         private final boolean reuseLambda;
+        private boolean ignoreLambdaArg;
 
         private CommonSubScalarOperatorCollector(boolean reuseLambda) {
             this.reuseLambda = reuseLambda;
+            this.ignoreLambdaArg = false;
         }
 
 
@@ -281,13 +283,16 @@ public class ScalarOperatorsReuse {
                     argument.accept(this, context)).reduce(Math::max).get() + 1, scalarOperator);
         }
 
-        // get rid of the expressions with lambda arguments, for example, select a+b, array_map(x-> 2*x+2*x > a+b, [1])
+        // when called this function without reuseLambda, here get rid of the expressions with lambda arguments,
+        // for example, select a+b, array_map(x-> 2*x+2*x > a+b, [1])
         // the a+b is reused, but 2*x is not reused as it contains the lambda argument x.
-        // TODO(fzh) support reusing lambda argument related expressions.
         @Override
         public Integer visitLambdaFunctionOperator(LambdaFunctionOperator scalarOperator, Void context) {
-            return collectCommonOperatorsByDepth(scalarOperator.getLambdaExpr().accept(this, null),
+            ignoreLambdaArg = !reuseLambda;
+            Integer res = collectCommonOperatorsByDepth(scalarOperator.getLambdaExpr().accept(this, null),
                     scalarOperator);
+            ignoreLambdaArg = false;
+            return res;
         }
 
         @Override
@@ -298,7 +303,7 @@ public class ScalarOperatorsReuse {
         // If a scalarOperator contains any non-deterministic function, it cannot be reused
         // because the non-deterministic function results returned each time are inconsistent.
         private boolean isNonDeterministicFuncOrLambdaArgumentExist(ScalarOperator scalarOperator) {
-            if (!reuseLambda && scalarOperator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
+            if (ignoreLambdaArg && scalarOperator.getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
                 return true;
             }
 

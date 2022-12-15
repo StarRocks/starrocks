@@ -599,7 +599,7 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select array_map(x -> x*2  + abs(c1) + (x*2+ abs(c1)), c2) from test_array";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 10> + <slot 10>common expressions:" +
+        Assert.assertTrue(plan.contains("array_map(<slot 4> -> <slot 10> + <slot 10>:common expressions:" +
                 "{<slot 8> <-> CAST(<slot 4> AS BIGINT)}{<slot 9> <-> <slot 8> * 2}{<slot 10> <-> <slot 9> + 6: abs}"));
 
     }
