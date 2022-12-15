@@ -131,7 +131,20 @@ public class ProfileManager {
             return "";
         }
 
-        String profileString = profile.toString();
+        String profileString;
+        switch (Config.profile_info_format) {
+            case "default":
+                profileString = profile.toString();
+                break;
+            case "json":
+                RuntimeProfile.ProfileFormater formater = new RuntimeProfile.JsonProfileFormater();
+                profileString = formater.format(profile, "");
+                break;
+            default:
+                profileString = profile.toString();
+                LOG.warn("unknown profile format '{}',  use default format instead.", Config.profile_info_format);
+        }
+
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,

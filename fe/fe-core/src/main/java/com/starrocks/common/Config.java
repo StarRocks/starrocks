@@ -1900,6 +1900,13 @@ public class Config extends ConfigBase {
     public static int profile_info_reserved_num = 500;
 
     /**
+     * format of profile infos reserved by `ProfileManager` for recently executed query.
+     * Default value: "default"
+     */
+    @ConfField(mutable = true)
+    public static String profile_info_format = "default";
+
+    /**
      * Max number of roles that can be granted to user including all direct roles and all parent roles
      * Used in new RBAC framework after 3.0 released
      **/
