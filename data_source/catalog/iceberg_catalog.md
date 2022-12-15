@@ -69,8 +69,8 @@ PROPERTIES ("key"="value", ...);
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
 | type                                   | 是       | 数据源类型，取值为 `iceberg`。                               |
 | iceberg.catalog.type                   | 是       | 元数据服务类型，取值为 `glue`。                              |
-| aws.hive.metastore.glue.aws-access-key | 是       | AWS Glue 用户的 access key ID（即访问密钥 ID）。             |
-| aws.hive.metastore.glue.aws-secret-key | 是       | AWS Glue 用户的 secret access key（即秘密访问密钥）。        |
+| aws.hive.metastore.glue.aws-access-key | 是       | IAM 用户的 access key ID（即访问密钥 ID）。             |
+| aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
 | aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
 
 ## 元数据同步

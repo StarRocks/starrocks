@@ -49,6 +49,8 @@
     + [Hudi catalog](/data_source/catalog/hudi_catalog.md)
     + [查询外部数据](/data_source/catalog/query_external_data.md)
   + [外部表](/data_source/External_table.md)
+  + [文件外部表](/data_source/file_external_table.md)
+  + [Block cache](/data_source/Block_cache.md)
 + 查询加速
   + [CBO 统计信息](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
@@ -525,6 +527,7 @@
       + [tan](/sql-reference/sql-functions/math-functions/tan.md)
       + [truncate](/sql-reference/sql-functions/math-functions/truncate.md)
   + [系统变量](/reference/System_variable.md)
+  + [用户自定义变量](/reference/user_defined_variables.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
 + 常见问题解答
