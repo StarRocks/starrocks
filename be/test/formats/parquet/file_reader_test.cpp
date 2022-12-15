@@ -720,8 +720,11 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_chunk();
@@ -792,8 +795,11 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // c0 is conjunct filter column
     ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
@@ -851,8 +857,11 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_struct_chunk();
