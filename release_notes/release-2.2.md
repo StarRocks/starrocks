@@ -20,7 +20,7 @@
 - Parquet 文件和 Hive 表中的列类型不一致时，会导致查询过程中 BE crash。([#8848](https://github.com/StarRocks/starrocks/issues/8848))
 - 太多 OR 语句导致 Planner 过多递归引发查询超时。([#12788](https://github.com/StarRocks/starrocks/pull/12788))
 - 子查询中有 LIMIT 可能导致结果错误。（[#12466](https://github.com/StarRocks/starrocks/pull/12466)）
-- 创建物化视图时语句中无法包含引号。（[#13102](https://github.com/StarRocks/starrocks/pull/13102)）
+- 创建视图时语句中无法包含引号。（[#13102](https://github.com/StarRocks/starrocks/pull/13102)）
 
 ## 2.2.9
 
