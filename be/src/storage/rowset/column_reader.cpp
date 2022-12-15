@@ -425,7 +425,7 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
-        ColumnIterator* element_iterator;
+        ColumnIterator* element_iterator = nullptr;
         RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&element_iterator));
 
         ColumnIterator* null_iterator = nullptr;

@@ -97,31 +97,29 @@ struct MergeEntry {
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
         chunk->reset();
-        while (true) {
-            auto st = segment_itr->get_next(chunk.get(), source_masks);
-            if (st.ok()) {
-                // 1. setup chunk_pk_column
-                if (encode_schema != nullptr) {
-                    // need to encode
-                    chunk_pk_column->reset_column();
-                    PrimaryKeyEncoder::encode(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
-                } else {
-                    // just use chunk's first column
-                    chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
-                }
-                DCHECK(chunk_pk_column->size() > 0);
-                DCHECK(chunk_pk_column->size() == chunk->num_rows());
-                // 2. setup pk cursor
-                pk_start = reinterpret_cast<const T*>(chunk_pk_column->raw_data());
-                pk_cur = pk_start;
-                pk_last = pk_start + chunk_pk_column->size() - 1;
-                return Status::OK();
-            } else if (st.is_end_of_file()) {
-                return Status::EndOfFile("End of merge entry iterator");
+        auto st = segment_itr->get_next(chunk.get(), source_masks);
+        if (st.ok()) {
+            // 1. setup chunk_pk_column
+            if (encode_schema != nullptr) {
+                // need to encode
+                chunk_pk_column->reset_column();
+                PrimaryKeyEncoder::encode(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
             } else {
-                // error
-                return st;
+                // just use chunk's first column
+                chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
             }
+            DCHECK(chunk_pk_column->size() > 0);
+            DCHECK(chunk_pk_column->size() == chunk->num_rows());
+            // 2. setup pk cursor
+            pk_start = reinterpret_cast<const T*>(chunk_pk_column->raw_data());
+            pk_cur = pk_start;
+            pk_last = pk_start + chunk_pk_column->size() - 1;
+            return Status::OK();
+        } else if (st.is_end_of_file()) {
+            return Status::EndOfFile("End of merge entry iterator");
+        } else {
+            // error
+            return st;
         }
     }
 };
