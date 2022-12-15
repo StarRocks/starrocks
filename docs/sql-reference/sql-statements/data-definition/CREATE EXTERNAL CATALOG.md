@@ -23,7 +23,7 @@ PROPERTIES ("key"="value", ...);
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | Yes          | The name of the external catalog. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name cannot exceed 64 characters in length.</li></ul> |
-| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see Hive catalog, Iceberg catalog, Hudi catalog and Delta Lake catalog. |
+| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see Hive catalog, Iceberg catalog, Hudi catalog, and Delta Lake catalog. |
 
 ## Examples
 
@@ -69,7 +69,7 @@ PROPERTIES(
     "type"="iceberg", 
     "iceberg.catalog.type"="glue",
     "aws.hive.metastore.glue.aws-access-key"="xxxxx",
-    "aws.hive.metastore.glue.aws-secret-key"="xxx",
+    "aws.hive.metastore.glue.aws-secret-key"="xxxxxxxxxxxx",
     "aws.hive.metastore.glue.endpoint"="https://glue.x-x-x.amazonaws.com"
 );
 ```

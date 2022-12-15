@@ -12,7 +12,7 @@ A Delta Lake catalog is an external catalog supported in StarRocks 2.5 and later
 
 ## Before you begin
 
-Before you create a Delta Lake catalog, configure your StarRocks cluster so that StarRocks can access the distributed file system (DFS) and metadata service of your Delta Lake. StarRocks supports four DFSs for Delta Lake: HDFS, Amazon S3, Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS). StarRocks supports two metadata services for Delta Lake: Hive metastore and AWS Glue. The configurations required for a Delta Lake catalog are the same as that required for a Hive catalog. Therefore, see [Hive catalog](../catalog/hive_catalog.md) for more information about the configurations.
+Before you create a Delta Lake catalog, configure your StarRocks cluster so that StarRocks can access the distributed file system (DFS) and metadata service of your Delta Lake. StarRocks supports four DFSs for Delta Lake: HDFS, Amazon S3, Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS). StarRocks supports two metadata services for Delta Lake: Hive metastore and AWS Glue. The configurations required for a Delta Lake catalog are the same as that required for a Hive catalog. Therefore, see [Hive catalog](../catalog/hive_catalog.md#before-you-begin) for more information about the configurations.
 
 ## Create a Delta Lake catalog
 
