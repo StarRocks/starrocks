@@ -50,6 +50,7 @@
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/type_traits.h"
 #include "types/date_value.hpp"
+#include "types/map_type_info.h"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
 #include "util/mysql_global.h"
@@ -314,6 +315,14 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
         return type_info;
+    } else if (type == TYPE_MAP) {
+        const ColumnMetaPB& key_meta = column_meta_pb.children_columns(0);
+        TypeInfoPtr key_type_info = get_type_info(key_meta);
+
+        const ColumnMetaPB& value_meta = column_meta_pb.children_columns(1);
+        TypeInfoPtr value_type_info = get_type_info(value_meta);
+
+        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
     } else {
         return get_type_info(delegate_type(type));
     }
@@ -326,6 +335,14 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
         return type_info;
+    } else if (col.type() == TYPE_MAP) {
+        const TabletColumn& key_meta = col.subcolumn(0);
+        TypeInfoPtr key_type_info = get_type_info(key_meta);
+
+        const TabletColumn& value_meta = col.subcolumn(1);
+        TypeInfoPtr value_type_info = get_type_info(value_meta);
+
+        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
     } else {
         return get_type_info(col.type(), col.precision(), col.scale());
     }
