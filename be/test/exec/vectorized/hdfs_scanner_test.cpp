@@ -1447,4 +1447,103 @@ TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
     scanner->close(_runtime_state);
 }
 
+// =============================================================================
+
+/*
+
+a column, in a row group it's encoded as dict page
+but in another row group it's encoded as plain page.
+
+sandbox-cloud :: ~ » hadoop jar ~/installed/parquet-tools-1.9.0.jar dump -c id --disable-data --disable-crop file:///home/disk4/zhangyan/dict2.parquet                                                                                                                                                                                                         1 ↵
+row group 0
+--------------------------------------------------------------------------------
+id:  BINARY UNCOMPRESSED DO:5709 FPO:5709 SZ:163/163/1.00 VC:100 ENC:PLAIN,RLE_DICTIONARY
+
+    id TV=100 RL=0 DL=1 DS: 3 DE:PLAIN
+    ----------------------------------------------------------------------------
+    page 0:                  DLE:RLE RLE:BIT_PACKED VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:103 VC:100
+
+row group 1
+--------------------------------------------------------------------------------
+id:  BINARY UNCOMPRESSED DO:0 FPO:16447 SZ:721/721/1.00 VC:100 ENC:PLAIN
+
+    id TV=100 RL=0 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:BIT_PACKED VLE:PLAIN ST:[no stats for this column] SZ:701 VC:100
+
+
+Python code
+
+def dict2_parquet():
+    def fn():
+        records = []
+        d = ['ysq01', 'ysq02', 'ysq03', None]
+        N = 100
+        for i in range(N):
+            x = {'seq': i}
+            for f in range(2):
+                x['f%02d' % f] = ''.join([chr(ord('a') + (i + f + x) % 26) for x in range(20)])
+            x['id'] = d[i % 4]
+            for f in range(2):
+                x['f%02d' % (f + 3)] = ''.join([chr(ord('a') + (i + f + x) % 26) for x in range(20)])
+            records.append(x)
+        return records
+
+    name = 'dict2.parquet'
+    json_data = fn()
+    df = pd.DataFrame.from_records(json_data)
+    # to enforce as dictionary page.
+    df['id'] = df['id'].astype('category')
+    fastparquet.write(name, df)
+
+    df = pd.DataFrame.from_records(json_data)
+    fastparquet.write(name, df, append=True)
+    peek_parquet_data(name)
+*/
+
+TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
+    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/dict_two_page.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    param->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+
+    // expect id = 'ysq01'
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 50);
+    EXPECT_EQ(scanner->raw_rows_read(), 200);
+    scanner->close(_runtime_state);
+}
+
 } // namespace starrocks::vectorized
