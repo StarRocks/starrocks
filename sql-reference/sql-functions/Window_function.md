@@ -225,7 +225,7 @@ select x, y,
         over (
             partition by x
             order by y
-        ) as rank
+        ) as `rank`
 from int_t;
 ~~~
 
@@ -521,7 +521,11 @@ RANK() OVER(partition_by_clause order_by_clause)
 根据x列进行排名
 
 ~~~SQL
-select x, y, rank() over(partition by x order by y) as rank
+select x, y, 
+    rank() over(
+        partition by x 
+        order by y
+    ) as `rank`
 from int_t;
 ~~~
 
@@ -556,7 +560,11 @@ ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 举例：
 
 ~~~SQL
-select x, y, row_number() over(partition by x order by y) as rank
+select x, y, 
+    row_number() over(
+        partition by x 
+        order by y
+    ) as `rank`
 from int_t;
 ~~~
 

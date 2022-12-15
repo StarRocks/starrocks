@@ -106,6 +106,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   控制是否启用 Colocate Join 功能。默认为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocate Join。
 
+* streaming_preaggregation_mode
+  
+  用于设置多阶段聚合时，group-by 第一阶段的预聚合方式。如果第一阶段的预聚合效果不好，也就是预聚合前后行数相差不大，则可以关闭预聚合，走流式方式，把数据简单序列化之后发出去。取值如下：
+  * `auto`：先探索本地预聚合，如果预聚合效果好，则进行本地预聚合；否则切换成流式。默认值，建议保留。
+  * `force_preaggregation`: 不进行探索，直接进行本地预聚合.
+  * `force_streaming`: 不进行探索，直接做流式.
+
 * disable_streaming_preaggregations
 
   控制是否开启流式预聚合。默认为 false，即开启。
