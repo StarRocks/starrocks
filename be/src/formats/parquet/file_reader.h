@@ -103,7 +103,6 @@ private:
     size_t _row_group_size = 0;
     vectorized::Schema _schema;
 
-    std::vector<GroupReaderParam::Column> _read_cols;
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
     bool _is_only_partition_scan = false;

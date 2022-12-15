@@ -124,16 +124,16 @@ public class BackupJobPrimaryKeyTest {
     @BeforeClass
     public static void start() {
         Config.tmp_dir = "./";
-        File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
+        File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
         backupDir.mkdirs();
     }
 
     @AfterClass
     public static void end() throws IOException {
         Config.tmp_dir = "./";
-        File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
+        File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
         if (backupDir.exists()) {
-            Files.walk(BackupHandler.BACKUP_ROOT_DIR,
+            Files.walk(BackupHandler.TEST_BACKUP_ROOT_DIR,
                             FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
                     .forEach(File::delete);
         }
@@ -205,6 +205,7 @@ public class BackupJobPrimaryKeyTest {
         List<TableRef> tableRefs = Lists.newArrayList();
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
         job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        job.setTestPrimaryKey();
     }
 
     @Test
