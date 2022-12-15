@@ -19,6 +19,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(R
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
+    local_exchange_source->set_need_local_shuffle(true);
     auto local_exchange = std::make_shared<BroadcastExchanger>(mem_mgr, local_exchange_source.get());
     auto local_exchange_sink =
             std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), pseudo_plan_node_id, local_exchange);
@@ -58,6 +59,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->chunk_size() * buffer_size);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
+    local_exchange_source->set_need_local_shuffle(true);
     local_exchange_source->set_runtime_state(state);
     auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
     auto local_exchange_sink =
@@ -94,6 +96,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
                                                                 kLocalExchangeBufferChunks);
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
+    local_exchange_source->set_need_local_shuffle(false);
     local_shuffle_source->set_runtime_state(state);
     auto local_shuffle =
             std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs,
@@ -131,6 +134,7 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_row_count * kLocalExchangeBufferChunks);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
+    local_exchange_source->set_need_local_shuffle(true);
     local_exchange_source->set_runtime_state(state);
     auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
 
