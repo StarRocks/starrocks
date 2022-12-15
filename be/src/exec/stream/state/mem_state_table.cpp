@@ -175,7 +175,7 @@ DatumKeyRow MemStateTable::_convert_datum_row_to_key(const DatumRow& row, size_t
 Status MemStateTable::flush(RuntimeState* state, vectorized::StreamChunk* chunk) {
     DCHECK(chunk);
     auto chunk_size = chunk->num_rows();
-    if (StreamChunkConverter::has_ops_colum(chunk)) {
+    if (StreamChunkConverter::has_ops_column(chunk)) {
         auto ops = StreamChunkConverter::ops(chunk);
         for (auto i = 0; i < chunk_size; i++) {
             if (ops[i] == StreamRowOp::UPDATE_BEFORE) {

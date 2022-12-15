@@ -65,23 +65,7 @@ public:
     }
 
     Datum(const DatumKey& datum_key) {
-        std::visit(
-                overloaded{[this](const int8_t& arg) { set_int8(arg); }, [this](const uint8_t& arg) { set_uint8(arg); },
-                           [this](const int16_t& arg) { set_int16(arg); },
-                           [this](const uint16_t& arg) { set_uint16(arg); },
-                           [this](const uint24_t& arg) { set_uint24(arg); },
-                           [this](const int32_t& arg) { set_int32(arg); },
-                           [this](const uint32_t& arg) { set_uint32(arg); },
-                           [this](const int64_t& arg) { set_int64(arg); },
-                           [this](const uint64_t& arg) { set_uint64(arg); },
-                           [this](const int96_t& arg) { set_int96(arg); },
-                           [this](const int128_t& arg) { set_int128(arg); },
-                           [this](const Slice& arg) { set_slice(arg); },
-                           [this](const decimal12_t& arg) { set_decimal12(arg); },
-                           [this](const DecimalV2Value& arg) { set_decimal(arg); },
-                           [this](const float& arg) { set_float(arg); }, [this](const double& arg) { set_double(arg); },
-                           [this](auto& arg) { throw std::runtime_error("unsupported datum key."); }},
-                datum_key);
+        std::visit(overloaded{[this](auto& arg) { set<decltype(arg)>(arg); }}, datum_key);
     }
 
     int8_t get_int8() const { return get<int8_t>(); }
@@ -195,56 +179,25 @@ public:
                 _value);
     }
 
-    bool equal_datum_key(const DatumKey& key) const {
-#define VISIT_ARG(type)                              \
-    [this](const type& arg) {                        \
-        if (!std::holds_alternative<type>(_value)) { \
-            return false;                            \
-        }                                            \
-        return arg == get<type>();                   \
-    },
-
-        return std::visit(
-                overloaded{
-                        VISIT_ARG(int8_t)
-                        VISIT_ARG(uint8_t)
-                        VISIT_ARG(int16_t)
-                        VISIT_ARG(uint16_t)
-                        VISIT_ARG(uint24_t)
-                        VISIT_ARG(int32_t)
-                        VISIT_ARG(uint32_t)
-                        VISIT_ARG(int64_t)
-                        VISIT_ARG(uint64_t)
-                        VISIT_ARG(int96_t)
-                        VISIT_ARG(int128_t)
-                        VISIT_ARG(Slice)
-                        VISIT_ARG(decimal12_t)
-                        VISIT_ARG(DecimalV2Value)
-                        VISIT_ARG(float)
-                        VISIT_ARG(double)
-                        [this](const auto& arg) {
-                          DCHECK(false);
-#ifdef BE_TEST
-    VLOG_ROW << "Type is not supported:" << arg.index();
-#endif
-                          return false;
+    template <typename T>
+    bool is_equal(const T& val) const {
+        return get<T>() == val;
     }
-                },
-                key);
-#undef VISIT_ARG
-                } // namespace starrocks::vectorized
 
-            private:
-                using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t,
-                                             uint32_t, int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t,
-                                             DecimalV2Value, float, double, DatumArray, DatumMap, HyperLogLog*,
-                                             BitmapValue*, PercentileValue*, JsonValue*>;
-                Variant _value;
-                }
-                ;
+    bool equal_datum_key(const DatumKey& key) const {
+        return std::visit([&](const auto& arg) { return is_equal(arg); }, key);
+    }
 
-                static const Datum kNullDatum{};
+private:
+    using Variant =
+            std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
+                         uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, DatumArray,
+                         DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
+    Variant _value;
+};
 
-                Datum convert2Datum(const DatumKey& key);
+static const Datum kNullDatum{};
 
-                } // namespace starrocks::vectorized
+Datum convert2Datum(const DatumKey& key);
+
+} // namespace starrocks::vectorized

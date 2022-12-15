@@ -45,29 +45,29 @@ public:
         return chunk;
     }
 
-    static bool has_ops_colum(const StreamChunk& chunk) {
+    static bool has_ops_column(const StreamChunk& chunk) {
         if (chunk.has_extra_data() && typeid(*chunk.get_extra_data()) == typeid(ChunkExtraColumnsData)) {
             return true;
         }
         return false;
     }
 
-    static bool has_ops_colum(StreamChunkPtr chunk_ptr) {
+    static bool has_ops_column(const StreamChunkPtr& chunk_ptr) {
         if (!chunk_ptr) {
             return false;
         }
-        return has_ops_colum(*chunk_ptr);
+        return has_ops_column(*chunk_ptr);
     }
 
-    static bool has_ops_colum(StreamChunk* chunk_ptr) {
+    static bool has_ops_column(StreamChunk* chunk_ptr) {
         if (!chunk_ptr) {
             return false;
         }
-        return has_ops_colum(*chunk_ptr);
+        return has_ops_column(*chunk_ptr);
     }
 
     static Int8Column* ops_col(const StreamChunk& stream_chunk) {
-        DCHECK(has_ops_colum(stream_chunk));
+        DCHECK(has_ops_column(stream_chunk));
         auto extra_column_data = dynamic_cast<ChunkExtraColumnsData*>(stream_chunk.get_extra_data().get());
         DCHECK(extra_column_data);
         DCHECK_EQ(extra_column_data->columns().size(), 1);
@@ -76,7 +76,7 @@ public:
         return op_col;
     }
 
-    static Int8Column* ops_col(StreamChunkPtr stream_chunk_ptr) {
+    static Int8Column* ops_col(const StreamChunkPtr& stream_chunk_ptr) {
         DCHECK(stream_chunk_ptr);
         return ops_col(*stream_chunk_ptr);
     }
@@ -86,7 +86,7 @@ public:
         return ops_col(*stream_chunk_ptr);
     }
 
-    static const StreamRowOp* ops(StreamChunk stream_chunk) {
+    static const StreamRowOp* ops(const StreamChunk& stream_chunk) {
         auto* op_col = ops_col(stream_chunk);
         return (StreamRowOp*)(op_col->get_data().data());
     }
@@ -96,7 +96,7 @@ public:
         return (StreamRowOp*)(op_col->get_data().data());
     }
 
-    static const StreamRowOp* ops(StreamChunkPtr stream_chunk) {
+    static const StreamRowOp* ops(const StreamChunkPtr& stream_chunk) {
         auto* op_col = ops_col(stream_chunk);
         return (StreamRowOp*)(op_col->get_data().data());
     }
