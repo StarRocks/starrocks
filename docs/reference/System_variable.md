@@ -198,11 +198,11 @@ Boolean value to control if to enable rule-based materialized view query rewrite
 
 * enable_profile
 
-Used to set whether the profile of the query needs to be viewed. The default is false, meaning no profile is required.
+Specifies whether to send the profile of a query. The default value is `false`, which means no profile is required.
 
-By default, a profile will only be sent to the FE when a query error occurs in the BEt. Profile sending causes network overhead and therefore affects high concurrency.
+By default, a profile is sent to the FE only when a query error occurs in the BE. Profile sending causes network overhead and therefore affects high concurrency.
 
-When there is a need to analyze the profile of a query, users can set this variable to true and send a query to deep dive. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the last 100 queries with `enable_profile` turned on.
+If you need to analyze the profile of a query, you can set this variable to `true`. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the latest 100 queries with `enable_profile` turned on.
 
 * language
 
