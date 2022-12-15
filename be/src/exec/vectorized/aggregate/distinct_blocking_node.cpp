@@ -155,21 +155,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    bool need_local_shuffle = true;
-    if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(ops_with_sink[0].get());
-        exchange_op != nullptr) {
-        auto& texchange_node = exchange_op->texchange_node();
-        DCHECK(texchange_node.__isset.partition_type);
-        need_local_shuffle = texchange_node.partition_type != TPartitionType::HASH_PARTITIONED &&
-                             texchange_node.partition_type != TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED;
-    }
-    if (need_local_shuffle) {
+    if (context->could_local_shuffle(ops_with_sink)) {
         ops_with_sink =
                 context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, partition_expr_ctxs);
     }
-
     ops_with_sink.push_back(std::move(sink_operator));
     context->add_pipeline(ops_with_sink);
+
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with ops_with_sink's
     auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
