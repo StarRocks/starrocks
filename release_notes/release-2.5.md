@@ -48,7 +48,7 @@
 - 函数优化：
   - [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 增加参数，可以计算时间区间的起始点和终点。[#11216](https://github.com/StarRocks/starrocks/pull/11216)
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md) 支持严格递增模式，防止计算重复的时间戳。[#10134](https://github.com/StarRocks/starrocks/pull/10134)
-  - unnest 函数支持变参。[#12484](https://github.com/StarRocks/starrocks/pull/12484)
+  - [unnest](../sql-reference/sql-functions/array-functions/unnest.md) 支持变参。[#12484](https://github.com/StarRocks/starrocks/pull/12484)
   - lead 和 lag 窗口函数支持查询 HLL 和 BITMAP 类型数据。相关文档，请参见[窗口函数](../sql-reference/sql-functions/Window_function.md)。[#12108](https://github.com/StarRocks/starrocks/pull/12108)
   - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md)、[array_sort](../sql-reference/sql-functions/array-functions/array_sort.md)、[array_concat](../sql-reference/sql-functions/array-functions/array_concat.md)、[array_slice](../sql-reference/sql-functions/array-functions/array_slice.md) 和 [reverse](../sql-reference/sql-functions/string-functions/reverse.md) 函数支持查询 JSON 数据。[#13155](https://github.com/StarRocks/starrocks/pull/13155)
 
