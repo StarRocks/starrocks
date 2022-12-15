@@ -1696,6 +1696,19 @@ public class AggregateTest extends PlanTestBase {
                     "  |  group by: [1: v1, BIGINT, true]\n" +
                     "  |  sorted streaming: true");
         }
+        {
+            try {
+                FeConstants.USE_MOCK_DICT_MANAGER = true;
+                connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+                sql = "select sum(t1b), t1a from test_all_type group by t1a";
+                plan = getCostExplain(sql);
+                assertContains(plan, "sorted streaming: true");
+                assertContains(plan, "Decode");
+            } finally {
+                connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+                FeConstants.USE_MOCK_DICT_MANAGER = false;
+            }
+        }
         connectContext.getSessionVariable().setEnableSortAggregate(false);
     }
 
