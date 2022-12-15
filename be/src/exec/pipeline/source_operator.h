@@ -42,14 +42,14 @@ public:
     // There are two source operators returning false.
     // - The scan operator, which has been assigned tablets with the specific bucket sequences.
     // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
-    virtual bool need_local_shuffle() const { return _need_local_shuffle; }
-    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
+    virtual bool could_local_shuffle() const { return _could_local_shuffle; }
+    void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
     virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
 
 protected:
     size_t _degree_of_parallelism = 1;
     MorselQueueFactory* _morsel_queue_factory = nullptr;
-    bool _need_local_shuffle = true;
+    bool _could_local_shuffle = true;
 };
 
 class SourceOperator : public Operator {

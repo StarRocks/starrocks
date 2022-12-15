@@ -118,7 +118,7 @@ public:
     virtual size_t num_original_morsels() const = 0;
 
     virtual bool is_shared() const = 0;
-    virtual bool need_local_shuffle() const = 0;
+    virtual bool could_local_shuffle() const = 0;
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -131,7 +131,7 @@ public:
     size_t num_original_morsels() const override;
 
     bool is_shared() const override { return true; }
-    bool need_local_shuffle() const override { return true; }
+    bool could_local_shuffle() const override { return true; }
 
 private:
     MorselQueuePtr _queue;
@@ -140,7 +140,7 @@ private:
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
 public:
-    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool need_local_shuffle);
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle);
     ~IndividualMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
@@ -153,11 +153,11 @@ public:
     size_t num_original_morsels() const override;
 
     bool is_shared() const override { return false; }
-    bool need_local_shuffle() const override { return _need_local_shuffle; }
+    bool could_local_shuffle() const override { return _could_local_shuffle; }
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
-    const bool _need_local_shuffle;
+    const bool _could_local_shuffle;
 };
 
 /// MorselQueue.

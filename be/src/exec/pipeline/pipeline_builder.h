@@ -62,7 +62,7 @@ public:
     MorselQueueFactory* morsel_queue_factory_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(const SourceOperatorFactory* source_op);
     // Whether the building pipeline `ops` need local shuffle for the next operator.
-    bool need_local_shuffle(OpFactories ops) const;
+    bool could_local_shuffle(OpFactories ops) const;
 
 private:
     static constexpr int kLocalExchangeBufferChunks = 8;
