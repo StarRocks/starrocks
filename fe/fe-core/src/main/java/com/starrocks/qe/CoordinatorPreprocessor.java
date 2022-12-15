@@ -304,6 +304,15 @@ public class CoordinatorPreprocessor {
 
     private void prepareFragments() {
         for (PlanFragment fragment : fragments) {
+            // Clear each destination for multi sink to avoid add destinations multiple times
+            // when retrying the query with these fragments.
+            if (fragment instanceof MultiCastPlanFragment) {
+                MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+                for (List<TPlanFragmentDestination> destination : multiSink.getDestinations()) {
+                    destination.clear();
+                }
+            }
+            
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }
 
