@@ -242,6 +242,7 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
     DCHECK_GT(_levels_decoded - _levels_parsed, 0);
     size_t levels_pos = _levels_parsed;
 
+#ifndef NDEBUG
     std::stringstream ss;
     ss << "rep=[";
     for (int i = levels_pos; i < _levels_decoded; ++i) {
@@ -252,7 +253,8 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
         ss << ", " << _def_levels[i];
     }
     ss << "]";
-    LOG(INFO) << ss.str();
+    VLOG_FILE << ss.str();
+#endif
 
     if (!_meet_first_record) {
         _meet_first_record = true;
@@ -265,7 +267,7 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
         rows_read += _rep_levels[levels_pos] == 0;
     }
 
-    LOG(INFO) << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
+    VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
     *num_rows = rows_read;
     *num_levels_parsed = levels_pos - _levels_parsed;
 }
