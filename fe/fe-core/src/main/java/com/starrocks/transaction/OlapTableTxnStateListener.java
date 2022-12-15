@@ -149,6 +149,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                                     String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
                                             backend == null ? "" : backend.getHost(), replica.getVersion(),
                                             replica.getLastFailedVersion()));
+                            errorReplicaIds.add(replica.getId());
                             // not remove rollup task here, because the commit maybe failed
                             // remove rollup task when commit successfully
                         }
