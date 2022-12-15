@@ -171,7 +171,7 @@ StarRocks supports two policies to update cached metadata: asynchronous update a
       [PARTITION ('partition_name', ...)];
       ```
 
-    For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABLE](https://starrocks.feishu.cn/docx/doxcnio1ged0SoeqyOUoSY0DNBc).
+    For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
 - To enable the automatic incremental update policy for the Hive catalog, add the following property.
 
     | **Property**                       | **Required** | **Description**                                              |
@@ -187,12 +187,10 @@ StarRocks develops a query execution plan based on the following data:
 
 Therefore, the time consumed by StarRocks to access the metadata service and storage system of Hive directly affects the time consumed by a query. To reduce the impact, StarRocks supports caching metadata of Hive and provides two policies, based on which StarRocks can cache and update the metadata of Hive tables or partitions and the metadata of their data files.
 
-- **Asynchronous update**: This is the default policy and requires no further configurations on your StarRocks cluster. With this policy, updates on cached metadata are automatically triggered when several conditions are met (see [How it works](#how-it-works) for more information), thereby reducing the access frequency on metadata services and storage systems. This means that the metadata cached in StarRocks cannot always stay up-to-date with the metadata in Hive. In some cases, you need to manually update the metadata cached in StarRocks.
+- **Asynchronous update**: This is the default policy and requires no further configurations on your StarRocks cluster. With this policy, updates on cached metadata are automatically triggered when several conditions are met (see [Asynchronous update](#asynchronous-update) for more information), thereby reducing the access frequency on metadata services and storage systems. This means that the metadata cached in StarRocks cannot always stay up-to-date with the metadata in Hive. In some cases, you need to manually update the metadata cached in StarRocks.
 - **Automatic incremental update**: The policy is available only when Hive metastore is used for your Hive cluster. To enable this policy, you need to add additional configurations to your StarRocks cluster and metadata service. After this policy is enabled, the asynchronous update policy is automatically disabled. The metadata cached in StarRocks always stays up-to-date with the metadata in Hive, and no manual updates are required.
 
 ### Asynchronous update
-
-#### How it works
 
 By default (the values of the`enable_hive_metastore_cache` and `enable_remote_file_cache` parameters are `true`), if a query hits a partition of a Hive table, StarRocks automatically caches the metadata of the partition and the metadata of the data file of the partition. The cached metadata is updated by using the lazy update policy. Example：
 
