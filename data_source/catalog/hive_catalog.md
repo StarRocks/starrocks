@@ -213,19 +213,35 @@ PROPERTIES ("key"="value", ...);
 参数说明：
 
 - `catalog_name`：Hive catalog 的名称，必选参数。<br>命名要求如下：
-  - 必须由字母 (a-z或A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
+  - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
-- `PROPERTIES`：Hive catalog 的属性，必选参数。<br>支持配置如下：
+- `PROPERTIES`：Hive catalog 的属性，必选参数。Hive 使用的元数据服务不同，该参数的配置也不同。
 
-    | **属性**            | **必选** | **说明**                                                     |
-    | ------------------- | -------- | ------------------------------------------------------------ |
-    | type                | 是       | 数据源类型，取值为 `hive`。                                   |
-    | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
+### Hive metastore
+
+如 Hive 使用 Hive metastore 作为元数据服务，则需要在创建 Hive catalog 时设置如下属性：
+
+| **属性**            | **必选** | **说明**                                                     |
+| ------------------- | -------- | ------------------------------------------------------------ |
+| type                | 是       | 数据源类型，取值为 `hive`。                                   |
+| hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
 > **注意**
 >
 > 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+
+### AWS Glue【公测中】
+
+如 Hive 使用 AWS Glue 作为元数据服务，则需要在创建 Hive catalog 时设置如下属性：
+
+| **属性**                               | **必选** | **说明**                                                     |
+| -------------------------------------- | -------- | ------------------------------------------------------------ |
+| type                                   | 是       | 数据源类型，取值为 `hive`。                                  |
+| hive.metastore.type                    | 是       | 元数据服务类型，取值为 `glue`。                              |
+| aws.hive.metastore.glue.aws-access-key | 是       | IAM 用户的 access key ID（即访问密钥 ID）。             |
+| aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
+| aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
 
 ## 元数据同步
 
@@ -317,7 +333,7 @@ Event listener 可以对 Hive metastore 中的 event（例如增减分区、增�
 
 | **参数**                           | **说明**                                                    |
 | ---------------------------------- | ----------------------------------------------------------- |
-| enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能，取值包括：<ul><li>`TRUE`：表示开启，为默认值。</li> <li>`FALSE`：表示未开启。</li></ul>|
+| enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能，取值包括：<ul><li>`TRUE`：表示开启。</li> <li>`FALSE`：表示未开启，为默认值。</li></ul>|
 | hms_events_polling_interval_ms     | StarRocks 读取 event 的间隔时间，默认值为 `5000`，单位：毫秒。    |
 | hms_events_batch_size_per_rpc      | StarRocks 每次读取 event 的最大数量，默认值为 `500`。        |
 | enable_hms_parallel_process_evens  | 是否并行处理读取的 event ，取值包括：<ul><li>`TRUE`：表示并行处理，为默认值。</li><li>`FALSE`：表示不并行处理。</li></ul>  |

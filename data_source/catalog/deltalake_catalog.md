@@ -25,6 +25,10 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
+> **说明**
+>
+> StarRocks 不缓存 Delta Lake 元数据，因此不需要维护元数据更新。每次查询默认请求最新的 Delta Lake 数据。
+
 ### 参数说明
 
 - `catalog_name`：Delta Lake catalog 的名称，必选参数。命名要求如下：
@@ -54,13 +58,9 @@ PROPERTIES ("key"="value", ...);
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
 | type                                   | 是       | 数据源类型，取值为 `deltalake`。                             |
 | hive.metastore.type                    | 是       | 元数据服务类型，取值为 `glue`。                              |
-| aws.hive.metastore.glue.aws-access-key | 是       | AWS Glue 用户的 access key ID（即访问密钥 ID）。             |
-| aws.hive.metastore.glue.aws-secret-key | 是       | AWS Glue 用户的 secret access key（即秘密访问密钥）。        |
+| aws.hive.metastore.glue.aws-access-key | 是       | IAM 用户的 access key ID（即访问密钥 ID）。             |
+| aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
 | aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。例如，服务在美国东部（俄亥俄州），那么 endpoint 为 `glue.us-east-2.amazonaws.com` 。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
-
-## 元数据同步
-
-StarRocks 不缓存 Delta Lake 元数据，因此不需要维护元数据更新。每次查询默认请求最新的 Delta Lake 数据。
 
 ## **下一步**
 

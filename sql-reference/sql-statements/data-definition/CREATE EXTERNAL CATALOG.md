@@ -7,13 +7,14 @@
 - [Hive catalog](/data_source/catalog/hive_catalog.md)：用于查询 Apache Hive™ 集群中的数据。
 - [Iceberg catalog](/data_source/catalog/iceberg_catalog.md)：用于查询 Apache Iceberg 集群中的数据。
 - [Hudi catalog](/data_source/catalog/hudi_catalog.md)：用于查询 Apache Hudi 集群中的数据。
+- [Delta Lake catalog](/data_source/catalog/deltalake_catalog.md)：用于查询 Delta Lake 数据。
 
 使用该创建语句无权限限制。在创建 external catalog 前，需要根据数据源的存储系统（如 Amazon S3）、元数据服务（如 Hive metastore）和认证方式（如 Kerberos）在 StarRocks 中做相应的配置。详细信息，请参见以上各个 external catalog 文档中的「前提条件」小节 。
 
 ## 语法
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
+CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
@@ -21,39 +22,101 @@ PROPERTIES ("key"="value", ...);
 
 | 参数         | 必选 | 说明                                                         |
 | ------------ | ---- | ------------------------------------------------------------ |
-| catalog_name | 是   | External catalog 的名称，命名要求如下：必须由字母(a-z或A-Z)、数字(0-9)或下划线(_)组成，且只能以字母开头。总长度不能超过 64 个字符。 |
-| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 Hive catalog、Iceberg catalog 和 Hudi catalog。 |
+| catalog_name | 是   | External catalog 的名称，命名要求如下：<ul><li>必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。</li><li>总长度不能超过 64 个字符。</li></ul> |
+| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 Hive catalog、Iceberg catalog、Hudi catalog 和 和 Delta Lake catalog。 |
 
 ## 示例
 
-示例一：创建名为 `hive1` 的 Hive catalog。
+示例一：创建名为 `hive_metastore_catalog` 的 Hive catalog。其对应的 Hive 集群使用 Hive metastore 作为元数据服务。
 
 ```SQL
-CREATE EXTERNAL CATALOG hive1
+CREATE EXTERNAL CATALOG hive_metastore_catalog
 PROPERTIES(
    "type"="hive", 
    "hive.metastore.uris"="thrift://x.x.x.x:9083"
 );
 ```
 
-示例二：创建名为 `iceberg1` 的 Iceberg catalog。
+示例二：创建名为 `hive_glue_catalog` 的 Hive catalog。其对应的 Hive 集群使用 AWS Glue 作为元数据服务。
 
 ```SQL
-CREATE EXTERNAL CATALOG iceberg1
+CREATE EXTERNAL CATALOG hive_glue_catalog
+PROPERTIES(
+    "type"="hive", 
+    "hive.metastore.type"="glue",
+    "aws.hive.metastore.glue.aws-access-key"="xxxxxx",
+    "aws.hive.metastore.glue.aws-secret-key"="xxxxxxxxxxxx",
+    "aws.hive.metastore.glue.endpoint"="https://glue.us-east-2.amazonaws.com"
+);
+```
+
+示例三：创建名为 `iceberg_metastore_catalog` 的 Iceberg catalog。其对应的 Iceberg 集群使用 Hive metastore 作为元数据服务。
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_metastore_catalog
 PROPERTIES(
     "type"="iceberg",
-    "iceberg.catalog.type"="HIVE",
+    "iceberg.catalog.type"="hive",
     "iceberg.catalog.hive.metastore.uris"="thrift://x.x.x.x:9083"
 );
 ```
 
-示例三：创建名为 `hudi1` 的 Hudi catalog。
+示例四：创建名为 `iceberg_glue_catalog` 的 Iceberg catalog。其对应的 Iceberg 集群使用  AWS Glue 作为元数据服务。
 
 ```SQL
-CREATE EXTERNAL CATALOG hudi1
+CREATE EXTERNAL CATALOG iceberg_glue_catalog
+PROPERTIES(
+    "type"="iceberg", 
+    "iceberg.catalog.type"="glue",
+    "aws.hive.metastore.glue.aws-access-key"="xxxxx",
+    "aws.hive.metastore.glue.aws-secret-key"="xxx",
+    "aws.hive.metastore.glue.endpoint"="https://glue.x-x-x.amazonaws.com"
+);
+```
+
+示例五：创建名为 `hudi_metastore_catalog` 的 Hudi catalog。其对应的 Hudi 集群使用 Hive metastore 作为元数据服务。
+
+```SQL
+CREATE EXTERNAL CATALOG hudi_metastore_catalog
 PROPERTIES(
     "type"="hudi",
     "hive.metastore.uris"="thrift://x.x.x.x:9083"
+);
+```
+
+示例六：创建名为 `hudi_glue_catalog` 的 Hudi catalog。其对应的 Hudi 集群使用 AWS Glue 作为元数据服务。
+
+```SQL
+CREATE EXTERNAL CATALOG hudi_glue_catalog
+PROPERTIES(
+    "type"="hudi", 
+    "hive.metastore.type"="glue",
+    "aws.hive.metastore.glue.aws-access-key"="xxxxxx",
+    "aws.hive.metastore.glue.aws-secret-key"="xxxxxxxxxxxx",
+    "aws.hive.metastore.glue.endpoint"="https://glue.x-x-x.amazonaws.com"
+);
+```
+
+示例七：创建名为 `delta_metastore_catalog` 的 Delta Lake catalog。其对应的 Delta Lake 使用 Hive metastore 作为元数据服务。
+
+```SQL
+CREATE EXTERNAL CATALOG delta_metastore_catalog
+PROPERTIES(
+    "type"="deltalake",
+    "hive.metastore.uris"="thrift://x.x.x.x:9083"
+);
+```
+
+示例八：创建名为 `delta_glue_catalog` 的 Delta Lake catalog。其对应的 Delta Lake 使用 AWS Glue 作为元数据服务。
+
+```SQL
+CREATE EXTERNAL CATALOG delta_glue_catalog
+PROPERTIES(
+    "type"="deltalake", 
+    "hive.metastore.type"="glue",
+    "aws.hive.metastore.glue.aws-access-key"="xxxxxx",
+    "aws.hive.metastore.glue.aws-secret-key"="xxxxxxxxxxxx",
+    "aws.hive.metastore.glue.endpoint"="https://glue.x-x-x.amazonaws.com"
 );
 ```
 
