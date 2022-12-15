@@ -244,11 +244,11 @@ You can specify the value for `START` and `END` and the expression in `EVERY` to
 - If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
 - If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).Determine the number of tablets
+For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
 
 ### distribution_des
 
-Data in partitions can be subdivided into buckets based on the hash values of the bucketing columns. We recommend that you follow the suggestions below to decide the bucketing column:
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns. We recommend that you follow the suggestions below to decide the bucketing column:
 
 - The column with high cardinality such as ID.
 - The column that is often used as a filter in queries.
@@ -257,10 +257,10 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 #### Precautions
 
-- **When  a table is created, you must specify the bucketing columns**.
+- **When a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
-- Modification is not supported after the bucketing columns is specified.
-- Since StarRocks 2.5, you do not need to set the number of buckets when a table is created, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+- Bucketing columns cannot be modified after they are specified.
+- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
 Syntax:
 
@@ -329,9 +329,9 @@ PROPERTIES (
 
 - `dynamic_partition.enable`: enables dynamic partitioning. Valid values are `TRUE` and `FALSE`. The default value is `TRUE`.
 
-- `dynamic_partition.time_unit`: the time granularity for dynamically created  partitions. It is a required parameter. Valid values are `DAY`, `WEEK`, and `MONT``H`.The time granularity determines the suffix format for dynamically created partitions.
+- `dynamic_partition.time_unit`: the time granularity for dynamically created partitions. It is a required parameter. Valid values are `DAY`, `WEEK`, and `MONTH`.The time granularity determines the suffix format for dynamically created partitions.
 
-  - If the value is `DAY`,  the suffix format for dynamically created partitions is yyyyMMdd. An example partition name suffix is `20200321`.
+  - If the value is `DAY`, the suffix format for dynamically created partitions is yyyyMMdd. An example partition name suffix is `20200321`.
   - If the value is `WEEK`, the suffix format for dynamically created partitions is yyyy_ww, for example `2020_13` for the 13th week of 2020.
   - If the value is `MONTH`, the suffix format for dynamically created partitions is yyyyMM, for example `202003`.
 
