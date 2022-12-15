@@ -14,7 +14,7 @@ From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to
 
 If you need to use brokers to export data, make sure that brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 ## Precautions
 

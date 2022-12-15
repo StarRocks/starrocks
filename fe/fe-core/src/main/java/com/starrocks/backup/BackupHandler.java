@@ -85,6 +85,8 @@ public class BackupHandler extends LeaderDaemon implements Writable {
     public static final Path BACKUP_ROOT_DIR = Paths.get(Config.tmp_dir, "backup").normalize();
     public static final Path RESTORE_ROOT_DIR = Paths.get(Config.tmp_dir, "restore").normalize();
 
+    public static final Path TEST_BACKUP_ROOT_DIR = Paths.get(Config.tmp_dir, "test_backup").normalize();
+
     private RepositoryMgr repoMgr = new RepositoryMgr();
 
     // db id -> last running or finished backup/restore jobs
