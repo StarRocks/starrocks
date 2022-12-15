@@ -36,7 +36,6 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type cod
     default:
         return UNKNOWN_COMPRESSION;
     }
-    return UNKNOWN_COMPRESSION;
 }
 
 } // namespace starrocks::parquet
