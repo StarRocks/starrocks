@@ -173,7 +173,7 @@ select x, y,
         over (
             partition by x
             order by y
-        ) as rank
+        ) as `rank`
 from int_t;
 ~~~
 
@@ -538,7 +538,7 @@ select x, y,
     rank() over(
         partition by x 
         order by y
-    ) as rank
+    ) as `rank`
 from int_t;
 ~~~
 
@@ -579,7 +579,7 @@ select x, y,
     row_number() over(
         partition by x 
         order by y
-    ) as rank
+    ) as `rank`
 from int_t;
 ~~~
 
