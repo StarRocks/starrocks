@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -113,6 +114,14 @@ public class AstToStringBuilder {
 
             List<String> setVarList = new ArrayList<>();
             for (SetVar setVar : stmt.getSetVars()) {
+                if (setVar instanceof SetPassVar) {
+                    StringBuilder tmp = new StringBuilder();
+                    tmp.append("PASSWORD FOR ")
+                            .append(((SetPassVar) setVar).getUserIdent().toString())
+                            .append(" = PASSWORD('***')");
+                    setVarList.add(tmp.toString());
+                    continue;
+                }
                 String setVarSql = "";
 
                 // `SET DEFAULT` is not supported
