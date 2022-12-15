@@ -1583,10 +1583,10 @@ def array2_parquet():
 
 TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    array_type.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
     SlotDesc parquet_descs[] = {
-            {"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)}, {"f00", array_type}, {""}};
+            {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)}, {"f00", array_type}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/array_decode.parquet";
 
