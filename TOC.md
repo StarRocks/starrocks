@@ -61,7 +61,7 @@
   + 数据去重
     + [使用 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
     + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
-  + [Lateral Join](/using_starrocks/Lateral_join.md)
+  + [使用 Lateral Join 实现行转列](/using_starrocks/Lateral_join.md)
   + [Query Cache](/using_starrocks/query_cache.md)
 + 管理手册
   + 部署集群
@@ -471,6 +471,7 @@
       + [array_cum_sum](/sql-reference/sql-functions/array-functions/array_cum_sum.md)
       + [array_to_bitmap](/sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
+      + [unnest](/sql-reference/sql-functions/array-functions/unnest.md)
     + bit函数
       + [bitand](/sql-reference/sql-functions/bit-functions/bitand.md)
       + [bitnot](/sql-reference/sql-functions/bit-functions/bitnot.md)

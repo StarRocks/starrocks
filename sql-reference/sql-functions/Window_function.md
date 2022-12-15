@@ -644,6 +644,137 @@ from int_t;
 +---+---+------+
 ~~~
 
+### QUALIFY
+
+QUALIFY 子句用于过滤窗口函数的结果。在 SELECT 语句中，可以使用 QUALIFY 来设置过滤条件，从多条记录中筛选符合条件的记录。QUALIFY 与聚合函数中的 HAVING 子句功能类似。
+
+QUALIFY 提供了一种更为简洁的数据筛选方式。比如，如果不使用 QUALIFY，过滤语句比较复杂：
+
+~~~SQL
+SELECT *
+FROM (SELECT DATE,
+             PROVINCE_CODE,
+             TOTAL_SCORE,
+             ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) AS SCORE_ROWNUMBER
+      FROM example_table) T1
+WHERE T1.SCORE_ROWNUMBER = 1;
+~~~
+
+使用 QUALIFY 之后，语句可以简化成这样：
+
+~~~SQL
+SELECT DATE, PROVINCE_CODE, TOTAL_SCORE
+FROM example_table 
+QUALIFY ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) = 1;
+~~~
+
+当前 QUALIFY 仅支持如下窗口函数：ROW_NUMBER()，RANK()，DENSE_RANK()。
+
+**语法：**
+
+~~~SQL
+SELECT <column_list>
+FROM <data_source>
+[GROUP BY ...]
+[HAVING ...]
+QUALIFY <window_function>
+[ ... ]
+~~~
+
+**参数：**
+
+* `<column_list>`: 要获取数据的列，多列使用逗号隔开。
+* `<data_source>`: 数据源，一般是表。
+* `<window_function>`: 用于过滤数据的窗口函数。当前仅支持 ROW_NUMBER()，RANK()，DENSE_RANK()。
+
+**示例：**
+
+~~~SQL
+-- 创建一张表。
+CREATE TABLE sales_record (
+   city_id INT,
+   item STRING,
+   sales INT
+) DISTRIBUTED BY HASH(`city_id`) BUCKETS 1;
+
+-- 向表插入数据。
+insert into sales_record values
+(1,'fruit',95),
+(2,'drinks',70),
+(3,'fruit',87),
+(4,'drinks',98);
+
+-- 查询表中数据。
+select * from sales_record order by city_id;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       1 | fruit  |    95 |
+|       2 | drinks |    70 |
+|       3 | fruit  |    87 |
+|       4 | drinks |    98 |
++---------+--------+-------+
+~~~
+
+示例一：获取表中行号大于 1 的记录，无分区。
+
+~~~SQL
+SELECT city_id, item, sales
+FROM sales_record
+QUALIFY row_number() OVER (ORDER BY city_id) > 1;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       2 | drinks |    70 |
+|       3 | fruit  |    87 |
+|       4 | drinks |    98 |
++---------+--------+-------+
+~~~
+
+示例二：按照 `item` 将表分为 2 个分区，获取每个分区中 row number 为`1`的记录。
+
+~~~SQL
+SELECT city_id, item, sales
+FROM sales_record 
+QUALIFY ROW_NUMBER() OVER (PARTITION BY item ORDER BY city_id) = 1
+ORDER BY city_id;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       1 | fruit  |    95 |
+|       2 | drinks |    70 |
++---------+--------+-------+
+~~~
+
+示例三：按照 `item` 将表分为 2 个分区，使用 rank() 获取每个分区里销量 `sales` 排名第一的记录。
+
+~~~SQL
+SELECT city_id, item, sales
+FROM sales_record
+QUALIFY RANK() OVER (PARTITION BY item ORDER BY sales DESC) = 1
+ORDER BY city_id;
++---------+--------+-------+
+| city_id | item   | sales |
++---------+--------+-------+
+|       1 | fruit  |    95 |
+|       4 | drinks |    98 |
++---------+--------+-------+
+~~~
+
+**注意事项：**
+
+带 QUALIFY  的查询语句中，子句的执行顺序如下：
+
+> 1. From
+> 2. Where
+> 3. Group by
+> 4. Having
+> 5. Window
+> 6. QUALIFY
+> 7. Distinct
+> 8. Order by
+> 9. Limit
+
 <br/>
 
 ## 使用 SUM() 窗口函数
