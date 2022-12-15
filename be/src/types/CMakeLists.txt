@@ -19,5 +19,6 @@ add_library(Types STATIC
     date_value.cpp
     hll.cpp
     logical_type.cpp
+    map_type_info.cpp
     timestamp_value.cpp
 )
