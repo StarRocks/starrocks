@@ -108,7 +108,8 @@ select * from test_array order by c1;
 示例一：将数组 `c3` 按照 `c2` 的值进行升序排序。
 
 ```Plaintext
-select c1, c3, c2, array_sort(c2), array_sortby(c3,c2) from test_array order by c1;
+select c1, c3, c2, array_sort(c2), array_sortby(c3,c2)
+from test_array order by c1;
 +------+------------+-------------+----------------+----------------------+
 | c1   | c3         | c2          | array_sort(c2) | array_sortby(c3, c2) |
 +------+------------+-------------+----------------+----------------------+
@@ -127,7 +128,12 @@ select c1, c3, c2, array_sort(c2), array_sortby(c3,c2) from test_array order by 
 示例二：将数组 `c3` 按照 Lambda 表达式生成的键值数组进行升序排序。该函数与上个示例功能对等。
 
 ```Plaintext
-select c1, c3, c2, array_sort(c2) as sorted_c2_asc, array_sortby((x,y) -> y, c3, c2) as sorted_c3_by_c2
+select 
+    c1,
+    c3,
+    c2,
+    array_sort(c2) as sorted_c2_asc,
+    array_sortby((x,y) -> y, c3, c2) as sorted_c3_by_c2
 from test_array order by c1;
 +------+------------+-------------+---------------+-----------------+
 | c1   | c3         | c2          | sorted_c2_asc | sorted_c3_by_c2 |
@@ -147,7 +153,13 @@ from test_array order by c1;
 示例三：将数组 `c3` 按照按照 c2+c3 的和的升序排序。
 
 ```SQL
-select c3, c2, array_map((x,y)-> x+y,c3,c2) as sum, array_sort(array_map((x,y)-> x+y,c3,c2)) as sorted_sum, array_sortby((x,y) -> x+y , c3,c2) as sorted_c3_by_sum from test_array where c1=1;
+select
+    c3,
+    c2,
+    array_map((x,y)-> x+y,c3,c2) as sum,
+    array_sort(array_map((x,y)-> x+y,c3,c2)) as sorted_sum,
+    array_sortby((x,y) -> x+y , c3,c2) as sorted_c3_by_sum
+from test_array where c1=1;
 +----------+---------+----------+------------+------------------+
 | c3       | c2      | sum      | sorted_sum | sorted_c3_by_sum |
 +----------+---------+----------+------------+------------------+
