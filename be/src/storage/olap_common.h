@@ -338,14 +338,12 @@ struct RowsetId {
     // to compatiable with old version
     void init(int64_t rowset_id) { init(1, rowset_id, 0, 0); }
 
-    void init(int64_t high, int64_t middle, int64_t low) {
-        init(high >> 56, high & LOW_56_BITS, middle, low);
-    }
+    void init(int64_t high, int64_t middle, int64_t low) { init(high >> 56, high & LOW_56_BITS, middle, low); }
 
     void init(int64_t id_version, int64_t high_without_version, int64_t middle, int64_t low) {
         version = static_cast<int8_t>(id_version);
         if (UNLIKELY(high_without_version >= MAX_ROWSET_ID)) {
-            LOG(FATAL) << "inc rowsetid is too large:" << high;
+            LOG(FATAL) << "inc rowsetid is too large:" << high_without_version;
         }
         hi = (id_version << 56) + (high_without_version & LOW_56_BITS);
         mi = middle;

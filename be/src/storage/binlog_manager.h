@@ -83,7 +83,7 @@ using BinlogReaderSharedPtr = std::shared_ptr<BinlogReader>;
 // version for the load. The *seq_id* is the sequence number of the change event in this load.
 // The information of these change events will be written to binlog files, and BinlogManager will
 // manage these binlog files, including generating, reading, and deleting after expiration.
-class BinlogManager : public enable_shared_from_this<BinlogManager> {
+class BinlogManager : public std::enable_shared_from_this<BinlogManager> {
 public:
     static Status create_and_init(Tablet& tablet, std::shared_ptr<BinlogManager>* binlog_manager);
 
