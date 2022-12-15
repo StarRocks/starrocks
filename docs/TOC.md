@@ -40,11 +40,14 @@
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
+    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Hive catalog](./data_source/catalog/hive_catalog.md)
     + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
+  + [File external table](./data_source/file_external_table.md)
+  + [Block cache](./data_source/Block_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
@@ -474,6 +477,7 @@
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)
+  + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
 + FAQ
@@ -502,6 +506,7 @@
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes
+  + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)
   + [v2.3](./release_notes/release-2.3.md)
   + [v2.2](./release_notes/release-2.2.md)
