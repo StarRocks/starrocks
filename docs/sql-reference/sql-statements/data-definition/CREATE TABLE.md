@@ -249,27 +249,30 @@ For more information, see [Data distribution](../../../table_design/Data_distrib
 ### distribution_des
 
 Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
-• high cardinality column such as ID
-• column that often used as a filter in queries
 
-But if the column that satisfy both requirements do not exist, you need to determine the buckting column according to the complexity of queries.
-• If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
-• If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
+- high cardinality column such as ID
+- column that often used as a filter in queries
 
-If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns.
+But if the column that satisfies both requirements does not exist, you need to determine the buckting column according to the complexity of queries.
 
-#### Precautions
+- If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
+- If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
+
+If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns but three bucketing columns at most.
+
+**Syntax**:
+
+```SQL
+DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
+```
+
+**Precautions**:
 
 - **When a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 - Since StarRocks 2.5, you do not need to set the number of buckets when you create a table, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
-Syntax:
-
-```SQL
-`DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`
-```
 
 Note:
 
