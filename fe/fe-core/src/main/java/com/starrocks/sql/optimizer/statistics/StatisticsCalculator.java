@@ -223,7 +223,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         OlapTable olapTable = (OlapTable) table;
         ColumnStatistic partitionStatistic = adjustPartitionStatistic(selectedPartitionIds, olapTable);
         if (partitionStatistic != null) {
-            String partitionColumnName = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
+            String partitionColumnName = olapTable.getPartitionColumnNames().get(0);
             Optional<Map.Entry<ColumnRefOperator, Column>> partitionColumnEntry =
                     colRefToColumnMetaMap.entrySet().stream().
                             filter(column -> column.getValue().getName().equalsIgnoreCase(partitionColumnName))
@@ -488,7 +488,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (olapTable.getPartitionColumnNames().size() != 1) {
                 return null;
             }
-            String partitionColumn = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
+            String partitionColumn = olapTable.getPartitionColumnNames().get(0);
             ColumnStatistic partitionColumnStatistic =
                     GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
             optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);

@@ -70,6 +70,11 @@ public class DeltaLakeTable extends Table {
                 .collect(Collectors.toList());
     }
 
+    public List<String> getPartitionColumnNames() {
+        return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
+                .collect(Collectors.toList());
+    }
+
     public boolean isUnPartitioned() {
         return partColumnNames.size() == 0;
     }

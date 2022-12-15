@@ -126,6 +126,11 @@ public class IcebergTable extends Table {
         return getPartitionColumns().size() == 0;
     }
 
+    public List<String> getPartitionColumnNames() {
+        return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
+                .collect(Collectors.toList());
+    }
+
     public String getFileIOMaxTotalBytes() {
         return icebergProperties.get(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
     }
@@ -161,6 +166,10 @@ public class IcebergTable extends Table {
 
     public void refreshTable() {
         IcebergUtil.refreshTable(this.getIcebergTable());
+    }
+
+    public String getTableLocation() {
+        return this.getIcebergTable().location();
     }
 
     // icbTbl is used for caching

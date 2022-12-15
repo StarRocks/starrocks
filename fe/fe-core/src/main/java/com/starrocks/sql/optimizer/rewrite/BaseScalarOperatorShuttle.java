@@ -191,10 +191,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
             ScalarOperator clonedCaseClause = null;
             ScalarOperator clonedElseClause = null;
             List<ScalarOperator> clonedWhenThenClauses;
-            if (operator.getCaseClause() != null) {
+            if (operator.hasCase()) {
                 clonedCaseClause = clonedOperators.get(0);
             }
-            if (operator.getElseClause() != null) {
+            if (operator.hasElse()) {
                 clonedElseClause = clonedOperators.get(clonedOperators.size() - 1);
             }
 

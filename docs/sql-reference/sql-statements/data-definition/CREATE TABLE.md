@@ -14,7 +14,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [key_desc]
 [COMMENT "table comment"];
 [partition_desc]
-[distribution_desc]
+distribution_desc
 [rollup_index]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
@@ -244,11 +244,23 @@ You can specify the value for `START` and `END` and the expression in `EVERY` to
 - If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
 - If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
+For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).Determine the number of tablets
 
 ### distribution_des
 
-Hash bucketing
+Data in partitions can be subdivided into buckets based on the hash values of the bucketing columns. We recommend that you follow the suggestions below to decide the bucketing column:
+
+- The column with high cardinality such as ID.
+- The column that is often used as a filter in queries.
+
+If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns.
+
+#### Precautions
+
+- **When  a table is created, you must specify the bucketing columns**.
+- The values of bucketing columns cannot be updated.
+- Modification is not supported after the bucketing columns is specified.
+- Since StarRocks 2.5, you do not need to set the number of buckets when a table is created, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
 Syntax:
 
@@ -315,19 +327,23 @@ PROPERTIES (
     "dynamic_partition.buckets" = "${integer_value}"
 ```
 
-dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default value: true.
+- `dynamic_partition.enable`: enables dynamic partitioning. Valid values are `TRUE` and `FALSE`. The default value is `TRUE`.
 
-dynamic_partition.time_unit: It is used to specify the time unit for adding partitions dynamically. Time unit could be DAY, WEEK, MONTH.
+- `dynamic_partition.time_unit`: the time granularity for dynamically created  partitions. It is a required parameter. Valid values are `DAY`, `WEEK`, and `MONT``H`.The time granularity determines the suffix format for dynamically created partitions.
 
-dynamic_partition.start: It is used to specify how many partitions should be deleted. The value must be less than 0. Default value: integer.Min_VAULE.
+  - If the value is `DAY`,  the suffix format for dynamically created partitions is yyyyMMdd. An example partition name suffix is `20200321`.
+  - If the value is `WEEK`, the suffix format for dynamically created partitions is yyyy_ww, for example `2020_13` for the 13th week of 2020.
+  - If the value is `MONTH`, the suffix format for dynamically created partitions is yyyyMM, for example `202003`.
 
-dynamic_partition.end: It is used to specify the how many partitions will be created in advance. The value must be more than 0.
+- `dynamic_partition.start`: the starting offset of dynamic partitioning. It is a required parameter. The value of this parameter must be a negative integer. The partitions before this offset will be deleted based on the current day, week, or month which is determined by the value of the parameter `dynamic_partition.time_unit`. The default value is `Integer.MIN_VALUE`, namely, -2147483648, which means that the history partitions will not be deleted.
 
-dynamic_partition.prefix: It is used to specify the prefix of the created partition. For instance, if the prefix is p, the partition will be named p20200108 automatically.
+- `dynamic_partition.end`: the end offset of dynamic partitioning. It is a required parameter. The value of this parameter must be a positive integer. The partitions from the current day, week, or month to the end offset will be created in advance.
 
-dynamic_partition.buckets: It is used to specify the number of buckets automatically created in partitions.
+- `dynamic_partition.prefix`: the prefix added to the names of dynamic partitions. The default value is `p`.
 
-- You can set a data compression algorithm when creating a table.
+- `dynamic_partition.buckets`: the number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word BUCKETS or automatically set by StarRocks.
+
+- [Preview] You can set a data compression algorithm when creating a table.
 
 You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
 
@@ -340,7 +356,7 @@ The valid values of `compression` are:
 
 For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
 
-- You can set write quorum for data loading.
+- [Preview] You can set write quorum for data loading.
 
 If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you create a table.
 
