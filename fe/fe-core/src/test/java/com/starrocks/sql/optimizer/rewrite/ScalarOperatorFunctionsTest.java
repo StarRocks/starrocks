@@ -31,9 +31,11 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
@@ -1051,5 +1053,15 @@ public class ScalarOperatorFunctionsTest {
         CallOperator random = new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList());
         CallOperator randomCopy = (CallOperator) random.clone();
         assertEquals(random, randomCopy);
+    }
+
+    @Test
+    public void testUTCTimestamp() {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
+                .atZone(ZoneOffset.UTC).toLocalDateTime();
+        assertEquals(expected, ScalarOperatorFunctions.utcTimestamp().getDatetime());
     }
 }
