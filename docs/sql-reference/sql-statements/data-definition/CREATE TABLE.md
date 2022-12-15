@@ -273,13 +273,6 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 - Bucketing columns cannot be modified after they are specified.
 - Since StarRocks 2.5, you do not need to set the number of buckets when you create a table, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
-
-Note:
-
-Please use specified key columns for Hash bucketing. The default bucket number is 10.
-
-It is recommended to use Hash bucketing method.
-
 ### PROPERTIES
 
 - If ENGINE type is olap. Users can specify storage medium, cooldown time and replica number.
