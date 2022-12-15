@@ -31,15 +31,8 @@ public:
     }
     virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
-    // When the pipeline of this source operator wants to insert a local shuffle for some complex operators,
-    // such as hash join and aggregate, use this method to decide whether really need to insert a local shuffle.
-    virtual bool could_local_shuffle() const { return _could_local_shuffle; }
-    void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
-    virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
-
 protected:
     size_t _degree_of_parallelism = 1;
-    bool _could_local_shuffle = true;
 };
 
 class SourceOperator : public Operator {
