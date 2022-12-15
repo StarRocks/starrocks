@@ -169,7 +169,7 @@ PROPERTIES
         * `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: For each rm-id, specify the hostname corresponding to the resource manager.
         * `spark.hadoop.yarn.resourcemanager.address.rm-id`: For each rm-id, specify `host:port` for the client to submit jobs to.
 
-* `*working_dir`: The directory used by ETL. Required if      Apache Spark™ is used as an ETL resource. For example: `hdfs://host:port/tmp/starrocks`.
+* `*working_dir`: The directory used by ETL. Required if Apache Spark™ is used as an ETL resource. For example: `hdfs://host:port/tmp/starrocks`.
 
 * Broker related parameters:
   * `broker`: Broker name. Required if Apache Spark™ is used as an ETL resource. You need to use the `ALTER SYSTEM ADD BROKER` command to complete the configuration in advance.
