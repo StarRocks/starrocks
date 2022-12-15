@@ -248,10 +248,13 @@ For more information, see [Data distribution](../../../table_design/Data_distrib
 
 ### distribution_des
 
-Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns. We recommend that you follow the suggestions below to decide the bucketing column:
+Data in partitions can be subdivided into tablets based on the hash values of the bucketing columns. We recommend that you choose the column that satisfy the following two requirements as the bucketing column.
+• high cardinality column such as ID
+• column that often used as a filter in queries
 
-- The column with high cardinality such as ID.
-- The column that is often used as a filter in queries.
+But if the column that satisfy both requirements do not exist, you need to determine the buckting column according to the complexity of queries.
+• If the query is complex, it is recommended that you select the high cardinality column as the bucketing column to ensure that the data is as balanced as possible in each bucket and improve the cluster resource utilization.
+• If the query is relatively simple, then it is recommended to select the column that is often used as in the query condition as the bucketing column to improve the query efficiency.
 
 If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns.
 
