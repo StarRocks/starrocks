@@ -350,7 +350,14 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
 ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
     // TODO: optimize the loop order for small build chunk
     ChunkPtr chunk = _init_output_chunk(state);
-    _probe_row_start = _probe_row_current;
+    bool probe_started = false;
+    _probe_row_start = 0;
+    auto probe_row_start = [&]() {
+        if (!probe_started) {
+            probe_started = true;
+            _probe_row_start = _probe_row_current;
+        }
+    };
     for (; _probe_row_current < _probe_chunk->num_rows(); ++_probe_row_current) {
         // Last build chunk must permute a chunk
         bool is_last_build_chunk = _curr_build_chunk_index == _num_build_chunks() - 1 && _num_build_chunks() > 1;
@@ -358,6 +365,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(0);
             _probe_row_finished = true;
+            probe_row_start();
             return chunk;
         }
 
@@ -366,6 +374,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
         while (!_probe_row_finished && _curr_build_chunk_index < _num_build_chunks()) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(_curr_build_chunk_index + 1);
+            probe_row_start();
             if (chunk->num_rows() >= state->chunk_size()) {
                 return chunk;
             }
