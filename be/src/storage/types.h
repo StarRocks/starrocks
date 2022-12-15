@@ -64,9 +64,6 @@ class TypeInfo {
 public:
     using Datum = vectorized::Datum;
 
-    virtual bool equal(const void* left, const void* right) const = 0;
-    virtual int cmp(const void* left, const void* right) const = 0;
-
     virtual void shallow_copy(void* dest, const void* src) const = 0;
 
     virtual void deep_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
@@ -81,7 +78,6 @@ public:
     virtual void set_to_max(void* buf) const = 0;
     virtual void set_to_min(void* buf) const = 0;
 
-    virtual uint32_t hash_code(const void* data, uint32_t seed) const = 0;
     virtual size_t size() const = 0;
 
     virtual LogicalType type() const = 0;

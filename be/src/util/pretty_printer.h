@@ -137,7 +137,14 @@ public:
 
         /// TODO: Remove DOUBLE_VALUE. IMPALA-1649
         case TUnit::DOUBLE_VALUE: {
-            double output = *reinterpret_cast<double*>(&value);
+            constexpr bool use_static_cast =
+                    std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, bool>;
+            double output;
+            if constexpr (use_static_cast) {
+                output = static_cast<double>(value);
+            } else {
+                output = *reinterpret_cast<double*>(&value);
+            }
             ss << std::setprecision(PRECISION) << output << " ";
             break;
         }

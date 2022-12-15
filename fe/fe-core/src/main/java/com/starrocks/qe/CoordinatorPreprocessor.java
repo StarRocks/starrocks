@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
@@ -76,6 +75,7 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -149,7 +149,7 @@ public class CoordinatorPreprocessor {
     private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
 
     // Resource group
-    private ResourceGroup resourceGroup = null;
+    private TWorkGroup resourceGroup = null;
 
     public CoordinatorPreprocessor(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
                                    List<ScanNode> scanNodes,
@@ -279,7 +279,7 @@ public class CoordinatorPreprocessor {
         return addressToBackendID;
     }
 
-    public ResourceGroup getResourceGroup() {
+    public TWorkGroup getResourceGroup() {
         return resourceGroup;
     }
 
@@ -289,10 +289,11 @@ public class CoordinatorPreprocessor {
 
     public void prepareExec() throws Exception {
         // prepare information
+        resetFragmentState();
         prepareFragments();
 
         // prepare workgroup
-        this.resourceGroup = prepareResourceGroup(connectContext,
+        resourceGroup = prepareResourceGroup(connectContext,
                 queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
                         : ResourceGroupClassifier.QueryType.SELECT);
 
@@ -300,6 +301,20 @@ public class CoordinatorPreprocessor {
         computeFragmentExecParams();
         traceInstance();
         computeBeInstanceNumbers();
+    }
+
+    /**
+     * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
+     */
+    private void resetFragmentState() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment instanceof MultiCastPlanFragment) {
+                MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+                for (List<TPlanFragmentDestination> destination : multiSink.getDestinations()) {
+                    destination.clear();
+                }
+            }
+        }
     }
 
     private void prepareFragments() {
@@ -1229,13 +1244,12 @@ public class CoordinatorPreprocessor {
         return null;
     }
 
-    public static ResourceGroup prepareResourceGroup(ConnectContext connect,
-                                                     ResourceGroupClassifier.QueryType queryType) {
-        ResourceGroup resourceGroup = null;
+    public static TWorkGroup prepareResourceGroup(ConnectContext connect, ResourceGroupClassifier.QueryType queryType) {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
-            return resourceGroup;
+            return null;
         }
         SessionVariable sessionVariable = connect.getSessionVariable();
+        TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
@@ -1246,8 +1260,7 @@ public class CoordinatorPreprocessor {
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = new ResourceGroup();
-            resourceGroup.setId(workgroupId);
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -1442,7 +1455,7 @@ public class CoordinatorPreprocessor {
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
                     if (enableResourceGroup && resourceGroup != null) {
-                        commonParams.setWorkgroup(resourceGroup.toThrift());
+                        commonParams.setWorkgroup(resourceGroup);
                     }
                 }
             }

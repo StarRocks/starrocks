@@ -501,7 +501,7 @@ The parameters in the preceding API operations are as follows:
 
 ## Precautions
 
-- When the session variable `pipeline_dop` is set to `1`, StarRocks needs to populate the query cache with the computation results of queries that are initiated for the first time. As a result, the query performance may be slightly lower than expected, and the query latency is increased. 
+- When the session variable `pipeline_dop` is set to `1`, StarRocks needs to populate the query cache with the computation results of queries that are initiated for the first time. As a result, the query performance may be slightly lower than expected, and the query latency is increased.
 - If you configure a large query cache size, the amount of memory that can be provisioned to processes on the BE is decreased. We recommend that the query cache size do not exceed 1/6 of the memory capacity provisioned to processes.
 - If the number of tablets processed by a pipeline is less than the value of the `pipeline_dop` parameter, the query cache does not work. To enable the query cache to work, you can set `pipeline_dop` to `1`.
 

@@ -15,19 +15,20 @@ This function works according to the following rules:
 ## Syntax
 
 ```Plain
-BIGINT output window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, cond2, ..., condN])
+BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, cond2, ..., condN])
 ```
 
 ## Parameters
 
-- `window`: The sliding window. The supported data type is BIGINT. The unit depends on the `time` parameter. If the data type of `time` is DATE, the unit is days. If the data type of `time` is DATETIME, the unit is seconds.
+- `window`: The length of the sliding window. The supported data type is BIGINT. The unit depends on the `time` parameter. If the data type of `time` is DATE, the unit is days. If the data type of `time` is DATETIME, the unit is seconds.
 
 - `time`: The column containing timestamps. DATE and DATETIME types are supported.
 
 - `mode`: The mode in which the event chain is filtered. The supported data type is INT. Value range: 0, 1, 2.
-  - `0` is the default value, which indicates general funnel calculation.
+  - `0` is the default value, which indicates common funnel calculation.
   - `1` indicates the `DEDUPLICATION` mode, that is, the filtered event chain cannot have repeated events. Suppose the `array` parameter is `[event_type = 'A', event_type = 'B', event_type = 'C', event_type = 'D']` and the original event chain is "A-B-C-B-D". Event B is repeated and the filtered event chain is "A-B-C".
   - `2` indicates the `FIXED` mode, that is, the filtered event chain cannot have events that disrupt the specified sequence. Suppose the previous `array` parameter is used and the original event chain is "A-B-D-C". Event D interrupts the sequence and the filtered event chain is "A-B".
+  - `4` indicates the `INCREASE` mode, which means the filtered events must have strictly increasing timestamps. Duplicate timestamp disrupts the event chain.
 
 - `array`: The defined event chain. It must be an array.
 
@@ -197,3 +198,55 @@ mysql> select uid, window_funnel(1900,time,2,[event_type='Browse', event_type='C
 ```
 
 `2` is returned because the "Pay" event disrupts the event chain and the event counter stops. The filtered event chain is "Browse-Click".
+
+**Example 4**: Calculate the maximum number of consecutive events based on `uid`. The sliding window is 1900s, and filter modes `0` and `4` are used.
+
+This example uses table `action3`, in which data is sorted by `time`.
+
+```Plaintext
+select * from action3 order by time;
++------+------------+---------------------+
+| uid  | event_type | time                |
++------+------------+---------------------+
+| 1    | Browse     | 2020-01-02 11:00:00 |
+| 1    | Click      | 2020-01-02 11:00:01 |
+| 2    | Browse     | 2020-01-02 11:00:03 |
+| 1    | Order      | 2020-01-02 11:00:31 |
+| 2    | Click      | 2020-01-02 11:00:03 |
+| 2    | Order      | 2020-01-02 11:01:03 |
++------+------------+---------------------+
+3 rows in set (0.02 sec)
+```
+
+Execute the following statement:
+
+```Plaintext
+select uid, window_funnel(1900,time,0,[event_type='Browse', event_type='Click',
+        event_type='Order']) AS level
+from action3 group by uid order by uid;
++------+-------+
+| uid  | level |
++------+-------+
+|    1 |     3 |
+|    2 |     3 |
++------+-------+
+```
+
+`3` is returned for `uid = 1` and `uid = 2`.
+
+Change `mode` to `4` and execute the statement again.
+
+```Plaintext
+select uid, window_funnel(1900,time,4,[event_type='Browse', event_type='Click',
+        event_type='Order']) AS level
+from action3 group by uid order by uid;
++------+-------+
+| uid  | level |
++------+-------+
+|    1 |     3 |
+|    2 |     1 |
++------+-------+
+1 row in set (0.02 sec)
+```
+
+`1` is returned for `uid = 2` because mode `4` (strictly increasing) is used. "Click" happens at the same second as "BROWSE". Therefore, "Click" and "Order" are not counted.

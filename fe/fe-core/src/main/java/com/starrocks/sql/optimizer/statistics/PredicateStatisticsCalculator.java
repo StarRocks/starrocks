@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -38,17 +39,35 @@ public class PredicateStatisticsCalculator {
         if (predicate == null) {
             return statistics;
         }
-        return predicate.accept(new PredicateStatisticsCalculatingVisitor(statistics), null);
+
+        // The time-complexity of PredicateStatisticsCalculatingVisitor OR row-count is O(2^n), n is OR number
+        if (countOrNode(predicate, 0) > StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT) {
+            return predicate.accept(new LargeOrCalculatingVisitor(statistics), null);
+        } else {
+            return predicate.accept(new PredicateStatisticsCalculatingVisitor(statistics), null);
+        }
+    }
+
+    private static long countOrNode(ScalarOperator root, long count) {
+        if (OperatorType.COMPOUND.equals(root.getOpType()) && ((CompoundPredicateOperator) root).isOr()) {
+            count = count + 1;
+        }
+
+        for (ScalarOperator child : root.getChildren()) {
+            count = countOrNode(child, count);
+        }
+
+        return count;
     }
 
     private static class PredicateStatisticsCalculatingVisitor extends ScalarOperatorVisitor<Statistics, Void> {
-        private final Statistics statistics;
+        protected final Statistics statistics;
 
         public PredicateStatisticsCalculatingVisitor(Statistics statistics) {
             this.statistics = statistics;
         }
 
-        private boolean checkNeedEvalEstimate(ScalarOperator predicate) {
+        protected boolean checkNeedEvalEstimate(ScalarOperator predicate) {
             if (predicate == null) {
                 return false;
             }
@@ -263,8 +282,7 @@ public class PredicateStatisticsCalculator {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics = predicate.getChild(1)
-                        .accept(new PredicateStatisticsCalculator.PredicateStatisticsCalculatingVisitor(leftStatistics),
-                                null);
+                        .accept(new PredicateStatisticsCalculatingVisitor(leftStatistics), null);
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
@@ -277,11 +295,12 @@ public class PredicateStatisticsCalculator {
                 for (int i = 1; i < disjunctive.size(); ++i) {
                     Statistics orItemStatistics = disjunctive.get(i).accept(this, null);
                     Statistics andStatistics = disjunctive.get(i).accept(
-                            new PredicateStatisticsCalculator.PredicateStatisticsCalculatingVisitor(cumulativeStatistics), null);
+                            new PredicateStatisticsCalculatingVisitor(cumulativeStatistics), null);
                     rowCount = cumulativeStatistics.getOutputRowCount() + orItemStatistics.getOutputRowCount() -
                             andStatistics.getOutputRowCount();
                     rowCount = Math.min(rowCount, statistics.getOutputRowCount());
-                    cumulativeStatistics = computeOrPredicateStatistics(cumulativeStatistics, orItemStatistics, rowCount);
+                    cumulativeStatistics =
+                            computeOrPredicateStatistics(cumulativeStatistics, orItemStatistics, rowCount);
                 }
 
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(cumulativeStatistics, rowCount);
@@ -294,8 +313,8 @@ public class PredicateStatisticsCalculator {
             }
         }
 
-        public Statistics computeOrPredicateStatistics(Statistics cumulativeStatistics, Statistics orItemStatistics,
-                                                       double rowCount) {
+        protected Statistics computeOrPredicateStatistics(Statistics cumulativeStatistics, Statistics orItemStatistics,
+                                                          double rowCount) {
             Statistics.Builder builder = Statistics.buildFrom(cumulativeStatistics);
             builder.setOutputRowCount(rowCount);
 
@@ -328,6 +347,74 @@ public class PredicateStatisticsCalculator {
 
         private ColumnStatistic getExpressionStatistic(ScalarOperator operator) {
             return ExpressionStatisticCalculator.calculate(operator, statistics);
+        }
+    }
+
+    private static class LargeOrCalculatingVisitor extends PredicateStatisticsCalculatingVisitor {
+        public LargeOrCalculatingVisitor(Statistics statistics) {
+            super(statistics);
+        }
+
+        @Override
+        public Statistics visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+            if (!checkNeedEvalEstimate(predicate)) {
+                return statistics;
+            }
+
+            if (predicate.isAnd()) {
+                Preconditions.checkState(predicate.getChildren().size() == 2);
+                Statistics leftStatistics = predicate.getChild(0).accept(this, null);
+                Statistics andStatistics = predicate.getChild(1)
+                        .accept(new LargeOrCalculatingVisitor(leftStatistics), null);
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
+                        andStatistics.getOutputRowCount());
+            } else if (predicate.isOr()) {
+                Preconditions.checkState(predicate.getChildren().size() == 2);
+
+                List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
+                Statistics baseStatistics = predicate.getChild(0).accept(this, null);
+                double rowCount = baseStatistics.getOutputRowCount();
+
+                for (int i = 1; i < disjunctive.size(); ++i) {
+                    Statistics orStatistics = disjunctive.get(i).accept(this, null);
+                    rowCount = (baseStatistics.getOutputRowCount() + orStatistics.getOutputRowCount()) / 2;
+                    rowCount = Math.max(rowCount, baseStatistics.getOutputRowCount());
+                    rowCount = Math.max(rowCount, orStatistics.getOutputRowCount());
+                    rowCount = Math.min(rowCount, statistics.getOutputRowCount());
+                    baseStatistics = computeOrPredicateStatistics(baseStatistics, orStatistics, rowCount);
+                }
+
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(baseStatistics, rowCount);
+            } else {
+                Preconditions.checkState(predicate.getChildren().size() == 1);
+                Statistics inputStatistics = predicate.getChild(0).accept(this, null);
+                double rowCount = Math.max(0, statistics.getOutputRowCount() - inputStatistics.getOutputRowCount());
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(
+                        Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build(), rowCount);
+            }
+        }
+
+        @Override
+        protected Statistics computeOrPredicateStatistics(Statistics baseStatistics, Statistics orItemStatistics,
+                                                          double rowCount) {
+            // support simple avg statistics
+            Statistics.Builder builder = Statistics.buildFrom(baseStatistics);
+            builder.setOutputRowCount(rowCount);
+
+            baseStatistics.getColumnStatistics().forEach((columnRefOperator, columnStatistic) -> {
+                ColumnStatistic.Builder columnBuilder = ColumnStatistic.buildFrom(columnStatistic);
+                ColumnStatistic rightColumnStatistic = orItemStatistics.getColumnStatistic(columnRefOperator);
+                columnBuilder.setMinValue(Math.min(columnStatistic.getMinValue(), rightColumnStatistic.getMinValue()));
+                columnBuilder.setMaxValue(Math.max(columnStatistic.getMaxValue(), rightColumnStatistic.getMaxValue()));
+                double distinct = Math.max(1,
+                        (columnStatistic.getDistinctValuesCount() + rightColumnStatistic.getDistinctValuesCount()) / 2);
+                double nulls = Math.max(1,
+                        (columnStatistic.getNullsFraction() + rightColumnStatistic.getNullsFraction()) / 2);
+                columnBuilder.setDistinctValuesCount(distinct);
+                columnBuilder.setNullsFraction(nulls);
+                builder.addColumnStatistic(columnRefOperator, columnBuilder.build());
+            });
+            return builder.build();
         }
     }
 }
