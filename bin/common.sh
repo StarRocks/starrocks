@@ -63,9 +63,9 @@ export_mem_limit_from_conf() {
     fi
 
     if [ -f /.dockerenv ] && [ "$cgroup_version" == "cgroup2fs" ]; then
-        mem_limit=$(cat /sys/fs/cgroup/memory/memory.max | awk '{printf $1}')
+        mem_limit=$(cat /sys/fs/cgroup/memory.max | awk '{printf $1}')
         if [ "$mem_limit" == "" ]; then
-            echo "can't get mem info from /sys/fs/cgroup/memory/memory.max"
+            echo "can't get mem info from /sys/fs/cgroup/memory.max"
             return 1
         fi
         if [ "$mem_limit" != "max" ]; then
