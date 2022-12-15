@@ -160,9 +160,6 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    bool need_local_shuffle() const override { return _need_local_shuffle; }
-    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
-
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
@@ -170,7 +167,6 @@ public:
 
 protected:
     ScanNode* const _scan_node;
-    bool _need_local_shuffle = true;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,
