@@ -20,17 +20,17 @@ Returns an array.
 
 ## Usage notes
 
-- This function can sort the elements of an array only in ascending order.
+- This function sorts the elements of an array only in ascending order.
 
 - `NULL` values are placed at the beginning of the array that is returned.
 
 - If you want to sort the elements of an array in descending order, use the [reverse](./reverse.md) function.
 
-- The elements of the array that is returned are of the same data type as the elements of the array that you specify.
+- The elements of the returned array have the same data type as the elements of the input array.
 
 ## Examples
 
-In this section, the following table is used as an example:
+The following table is used as an example:
 
 ```Plain%20Text
 mysql> select * from test;
