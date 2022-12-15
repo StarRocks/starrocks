@@ -203,94 +203,121 @@ Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及�
 
 ## 创建 Hive catalog
 
-以上相关配置完成后，即可创建 Hive catalog。
+以上相关配置完成后，即可创建 Hive catalog，语法和参数说明如下。
 
 ```SQL
 CREATE EXTERNAL CATALOG catalog_name 
 PROPERTIES ("key"="value", ...);
 ```
 
-参数说明：
+### catalog_name
 
-- `catalog_name`：Hive catalog 的名称，必选参数。<br>命名要求如下：
-  - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
-  - 总长度不能超过 64 个字符。
+Hive catalog 的名称，必选参数。命名要求如下：
 
-- `PROPERTIES`：Hive catalog 的属性，必选参数。Hive 使用的元数据服务不同，该参数的配置也不同。
+- 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
+- 总长度不能超过 64 个字符。
 
-### Hive metastore
+### PROPERTIES
 
-如 Hive 使用 Hive metastore 作为元数据服务，则需要在创建 Hive catalog 时设置如下属性：
+Hive catalog 的属性，必选参数。当前支持配置如下属性：
 
-| **属性**            | **必选** | **说明**                                                     |
-| ------------------- | -------- | ------------------------------------------------------------ |
-| type                | 是       | 数据源类型，取值为 `hive`。                                   |
-| hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
+- 根据 Hive 使用的元数据服务类型来配置不同属性。
+- 设置该 Hive catalog 用于更新元数据缓存的策略。
 
-> **注意**
->
-> 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+#### 元数据服务属性配置
 
-### AWS Glue【公测中】
+- 如 Hive 使用 Hive metastore 作为元数据服务，则需要在创建 Hive catalog 时设置如下属性：
 
-如 Hive 使用 AWS Glue 作为元数据服务，则需要在创建 Hive catalog 时设置如下属性：
+    | **属性**            | **必选** | **说明**                                                     |
+    | ------------------- | -------- | ------------------------------------------------------------ |
+    | type                | 是       | 数据源类型，取值为 `hive`。                                   |
+    | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
-| **属性**                               | **必选** | **说明**                                                     |
-| -------------------------------------- | -------- | ------------------------------------------------------------ |
-| type                                   | 是       | 数据源类型，取值为 `hive`。                                  |
-| hive.metastore.type                    | 是       | 元数据服务类型，取值为 `glue`。                              |
-| aws.hive.metastore.glue.aws-access-key | 是       | IAM 用户的 access key ID（即访问密钥 ID）。             |
-| aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
-| aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
+    > **注意**
+    >
+    > 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
 
-## 元数据同步
+- 【公测中】如 Hive 使用 AWS Glue 作为元数据服务，则需要在创建 Hive catalog 时设置如下属性：
 
-StarRocks 需要利用 Hive 表的元数据来进行查询规划，因此请求访问 Hive 元数据服务的时间直接影响了查询所消耗的时间。为了降低这种影响，StarRocks 提供了元数据同步功能，即将 Hive 表元数据（包括分区统计信息和分区的数据文件信息）缓存在 StarRocks 中并维护更新。当前支持的同步方式有两种：
+    | **属性**                               | **必选** | **说明**                                                     |
+    | -------------------------------------- | -------- | ------------------------------------------------------------ |
+    | type                                   | 是       | 数据源类型，取值为 `hive`。                                  |
+    | hive.metastore.type                    | 是       | 元数据服务类型，取值为 `glue`。                              |
+    | aws.hive.metastore.glue.aws-access-key | 是       | IAM 用户的 access key ID（即访问密钥 ID）。             |
+    | aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
+    | aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
 
-- **异步更新**：StarRocks 默认的元数据同步方式，无需做额外的配置即可使用。异步更新需要满足两个条件才可以自动触发更新（具体见原理），这意味着缓存的元数据不会一直维持在最新的状态，在部分场景下，需要手动进行更新。
-- **自动增量更新**：如开启该同步方式，则需要分别在 Hive metastore 和 StarRocks 中进行相应的配置。开启后， StarRocks 内缓存的元数据会一直在维持最新的状态，无需进行手动更新。
+#### 元数据缓存更新属性配置
 
-### 元数据异步更新
+StarRocks 当前支持两种更新元数据缓存的策略：异步更新和自动增量更新。有关这两种策略的详细说明，请参见[元数据缓存更新](#元数据缓存更新)。
 
-#### 原理
+- StarRocks 默认使用异步更新来更新所有缓存的 Hive 元数据。大部分情况下，如下默认配置就能够保证较优的查询性能，无需调整。但如果您的 Hive 数据更新相对频繁，也可以通过调节缓存更新和淘汰的间隔时间来适配 Hive 数据的更新频率。
 
-如查询命中 Hive 表的某个分区，StarRocks 会自动异步缓存该分区的元数据。缓存的元数据采用的是“懒更新策略”，即如果查询命中该分区，且距离上一次更新已经超过默认间隔时间，那么 StarRocks 会异步更新缓存分区元数据，否则不会更新。更新的默认间隔时间由 `hive_meta_cache_refresh_interval_s` 参数控制，默认值为 `7200`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
+    | **属性**                               | **必选** | **说明**                                                     |
+    | -------------------------------------- | -------- | ------------------------------------------------------------ |
+    | enable_hive_metastore_cache            | 否       | 是否缓存 Hive 表或分区的元数据，取值包括：<ul><li>`true`：缓存，为默认值。</li><li>`false`：不缓存。</li></ul> |
+    | enable_remote_file_cache               | 否       | 是否缓存 Hive 表或分区的数据文件元数据，取值包括：<ul><li>`true`：缓存，为默认值。</li><li>`false`：不缓存。</li></ul> |
+    | metastore_cache_refresh_interval_sec   | 否       | Hive 表或分区元数据进行缓存异步更新的间隔时间。单位：秒，默认值为 `7200`，即 2 小时。 |
+    | remote_file_cache_refresh_interval_sec | 否       | Hive 表或分区的数据文件元数据进行缓存异步更新的间隔时间。默认值为 `60`，单位：秒。 |
+    | metastore_cache_ttl_sec                | 否       | Hive 表或分区元数据缓存自动淘汰的间隔时间。单位：秒，默认值为 `86400`，即 24 小时。 |
+    | remote_file_cache_ttl_sec              | 否       | Hive 表或分区的数据文件元数据缓存自动淘汰的间隔时间。单位：秒，默认值为 `129600`，即 36 小时。 |
 
-如超过默认间隔时间，该分区元数据依旧没有更新，则默认缓存的分区元数据失效。在下次查询时，会重新缓存该分区元数据。元数据缓存失效的时间由 `hive_meta_cache_ttl_s` 参数控制，默认值为 `86400`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
+    异步更新无法保证最新的 Hive 数据。StarRocks 提供手动更新的方式帮助您获取最新数据。如果您想要在缓存更新间隔还未到来时更新数据，可以进行手动更新。例如，有一张 Hive 表 `table1`，其包含 4 个分区：`p1`、`p2`、`p3` 和 `p4`。如当前  StarRocks 中只缓存了 `p1`、`p2` 和 `p3` 分区元数据和其数据文件元数据，那么手动更新有以下两种方式：
 
-#### 示例
-
-有一张 Hive 表 `table1`，其包含 4 个分区：`p1`、`p2`、`p3` 和 `p4`。如查询命中分区 `p1`，那么 StarRocks 会自动异步缓存 `p1` 的元数据。如维护更新的间隔时间为 1 小时，则后续更新有以下几种情况：
-
-- 如查询命中 `p1`，且当前时间距离上一次更新超过 1 小时，StarRocks 会异步更新缓存的 `p1` 元数据。
-- 如查询命中 `p1`，且当前时间距离上一次更新没有超过 1 小时，StarRocks 不会异步更新缓存的 `p1` 元数据。
-
-#### 手动更新
-
-要查询最新的 Hive 数据，需保证 StarRocks 缓存的 Hive 元数据也更至最新。如当前时间距离上一次更新还没有超过默认间隔时间，则可手动更新元数据后再进行查询，具体如下：
-
-- 若 Hive 表结构发生变更（例如增减分区或增减列），可执行如下语句将该变更同步到 StarRocks 中。
+  - 同时更新表 `table1` 所有缓存在 StarRocks 中的分区元数据和其数据文件元数据，即包括 `p1`、`p2` 和 `p3`。
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name;
     ```
 
-- 若 Hive 表中的某些分区发生数据更新（例如数据导入），可执行如下语句将该变更同步到 StarRocks 中。
+  - 更新指定分区元数据和其数据文件元数据缓存。
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
     [PARTITION ('partition_name', ...)];
     ```
 
-有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
+    有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABLE](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
+
+- 如使用自动增量更新作为该 Hive catalog 的更新元数据缓存的策略，在创建 Hive catalog 时需配置如下属性。
+
+    | **属性**                           | **必选** | **说明**                                                     |
+    | ---------------------------------- | -------- | ------------------------------------------------------------ |
+    | enable_hms_events_incremental_sync | 否       | 是否开启元数据缓存自动增量更新，取值包括：<ul><li>`TRUE`：表示开启。</li><li>`FALSE`：表示未开启，为默认值。</li></ul>如要为该 Hive catalog 开启自动增量更新策略，需将该参数值设置为 `TRUE`。 |
+
+## 元数据缓存更新
+
+StarRocks 需要利用元数据服务中的 Hive 表或分区的元数据（例如表结构）和存储系统中表或分区的数据文件元数据（例如文件大小）来生成查询执行计划。因此请求访问 Hive 元数据服务和存储系统的时间直接影响了查询所消耗的时间。为了降低这种影响，StarRocks 提供元数据缓存能力，即将 Hive 表或分区的元数据和其数据文件元数据缓存在 StarRocks 中并维护更新。
+
+- **异步更新**：StarRocks 默认的元数据缓存更新策略，无需配置即可使用。但为了减少对元数据服务和存储系统的访问压力，异步更新需要满足相应条件才会自动触发更新（具体见原理），这意味着缓存的表或分区的元数据和其数据文件元数据不会一直维持在最新的状态，在部分场景下，需要手动进行更新。
+- **自动增量更新**：仅当 Hive 使用 Hive metastore 作为元数据服务时，StarRocks 才支持开启该更新策略。要开启该更新策略，则需要分别在元数据服务和 StarRocks 中进行相应的配置。开启后， 异步更新机制将不再生效，StarRocks 内缓存的元数据会一直在维持最新的状态，无需进行手动更新。
+
+### 异步更新
+
+默认情况下（即 `enable_hive_metastore_cache` 和 `enable_remote_file_cache` 参数值均为 `true`），如查询命中 Hive 表的一个分区，StarRocks 会自动缓存该分区元数据及其数据文件元数据。缓存下来的两种元数据采用的是“懒更新策略”。示例如下：
+
+有一张 Hive 表 `table2`，其包含 4 个分区：`p1`、`p2`、`p3` 和 `p4`。如查询命中分区 `p1`，那么 StarRocks 会自动缓存 `p1` 的元数据和 `p1` 的数据文件元数据。假设当前两种元数据缓存的更新和淘汰设置如下：
+
+- 异步更新缓存的 `p1` 元数据的间隔时间（由 `metastore_cache_refresh_interval_sec` 参数控制）为 2 小时。
+- 异步更新缓存的 `p1` 数据文件元数据的间隔时间（由 `remote_file_cache_refresh_interval_sec` 参数控制）为 60 秒。
+- 自动淘汰缓存的 `p1` 元数据的间隔时间（由 `metastore_cache_ttl_sec` 参数控制）为 24 小时。
+- 自动淘汰缓存的 `p1` 数据文件元数据的间隔时间（由 `remote_file_cache_ttl_sec` 参数控制）为 36 小时。
+
+那么这两种元数据后续的更新和淘汰会有以下几种情况：
+
+![figure1](/assets/hive_catalog.png)
+
+- 如后续有查询命中 `p1`，且当前时间距离上一次缓存更新没有超过 60 秒，StarRocks 既不更新缓存的 `p1` 元数据也不更新缓存的`p1` 数据文件元数据。
+- 如后续有查询命中 `p1`，且当前时间距离上一次缓存更新超过 60 秒，StarRocks 会更新缓存的 `p1`数据文件元数据。
+- 如后续有查询命中 `p1`，且当前时间距离上一次缓存更新超过 2 小时，StarRocks 会更新缓存的 `p1` 元数据。
+- 如继上一次缓存更新后，`p1`分区在 24 小时内未被访问，StarRocks 会淘汰缓存 `p1` 元数据。待后续有查询命中 `p1` 再重新缓存。
+- 如继上一次缓存更新后，`p1`分区在 36 小时内未被访问，StarRocks 会淘汰缓存 `p1` 数据文件元数据。待后续有查询命中 `p1` 再重新缓存。
 
 ### 元数据自动增量更新
 
-元数据自动增量更新即通过让 StarRocks 的 FE 节点定时读取 Hive metastore 的 event 来感知 Hive 表元数据的变更情况（例如增减分区、增减列或分区内数据变更），并自动更新 StarRocks 内缓存的 Hive 表元数据。开启该机制的操作步骤如下。
+元数据自动增量更新即通过让 StarRocks 的 FE 节点定时读取 Hive metastore 的 event 来感知 Hive 表元数据的变更情况（例如增减分区、增减列或分区内数据变更），并自动更新 StarRocks 内缓存的 Hive 表元数据。开启该机制的需要做如下配置。
 
-> 注意：开启该机制后，异步更新机制将不再生效。
-
-#### 步骤一：为 Hive metastore 配置 event listener
+#### 为 Hive metastore 配置 event listener
 
 Event listener 可以对 Hive metastore 中的 event（例如增减分区、增减列或数据更新）进行监听。当前，Hive metastore 2.x 和 3.x 版本均支持配置 event listener，以下为针对 Hive Metastore 3.1.2 版本的配置。将如下配置添加到 **$HiveMetastore/conf/hive-site.xml** 文件中，并重启 Hive metastore。
 
@@ -327,13 +354,16 @@ Event listener 可以对 Hive metastore 中的 event（例如增减分区、增�
 
 您可以在 FE 日志中搜索 `event id` 来查看 event listener 是否配置成功。如未成功，则 `event id` 为 `0`。
 
-#### 步骤二：StarRocks 开启自动增量元数据更新
+#### StarRocks 开启自动增量元数据更新
 
-在每个 FE 的 **$FE_HOME/conf/fe.conf** 中配置如下参数以读取 event。
+设置 enable_hms_events_incremental_sync=true 即开启自动增量更新策略。当前支持以下两种开启方式：
+
+- 创建 external catalog 时将该参数配置到 PROPERTIES 中，即为单个 external catalog 开启该策略。
+- 将该参数配置到在各个 FE 的 **$FE_HOME/conf/fe.conf** 中，即为当前集群的所有 external catalog 开启该策略，设置后需重启各个 FE 生效。
+您还可以根据业务需求在 **$FE_HOME/conf/fe.conf** 中调节以下参数，设置后需重启各个 FE 生效。
 
 | **参数**                           | **说明**                                                    |
 | ---------------------------------- | ----------------------------------------------------------- |
-| enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能，取值包括：<ul><li>`TRUE`：表示开启。</li> <li>`FALSE`：表示未开启，为默认值。</li></ul>|
 | hms_events_polling_interval_ms     | StarRocks 读取 event 的间隔时间，默认值为 `5000`，单位：毫秒。    |
 | hms_events_batch_size_per_rpc      | StarRocks 每次读取 event 的最大数量，默认值为 `500`。        |
 | enable_hms_parallel_process_evens  | 是否并行处理读取的 event ，取值包括：<ul><li>`TRUE`：表示并行处理，为默认值。</li><li>`FALSE`：表示不并行处理。</li></ul>  |

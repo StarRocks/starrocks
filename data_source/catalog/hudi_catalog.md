@@ -19,83 +19,81 @@ Hudi catalog 是一个外部数据目录 (external catalog)。StarRocks 2.4 及�
 
 ## 创建 Hudi catalog
 
-以上相关配置完成后，即可创建 Hudi catalog。
-
-### 语法
+以上相关配置完成后，即可创建 Hudi catalog，语法和参数说明如下。
 
 ```SQL
 CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
-### 参数说明
+### catalog_name
 
-- `catalog_name`：Hudi catalog 的名称，必选参数。<br>命名要求如下：
-  - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
-  - 总长度不能超过 64 个字符。
+Hudi catalog 的名称，必选参数。命名要求如下：
 
-- `PROPERTIES`：Hudi catalog 的属性，必选参数。Hudi 使用的元数据服务不同，该参数的配置也不同。
+- 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
+- 总长度不能超过 64 个字符。
 
-#### Hive metastore
+### PROPERTIES
 
-如 Hudi 使用 Hive metastore 作为元数据服务，则需要在创建 Hudi catalog 时设置如下属性：
+Hudi catalog 的属性，必选参数。当前支持配置如下属性：
 
-| **属性**            | **必选** | **说明**                                                     |
-| ------------------- | -------- | ------------------------------------------------------------ |
-| type                | 是       | 数据源类型，取值为 `hudi`。                                   |
-| hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
+- 根据 Hudi 使用的元数据服务类型来配置不同属性。
+- 设置该 Hudi catalog 用于更新元数据缓存的策略。
 
-> **注意**
->
-> 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+#### 元数据服务属性配置
 
-#### AWS Glue【公测中】
+- 如 Hudi 使用 Hive metastore 作为元数据服务，则需要在创建 Hudi catalog 时设置如下属性：
 
-如 Hudi 使用 AWS Glue 作为元数据服务，则需要在创建 Hudi catalog 时设置如下属性：
+  | **属性**            | **必选** | **说明**                                                     |
+  | ------------------- | -------- | ------------------------------------------------------------ |
+  | type                | 是       | 数据源类型，取值为 `hudi`。                                   |
+  | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
+
+  > **注意**
+  >
+  > 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+
+- 【公测中】如 Hudi 使用 AWS Glue 作为元数据服务，则需要在创建 Hudi catalog 时设置如下属性：
+
+  | **属性**                               | **必选** | **说明**                                                     |
+  | -------------------------------------- | -------- | ------------------------------------------------------------ |
+  | type                                   | 是       | 数据源类型，取值为 `hudi`。                                  |
+  | hive.metastore.type                    | 是       | 元数据服务类型，取值为 `glue`。                              |
+  | aws.hive.metastore.glue.aws-access-key | 是       | IAM 用户的 access key ID（即访问密钥 ID）。             |
+  | aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
+  | aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
+
+#### 元数据缓存更新属性配置
+
+StarRocks 需要利用元数据服务中的 Hudi 表或分区的元数据（例如表结构）和存储系统中表或分区的数据文件元数据（例如文件大小）来生成查询执行计划。因此请求访问 Hudi 元数据服务和存储系统的时间直接影响了查询所消耗的时间。为了降低这种影响，StarRocks 提供元数据缓存能力，即将 Hudi 表或分区的元数据和其数据文件元数据缓存在 StarRocks 中并维护更新。
+
+Hudi catalog 使用异步更新策略来更新所有缓存的 Hudi 元数据。有关该策略的原理说明，请参见[异步更新](../catalog/hive_catalog.md#异步更新)。大部分情况下，如下默认配置就能够保证较优的查询性能，无需调整。但如果您的 Hudi 数据更新相对频繁，也可以通过调节缓存更新和淘汰的间隔时间来适配 Hudi 数据的更新频率。
 
 | **属性**                               | **必选** | **说明**                                                     |
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
-| type                                   | 是       | 数据源类型，取值为 `hudi`。                                  |
-| hive.metastore.type                    | 是       | 元数据服务类型，取值为 `glue`。                              |
-| aws.hive.metastore.glue.aws-access-key | 是       | IAM 用户的 access key ID（即访问密钥 ID）。             |
-| aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
-| aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
+| enable_hive_metastore_cache            | 否       | 是否缓存 Hudi 表或分区的元数据，取值包括：<ul><li>`true`：缓存，为默认值。</li><li>`false`：不缓存。</li></ul> |
+| enable_remote_file_cache               | 否       | 是否缓存 Hudi 表或分区的数据文件元数据，取值包括：<ul><li>`true`：缓存，为默认值。</li><li>`false`：不缓存。</li></ul> |
+| metastore_cache_refresh_interval_sec   | 否       | Hudi 表或分区元数据进行缓存异步更新的间隔时间。单位：秒，默认值为 `7200`，即 2 小时。 |
+| remote_file_cache_refresh_interval_sec | 否       | Hudi 表或分区的数据文件元数据进行缓存异步更新的间隔时间。默认值为 `60`，单位：秒。 |
+| metastore_cache_ttl_sec                | 否       | Hudi 表或分区元数据缓存自动淘汰的间隔时间。单位：秒，默认值为 `86400`，即 24 小时。 |
+| remote_file_cache_ttl_sec              | 否       | Hudi 表或分区的数据文件元数据缓存自动淘汰的间隔时间。单位：秒，默认值为 `129600`，即 36 小时。 |
 
-## 元数据异步更新
+异步更新无法保证最新的 Hudi 数据。StarRocks 提供手动更新的方式帮助您获取最新数据。如果您想要在缓存更新间隔还未到来时更新数据，可以进行手动更新。例如，有一张 Hudi 表 `table1`，其包含 4 个分区：`p1`、`p2`、`p3` 和 `p4`。如当前  StarRocks 中只缓存了 `p1`、`p2` 和 `p3` 分区元数据和其数据文件元数据，那么手动更新有以下两种方式：
 
-StarRocks 需要利用 Hudi 表的元数据来进行查询规划，因此请求访问 Hudi 元数据服务的时间直接影响了查询所消耗的时间。为了降低这种影响，StarRocks 提供了元数据同步功能，即将 Hudi 表元数据（包括分区统计信息和分区的数据文件信息）缓存在 StarRocks 中并维护更新。当前支持的同步方式为异步更新。
-
-### 原理
-
-如查询命中 Hudi 表的某个分区，StarRocks 会自动异步缓存该分区的元数据。缓存的元数据采用的是“懒更新策略”，即如果查询命中该分区，且距离上一次更新已经超过默认间隔时间，那么 StarRocks 会异步更新缓存分区元数据，否则不会更新。更新的默认间隔时间由 `hive_meta_cache_refresh_interval_s` 参数控制，默认值为 `7200`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
-
-如超过默认间隔时间，该分区元数据依旧没有更新，则默认缓存的分区元数据失效。在下次查询时，会重新缓存该分区元数据。元数据缓存失效的时间由 `hive_meta_cache_ttl_s` 参数控制，默认值为 `86400`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
-
-### 示例
-
-有一张 Hudi 表 `table1` ，其包含 4 个分区：`p1`、 `p2`、 `p3` 和 `p4`。如查询命中分区 `p1`，那么 StarRocks 会自动异步缓存 `p1` 的元数据。如维护更新的间隔时间为 1 小时，则后续更新有以下几种情况：
-
-- 如查询命中`p1`，且当前时间距离上一次更新超过 1 小时，StarRocks 会异步更新缓存的`p1`元数据。
-- 如查询命中`p1`，且当前时间距离上一次更新没有超过 1 小时，StarRocks 不会异步更新缓存的`p1`元数据。
-
-### 手动更新
-
-要查询最新的 Hudi 数据，需保证 StarRocks 缓存的 Hudi 元数据也更至最新。如当前时间距离上一次更新还没有超过默认间隔时间，则可手动更新元数据后再进行查询，具体如下：
-
-- 若 Hudi 表结构发生变更（例如增减分区或增减列），可执行如下语句将该变更同步到 StarRocks 中。
+- 同时更新表 `table1` 所有缓存在 StarRocks 中的分区元数据和其数据文件元数据，即包括 `p1`、`p2` 和 `p3`。
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name;
     ```
 
-- 若 Hudi 表中的某些分区发生数据更新（例如数据导入），可执行如下语句将该变更同步到 StarRocks 中。
+- 更新指定分区元数据和其数据文件元数据缓存。
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
     [PARTITION ('partition_name', ...)];
     ```
 
-有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
+有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
 
 ## 下一步
 
