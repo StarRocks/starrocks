@@ -37,6 +37,7 @@ statement
     | createWarehouseStatement
     | dropWarehouseStatement
     | showWarehousesStatement
+    | alterWarehouseStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -267,7 +268,9 @@ dropWarehouseStatement
     : DROP (WAREHOUSE) (IF EXISTS)? identifier FORCE?
     ;
 
-
+alterWarehouseStatement
+    : ALTER TABLE identifier alterClause (',' alterClause)*
+    ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 
@@ -658,6 +661,11 @@ alterClause
     | modifyPartitionClause
     | replacePartitionClause
     | partitionRenameClause
+
+    //Alter warehouse clause
+    | addClusterClause
+    | removeClusterClause
+    | modifyWarehouseClause
     ;
 
 // ---------Alter system clause---------
@@ -783,6 +791,20 @@ replacePartitionClause
 
 partitionRenameClause
     : RENAME PARTITION parName=identifier newParName=identifier
+    ;
+
+// ---------Alter warehouse clause---------
+
+addClusterClause
+    : ADD CLUSTER name=identifier
+    ;
+
+removeClusterClause
+    : DROP CLUSTER name=identifier
+    ;
+
+modifyWarehouseClause
+    : MODIFY WAREHOUSE identifier SET propertyList
     ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -2198,4 +2220,5 @@ nonReserved
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE
     | YEAR
     | DOTDOTDOT
+    | WAREHOUSE | WAREHOUSES
     ;
