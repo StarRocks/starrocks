@@ -131,7 +131,13 @@ public class LoadManager implements Writable {
         addLoadJob(loadJob);
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
+<<<<<<< HEAD
         Catalog.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+=======
+        if (!loadJob.isCompleted()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        }
+>>>>>>> 5451a0211 ([BugFix] Fix memory leak for insert load job)
     }
 
     private void addLoadJob(LoadJob loadJob) {
