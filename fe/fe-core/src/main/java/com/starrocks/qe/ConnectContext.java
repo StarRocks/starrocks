@@ -38,7 +38,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
@@ -59,6 +58,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -181,7 +181,7 @@ public class ConnectContext {
 
     protected PlannerProfile plannerProfile;
 
-    protected ResourceGroup resourceGroup;
+    protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
 
@@ -553,11 +553,11 @@ public class ConnectContext {
         return plannerProfile;
     }
 
-    public ResourceGroup getResourceGroup() {
+    public TWorkGroup getResourceGroup() {
         return resourceGroup;
     }
 
-    public void setResourceGroup(ResourceGroup resourceGroup) {
+    public void setResourceGroup(TWorkGroup resourceGroup) {
         this.resourceGroup = resourceGroup;
     }
 
