@@ -81,8 +81,8 @@ public:
 
 private:
     ChunkAllocator* _chunk_allocator = nullptr;
-    ChunkPtr _swap_chunk;
-    size_t _max_allocated_rows;
+    ChunkPtr _swap_chunk = nullptr;
+    size_t _max_allocated_rows = 0;
 };
 
 class SchemaChange {

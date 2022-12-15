@@ -406,13 +406,13 @@ public class Optimizer {
         result = new ExchangeSortToMergeRule().rewrite(result, rootTaskContext);
         result = new PruneAggregateNodeRule().rewrite(result, rootTaskContext);
         result = new PruneShuffleColumnRule().rewrite(result, rootTaskContext);
+        result = new UseSortAggregateRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
-        result = new UseSortAggregateRule().rewrite(result, rootTaskContext);
 
         result.setPlanCount(planCount);
         return result;

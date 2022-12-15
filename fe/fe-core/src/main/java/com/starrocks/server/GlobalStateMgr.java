@@ -203,6 +203,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVActiveChecker;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -421,6 +422,7 @@ public class GlobalStateMgr {
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
     private MVJobExecutor mvMVJobExecutor;
+    private MVActiveChecker mvActiveChecker;
 
     private SmallFileMgr smallFileMgr;
 
@@ -604,6 +606,7 @@ public class GlobalStateMgr {
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
         this.mvMVJobExecutor = new MVJobExecutor();
+        this.mvActiveChecker = new MVActiveChecker();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -1171,6 +1174,7 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+        mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
