@@ -82,8 +82,6 @@ select v1,unnest from lateral_test2 , unnest(split(v2, ",")) ;
 
 ### Expanding an array into multiple rows
 
- **From 2.5, unnest can take multiple arrays of different types and lengths.** For more information, see [unnest()](../sql-reference/sql-functions/array-functions/unnest.md).
-
 ~~~SQL
 CREATE TABLE lateral_test (
     `v1` bigint(20) NULL COMMENT "",
