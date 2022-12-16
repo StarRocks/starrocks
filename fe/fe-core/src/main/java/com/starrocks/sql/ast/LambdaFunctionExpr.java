@@ -76,11 +76,14 @@ public class LambdaFunctionExpr extends Expr {
         }
         StringBuilder commonSubOp = new StringBuilder();
         if (commonSubOperatorNum > 0) {
-            commonSubOp.append(":common expressions:");
+            commonSubOp.append("\n        lambda common expressions:");
         }
         for (int i = realChildrenNum; i < realChildrenNum + commonSubOperatorNum; ++i) {
             commonSubOp.append("{").append(getChild(i).toSql()).append(" <-> ")
                     .append(getChild(i + commonSubOperatorNum).toSql()).append("}");
+        }
+        if (commonSubOperatorNum > 0) {
+            commonSubOp.append("\n        ");
         }
         return String.format("%s -> %s%s", names, getChild(0).toSql(), commonSubOp);
     }
@@ -98,11 +101,14 @@ public class LambdaFunctionExpr extends Expr {
         }
         StringBuilder commonSubOp = new StringBuilder();
         if (commonSubOperatorNum > 0) {
-            commonSubOp.append(":common expressions:");
+            commonSubOp.append("\n        lambda common expressions:");
         }
         for (int i = realChildrenNum; i < realChildrenNum + commonSubOperatorNum; ++i) {
             commonSubOp.append("{").append(getChild(i).explain()).append(" <-> ")
                     .append(getChild(i + commonSubOperatorNum).explain()).append("}");
+        }
+        if (commonSubOperatorNum > 0) {
+            commonSubOp.append("\n        ");
         }
         return String.format("%s -> %s%s", names, getChild(0).explain(), commonSubOp);
     }

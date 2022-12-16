@@ -325,8 +325,8 @@ public class ScalarOperatorsReuse {
     }
 
 
-    public static Projection getNewProjection(Projection projection, ColumnRefFactory columnRefFactory,
-                                              boolean reuseLambda) {
+    public static Projection rewriteProjectionOrLambdaExpr(Projection projection, ColumnRefFactory columnRefFactory,
+                                                           boolean reuseLambda) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
         List<ScalarOperator> scalarOperators = Lists.newArrayList(columnRefMap.values());
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubOperatorsByDepth = ScalarOperatorsReuse
@@ -416,7 +416,7 @@ public class ScalarOperatorsReuse {
             ColumnRefOperator keyCol = columnRefFactory.create("lambda", operator.getType(),
                     operator.isNullable(), false);
             columnRefMap.put(keyCol, operator.getLambdaExpr());
-            Projection fakeProjection = getNewProjection(new Projection(columnRefMap), columnRefFactory, true);
+            Projection fakeProjection = rewriteProjectionOrLambdaExpr(new Projection(columnRefMap), columnRefFactory, true);
             columnRefMap = fakeProjection.getCommonSubOperatorMap();
             if (!columnRefMap.isEmpty()) {
                 operator.addColumnToExpr(columnRefMap);
