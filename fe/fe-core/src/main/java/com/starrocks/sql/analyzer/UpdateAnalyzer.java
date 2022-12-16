@@ -6,6 +6,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Column;
@@ -14,6 +15,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.JoinRelation;
+>>>>>>> e3e2d7125 ([BugFix] Update Statement fail when SET a column using DEFAULT key word(#15181) (#15182))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -56,6 +62,7 @@ public class UpdateAnalyzer {
                 if (col.isKey()) {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
                 }
+<<<<<<< HEAD
                 if (assign.getExpr() instanceof LiteralExpr) {
                     // TypeManager.addCastExpr can check if the literal can be cast to the column type
                     item = new SelectListItem(TypeManager.addCastExpr(assign.getExpr(), col.getType()), col.getName());
@@ -63,6 +70,14 @@ public class UpdateAnalyzer {
                     // There are still cases that this expr cannot cast to the column type, that's a known issue
                     item = new SelectListItem(new CastExpr(col.getType(), assign.getExpr()), col.getName());
                 }
+=======
+
+                if (assign.getExpr() instanceof DefaultValueExpr) {
+                    assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
+                }
+
+                item = new SelectListItem(assign.getExpr(), col.getName());
+>>>>>>> e3e2d7125 ([BugFix] Update Statement fail when SET a column using DEFAULT key word(#15181) (#15182))
             } else {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             }
