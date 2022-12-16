@@ -438,7 +438,11 @@ As for the current version, multi-table materialized views support two refresh s
 
 #### Enable async materialized view
 
-To use the async materialized view feature, you need to set the configuration item `enable_experimental_mv` as `true` in the FE configuration file **fe.conf**, and restart the cluster to allow the configuration take effect.
+To use the async materialized view feature, you need to set the configuration item `enable_experimental_mv` as `true` using the following statement:
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("enable_experimental_mv"="true");
+```
 
 #### Create base tables
 

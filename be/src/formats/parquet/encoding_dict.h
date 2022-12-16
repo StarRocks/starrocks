@@ -211,7 +211,8 @@ public:
 
         switch (content_type) {
         case DICT_CODE: {
-            dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            [[maybe_unused]] auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            DCHECK(ret) << "append_numbers failed";
             break;
         }
         case VALUE: {
@@ -219,7 +220,8 @@ public:
             for (int i = 0; i < count; ++i) {
                 _slices[i] = _dict[_indexes[i]];
             }
-            dst->append_strings_overflow(_slices, _max_value_length);
+            [[maybe_unused]] auto ret = dst->append_strings_overflow(_slices, _max_value_length);
+            DCHECK(ret) << "append_strings_overflow failed";
             break;
         }
         default:
