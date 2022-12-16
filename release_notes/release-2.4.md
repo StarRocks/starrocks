@@ -1,5 +1,31 @@
 # StarRocks version 2.4
 
+## 2.4.2
+
+发布日期：2022 年 12 月 14 日
+
+### 功能优化
+
+- 优化了 Bucket Hint 在存在大量 Bucket 时候的性能。[#13142](https://github.com/StarRocks/starrocks/pull/13142)
+
+### 问题修复
+
+修复了如下 Bug：
+
+- 主键索引落盘可能导致 BE 崩溃。[#14857](https://github.com/StarRocks/starrocks/pull/14857) [#14819](https://github.com/StarRocks/starrocks/pull/14819)
+- 物化视图表类型不能被`SHOW FULL TABLES` 正确识别。[#13954](https://github.com/StarRocks/starrocks/pull/13954)
+- StarRocks 从 v2.2 升级到 v2.4 可能导致 BE 崩溃。[#13795](https://github.com/StarRocks/starrocks/pull/13795)
+- Broker Load 可能导致 BE 崩溃。[#13973](https://github.com/StarRocks/starrocks/pull/13973)
+- Session 变量 `statistic_collect_parallel` 不生效。[#14352](https://github.com/StarRocks/starrocks/pull/14352)
+- INSERT INTO 可能导致 BE 崩溃。[#14818](https://github.com/StarRocks/starrocks/pull/14818)
+- JAVA UDF 可能导致 BE 崩溃。[#13947](https://github.com/StarRocks/starrocks/pull/13947)
+- Partial Update 时副本 Clone 可能导致 BE 崩溃且无法重启。[#13683](https://github.com/StarRocks/starrocks/pull/13683)
+- Colocated Join 可能不生效。[#13561](https://github.com/StarRocks/starrocks/pull/13561)
+
+### 行为变更
+
+- Session 变量 `query_timeout` 添加最大值 `259200` 和最小值 `1` 的限制。
+
 ## 2.4.1
 
 发布日期：2022 年 11 月 14 日
@@ -15,6 +41,8 @@
 - 优化 Routine Load 的报错信息显示。[#12155](https://github.com/StarRocks/starrocks/pull/12155)
 
 ### 问题修复
+
+修复了如下 Bug：
 
 - 因自 2.4.0 RC 升级至 2.4.0 导致 BE 崩溃。[#13128](https://github.com/StarRocks/starrocks/pull/13128)
 
