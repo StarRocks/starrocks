@@ -711,7 +711,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     return Status::OK();
 }
 
-static void NoOpDeleter(void *) {}
+static void none_free(void *) {}
 
 int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
                                                         butil::IOBuf& attachment) {
@@ -723,7 +723,7 @@ int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkPara
 
         if (_encode_context != nullptr && _encode_context->get_session_encode_level() >= 32) {
             size_t size =
-                    attachment.append_user_data((void*)(chunk->data().c_str()), chunk->data().size(), NoOpDeleter);
+                    attachment.append_user_data((void*)(chunk->data().c_str()), chunk->data().size(), none_free);
             attachment_physical_bytes += size;
         } else {
             attachment.append(chunk->data());
