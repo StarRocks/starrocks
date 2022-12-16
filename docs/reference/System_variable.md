@@ -106,6 +106,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Used to control whether Colocate Join is enabled. The default value is `false`, meaning the feature is enabled. When this feature is disabled, query planning will not attempt to execute Colocate Join.
 
+* streaming_preaggregation_mode
+
+  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination。Valid values:
+  * `auto`：The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
+  * `force_preaggregation`: The system directly performs local preaggregation.
+  * `force_streaming`: The system directly performs streaming.
+
 * disable_streaming_preaggregations
 
   Used to enable the streaming pre-aggregations. The default value is `false`, meaning  it is enabled.
