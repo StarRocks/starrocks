@@ -129,6 +129,7 @@ public class QueryQueueManager {
         long startMs = System.currentTimeMillis();
         long timeoutMs;
         PendingQueryInfo info = new PendingQueryInfo(connectCtx, lock, coord);
+        boolean isPending = false;
 
         try {
             lock.lock();
@@ -139,9 +140,10 @@ public class QueryQueueManager {
             if (!canQueueMore()) {
                 throw new UserException("Need be queued but exceed query queue capacity");
             }
+
+            isPending = true;
             info.connectCtx.setPending(true);
             pendingQueryInfoMap.put(info.connectCtx, info);
-
             MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(1L);
             MetricRepo.COUNTER_QUERY_QUEUE_TOTAL.increase(1L);
 
@@ -160,11 +162,12 @@ public class QueryQueueManager {
                 }
             }
         } finally {
-            info.connectCtx.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
-            info.connectCtx.setPending(false);
-            pendingQueryInfoMap.remove(info.connectCtx);
-
-            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
+            if (isPending) {
+                info.connectCtx.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
+                MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
+                pendingQueryInfoMap.remove(info.connectCtx);
+                info.connectCtx.setPending(false);
+            }
 
             lock.unlock();
         }
