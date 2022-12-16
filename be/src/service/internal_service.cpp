@@ -155,7 +155,6 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                 throw std::runtime_error(msg);
             }
             auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
-            LOG(WARNING) << i << " th read chunk size = " << size;
             if (UNLIKELY(size != chunk->data_size())) {
                 auto msg = fmt::format("read {} != expected {}.", size, chunk->data_size());
                 LOG(WARNING) << msg;
