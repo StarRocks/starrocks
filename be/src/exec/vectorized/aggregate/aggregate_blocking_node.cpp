@@ -227,16 +227,11 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
-        auto* source_op = context->source_operator(ops);
-        auto part_type = source_op->partition_type();
-        const auto& partition_exprs = source_op->partition_exprs();
-        if (!partition_exprs.empty()) {
-            return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, partition_exprs, part_type);
-        }
-
-        std::vector<ExprContext*> group_by_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
-        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs, part_type);
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, [this]() {
+            std::vector<ExprContext*> group_by_expr_ctxs;
+            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
+            return group_by_expr_ctxs;
+        });
     };
 
     if (!sorted_streaming_aggregate) {

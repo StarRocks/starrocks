@@ -215,16 +215,10 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         partition_limit = _tnode.sort_node.partition_limit;
     }
 
-    if (!is_merging && context->could_local_shuffle(ops_sink_with_sort)) {
+    if (!is_merging) {
         // prepend local shuffle to PartitionSortSinkOperator
-        auto* source_op = context->source_operator(ops_sink_with_sort);
-        if (!source_op->partition_exprs().empty()) {
-            ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
-                    runtime_state(), ops_sink_with_sort, source_op->partition_exprs(), source_op->partition_type());
-        } else {
-            ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_sink_with_sort,
-                                                                                   _analytic_partition_exprs);
-        }
+        ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_sink_with_sort,
+                                                                               _analytic_partition_exprs);
     }
 
     auto degree_of_parallelism =

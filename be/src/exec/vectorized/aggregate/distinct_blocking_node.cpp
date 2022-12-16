@@ -159,20 +159,11 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
 
-    if (could_local_shuffle) {
-        auto* source_op = context->source_operator(ops_with_sink);
-        auto part_type = source_op->partition_type();
-        const auto& source_partition_exprs = source_op->partition_exprs();
-        if (!source_partition_exprs.empty()) {
-            ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
-                                                                              source_partition_exprs, part_type);
-        } else {
-            const auto& agg_partition_exprs =
-                    down_cast<AggregateDistinctBlockingSinkOperatorFactory*>(agg_sink_op.get())->partition_by_exprs();
-            ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
-                                                                              agg_partition_exprs, part_type);
-        }
-    }
+    const auto& agg_partition_exprs =
+            down_cast<AggregateDistinctBlockingSinkOperatorFactory*>(agg_sink_op.get())->partition_by_exprs();
+    ops_with_sink =
+            context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, agg_partition_exprs);
+
     ops_with_sink.push_back(std::move(agg_sink_op));
 
     // Aggregator must be used by a pair of sink and source operators,
