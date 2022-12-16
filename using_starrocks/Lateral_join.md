@@ -2,7 +2,7 @@
 
 ## 背景介绍
 
-「行列转化」是ETL处理过程中常见的操作，Lateral 一个特殊的Join关键字，能够按照每行和内部的子查询或者table function关联，通过Lateral 与unnest配合，我们可以实现一行转多行的功能。
+「行列转化」是 ETL 处理过程中常见的操作。Lateral Join 功能能够将每行数据和内部的子查询或者 Table Function 关联。通过 Lateral Join 与 Unnest 功能配合，您可以实现一行转多行的功能。Unnest 是一种 Table Function，可以把数组类型转化成 Table 的多行。更多信息，参见 [unnest()](../sql-reference/sql-functions/array-functions/unnest.md)。
 
 ## 使用说明
 

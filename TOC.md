@@ -357,6 +357,7 @@
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
       + [array_remove](/sql-reference/sql-functions/array-functions/array_remove.md)
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
+      + [unnest](/sql-reference/sql-functions/array-functions/unnest.md)
     + bit函数
       + [bitand](/sql-reference/sql-functions/bit-functions/bitand.md)
       + [bitnot](/sql-reference/sql-functions/bit-functions/bitnot.md)
