@@ -419,6 +419,7 @@
       + [array_cum_sum](./sql-reference/sql-functions/array-functions/array_cum_sum.md)
       + [array_to_bitmap](./sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
+      + [unnest](./sql-reference/sql-functions/array-functions/unnest.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
     + Cryptographic Functions
