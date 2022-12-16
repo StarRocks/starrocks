@@ -1331,6 +1331,10 @@ public class PlanFragmentBuilder {
         }
 
         private void clearOlapScanNodePartitionsIfNotSatisfy(PlanFragment fragment, PhysicalHashAggregateOperator aggOp) {
+            if (aggOp.getPartitionByColumns().isEmpty()) {
+                return;
+            }
+
             PlanNode leafNode = fragment.getLeftMostLeafNode();
             if (!(leafNode instanceof OlapScanNode)) {
                 return;
