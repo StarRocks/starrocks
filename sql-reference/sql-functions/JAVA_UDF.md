@@ -516,7 +516,7 @@ SHOW FUNCTIONS;
 运行以下命令删除指定的 UDF。
 
 ```sql
-DROP FUNCTION function_name;
+DROP FUNCTION function_name(arg_type [, ...]);
 ```
 
 更多信息，请参见[DROP FUNCTION](../sql-reference/sql-statements/data-definition/drop-function.md)。
