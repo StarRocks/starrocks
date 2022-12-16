@@ -94,8 +94,7 @@ Status MapColumnIterator::next_batch(const vectorized::SparseRange& range, vecto
         map_column = down_cast<vectorized::MapColumn*>(dst);
     }
 
-    CHECK((_nulls == nullptr && null_column == nullptr) ||
-          (_nulls != nullptr && null_column != nullptr));
+    CHECK((_nulls == nullptr && null_column == nullptr) || (_nulls != nullptr && null_column != nullptr));
 
     // 1. Read null column
     if (_nulls != nullptr) {
