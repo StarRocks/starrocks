@@ -221,6 +221,27 @@ public:
         return Status::OK();
     }
 
+    Status base_compact(TabletSharedPtr tablet) {
+        if (!tablet->force_base_compaction()) {
+            LOG(WARNING) << "no need compact";
+            return Status::InternalError("no need compact");
+        }
+
+        auto task = tablet->create_compaction_task();
+        if (task == nullptr) {
+            LOG(WARNING) << "task is null";
+            return Status::InternalError("task is null");
+        }
+
+        task->run();
+        if (task->compaction_task_state() == COMPACTION_FAILED) {
+            LOG(WARNING) << "task fail";
+            return Status::InternalError("task fail");
+        }
+
+        return Status::OK();
+    }
+
     void SetUp() override {
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_cumulative_compaction_num_singleton_deltas = 5;
@@ -1117,10 +1138,59 @@ TEST_F(SizeTieredCompactionPolicyTest, test_force_base_compaction) {
 
     sleep(1);
 
-    config::base_compaction_interval_seconds_since_last_operation = 1;
+    config::base_compaction_interval_seconds_since_last_operation = 0;
 
     {
         auto res = compact(tablet);
+        ASSERT_TRUE(res.ok());
+
+        ASSERT_EQ(1, tablet->version_count());
+        std::vector<Version> versions;
+        tablet->list_versions(&versions);
+        ASSERT_EQ(1, versions.size());
+        ASSERT_EQ(0, versions[0].first);
+        ASSERT_EQ(2, versions[0].second);
+    }
+
+    config::base_compaction_interval_seconds_since_last_operation = 86400;
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction) {
+    LOG(INFO) << "test_manual_force_base_compaction";
+    create_tablet_schema(DUP_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    write_new_version(tablet_meta, 4);
+    write_new_version(tablet_meta, 3);
+    write_new_version(tablet_meta, 2);
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    init_compaction_context(tablet);
+
+    ASSERT_EQ(3, tablet->version_count());
+
+    {
+        auto res = compact(tablet);
+        ASSERT_FALSE(res.ok());
+
+        ASSERT_EQ(3, tablet->version_count());
+        std::vector<Version> versions;
+        tablet->list_versions(&versions);
+        ASSERT_EQ(3, versions.size());
+        ASSERT_EQ(0, versions[0].first);
+        ASSERT_EQ(0, versions[0].second);
+        ASSERT_EQ(1, versions[1].first);
+        ASSERT_EQ(1, versions[1].second);
+        ASSERT_EQ(2, versions[2].first);
+        ASSERT_EQ(2, versions[2].second);
+    }
+
+    {
+        auto res = base_compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(1, tablet->version_count());
