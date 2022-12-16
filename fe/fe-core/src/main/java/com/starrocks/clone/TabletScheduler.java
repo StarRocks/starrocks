@@ -119,6 +119,8 @@ public class TabletScheduler extends LeaderDaemon {
     private static final int MAX_SLOT_PER_PATH = 64;
     private static final int MIN_SLOT_PER_PATH = 2;
 
+    private static final long CLUSTER_LOAD_STATISTICS_LOGGING_INTERVAL_MS = 60000; // 1min
+
     /**
      * If the number of tablets which have finished scheduling is less than the
      * (total number of tablets per bucket in colocate group) * COLOCATE_BACKEND_RESET_RATIO,
@@ -421,7 +423,9 @@ public class TabletScheduler extends LeaderDaemon {
     private void updateClusterLoadStatistic() {
         ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
-        LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+        if (System.currentTimeMillis() - lastStatUpdateTime > CLUSTER_LOAD_STATISTICS_LOGGING_INTERVAL_MS) {
+            LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+        }
         this.loadStatistic = clusterLoadStatistic;
     }
 
@@ -448,7 +452,9 @@ public class TabletScheduler extends LeaderDaemon {
             pendingTablets.add(tabletCtx);
         }
 
-        LOG.info("adjust priority for all tablets. changed: {}, total: {}", changedNum, size);
+        if (changedNum != 0) {
+            LOG.info("adjust priority for all tablets. changed: {}, total: {}", changedNum, size);
+        }
     }
 
     private void debugLogPendingTabletsStats() {
