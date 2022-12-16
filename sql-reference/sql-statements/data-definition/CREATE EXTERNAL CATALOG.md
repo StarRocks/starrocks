@@ -46,7 +46,7 @@ PROPERTIES(
     "hive.metastore.type"="glue",
     "aws.hive.metastore.glue.aws-access-key"="xxxxxx",
     "aws.hive.metastore.glue.aws-secret-key"="xxxxxxxxxxxx",
-    "aws.hive.metastore.glue.endpoint"="https://glue.us-east-2.amazonaws.com"
+    "aws.hive.metastore.glue.endpoint"="https://glue.x-x-x.amazonaws.com"
 );
 ```
 
