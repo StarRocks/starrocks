@@ -108,6 +108,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Used to control whether the Colocation Join is enabled. The default value is `false`, meaning the feature is enabled. When this feature is disabled, query planning will not attempt to execute Colocation Join.
 
+* streaming_preaggregation_mode
+
+  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination。Valid values:
+  * `auto`：The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
+  * `force_preaggregation`: The system directly performs local preaggregation.
+  * `force_streaming`: The system directly performs streaming.
+
 * disable_streaming_preaggregations
 
   Used to enable the streaming pre-aggregations. The default value is `false`, meaning  it is enabled.
@@ -198,7 +205,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_profile
 
-  Specifies whether to send the profile of a query. The default value is `false`, which means no profile is required.
+  Specifies whether to send the profile of a query for analysis. The default value is `false`, which means no profile is required.
 
   By default, a profile is sent to the FE only when a query error occurs in the BE. Profile sending causes network overhead and therefore affects high concurrency.
 
