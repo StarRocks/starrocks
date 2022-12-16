@@ -114,10 +114,8 @@ public class TabletScheduler extends LeaderDaemon {
 
     private static final long SCHEDULE_INTERVAL_MS = 1000; // 1s
 
-    public static final int BALANCE_SLOT_NUM_FOR_PATH = 2;
-
-    private static final int MAX_SLOT_PER_PATH = 64;
-    private static final int MIN_SLOT_PER_PATH = 2;
+    protected static final int MAX_SLOT_PER_PATH = 64;
+    protected static final int MIN_SLOT_PER_PATH = 2;
 
     /**
      * If the number of tablets which have finished scheduling is less than the
