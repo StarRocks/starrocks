@@ -206,7 +206,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    OpFactories ops_sink_with_sort = _children[0]->decompose_to_pipeline(context);
     bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
     bool is_rank_topn_type = _tnode.sort_node.__isset.topn_type && _tnode.sort_node.topn_type != TTopNType::ROW_NUMBER;
     bool is_merging = _analytic_partition_exprs.empty();
@@ -215,14 +215,20 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         partition_limit = _tnode.sort_node.partition_limit;
     }
 
-    if (!is_merging) {
+    if (!is_merging && context->could_local_shuffle(ops_sink_with_sort)) {
         // prepend local shuffle to PartitionSortSinkOperator
-        operators_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
-                runtime_state(), operators_sink_with_sort, _analytic_partition_exprs);
+        auto* source_op = context->source_operator(ops_sink_with_sort);
+        if (!source_op->partition_exprs().empty()) {
+            ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
+                    runtime_state(), ops_sink_with_sort, source_op->partition_exprs(), source_op->partition_type());
+        } else {
+            ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_sink_with_sort,
+                                                                                   _analytic_partition_exprs);
+        }
     }
 
     auto degree_of_parallelism =
-            down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
+            down_cast<SourceOperatorFactory*>(ops_sink_with_sort[0].get())->degree_of_parallelism();
     std::any context_factory;
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
@@ -268,8 +274,8 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    operators_sink_with_sort.emplace_back(std::move(sink_operator));
-    context->add_pipeline(operators_sink_with_sort);
+    ops_sink_with_sort.emplace_back(std::move(sink_operator));
+    context->add_pipeline(ops_sink_with_sort);
     if (is_merging) {
         if (is_partition) {
             source_operator->set_degree_of_parallelism(degree_of_parallelism);
