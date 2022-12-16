@@ -22,7 +22,8 @@ public:
     std::shared_ptr<CompactionTask> create_compaction(TabletSharedPtr tablet) override;
 
 protected:
-    Status _pick_rowsets_to_size_tiered_compact(std::vector<RowsetSharedPtr>* input_rowsets, double* score);
+    Status _pick_rowsets_to_size_tiered_compact(bool force_base_compaction, std::vector<RowsetSharedPtr>* input_rowsets,
+                                                double* score);
     double _cal_compaction_score(int64_t segment_num, int64_t level_size, int64_t total_size, KeysType keys_type,
                                  bool reached_max_version);
     Status _check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets);
