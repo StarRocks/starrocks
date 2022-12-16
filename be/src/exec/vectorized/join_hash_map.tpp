@@ -14,6 +14,12 @@
 
 #include "simd/simd.h"
 
+#define JOIN_HASH_MAP_TPP
+
+#ifndef JOIN_HASH_MAP_H
+#include "join_hash_map.h"
+#endif
+
 namespace starrocks::vectorized {
 template <LogicalType PT>
 void JoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
@@ -1702,3 +1708,5 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
 }
 
 } // namespace starrocks::vectorized
+
+#undef JOIN_HASH_MAP_TPP
