@@ -112,6 +112,7 @@ Specifies some optional parameters, which are applied to the entire load job. Sy
 -H "strict_mode: true | false"
 -H "timezone: <string>"
 -H "load_mem_limit: <num>"
+-H "merge_condition: <column_name>"
 ```
 
 The following table describes the optional parameters.
