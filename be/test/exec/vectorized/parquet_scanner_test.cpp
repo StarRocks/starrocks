@@ -27,7 +27,8 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "testutil//assert.h"
+#include "testutil/assert.h"
+#include "testutil/desc_tbl_helper.h"
 
 namespace starrocks::vectorized {
 
@@ -74,40 +75,6 @@ class ParquetScannerTest : public ::testing::Test {
             }
         }
         return ranges;
-    }
-
-    using SlotInfo = std::tuple<std::string, TypeDescriptor, bool>;
-    using SlotInfoArray = std::vector<SlotInfo>;
-
-    void generate_desc_tuple(const SlotInfoArray& slot_infos, TDescriptorTableBuilder* desc_tbl_builder) {
-        TTupleDescriptorBuilder tuple_builder;
-        for (auto& slot_info : slot_infos) {
-            auto& name = std::get<0>(slot_info);
-            auto& type = std::get<1>(slot_info);
-            auto& is_nullable = std::get<2>(slot_info);
-            TSlotDescriptorBuilder slot_desc_builder;
-            slot_desc_builder.type(type)
-                    .length(type.len)
-                    .precision(type.precision)
-                    .scale(type.scale)
-                    .nullable(is_nullable);
-            slot_desc_builder.column_name(name);
-            tuple_builder.add_slot(slot_desc_builder.build());
-        }
-        tuple_builder.build(desc_tbl_builder);
-    }
-
-    DescriptorTbl* generate_desc_tbl(const SlotInfoArray& src_slot_infos, const SlotInfoArray& dst_slot_infos) {
-        /// Init DescriptorTable
-        TDescriptorTableBuilder desc_tbl_builder;
-        generate_desc_tuple(src_slot_infos, &desc_tbl_builder);
-        if (!dst_slot_infos.empty()) {
-            generate_desc_tuple(dst_slot_infos, &desc_tbl_builder);
-        }
-        DescriptorTbl* desc_tbl = nullptr;
-        DescriptorTbl::create(_runtime_state, &_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
-                              config::vector_chunk_size);
-        return desc_tbl;
     }
 
     starrocks::TExpr create_column_ref(int32_t slot_id, const TypeDescriptor& type_desc, bool is_nullable) {
@@ -209,7 +176,7 @@ class ParquetScannerTest : public ::testing::Test {
         scanner->close();
     }
 
-    SlotInfoArray select_columns(const std::vector<std::string>& column_names, bool is_nullable) {
+    SlotTypeDescInfoArray select_columns(const std::vector<std::string>& column_names, bool is_nullable) {
         auto slot_map = std::unordered_map<std::string, TypeDescriptor>{
                 {"col_date", TypeDescriptor::from_primtive_type(TYPE_DATE)},
                 {"col_datetime", TypeDescriptor::from_primtive_type(TYPE_DATETIME)},
@@ -253,7 +220,7 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_struct_string", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
                 {"col_json_json_string", TypeDescriptor::create_json_type()},
         };
-        SlotInfoArray slot_infos;
+        SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
             CHECK_EQ(slot_map.count(name), 1);
@@ -286,7 +253,7 @@ class ParquetScannerTest : public ::testing::Test {
         auto dst_slot_infos = select_columns(column_names, is_nullable);
 
         auto ranges = generate_ranges(file_names, columns_from_file.size(), column_values);
-        auto* desc_tbl = generate_desc_tbl(src_slot_infos, dst_slot_infos);
+        auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
         auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges);
         auto check = [](const ChunkPtr& chunk) {
             auto& columns = chunk->columns();
@@ -312,7 +279,7 @@ class ParquetScannerTest : public ::testing::Test {
         auto dst_slot_infos = select_columns(column_names, is_nullable);
 
         auto ranges = generate_ranges(file_names, columns_from_file.size(), {});
-        auto* desc_tbl = generate_desc_tbl(src_slot_infos, dst_slot_infos);
+        auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
         auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges);
 
         ChunkPtr result;
@@ -379,7 +346,7 @@ TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
     };
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(_nullable_file_names, slot_infos.size(), {});
-    auto* desc_tbl = generate_desc_tbl(slot_infos, {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
@@ -397,7 +364,7 @@ TEST_F(ParquetScannerTest, test_parquet_data) {
     };
     auto slot_infos = select_columns(column_names, false);
     auto ranges = generate_ranges(_file_names, slot_infos.size(), {});
-    auto* desc_tbl = generate_desc_tbl(slot_infos, {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
@@ -563,7 +530,7 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     };
     auto slot_infos = select_columns(column_names, false);
     auto ranges = generate_split_ranges(_file_names, _file_sizes, slot_infos.size(), {});
-    auto* desc_tbl = generate_desc_tbl(slot_infos, {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
