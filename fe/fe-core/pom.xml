@@ -67,9 +67,9 @@ under the License.
         <profile>
             <id>thirdparty</id>
             <activation>
-                <property>
-                    <name>env.STARROCKS_THIRDPARTY</name>
-                </property>
+                <file>
+                    <exists>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</exists>
+                </file>
             </activation>
             <properties>
                 <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
