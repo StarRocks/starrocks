@@ -15,7 +15,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
-#include "types/logical_type.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -1345,13 +1344,8 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
     }
 }
 
-<<<<<<< HEAD
-template <PrimitiveType toType>
-static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, std::string json_str) {
-=======
-template <LogicalType toType, class JsonValueType>
+template <PrimitiveType toType, class JsonValueType>
 static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, JsonValueType json_str) {
->>>>>>> d3b0766c9 ([BugFix] fix parse number format json string behavior (#14690))
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
 
@@ -1373,13 +1367,8 @@ static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& c
     return ColumnHelper::cast_to<toType>(ptr);
 }
 
-<<<<<<< HEAD
-template <PrimitiveType toType>
-static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json_str) {
-=======
-template <LogicalType toType, class JsonValueType>
+template <PrimitiveType toType, class JsonValueType>
 static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, JsonValueType json_str) {
->>>>>>> d3b0766c9 ([BugFix] fix parse number format json string behavior (#14690))
     std::cerr << "evaluate castCast: " << json_str << std::endl;
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
