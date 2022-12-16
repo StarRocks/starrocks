@@ -198,7 +198,13 @@ struct BinaryPredicateBuilder {
 };
 
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
-    LogicalType type = thrift_to_type(node.child_type);
+    LogicalType type;
+    if (node.__isset.child_type_desc) {
+        type = TypeDescriptor::from_thrift(node.child_type_desc).type;
+    } else {
+        type = TypeDescriptor::from_thrift(node.type).type;
+    }
+
     if (type == TYPE_ARRAY) {
         return new ArrayPredicate(node);
     } else {
