@@ -36,7 +36,7 @@
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
 + 导出数据
-  + [使用 Broker 导出数据](/unloading/Export.md)
+  + [使用 EXPORT 导出数据](/unloading/Export.md)
   + [使用 Spark 连接器读取数据](/unloading/Spark_connector.md)
   + [使用 Flink 连接器读取数据](/unloading/Flink_connector.md)
 + 查询数据源

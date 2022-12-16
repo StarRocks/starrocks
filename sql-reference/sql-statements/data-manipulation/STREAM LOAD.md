@@ -112,6 +112,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 -H "strict_mode: true | false"
 -H "timezone: <string>"
 -H "load_mem_limit: <num>"
+-H "merge_condition: <column_name>"
 ```
 
 参数说明如下表所述。
