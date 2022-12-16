@@ -5,6 +5,7 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -13,6 +14,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.JoinRelation;
+>>>>>>> e3e2d7125 ([BugFix] Update Statement fail when SET a column using DEFAULT key word(#15181) (#15182))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -64,6 +70,10 @@ public class UpdateAnalyzer {
             if (assign != null) {
                 if (col.isKey()) {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
+                }
+
+                if (assign.getExpr() instanceof DefaultValueExpr) {
+                    assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
                 }
 
                 item = new SelectListItem(assign.getExpr(), col.getName());
