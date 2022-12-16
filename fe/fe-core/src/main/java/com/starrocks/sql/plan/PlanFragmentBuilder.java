@@ -1450,8 +1450,6 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
             boolean withLocalShuffle = inputFragment != originalInputFragment;
 
-            clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
-
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
             List<ColumnRefOperator> partitionBys = node.getPartitionByColumns();
@@ -1579,6 +1577,7 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
+                clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
