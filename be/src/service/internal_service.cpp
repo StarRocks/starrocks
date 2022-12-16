@@ -144,11 +144,26 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     const auto receive_timestamp = GetCurrentTimeNanos();
     response->set_receive_timestamp(receive_timestamp);
     if (cntl->request_attachment().size() > 0) {
-        const butil::IOBuf& io_buf = cntl->request_attachment();
+        butil::IOBuf& io_buf = cntl->request_attachment();
         size_t offset = 0;
         for (size_t i = 0; i < req->chunks().size(); ++i) {
             auto chunk = req->mutable_chunks(i);
+#if 1
+            if (UNLIKELY(io_buf.size() < chunk->data_size())) {
+                auto msg = fmt::format("iobuf's size {} < {}", io_buf.size(), chunk->data_size());
+                LOG(WARNING) << msg;
+                throw std::runtime_error(msg);
+            }
+            auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
+            LOG(WARNING) << i << " th read chunk size = " << size;
+            if (UNLIKELY(size != chunk->data_size())) {
+                auto msg = fmt::format("read {} != expected {}.", size, chunk->data_size());
+                LOG(WARNING) << msg;
+                throw std::runtime_error(msg);
+            }
+#else
             io_buf.copy_to(chunk->mutable_data(), chunk->data_size(), offset);
+#endif
             offset += chunk->data_size();
         }
     }

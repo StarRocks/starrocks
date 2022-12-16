@@ -711,24 +711,31 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     return Status::OK();
 }
 
+static void NoOpDeleter(void *) {}
+
 int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
                                                         butil::IOBuf& attachment) {
     int64_t attachment_physical_bytes = 0;
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
         auto chunk = chunk_request->mutable_chunks(i);
         chunk->set_data_size(chunk->data().size());
-
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-        attachment.append(chunk->data());
-        attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
 
-        chunk->clear_data();
+        if (_encode_context != nullptr && _encode_context->get_session_encode_level() >= 32) {
+            size_t size =
+                    attachment.append_user_data((void*)(chunk->data().c_str()), chunk->data().size(), NoOpDeleter);
+            attachment_physical_bytes += size;
+        } else {
+            attachment.append(chunk->data());
+            attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
+            chunk->clear_data();
+        }
+
         // If the request is too big, free the memory in order to avoid OOM
         if (_is_large_chunk(chunk->data_size())) {
             chunk->mutable_data()->shrink_to_fit();
         }
     }
-
     return attachment_physical_bytes;
 }
 
