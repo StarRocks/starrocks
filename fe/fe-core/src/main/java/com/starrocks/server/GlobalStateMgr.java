@@ -1156,7 +1156,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
@@ -1175,6 +1174,8 @@ public class GlobalStateMgr {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
+        // materialized view active checker
+        mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
