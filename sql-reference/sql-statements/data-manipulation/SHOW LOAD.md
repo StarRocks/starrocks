@@ -41,7 +41,7 @@ SHOW LOAD [ FROM db_name ]
 
 ```undefined
 +-------+-------+-------+----------+------+---------+----------+----------+------------+--------------+---------------+---------------+----------------+-----+------------+
-| JobId | Label | State | Progress | Type | EtlInfo | TaskInfo | ErrorMsg | CreateTime | EtlStartTime | EtlFinishTime | LoadStartTime | LoadFinishTime | URL | JobDetails |
+| JobId | Label | State | Progress | Type | Priority | EtlInfo | TaskInfo | ErrorMsg | CreateTime | EtlStartTime | EtlFinishTime | LoadStartTime | LoadFinishTime | URL | JobDetails |
 +-------+-------+-------+----------+------+---------+----------+----------+------------+--------------+---------------+---------------+----------------+-----+------------+
 ```
 

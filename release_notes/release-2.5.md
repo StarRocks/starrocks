@@ -14,7 +14,7 @@
 - 【公测中】支持通过[文件外部表](../data_source/file_external_table.md)查询 HDFS 或对象存储上的 Parquet 和 ORC 文件。[#13064](https://github.com/StarRocks/starrocks/pull/13064)
 - 支持基于 Hive、Hudi 或 Iceberg catalog 创建物化视图，以及基于物化视图创建物化视图。相关文档，请参见[物化视图](../using_starrocks/Materialized_view.md)。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
 - 主键模型表支持条件更新。相关文档，请参见[通过导入实现数据变更](../loading/PrimaryKeyLoad.md#条件更新)。[#12159](https://github.com/StarRocks/starrocks/pull/12159)
-- 支持 [QueryCache](../using_starrocks/query_cache.md)，通过保存查询的中间计算结果提升简单高并发查询的 QPS 并降低平均时延。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
+- 支持 [Query Cache](../using_starrocks/query_cache.md)，通过保存查询的中间计算结果提升简单高并发查询的 QPS 并降低平均时延。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
 - 【公测中】支持使用 Routine Load 从 Apache Pulsar 导入数据。相关文档，请参见[从 Apache® Pulsar™ 持续导入](../loading/load_from_pulsar.md)。[#10102](https://github.com/StarRocks/starrocks/pull/10102)
 - 支持为 Broker Load 作业指定优先级。相关文档，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。[#11029](https://github.com/StarRocks/starrocks/pull/11029)
 - 【公测中】支持为 StarRocks 原生表手动设置数据导入的副本数。相关文档，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。[#11253](https://github.com/StarRocks/starrocks/pull/11253)

@@ -61,7 +61,7 @@ PROPERTIES ("key"="value", ...);
 | iceberg.catalog.type   | 是       | Iceberg 中 catalog 的类型，取值为 `CUSTOM`，使用自定义元数据服务则需要在 Iceberg 中配置 custom catalog。 |
 | iceberg.catalog-impl   | 是       | Custom catalog 的全限定类名。FE 会根据该类名查找开发的 custom catalog。如果您在 custom catalog 中自定义了配置项，且希望在查询外部数据时这些配置项能生效，您可以在创建 Iceberg catalog 时将这些配置项以键值对的形式添加到 SQL 语句的 `PROPERTIES` 中。 |
 
-### AWS Glue【公测中】
+#### AWS Glue【公测中】
 
 如使用 AWS Glue 作为元数据服务，则需要在创建 Iceberg catalog 时设置如下属性：
 
