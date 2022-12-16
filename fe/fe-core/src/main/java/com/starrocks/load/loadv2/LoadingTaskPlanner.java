@@ -282,6 +282,7 @@ public class LoadingTaskPlanner {
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
                 table.writeQuorum(), table.enableReplicatedStorage());
+        olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table);
         olapTableSink.complete(mergeConditionStr);
 
