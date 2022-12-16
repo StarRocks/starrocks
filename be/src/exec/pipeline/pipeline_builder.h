@@ -62,9 +62,6 @@ public:
     size_t degree_of_parallelism_of_source_operator(int32_t source_node_id) const;
     size_t degree_of_parallelism_of_source_operator(const SourceOperatorFactory* source_op) const;
 
-    // Whether the building pipeline `ops` need local shuffle for the next operator.
-    bool could_local_shuffle(OpFactories ops) const;
-
 private:
     static constexpr int kLocalExchangeBufferChunks = 8;
 

@@ -28,6 +28,7 @@
 #include <map>
 #include <new>
 #include <numeric>
+#include <optional>
 #include <roaring/roaring.hh>
 #include <stdexcept>
 #include <string>

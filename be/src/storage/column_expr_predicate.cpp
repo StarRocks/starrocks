@@ -4,6 +4,8 @@
 #include "storage/column_expr_predicate.h"
 
 #include "column/column_helper.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/binary_predicate.h"
@@ -18,12 +20,20 @@
 namespace starrocks::vectorized {
 
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
-                                         ExprContext* expr_ctx, const SlotDescriptor* slot_desc)
-        : ColumnPredicate(type_info, column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
+                                         const SlotDescriptor* slot_desc)
+        : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
+    _is_expr_predicate = true;
+}
+
+StatusOr<ColumnExprPredicate*> ColumnExprPredicate::make_column_expr_predicate(TypeInfoPtr type_info,
+                                                                               ColumnId column_id, RuntimeState* state,
+                                                                               ExprContext* expr_ctx,
+                                                                               const SlotDescriptor* slot_desc) {
+    auto* expr_predicate = new ColumnExprPredicate(std::move(type_info), column_id, state, slot_desc);
     // note: conjuncts would be shared by multiple scanners
     // so here we have to clone one to keep thread safe.
-    _add_expr_ctx(expr_ctx);
-    _is_expr_predicate = true;
+    RETURN_IF_ERROR(expr_predicate->_add_expr_ctx(expr_ctx));
+    return expr_predicate;
 }
 
 ColumnExprPredicate::~ColumnExprPredicate() {
@@ -32,13 +42,14 @@ ColumnExprPredicate::~ColumnExprPredicate() {
     }
 }
 
-void ColumnExprPredicate::_add_expr_ctxs(std::vector<ExprContext*> expr_ctxs) {
+Status ColumnExprPredicate::_add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs) {
     for (auto& expr : expr_ctxs) {
-        _add_expr_ctx(expr);
+        RETURN_IF_ERROR(_add_expr_ctx(expr));
     }
+    return Status::OK();
 }
 
-void ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
+Status ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
         // Transfer the ownership to object pool
@@ -46,9 +57,10 @@ void ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
         _expr_ctxs.emplace_back(ctx);
         _monotonic &= ctx->root()->is_monotonic();
     }
+    return Status::OK();
 }
 
-void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
+Status ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
         ExprContext* ctx = nullptr;
@@ -56,6 +68,7 @@ void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
         _expr_ctxs.emplace_back(ctx);
         _monotonic &= ctx->root()->is_monotonic();
     }
+    return Status::OK();
 }
 
 Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
@@ -179,10 +192,11 @@ Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const Typ
     RETURN_IF_ERROR(cast_expr_ctx->prepare(_state));
     RETURN_IF_ERROR(cast_expr_ctx->open(_state));
 
-    ColumnExprPredicate* pred =
-            obj_pool->add(new ColumnExprPredicate(target_type_info, _column_id, _state, nullptr, _slot_desc));
-    pred->_add_expr_ctxs(_expr_ctxs);
-    pred->_add_expr_ctx(std::move(cast_expr_ctx));
+    ASSIGN_OR_RETURN(auto pred, ColumnExprPredicate::make_column_expr_predicate(target_type_info, _column_id, _state,
+                                                                                nullptr, _slot_desc));
+
+    RETURN_IF_ERROR(pred->_add_expr_ctxs(_expr_ctxs));
+    RETURN_IF_ERROR(pred->_add_expr_ctx(std::move(cast_expr_ctx)));
     *output = pred;
     return Status::OK();
 }
@@ -247,9 +261,9 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         auto expr_rewrite = std::make_unique<ExprContext>(expr);
         RETURN_IF_ERROR(expr_rewrite->prepare(_state));
         RETURN_IF_ERROR(expr_rewrite->open(_state));
-
-        ColumnExprPredicate* new_pred =
-                pool->add(new ColumnExprPredicate(_type_info, _column_id, _state, nullptr, _slot_desc));
+        ASSIGN_OR_RETURN(ColumnExprPredicate * new_pred, ColumnExprPredicate::make_column_expr_predicate(
+                                                                 _type_info, _column_id, _state, nullptr, _slot_desc));
+        new_pred = pool->add(new_pred);
         new_pred->_add_expr_ctx(std::move(expr_rewrite));
         for (int i = 1; i < _expr_ctxs.size(); i++) {
             new_pred->_add_expr_ctx(_expr_ctxs[i]);
