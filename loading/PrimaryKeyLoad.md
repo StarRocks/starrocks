@@ -436,7 +436,7 @@ MySQL [test_db]> SELECT * FROM table3;
 
 从查询结果可以看到，`example3.csv` 文件中 `id` 为 `101` 的数据已经从 `table3` 表中删除，`example3.csv` 文件中 `id` 为 `102` 的数据已经更新到 `table3` 表中，并且 `example3.csv` 文件中 `id` 为 `103` 的数据已经插入到 `table3` 表中。
 
-## 部分更新【公测中】
+## 部分更新
 
 自 StarRocks v2.2 起，主键模型表支持部分更新，您可以选择只更新部分指定的列。这里以 CSV 格式的数据文件为例进行说明。
 
