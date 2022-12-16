@@ -127,7 +127,8 @@ protected:
 };
 
 void verify_binlog_reader(std::shared_ptr<BinlogManager> binlog_manager, vectorized::VectorizedSchema& schema,
-                          std::vector<int32_t>& num_rows_vector, int32_t start_key, int64_t seek_version, int64_t seek_seq_id) {
+                          std::vector<int32_t>& num_rows_vector, int32_t start_key, int64_t seek_version,
+                          int64_t seek_seq_id) {
     std::shared_ptr<BinlogReader> binlog_reader = binlog_manager->create_reader(schema, 100);
     ASSERT_OK(binlog_reader->seek(seek_version, seek_seq_id));
     vectorized::ChunkPtr chunk = ChunkHelper::new_chunk(schema, 100);
@@ -153,6 +154,7 @@ void verify_binlog_reader(std::shared_ptr<BinlogManager> binlog_manager, vectori
     ASSERT_TRUE(binlog_reader->get_next(&chunk, 4).is_end_of_file());
     ASSERT_EQ(4, binlog_reader->next_version());
     ASSERT_EQ(0, binlog_reader->next_version());
+    binlog_reader->close();
 }
 
 TEST_F(BinlogReaderTest, test_basic) {
@@ -161,20 +163,20 @@ TEST_F(BinlogReaderTest, test_basic) {
 
     std::vector<RowsetSharedPtr> rowsets;
     rowsets.emplace_back(RowsetSharedPtr());
-    rowset_id.init(1, 2, 3);
+    rowset_id.init(2, 1, 2, 3);
     build_rowset(1, rowset_id, &start_key, {1000, 10, 20}, rowsets.back());
 
     rowsets.emplace_back(RowsetSharedPtr());
-    rowset_id.init(2, 2, 3);
+    rowset_id.init(2, 2, 2, 3);
     build_rowset(2, rowset_id, &start_key, {5, 90, 1}, rowsets.back());
 
     rowsets.emplace_back(RowsetSharedPtr());
-    rowset_id.init(3, 2, 3);
+    rowset_id.init(2, 3, 2, 3);
     build_rowset(3, rowset_id, &start_key, {10, 40, 10}, rowsets.back());
 
     std::shared_ptr<BinlogManager> binlog_manager =
             std::make_shared<BinlogManager>(_binlog_file_dir, 100, 20, LZ4_FRAME);
-    for (const auto & rowset : rowsets) {
+    for (const auto& rowset : rowsets) {
         ASSERT_OK(binlog_manager->add_insert_rowset(rowset));
     }
 
@@ -212,6 +214,7 @@ TEST_F(BinlogReaderTest, test_basic) {
 
     std::shared_ptr<BinlogReader> binlog_reader = binlog_manager->create_reader(_schema, 100);
     ASSERT_TRUE(binlog_reader->seek(4, 0).is_not_found());
+    binlog_reader->close();
 }
 
 } // namespace starrocks

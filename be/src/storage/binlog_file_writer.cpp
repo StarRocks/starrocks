@@ -34,7 +34,6 @@ BinlogFileWriter::BinlogFileWriter(int64_t file_id, std::string file_name, int32
 
 Status BinlogFileWriter::init() {
     CHECK(_writer_state == WAIT_INIT);
-    _writer_state = WAIT_WRITE;
     // 1. create file
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
@@ -78,6 +77,7 @@ Status BinlogFileWriter::init() {
     _pending_version_context = std::make_unique<PendingVersionContext>();
     _pending_page_context = std::make_unique<PendingPageContext>();
 
+    _writer_state = WAIT_WRITE;
     LOG(INFO) << "Init binlog file writer, file id " << _file_id << ", file name " << _file_path;
     return Status::OK();
 }
@@ -85,15 +85,15 @@ Status BinlogFileWriter::init() {
 Status BinlogFileWriter::prepare(int64_t version, const RowsetId& rowset_id, int64_t start_seq_id,
                                  int64_t change_event_timestamp_in_us) {
     CHECK(_writer_state == WAIT_WRITE);
-    _writer_state = PREPARE;
 
-    PendingVersionContext* write_context = _pending_version_context.get();
-    write_context->version = version;
-    write_context->rowset_id.init(rowset_id.to_string());
-    write_context->start_seq_id = start_seq_id;
-    write_context->change_event_timestamp_in_us = change_event_timestamp_in_us;
-    write_context->rowsets.clear();
-    write_context->rowsets.emplace(rowset_id);
+    PendingVersionContext* version_context = _pending_version_context.get();
+    version_context->version = version;
+    version_context->rowset_id.init(rowset_id.to_string());
+    version_context->start_seq_id = start_seq_id;
+    version_context->change_event_timestamp_in_us = change_event_timestamp_in_us;
+    version_context->num_pages = 0;
+    version_context->rowsets.clear();
+    version_context->rowsets.emplace(rowset_id);
 
     PendingPageContext* page_context = _pending_page_context.get();
     page_context->start_seq_id = start_seq_id;
@@ -107,6 +107,7 @@ Status BinlogFileWriter::prepare(int64_t version, const RowsetId& rowset_id, int
     page_context->page_content.Clear();
     page_context->rowsets.emplace(rowset_id);
 
+    _writer_state = PREPARE;
     return Status::OK();
 }
 
@@ -114,14 +115,15 @@ Status BinlogFileWriter::add_empty() {
     CHECK(_writer_state == PREPARE);
     CHECK(_pending_page_context->num_log_entries == 0)
             << "Empty rowset should only have one empty log entry,"
-            << ", tablet version " << _pending_version_context->version << ", file id " << _file_id << ", file name "
+            << ", version " << _pending_version_context->version << ", file id " << _file_id << ", file name "
             << _file_path << ", actual number of entries " << _pending_page_context->num_log_entries;
 
     LogEntryPB* log_entry = _pending_page_context->page_content.add_entries();
     log_entry->set_entry_type(EMPTY_PB);
 
-    // No need to refer an empty rowset
+    // No need to add rowset
     _pending_version_context->rowsets.clear();
+    _pending_page_context->rowsets.clear();
     PendingPageContext* page_context = _pending_page_context.get();
     page_context->num_log_entries += 1;
     // TODO reduce estimation cost
@@ -132,7 +134,6 @@ Status BinlogFileWriter::add_empty() {
 Status BinlogFileWriter::add_insert_range(int32_t seg_index, int32_t start_row_id, int32_t num_rows) {
     CHECK(_writer_state == PREPARE);
     RETURN_IF_ERROR(_switch_page_if_full());
-
     PendingPageContext* page_context = _pending_page_context.get();
     LogEntryPB* log_entry = page_context->page_content.add_entries();
     log_entry->set_entry_type(INSERT_RANGE_PB);
@@ -220,20 +221,19 @@ Status BinlogFileWriter::add_delete(const RowsetSegInfo& delete_info, int32_t ro
 
 Status BinlogFileWriter::commit(bool end_of_version) {
     CHECK(_writer_state == PREPARE);
-    _writer_state = WAIT_WRITE;
-    Status status;
-    if (_pending_page_context->num_log_entries > 0) {
-        status = _flush_page(end_of_version);
+    CHECK(_pending_page_context->num_log_entries > 0);
+    Status status = _flush_page(end_of_version);
+    if (!status.ok()) {
         LOG(WARNING) << "Failed to flush page when committing"
-                     << ", tablet version " << _pending_version_context->version << ", file id " << _file_id
-                     << ", file name " << _file_path << ", " << status;
+                     << ", version " << _pending_version_context->version << ", file id " << _file_id << ", file name "
+                     << _file_path << ", " << status;
         return status;
     }
     status = _file->sync();
     if (!status.ok()) {
         LOG(WARNING) << "Failed to sync when committing"
-                     << ", tablet version " << _pending_version_context->version << ", file id " << _file_id
-                     << ", file name " << _file_path << ", " << status;
+                     << ", version " << _pending_version_context->version << ", file id " << _file_id << ", file name "
+                     << _file_path << ", " << status;
         return status;
     }
 
@@ -258,45 +258,43 @@ Status BinlogFileWriter::commit(bool end_of_version) {
         }
     }
     _reset_pending_context();
+    _writer_state = WAIT_WRITE;
     return Status::OK();
 }
 
 Status BinlogFileWriter::abort() {
     CHECK(_writer_state == PREPARE);
-    _writer_state = WAIT_WRITE;
-
-    int64_t tablet_version = _pending_version_context->version;
+    int64_t version = _pending_version_context->version;
     _reset_pending_context();
     CHECK(_file_meta->file_size() <= _file->size())
             << "File size in meta is larger than the actual size,"
-            << ", tablet version " << tablet_version << ", file id " << _file_id << ", file name " << _file_path
-            << ", meta size " << _file_meta->file_size() << ", actual size " << _file->size();
+            << ", version " << version << ", file id " << _file_id << ", file name " << _file_path << ", meta size "
+            << _file_meta->file_size() << ", actual size " << _file->size();
     if (_file_meta->file_size() == _file->size()) {
+        _writer_state = WAIT_WRITE;
         return Status::OK();
     }
 
     // try to truncate the file to remove useless data
     Status status = FileSystemUtil::resize_file(_file_path, _file_meta->file_size());
     if (!status.ok()) {
-        LOG(WARNING) << "Failed to resize file, tablet version " << _pending_version_context->version << ", file id "
+        LOG(WARNING) << "Failed to resize file, version " << _pending_version_context->version << ", file id "
                      << _file_id << ", file name " << _file_path << ", current size " << _file->size()
                      << ", target size " << _file_meta->file_size() << ", " << status;
         return status;
     }
 
-    // reopen the file to append to the truncated file
-    status = _file->close();
-    if (!status.ok()) {
-        LOG(WARNING) << "Failed to abort, tablet version " << _pending_version_context->version << ", file id "
-                     << _file_id << ", file name " << _file_path << ", " << status;
-        return status;
-    }
-
+    // TODO reopening the file is to reset the underlying file position
+    //  to the end of file after resizing. WritableFile does not provide
+    //  a method to do it currently. Maybe we can improve it in the future?
+    _file.reset();
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
     WritableFileOptions write_option;
-    write_option.mode = FileSystem::CREATE_OR_OPEN;
+    // use MUST_EXIST to append to the end of file after opening the file again
+    write_option.mode = FileSystem::MUST_EXIST;
     ASSIGN_OR_RETURN(_file, fs->new_writable_file(write_option, _file_path))
+    _writer_state = WAIT_WRITE;
     return Status::OK();
 }
 
@@ -336,9 +334,6 @@ Status BinlogFileWriter::_switch_page_if_full() {
 }
 
 Status BinlogFileWriter::_flush_page(bool end_of_version) {
-    CHECK(_pending_page_context->num_log_entries > 0) << "Can't flush an empty page"
-                                                      << ", tablet version " << _pending_version_context->version
-                                                      << ", file id " << _file_id << ", file name " << _file_path;
     // 1. compress page content
     PageContentPB& page_content = _pending_page_context->page_content;
     // TODO reuse serialized_page_content
@@ -412,7 +407,12 @@ Status BinlogFileWriter::_flush_page(bool end_of_version) {
     // header pb checksum
     uint32_t checksum = crc32c::Value(serialized_page_header.data(), serialized_page_header.size());
     put_fixed32_le(&header_fixed_buf, checksum);
-    std::vector<Slice> data{header_fixed_buf, serialized_page_header, serialized_page_content};
+    std::vector<Slice> data{header_fixed_buf, serialized_page_header};
+    if (compressed_body.size() == 0) {
+        data.emplace_back(serialized_page_content);
+    } else {
+        data.emplace_back(compressed_body);
+    }
     // sync file when commit
     status = _file->appendv(&data[0], data.size());
     if (!status.ok()) {

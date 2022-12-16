@@ -30,7 +30,7 @@ using BinlogFileReaderSharedPtr = std::shared_ptr<BinlogFileReader>;
 
 // Read binlog in a tablet. Binlog can be treated as a table with schema. The schema includes the
 // data columns of base table and meta columns of binlog. The name and SQL data type of meta columns
-// are as followings.
+// are as following.
 //    +-------------------+---------------+----------------------------------------------------------------------+
 //    | Column Name       | SQL Data Type | Description                                                          |
 //    +===================+===============+======================================================================+
@@ -40,7 +40,7 @@ using BinlogFileReaderSharedPtr = std::shared_ptr<BinlogFileReader>;
 //    |                   |               | UPDATE_AFTER (2)                                                     |
 //    |                   |               | DELETE (3)                                                           |
 //    +-------------------+---------------+----------------------------------------------------------------------+
-//    | _binlog_version   | BIGINT        | The version to generate the change event                             |
+//    | _binlog_version   | BIGINT        | The version of ingestion to generate the change event                |
 //    +-------------------+---------------+----------------------------------------------------------------------+
 //    | _binlog_seq_id    | BIGINT        | The sequence number of the change event in the version               |
 //    +-------------------+---------------+----------------------------------------------------------------------+
@@ -64,7 +64,7 @@ using BinlogFileReaderSharedPtr = std::shared_ptr<BinlogFileReader>;
 //
 // Note that the binlog can only be read forward, and you can call seek() multiple
 // times to skip to read some binlog, but the seek position must be no less than
-// <binlog_reader->next_version(), binlog_reader->next_seq_id()>
+// <binlog_reader->next_version(), binlog_reader->next_seq_id()> for each call
 //
 // TODO currently only support to read binlog from duplicate key table
 class BinlogReader final {
@@ -72,8 +72,6 @@ public:
     // The last column of schema should include a column
     BinlogReader(int64_t reader_id, std::shared_ptr<BinlogManager> binlog_manager, vectorized::VectorizedSchema& schema,
                  int chunk_size);
-
-    ~BinlogReader();
 
     // Seek to the position at <version, seq_id>. The position is inclusive.
     // Returns Status::OK() if find the change event, Status::NotFound() if
@@ -92,6 +90,8 @@ public:
     // The sequence number of next change event to read, and will update after seek/get_next is called.
     int64_t next_seq_id() { return _next_seq_id; }
 
+    void close() { _reset(); }
+
 private:
     Status _seek_to_file_meta(int64_t version, int64_t seq_id);
     Status _seek_to_segment_row(int64_t seq_id);
@@ -102,6 +102,8 @@ private:
     std::shared_ptr<BinlogManager> _binlog_manager;
     vectorized::VectorizedSchema _schema;
     int32_t _chunk_size;
+    bool _has_meta_columns;
+    vectorized::VectorizedSchema _schema_without_meta;
 
     BinlogFileMetaPBSharedPtr _file_meta;
     BinlogFileReaderSharedPtr _binlog_file_reader;

@@ -51,7 +51,7 @@ Status BinlogManager::init(Tablet& tablet) {
 }
 
 Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
-    // TODO can block publish RPC
+    // TODO will block publish RPC
     std::lock_guard lock(_write_lock);
     if (!_binlog_file_metas.empty()) {
         BinlogFileMetaPBSharedPtr file_meta = _binlog_file_metas.rbegin()->second;
@@ -85,7 +85,6 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
         status = current_writer->prepare(rowset->start_version(), rowset->rowset_id(), 0,
                                          rowset->creation_time() * 1000000);
         if (!status.ok()) {
-            current_writer->abort();
             LOG(WARNING) << "Fail to prepare binlog writer for rowset " << rowset->rowset_id() << ", version "
                          << rowset->start_version() << ", binlog writer " << current_writer->file_name() << ", "
                          << status;
@@ -206,6 +205,7 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to abort binlog writer " << writer->file_name();
                 // if the first writer fails to abort, not reuse it
+                // TODO how to recover it, still append file meta to the end of file?
                 if (i == 0) {
                     reuse_first_writer = false;
                 }

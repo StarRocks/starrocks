@@ -56,10 +56,10 @@ extern const int32_t k_binlog_format_version;
 enum WriterState { WAIT_INIT, WAIT_WRITE, PREPARE, CLOSED };
 
 // Build the binlog file. A binlog file contains multiple pages, each page contains multiple log entries,
-// and each entry contains one or more change events. Binlog from multiple version are written to the file
-// sequentially. A page only contains change events from one version, and can not be shared among version.
-// The log entry is defined as a protobuf message, and currently there are four types of log entries, and
-// you can refer to binlog.proto for details.
+// and each entry contains one or more change events(INSERT, UPDATE_BEFORE, UPDATE_AFTER, DELETE). Binlog
+// from multiple version are written to the file sequentially. A page only contains change events from one
+// version, and can not be shared among version. The log entry is defined as a protobuf message, and
+// currently there are four types of log entries, and you can refer to binlog.proto for details.
 //    +--------------+------------------------------------------------------------------------------------------+
 //    | Type         | Description                                                                              |
 //    +==============+==========================================================================================+
@@ -70,13 +70,13 @@ enum WriterState { WAIT_INIT, WAIT_WRITE, PREPARE, CLOSED };
 //    +--------------+------------------------------------------------------------------------------------------+
 //    | DELETE       | Delete an existing row. It will generate a DELETE change event                           |
 //    +--------------+------------------------------------------------------------------------------------------+
-//    | EMPTY        | There is no data change in a load                                                        |
+//    | EMPTY        | There is no data change in an ingestion                                                        |
 //    +--------------+------------------------------------------------------------------------------------------+
 //
 // How to use
 //  std::shared_ptr<BinlogFileWriter> file_writer;
 //  file_writer->init();
-//  // prepare when starting to write binlog of a new version
+//  // prepare when starting to write data of a new version
 //  file_writer->prepare();
 //  // add multiple items
 //  file_writer->add_insert_range():
@@ -93,30 +93,39 @@ public:
     // Initialize the file writer.
     Status init();
 
-    // prepare when starting to write binlog of a version
+    // Prepare to write binlog for a new version.
     Status prepare(int64_t version, const RowsetId& rowset_id, int64_t start_seq_id,
                    int64_t change_event_timestamp_in_us);
 
-    // Add an empty log entry when there is no data in this version.
+    // Add an empty log entry when there is no data in an ingestion.
     // An empty version can only have one log entry, and it must be
-    // the typ of EMPTY
+    // the typ of EMPTY. abort() should be called if the returned
+    // status is not Status::OK().
     Status add_empty();
 
-    // Add an INSERT_RANGE log entry
+    // Add an INSERT_RANGE log entry. abort() should be called if
+    // the returned status is not Status::OK().
     Status add_insert_range(int32_t seg_index, int32_t start_row_id, int32_t num_rows);
 
-    // Add an UPDATE log entry
+    // Add an UPDATE log entry. abort() should be called if
+    // the returned status is not Status::OK().
     Status add_update(const RowsetSegInfo& before_info, int32_t before_row_id, int32_t after_seg_index,
                       int after_row_id);
 
-    // Add an DELETE log entry
+    // Add an DELETE log entry. abort() should be called if
+    // the returned status is not Status::OK().
     Status add_delete(const RowsetSegInfo& delete_info, int32_t row_id);
 
-    // Commit the data of the version, and tell the binlog file whether this
-    // is the end the version.
+    // Commit the data of the version, and tell the binlog file
+    // whether this is the end the version. abort() should be
+    // called if the returned status is not Status::OK().
     Status commit(bool end_of_version);
 
-    // Abort the write process for current version if there happens any error
+    // Abort the write process for current version if there happens any
+    // error when adding data or committing. If the returned status is
+    // not Status::OK(), can't append data to this writer anymore because
+    // the writer's state is unknown, but the committed binlog is still
+    // available.
     Status abort();
 
     // Close the file writer

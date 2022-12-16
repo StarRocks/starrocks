@@ -44,10 +44,6 @@ Status BinlogFileReader::seek(int64_t version, int64_t seq_id) {
 }
 
 Status BinlogFileReader::next() {
-    if (_is_end_of_file()) {
-        return Status::EndOfFile("There is no left entries");
-    }
-
     PageContext* page_context = _current_page_context.get();
     if (page_context->next_log_entry_index >= page_context->page_header.num_log_entries()) {
         // end of current page and read the next
@@ -68,7 +64,6 @@ Status BinlogFileReader::_seek(int64_t version, int64_t seq_id) {
 }
 
 Status BinlogFileReader::_seek_to_page(int64_t version, int64_t seq_id) {
-    _reset_current_page_context();
     do {
         _reset_current_page_context();
         PageHeaderPB& page_header_pb = _current_page_context->page_header;
@@ -77,31 +72,45 @@ Status BinlogFileReader::_seek_to_page(int64_t version, int64_t seq_id) {
             return Status::NotFound(strings::Substitute("Can't find version $0", version));
         }
 
-        // find the page containing the target change event
-        if (page_header_pb.version() == version && page_header_pb.end_seq_id() >= seq_id) {
-            RETURN_IF_ERROR(
-                    _read_page_content(_next_page_index, &page_header_pb, &(_current_page_context->page_content)));
-            break;
+        if (page_header_pb.version() == version) {
+            if (seq_id < page_header_pb.start_seq_id()) {
+                return Status::NotFound(strings::Substitute("Can't find version $0, seq_id $1", version, seq_id));
+            }
+
+            int64_t end_seq_id = page_header_pb.end_seq_id();
+            // end_seq_id == -1 is a special case for an empty ingestion which will
+            // generate a page with an EMPTY log entry, and only allow to seek with
+            // <version, 0> to get the log entry
+            if (end_seq_id == -1 || seq_id <= end_seq_id) {
+                CHECK((end_seq_id != -1) || (seq_id == 0));
+                RETURN_IF_ERROR(
+                        _read_page_content(_next_page_index, &page_header_pb, &(_current_page_context->page_content)));
+                break;
+            }
         }
 
-        // reach the last page of the file
-        if (_next_page_index == _file_meta->num_pages()) {
+        // skip to read page content
+        _current_file_pos += page_header_pb.compressed_size();
+        _next_page_index++;
+        // reach the end of the file
+        if (_next_page_index >= _file_meta->num_pages()) {
             return Status::NotFound(
                     strings::Substitute("Can't find version $0, changelog_id $1 "
                                         "in file $2, largest version $3, seq_id $4, and changelog_id $5",
                                         version, seq_id, _file_path, _file_meta->end_version(),
                                         _file_meta->end_seq_id(), _file_meta->end_seq_id()));
         }
-
-        // skip to read page content
-        _current_file_pos += page_header_pb.compressed_size();
-        _next_page_index++;
     } while (true);
+    _next_page_index++;
     _init_current_log_entry();
     return Status::OK();
 }
 
 Status BinlogFileReader::_read_next_page() {
+    if (_next_page_index >= _file_meta->num_pages()) {
+        return Status::EndOfFile("There is no more pages");
+    }
+
     _reset_current_page_context();
     PageHeaderPB& page_header_pb = _current_page_context->page_header;
     RETURN_IF_ERROR(_read_page_header(_next_page_index, &page_header_pb));
@@ -116,7 +125,9 @@ Status BinlogFileReader::_seek_to_log_entry(int64_t seq_id) {
     int32_t num_log_entries = page_content.entries_size();
     while (_current_page_context->next_log_entry_index < num_log_entries) {
         _advance_log_entry();
-        if (_current_log_entry->end_seq_id >= seq_id) {
+        int64_t end_seq_id = _current_log_entry->end_seq_id;
+        // end_seq_id == -1 is for an empty ingestion with only one EMPTY log entry
+        if (end_seq_id == -1 || end_seq_id >= seq_id) {
             return Status::OK();
         }
     }
@@ -126,14 +137,17 @@ Status BinlogFileReader::_seek_to_log_entry(int64_t seq_id) {
 }
 
 void BinlogFileReader::_advance_log_entry() {
-    int next_log_entry_index = _current_page_context->next_log_entry_index;
-    LogEntryPB* next_log_entry = _current_page_context->page_content.mutable_entries(next_log_entry_index);
-    int64_t next_start_seq_id = _current_log_entry->end_seq_id + 1;
+    PageContext* page_context = _current_page_context.get();
+    LogEntryInfo* log_entry_info = _current_log_entry.get();
+
+    int next_log_entry_index = page_context->next_log_entry_index;
+    LogEntryPB* next_log_entry = page_context->page_content.mutable_entries(next_log_entry_index);
+    int64_t next_start_seq_id = log_entry_info->end_seq_id + 1;
     int num_change_events = 0;
     // assume next log entry share file id with the current first
-    FileIdPB* next_file_id = _current_log_entry->file_id;
+    FileIdPB* next_file_id = log_entry_info->file_id;
     // assume rows in next log entry are continuous with current log entry first
-    int next_start_row_id = _current_log_entry->start_row_id + _current_log_entry->num_rows;
+    int next_start_row_id = log_entry_info->start_row_id + log_entry_info->num_rows;
     int num_rows = 0;
     switch (next_log_entry->entry_type()) {
     case INSERT_RANGE_PB: {
@@ -167,20 +181,19 @@ void BinlogFileReader::_advance_log_entry() {
     default:
         break;
     }
-    _current_log_entry->log_entry = next_log_entry;
-    _current_log_entry->start_seq_id = next_start_seq_id;
-    _current_log_entry->end_seq_id = next_start_seq_id + num_change_events - 1;
-    _current_log_entry->file_id = next_file_id;
-    _current_log_entry->start_row_id = next_start_row_id;
-    _current_log_entry->num_rows = num_rows;
-    _current_log_entry->end_of_version =
-            _current_page_context->page_header.end_of_version() &&
-            (next_log_entry_index + 1 == _current_page_context->page_header.num_log_entries());
-    _current_page_context->next_log_entry_index += 1;
+    log_entry_info->log_entry = next_log_entry;
+    log_entry_info->start_seq_id = next_start_seq_id;
+    log_entry_info->end_seq_id = next_start_seq_id + num_change_events - 1;
+    log_entry_info->file_id = next_file_id;
+    log_entry_info->start_row_id = next_start_row_id;
+    log_entry_info->num_rows = num_rows;
+    log_entry_info->end_of_version = _current_page_context->page_header.end_of_version() &&
+                                     (next_log_entry_index == page_context->page_header.num_log_entries() - 1);
+    page_context->next_log_entry_index += 1;
 }
 
 Status BinlogFileReader::_read_file_header() {
-    // Header: magic_number + header_pb_size(uint32_t) + header_pb_checksum(uint32_t) + header_pb
+    // Header base size: magic_number + header_pb_size(uint32_t) + header_pb_checksum(uint32_t)
     size_t header_base_size = k_binlog_magic_number_length + 8;
     if (_file_size < header_base_size) {
         return Status::Corruption(
@@ -211,7 +224,7 @@ Status BinlogFileReader::_read_file_header() {
     std::string_view header_pb_buffer;
     _file_header = std::make_unique<BinlogFileHeaderPB>();
     if (header_size > header_buffer_size) {
-        // TODO use the left data in the header_buffer to reduce bytes to read
+        // TODO use the left data in the header_buffer to reduce IO
         header_buff.resize(header_pb_size);
         RETURN_IF_ERROR(_file->read_at_fully(header_base_size, header_buff.data(), header_buff.size()));
         header_pb_buffer = std::string_view(header_buff.data(), header_buff.size());
@@ -310,7 +323,7 @@ Status BinlogFileReader::_read_page_content(int page_index, PageHeaderPB* page_h
         RETURN_IF_ERROR(get_block_compression_codec(compress_type, &compress_codec));
         std::unique_ptr<char[]> decompressed_page(
                 new char[uncompressed_size + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
-        Slice decompress_page_slice(page.get(), uncompressed_size);
+        Slice decompress_page_slice(decompressed_page.get(), uncompressed_size);
         RETURN_IF_ERROR(compress_codec->decompress(page_slice, &decompress_page_slice));
         if (decompress_page_slice.get_size() != uncompressed_size) {
             return Status::Corruption(strings::Substitute(

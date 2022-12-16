@@ -95,16 +95,16 @@ private:
 
     // init current log entry after switching to the next page
     void _init_current_log_entry() {
-        _current_log_entry->log_entry = nullptr;
-        _current_log_entry->start_seq_id = _current_page_context->page_header.start_seq_id();
-        _current_log_entry->end_seq_id = _current_page_context->page_header.start_seq_id() - 1;
-        _current_log_entry->file_id = nullptr;
-    }
-
-    bool _is_end_of_file() {
-        PageContext* page_context = _current_page_context.get();
-        return _next_page_index == _file_meta->num_pages() &&
-               page_context->next_log_entry_index == page_context->page_header.num_log_entries();
+        PageHeaderPB& page_header = _current_page_context->page_header;
+        LogEntryInfo* log_entry_info = _current_log_entry.get();
+        log_entry_info->log_entry = nullptr;
+        log_entry_info->version = page_header.version();
+        log_entry_info->start_seq_id = page_header.start_seq_id();
+        log_entry_info->end_seq_id = page_header.start_seq_id() - 1;
+        log_entry_info->file_id = nullptr;
+        log_entry_info->start_row_id = 0;
+        log_entry_info->num_rows = 0;
+        log_entry_info->end_of_version = false;
     }
 
     std::string _file_path;

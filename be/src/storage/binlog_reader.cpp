@@ -22,16 +22,17 @@
 
 namespace starrocks {
 
+const string BINLOG_OP = "_binlog_op";
+const string BINLOG_VERSION = "_binlog_version";
+const string BINLOG_SEQ_ID = "_binlog_seq_id";
+const string BINLOG_TIMESTAMP = "_binlog_timestamp";
+
 BinlogReader::BinlogReader(int64_t reader_id, std::shared_ptr<BinlogManager> binlog_manager,
                            vectorized::VectorizedSchema& schema, int chunk_size)
         : _reader_id(reader_id),
           _binlog_manager(std::move(binlog_manager)),
           _schema(std::move(schema)),
           _chunk_size(chunk_size) {}
-
-BinlogReader::~BinlogReader() {
-    _reset();
-}
 
 Status BinlogReader::seek(int64_t version, int64_t seq_id) {
     if (version < _next_version || (version == _next_version && seq_id > _next_seq_id)) {
@@ -57,7 +58,7 @@ Status BinlogReader::get_next(vectorized::ChunkPtr* chunk, int64_t max_version_e
         return Status::EndOfFile("End of max version " + max_version_exclusive);
     }
 
-    chunk->get()->reset();
+    // TODO skip multiple empty entries
     if (_log_entry_info->log_entry->entry_type() == EMPTY_PB) {
         _next_version += 1;
         _next_seq_id = 0;
@@ -146,6 +147,7 @@ Status BinlogReader::_init_segment_iterator(int32_t start_row_id) {
 
     int seg_index = _log_entry_info->file_id->segment_index();
     SegmentSharedPtr seg_ptr = _rowset->segments()[seg_index];
+    // TODO only read needed columns
     vectorized::SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset->rowset_path()));
     seg_options.chunk_size = _chunk_size;
