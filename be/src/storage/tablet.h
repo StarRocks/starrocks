@@ -230,6 +230,8 @@ public:
     // do not do compaction
     bool need_compaction();
 
+    bool force_base_compaction();
+
     double compaction_score();
     CompactionType compaction_type();
 

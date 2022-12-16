@@ -316,7 +316,7 @@ void CompactionManager::update_tablet(TabletSharedPtr tablet) {
 }
 
 bool CompactionManager::register_task(CompactionTask* compaction_task) {
-    if (!compaction_task || check_if_exceed_max_task_num()) {
+    if (!compaction_task) {
         return false;
     }
     std::lock_guard lg(_tasks_mutex);
