@@ -80,7 +80,10 @@ SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY nam
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
 
-> 注：提示必须以"/*+"开头，并且只能跟随在 SELECT 关键字之后。
+> 注：
+> 1. `SET_VAR` 提示仅支持 MySQL 8.0 之后的版本；
+> 2. 提示必须以"/*+"开头，并且只能跟随在 SELECT 关键字之后。
+
 
 ## 支持的变量
 
