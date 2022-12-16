@@ -303,7 +303,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (srcBePathSlot == null) {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "working slots not exist for src be");
         }
-        if (srcBePathSlot.takeBalanceSlot(pathHash) == -1) {
+        if (srcBePathSlot.takeSlot(pathHash) == -1) {
             throw new SchedException(SchedException.Status.SCHEDULE_FAILED, "path busy, wait for next round");
         }
     }
