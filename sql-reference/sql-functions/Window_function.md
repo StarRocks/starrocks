@@ -266,7 +266,13 @@ from mail_merge;
 LAG (expr, offset, default) OVER (partition_by_clause order_by_clause)
 ~~~
 
-以下示例计算 `stock_ticker` 表中每个 `closing_date` 前一天的收盘价。
+**参数说明：**
+
+* `expr`: 需要计算的目标字段。
+* `offset`: 偏移量，表示向前查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
+* `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
+
+以下示例计算 `stock_ticker` 表中股票 JDR **前一天**的收盘价 `closing_price`。`default` 设置为 0，表示如果没有符合条件的行，则返回 0，比如下面示例中返回结果的第一行。
 
 ~~~SQL
 select stock_symbol, closing_date, closing_price,
@@ -345,6 +351,12 @@ from mail_merge;
 ~~~SQL
 LEAD (expr, offset, default) OVER (partition_by_clause order_by_clause)
 ~~~
+
+参数说明：
+
+* `expr`: 需要计算的目标字段。
+* `offset`: 偏移量，表示向后查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
+* `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
 
 以下示例计算第二天的收盘价对比当天收盘价的走势，即第二天收盘价比当天高还是低。
 
