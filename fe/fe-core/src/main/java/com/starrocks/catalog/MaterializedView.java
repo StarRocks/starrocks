@@ -179,6 +179,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     return db.getTable(tableId);
                 }
             } else {
+                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                    return null;
+                }
                 Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
                 if (table.getTableIdentifier().equals(tableIdentifier)) {
                     return table;
