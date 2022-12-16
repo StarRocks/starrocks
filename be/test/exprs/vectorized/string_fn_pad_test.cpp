@@ -214,17 +214,18 @@ TEST_F(StringFunctionPadTest, padNotConstUTF8Test) {
             {"博学笃志", 14, "甲乙丙丁戊", false, "甲乙丙丁戊甲乙丙丁戊博学笃志", "博学笃志甲乙丙丁戊甲乙丙丁戊"},
             {"博学笃志", 15, "甲乙丙丁戊", false, "甲乙丙丁戊甲乙丙丁戊甲博学笃志", "博学笃志甲乙丙丁戊甲乙丙丁戊甲"},
     };
-    auto nulls_7_3 = create_null_column(4096, 7, 3);
-    auto nulls_11_1 = create_null_column(4096, 11, 1);
-    auto nulls_17_13 = create_null_column(4096, 17, 13);
-    test_pad(4096, cases, {nullptr, nullptr, nullptr}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nullptr, nullptr}, nullptr);
-    test_pad(4096, cases, {nullptr, nulls_11_1, nullptr}, nullptr);
-    test_pad(4096, cases, {nullptr, nullptr, nulls_17_13}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nulls_11_1, nullptr}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nullptr, nulls_17_13}, nullptr);
-    test_pad(4096, cases, {nullptr, nulls_11_1, nulls_17_13}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nulls_11_1, nulls_17_13}, nullptr);
+    const auto num_rows = 40;
+    auto nulls_7_3 = create_null_column(num_rows, 7, 3);
+    auto nulls_11_1 = create_null_column(num_rows, 11, 1);
+    auto nulls_17_13 = create_null_column(num_rows, 17, 13);
+    test_pad(num_rows, cases, {nullptr, nullptr, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nullptr, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nullptr, nulls_11_1, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nullptr, nullptr, nulls_17_13}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nulls_11_1, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nullptr, nulls_17_13}, nullptr);
+    test_pad(num_rows, cases, {nullptr, nulls_11_1, nulls_17_13}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nulls_11_1, nulls_17_13}, nullptr);
 }
 
 void test_const_pad(size_t num_rows, TestCaseType& c) {
