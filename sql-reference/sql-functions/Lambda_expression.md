@@ -4,7 +4,7 @@ Lambda 表达式（Lambda expression）是一种匿名函数，可以作为高�
 
 Lambda 表达式使用运算符 `->` 来表示，读作 “goes to”。运算符左侧为输入参数，右侧为表达式。
 
-从 2.5 版本开始，StarRocks 支持在以下高阶函数 (higher-order function) 中应用 Lambda 表达式：[array_map()](./array-functions/array_map.md)，[array_filter()](./array-functions/array_map.md)，[array_sum()](./array-functions/array_sum.md)，[array_sortby()](./array-functions/array_sortby.md)。
+从 2.5 版本开始，StarRocks 支持在以下高阶函数 (higher-order function) 中应用 Lambda 表达式：[array_map()](./array-functions/array_map.md)，[array_filter()](./array-functions/array_filter.md)，[array_sum()](./array-functions/array_sum.md)，[array_sortby()](./array-functions/array_sortby.md)。
 
 ## 语法
 
