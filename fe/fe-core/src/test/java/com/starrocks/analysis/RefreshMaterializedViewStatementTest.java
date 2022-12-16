@@ -110,6 +110,7 @@ public class RefreshMaterializedViewStatementTest {
         taskManager.executeTaskSync(mvTaskName);
         MaterializedView.MvRefreshScheme refreshScheme = mv1.getRefreshScheme();
         Assert.assertNotNull(refreshScheme);
+        System.out.println("visibleVersionMap:" + refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap());
         Assert.assertTrue(refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().containsKey(t1.getId()));
         Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap =
                 refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(t1.getId());

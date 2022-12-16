@@ -224,6 +224,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         public void setVersion(long version) {
             this.version = version;
         }
+
+        @Override
+        public String toString() {
+            return "BasePartitionInfo{" +
+                    "id=" + id +
+                    ", version=" + version +
+                    '}';
+        }
     }
 
     public static class AsyncRefreshContext {
