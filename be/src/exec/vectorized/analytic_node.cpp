@@ -323,6 +323,7 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
     }
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto could_local_shuffle = context->source_operator(ops_with_sink)->could_local_shuffle();
+    auto partition_type = context->source_operator(ops_with_sink)->partition_type();
 
     AnalytorFactoryPtr analytor_factory =
             std::make_shared<AnalytorFactory>(degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc);
@@ -340,6 +341,7 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     source_op->set_degree_of_parallelism(degree_of_parallelism);
     source_op->set_could_local_shuffle(could_local_shuffle);
+    source_op->set_partition_type(partition_type);
     ops_with_source.push_back(std::move(source_op));
 
     if (limit() != -1) {

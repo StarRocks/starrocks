@@ -223,6 +223,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
     auto could_local_shuffle = context->source_operator(ops_sink_with_sort)->could_local_shuffle();
+    auto partition_type = context->source_operator(ops_sink_with_sort)->partition_type();
     std::any context_factory;
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
@@ -274,15 +275,18 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         if (is_partition) {
             source_operator->set_degree_of_parallelism(degree_of_parallelism);
             source_operator->set_could_local_shuffle(could_local_shuffle);
+            source_operator->set_partition_type(partition_type);
         } else {
             // source_operator's instance count must be 1
             source_operator->set_degree_of_parallelism(1);
             source_operator->set_could_local_shuffle(true);
+            source_operator->set_partition_type(partition_type);
         }
     } else {
         // Each PartitionSortSinkOperator has an independent LocalMergeSortSinkOperator respectively
         source_operator->set_degree_of_parallelism(degree_of_parallelism);
         source_operator->set_could_local_shuffle(could_local_shuffle);
+        source_operator->set_partition_type(partition_type);
     }
     operators_source_with_sort.emplace_back(std::move(source_operator));
 

@@ -213,14 +213,15 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
     size_t degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
 
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    auto partition_type = context->source_operator(ops_with_sink)->partition_type();
     if (!should_cache && _tnode.agg_node.__isset.interpolate_passthrough && _tnode.agg_node.interpolate_passthrough &&
         could_local_shuffle) {
         ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink,
                                                                               degree_of_parallelism, true);
     }
 
-    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
+    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, &context](bool post_cache) {
         // shared by sink operator factory and source operator factory
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         auto aggr_mode = should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
@@ -230,6 +231,7 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
         auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(),
                                                                                          id(), aggregator_factory);
         source_operator->set_could_local_shuffle(could_local_shuffle);
+        source_operator->set_partition_type(partition_type);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
     };
 

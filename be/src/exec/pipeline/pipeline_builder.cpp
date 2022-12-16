@@ -37,6 +37,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_broadcast_exchange(R
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
     local_exchange_source->set_could_local_shuffle(true);
+    local_exchange_source->set_partition_type(source_operator(pred_operators)->partition_type());
     auto local_exchange = std::make_shared<BroadcastExchanger>(mem_mgr, local_exchange_source.get());
     auto local_exchange_sink =
             std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), pseudo_plan_node_id, local_exchange);
@@ -65,19 +66,20 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
     // streams and produce one output stream piping into the sort operator.
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
-    auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
-    if (!force && source_operator->degree_of_parallelism() == num_receivers) {
+    auto* source_op = source_operator(pred_operators);
+    if (!force && source_op->degree_of_parallelism() == num_receivers) {
         return pred_operators;
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    int buffer_size = std::max(num_receivers, static_cast<int>(source_operator->degree_of_parallelism())) *
-                      kLocalExchangeBufferChunks;
+    int buffer_size =
+            std::max(num_receivers, static_cast<int>(source_op->degree_of_parallelism())) * kLocalExchangeBufferChunks;
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->chunk_size() * buffer_size);
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
     local_exchange_source->set_could_local_shuffle(true);
+    local_exchange_source->set_partition_type(source_op->partition_type());
     auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
     auto local_exchange_sink =
             std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), pseudo_plan_node_id, local_exchange);
@@ -146,8 +148,9 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_shuffle_source->set_runtime_state(state);
-
     local_shuffle_source->set_could_local_shuffle(pred_source_op->partition_exprs().empty());
+    local_shuffle_source->set_partition_type(pred_source_op->partition_type());
+
     auto local_shuffle =
             std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs,
                                                  pred_source_op->degree_of_parallelism());
@@ -176,8 +179,8 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     // Approximately, each pred driver can output state->chunk_size() rows at the same time.
     size_t max_row_count = 0;
     for (const auto& pred_ops : pred_operators_list) {
-        auto* source_operator = down_cast<SourceOperatorFactory*>(pred_ops[0].get());
-        max_row_count += source_operator->degree_of_parallelism() * state->chunk_size();
+        auto* source_op = source_operator(pred_ops);
+        max_row_count += source_op->degree_of_parallelism() * state->chunk_size();
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
@@ -186,6 +189,7 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
     local_exchange_source->set_could_local_shuffle(true);
+
     auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
 
     // Append a local exchange sink to the tail of each pipeline, which comes to end.
