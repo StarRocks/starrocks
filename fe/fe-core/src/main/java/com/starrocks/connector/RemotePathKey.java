@@ -15,6 +15,8 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.sql.ast.TimeTravelSpec;
+
 import java.util.Objects;
 import java.util.Optional;
 
@@ -24,6 +26,8 @@ public class RemotePathKey {
 
     // The table location must exist in HudiTable
     private final Optional<String> hudiTableLocation;
+
+    private TimeTravelSpec timeTravelSpec;
 
     public static RemotePathKey of(String path, boolean isRecursive) {
         return new RemotePathKey(path, isRecursive, Optional.empty());
@@ -49,6 +53,14 @@ public class RemotePathKey {
         return path;
     }
 
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
+    }
+
     public boolean isRecursive() {
         return isRecursive;
     }
@@ -68,12 +80,13 @@ public class RemotePathKey {
         RemotePathKey pathKey = (RemotePathKey) o;
         return isRecursive == pathKey.isRecursive &&
                 Objects.equals(path, pathKey.path) &&
-                Objects.equals(hudiTableLocation, pathKey.hudiTableLocation);
+                Objects.equals(hudiTableLocation, pathKey.hudiTableLocation) &&
+                Objects.equals(timeTravelSpec, pathKey.timeTravelSpec);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(path, isRecursive, hudiTableLocation);
+        return Objects.hash(path, isRecursive, hudiTableLocation, timeTravelSpec);
     }
 
     @Override
@@ -82,6 +95,7 @@ public class RemotePathKey {
         sb.append("path='").append(path).append('\'');
         sb.append(", isRecursive=").append(isRecursive);
         sb.append(", hudiTableLocation=").append(hudiTableLocation);
+        sb.append(", timeTravelSpec=").append(timeTravelSpec);
         sb.append('}');
         return sb.toString();
     }

@@ -31,6 +31,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -128,6 +129,11 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         return fileOps.getRemoteFiles(partitions.build());
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TimeTravelSpec timeTravelSpec) {
+        return this.getRemoteFileInfos(table, partitionKeys);
     }
 
     @Override

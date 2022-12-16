@@ -378,7 +378,8 @@ public class Utils {
                     Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
                     List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
                             icebergPredicate, table.getIcebergTable(),
-                            scanOperator.getColRefToColumnMetaMap());
+                            scanOperator.getColRefToColumnMetaMap(),
+                            ((LogicalIcebergScanOperator) operator).getTimeTravelSpec());
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                 } catch (Exception e) {
                     LOG.warn("Iceberg table {} get column failed. error : {}", table.getName(), e);

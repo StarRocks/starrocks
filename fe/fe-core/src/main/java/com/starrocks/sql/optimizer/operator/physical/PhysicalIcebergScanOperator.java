@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -32,6 +33,8 @@ import java.util.Map;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+    // Optional timeTravelSpec for querying historical data
+    private TimeTravelSpec timeTravelSpec;
 
     public PhysicalIcebergScanOperator(Table table,
                                        Map<ColumnRefOperator, Column> columnRefMap,
@@ -41,6 +44,14 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
                                        Projection projection) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, table, columnRefMap, limit, predicate, projection);
         this.predicates = predicates;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
+    }
+
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
     }
 
     @Override

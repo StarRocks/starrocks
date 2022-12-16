@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -32,6 +33,7 @@ import java.util.Set;
 public class LogicalHudiScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private boolean hasUnknownColumn;
+    private TimeTravelSpec timeTravelSpec;
 
     public LogicalHudiScanOperator(Table table,
                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -79,6 +81,14 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
 
     public void setHasUnknownColumn(boolean hasUnknownColumn) {
         this.hasUnknownColumn = hasUnknownColumn;
+    }
+
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
     }
 
     @Override

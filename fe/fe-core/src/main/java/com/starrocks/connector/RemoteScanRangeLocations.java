@@ -25,6 +25,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -45,6 +46,7 @@ public class RemoteScanRangeLocations {
     private static final Logger LOG = LogManager.getLogger(RemoteScanRangeLocations.class);
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
+    private TimeTravelSpec timeTravelSpec;
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
                                        RemoteFileBlockDesc blockDesc) {
@@ -171,8 +173,7 @@ public class RemoteScanRangeLocations {
         }
         String catalogName = hiveMetaStoreTable.getCatalogName();
         List<RemoteFileInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getRemoteFileInfos(catalogName, table, partitionKeys);
-
+                .getRemoteFileInfos(catalogName, table, partitionKeys, timeTravelSpec);
         if (table instanceof HiveTable) {
             Preconditions.checkState(partitions.size() == partitionKeys.size());
             for (int i = 0; i < partitions.size(); i++) {
@@ -227,5 +228,13 @@ public class RemoteScanRangeLocations {
 
     public int getScanRangeLocationsSize() {
         return result.size();
+    }
+
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
     }
 }

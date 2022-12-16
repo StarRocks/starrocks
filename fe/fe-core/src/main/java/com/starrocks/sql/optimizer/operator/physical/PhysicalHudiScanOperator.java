@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -32,6 +33,7 @@ import java.util.Map;
 
 public class PhysicalHudiScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+    private TimeTravelSpec timeTravelSpec;
 
     public PhysicalHudiScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> columnRefMap,
@@ -51,6 +53,14 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
     @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
+    }
+
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
     }
 
     @Override

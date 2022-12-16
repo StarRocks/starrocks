@@ -38,6 +38,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -269,16 +270,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalIcebergScan(LogicalIcebergScanOperator node, ExpressionContext context) {
-        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                node.getTimeTravelSpec());
     }
 
     @Override
     public Void visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
-        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeIcebergScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                node.getTimeTravelSpec());
     }
 
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
-                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                        TimeTravelSpec timeTravelSpec) {
         if (context.getStatistics() == null) {
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             org.apache.iceberg.Table icebergTbl = ((IcebergTable) table).getIcebergTable();
@@ -286,7 +290,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                     new ScalarOperatorToIcebergExpr.IcebergContext(schema);
             Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
-            Statistics stats = getTableStatistics(icebergPredicate, icebergTbl, colRefToColumnMetaMap);
+            Statistics stats = getTableStatistics(icebergPredicate, icebergTbl, colRefToColumnMetaMap, timeTravelSpec);
             context.setStatistics(stats);
         }
 

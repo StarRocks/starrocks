@@ -340,6 +340,7 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -3577,7 +3578,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 sb.append(child.getText());
                 sb.append(" ");
             }
+
             tableRelation.setTemporalClause(sb.toString());
+
+            if (context.temporalClause().version != null || context.temporalClause().timestamp != null) {
+                String version = context.temporalClause().version != null ?
+                        context.temporalClause().version.getText().replaceAll("['\"]", "") : "";
+                String timestamp = context.temporalClause().timestamp != null ?
+                        context.temporalClause().timestamp.getText().replaceAll("['\"]", "") : "";
+                tableRelation.setTimeTravelSpec(new TimeTravelSpec(version, timestamp));
+            }
         }
 
         return tableRelation;

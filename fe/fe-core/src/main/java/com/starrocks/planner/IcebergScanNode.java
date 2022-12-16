@@ -38,6 +38,7 @@ import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -95,6 +96,9 @@ public class IcebergScanNode extends ScanNode {
     private boolean isFinalized = false;
     private CloudConfiguration cloudConfiguration = null;
 
+    // Optional timeTravelSpec for querying historical data
+    private TimeTravelSpec timeTravelSpec;
+
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         srIcebergTable = (IcebergTable) desc.getTable();
@@ -117,6 +121,14 @@ public class IcebergScanNode extends ScanNode {
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
         getAliveBackends();
+    }
+
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
     }
 
     private void getAliveBackends() throws UserException {
@@ -224,7 +236,7 @@ public class IcebergScanNode extends ScanNode {
         }
 
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
-                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
+                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate, timeTravelSpec).planTasks()) {
             for (FileScanTask task : combinedScanTask.files()) {
                 DataFile file = task.file();
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
@@ -280,6 +292,10 @@ public class IcebergScanNode extends ScanNode {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
         helper.addValue(super.debugString());
         helper.add("icebergTable=", srIcebergTable.getName());
+        if (timeTravelSpec != null && !timeTravelSpec.isEmpty()) {
+            helper.addValue(" ");
+            helper.addValue(timeTravelSpec);
+        }
         return helper.toString();
     }
 

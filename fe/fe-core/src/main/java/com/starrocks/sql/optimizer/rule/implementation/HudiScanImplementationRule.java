@@ -44,6 +44,10 @@ public class HudiScanImplementationRule extends ImplementationRule {
                     scan.getPredicate(),
                     scan.getProjection());
 
+            if (scan.getTimeTravelSpec() != null) {
+                physicalHudiScan.setTimeTravelSpec(scan.getTimeTravelSpec());
+            }
+
             result = new OptExpression(physicalHudiScan);
         }
         return Lists.newArrayList(result);

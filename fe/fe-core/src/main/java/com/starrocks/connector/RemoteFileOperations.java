@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.ast.TimeTravelSpec;
 
 import java.util.Collection;
 import java.util.List;
@@ -36,6 +37,7 @@ public class RemoteFileOperations {
     private final ExecutorService executor;
     private final boolean isRecursive;
     private final boolean enableCatalogLevelCache;
+    private TimeTravelSpec timeTravelSpec;
 
     public RemoteFileOperations(CachingRemoteFileIO remoteFileIO,
                                 ExecutorService executor,
@@ -51,10 +53,19 @@ public class RemoteFileOperations {
         return getRemoteFiles(partitions, Optional.empty());
     }
 
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
+    }
+
     public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
             RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+            key.setTimeTravelSpec(timeTravelSpec);
             pathKeyToPartition.put(key, partition);
         }
 
@@ -73,6 +84,7 @@ public class RemoteFileOperations {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getRemoteFiles")) {
             for (Partition partition : partitions) {
                 RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+                pathKey.setTimeTravelSpec(timeTravelSpec);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() ->
                         remoteFileIO.getRemoteFiles(pathKey));
                 futures.add(future);

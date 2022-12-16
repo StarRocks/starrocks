@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -29,6 +30,7 @@ import java.util.Map;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private TimeTravelSpec timeTravelSpec;
 
     public LogicalIcebergScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -55,6 +57,14 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                 builder.getProjection());
 
         this.predicates = builder.predicates;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
+    }
+
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
     }
 
     @Override

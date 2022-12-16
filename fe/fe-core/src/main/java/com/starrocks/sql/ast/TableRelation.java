@@ -35,6 +35,8 @@ public class TableRelation extends Relation {
     // optional temporal clause for external MySQL tables that support this syntax
     private String temporalClause;
 
+    private TimeTravelSpec timeTravelSpec;
+
     public TableRelation(TableName name) {
         this.name = name;
         this.partitionNames = null;
@@ -124,5 +126,13 @@ public class TableRelation extends Relation {
 
     public String getTemporalClause() {
         return this.temporalClause;
+    }
+
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
     }
 }

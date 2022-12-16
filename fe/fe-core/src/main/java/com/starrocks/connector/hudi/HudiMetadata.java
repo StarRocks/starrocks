@@ -35,6 +35,7 @@ import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -131,6 +132,31 @@ public class HudiMetadata implements ConnectorMetadata {
             }
         }
 
+        return fileOps.getRemoteFiles(partitions.build(), Optional.of(hmsTbl.getTableLocation()));
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TimeTravelSpec timeTravelSpec) {
+        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
+        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
+
+        if (((HiveMetaStoreTable) table).isUnPartitioned()) {
+            partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
+        } else {
+            Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionKeys);
+            for (PartitionKey partitionKey : partitionKeys) {
+                String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
+                Partition partition = existingPartitions.get(hivePartitionName);
+                if (partition != null) {
+                    partitions.add(partition);
+                } else {
+                    LOG.error("Partition {} doesn't exist", hivePartitionName);
+                    throw new StarRocksConnectorException("Partition %s doesn't exist", hivePartitionName);
+                }
+            }
+        }
+
+        fileOps.setTimeTravelSpec(timeTravelSpec);
         return fileOps.getRemoteFiles(partitions.build(), Optional.of(hmsTbl.getTableLocation()));
     }
 

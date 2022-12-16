@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -94,6 +95,17 @@ public interface ConnectorMetadata {
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+        return Lists.newArrayList();
+    }
+
+    /**
+     * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
+     * @param table
+     * @param partitionKeys selected columns
+     * @return the remote file information of the query to scan.
+     */
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                    TimeTravelSpec timeTravelSpec) {
         return Lists.newArrayList();
     }
 

@@ -25,6 +25,7 @@ import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
@@ -41,6 +42,7 @@ public class HudiScanNode extends ScanNode {
     private HudiTable hudiTable;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
+    private TimeTravelSpec timeTravelSpec;
 
     public HudiScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -56,15 +58,28 @@ public class HudiScanNode extends ScanNode {
         return hudiTable;
     }
 
+    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
+        this.timeTravelSpec = timeTravelSpec;
+    }
+
+    public TimeTravelSpec getTimeTravelSpec() {
+        return timeTravelSpec;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
         helper.addValue(super.debugString());
         helper.addValue("hudiTable=" + hudiTable.getName());
+        if (timeTravelSpec != null && !timeTravelSpec.isEmpty()) {
+            helper.addValue(" ");
+            helper.addValue(timeTravelSpec);
+        }
         return helper.toString();
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
+        scanRangeLocations.setTimeTravelSpec(timeTravelSpec);
         scanRangeLocations.setupScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
     }
 

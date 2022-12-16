@@ -18,6 +18,7 @@ package com.starrocks.connector.iceberg.cost;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -53,21 +54,26 @@ public class IcebergTableStatisticCalculator {
 
     private final Table icebergTable;
 
-    private IcebergTableStatisticCalculator(Table icebergTable) {
+    private final TimeTravelSpec timeTravelSpec;
+
+    private IcebergTableStatisticCalculator(Table icebergTable, TimeTravelSpec timeTravelSpec) {
         this.icebergTable = icebergTable;
+        this.timeTravelSpec = timeTravelSpec;
     }
 
     public static Statistics getTableStatistics(Expression icebergPredicate,
                                                 Table icebergTable,
-                                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        return new IcebergTableStatisticCalculator(icebergTable)
+                                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                TimeTravelSpec timeTravelSpec) {
+        return new IcebergTableStatisticCalculator(icebergTable, timeTravelSpec)
                 .makeTableStatistics(icebergPredicate, colRefToColumnMetaMap);
     }
 
     public static List<ColumnStatistic> getColumnStatistics(Expression icebergPredicate,
                                                             Table icebergTable,
-                                                            Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        return new IcebergTableStatisticCalculator(icebergTable)
+                                                            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                            TimeTravelSpec timeTravelSpec) {
+        return new IcebergTableStatisticCalculator(icebergTable, timeTravelSpec)
                 .makeColumnStatistics(icebergPredicate, colRefToColumnMetaMap);
     }
 
@@ -75,7 +81,7 @@ public class IcebergTableStatisticCalculator {
                                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         List<ColumnStatistic> columnStatistics = new ArrayList<>();
         List<Types.NestedField> columns = icebergTable.schema().columns();
-        IcebergFileStats icebergFileStats = new IcebergTableStatisticCalculator(icebergTable).
+        IcebergFileStats icebergFileStats = new IcebergTableStatisticCalculator(icebergTable, timeTravelSpec).
                 generateIcebergFileStats(icebergPredicate, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream().
@@ -225,7 +231,7 @@ public class IcebergTableStatisticCalculator {
                 .collect(toImmutableList());
 
         TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
-                snapshot.get(), icebergPredicate);
+                snapshot.get(), icebergPredicate, timeTravelSpec);
 
         IcebergFileStats icebergFileStats = null;
         for (CombinedScanTask combinedScanTask : tableScan.planTasks()) {

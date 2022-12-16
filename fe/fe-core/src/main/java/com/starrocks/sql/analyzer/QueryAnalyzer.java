@@ -264,7 +264,9 @@ public class QueryAnalyzer {
                     return viewRelation;
                 } else {
                     if (tableRelation.getTemporalClause() != null) {
-                        if (table.getType() != Table.TableType.MYSQL) {
+                        if (table.getType() != Table.TableType.MYSQL &&
+                                table.getType() != Table.TableType.ICEBERG &&
+                                table.getType() != Table.TableType.HUDI) {
                             throw unsupportedException(
                                     "unsupported table type for temporal clauses: " + table.getType() +
                                             "; only external MYSQL tables support temporal clauses");

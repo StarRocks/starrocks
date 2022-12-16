@@ -65,6 +65,10 @@ class TokenLimitTest {
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",
+
+                // SparkSQL temporal query syntax
+                "SELECT * FROM t VERSION AS OF 10963874102873;",
+                "SELECT * FROM t TIMESTAMP AS OF '1986-10-26 01:21:00';"
         };
 
         for (String query : temporalQueries) {
