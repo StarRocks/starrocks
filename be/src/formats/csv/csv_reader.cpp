@@ -36,9 +36,9 @@ static std::pair<const char*, size_t> trim(const char* value, size_t len) {
     return std::make_pair(value + begin, end - begin + 1);
 }
 
-inline bool CSVReader::is_field_delimiter(bool expandBuffer) {
-    if (LIKELY(_field_delimiter_length == 1)) {
-        if (*(_buff.position()) == _parse_options.field_delimiter[0]) {
+inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
+    if (LIKELY(_column_delimiter_length == 1)) {
+        if (*(_buff.position()) == _parse_options.column_delimiter[0]) {
             _buff.skip(1);
             return true;
         }
@@ -46,8 +46,8 @@ inline bool CSVReader::is_field_delimiter(bool expandBuffer) {
         int i = 0;
         const char* base_ptr = _buff.base_ptr();
         size_t p = _buff.position_offset();
-        while (i < _field_delimiter_length && p < _buff.limit_offset() &&
-               *(base_ptr + p) == _parse_options.field_delimiter[i]) {
+        while (i < _column_delimiter_length && p < _buff.limit_offset() &&
+               *(base_ptr + p) == _parse_options.column_delimiter[i]) {
             i++;
             p++;
             if (UNLIKELY(_buff.limit_offset() - p < 1)) {
@@ -60,8 +60,8 @@ inline bool CSVReader::is_field_delimiter(bool expandBuffer) {
                 }
             }
         }
-        if (i == _field_delimiter_length) {
-            _buff.skip(_field_delimiter_length);
+        if (i == _column_delimiter_length) {
+            _buff.skip(_column_delimiter_length);
             return true;
         }
     }
@@ -152,7 +152,7 @@ Status CSVReader::readMore(bool expandBuffer) {
     if (UNLIKELY(_buff.available() < 1)) { \
         status = readMore(notGetLine);     \
         if (!status.ok()) {                \
-            is_enclose_field = true;       \
+            is_enclose_column = true;       \
             curState = NEWROW;            \
             goto newrow_label;            \
         }                                  \
@@ -175,17 +175,17 @@ Status CSVReader::more_rows() {
     // parsed_start and parsed_end record a row at the start and end of the buff.
     size_t parsed_start = _buff.position_offset();
     size_t parsed_end = 0;
-    // If field_start is initialized to the maximum value, the START state is not entered.
-    size_t field_start = std::string::npos;
-    size_t field_end = 0;
-    bool is_enclose_field = false;
-    bool is_escape_field = false;
+    // If column_start is initialized to the maximum value, the START state is not entered.
+    size_t column_start = std::string::npos;
+    size_t column_end = 0;
+    bool is_enclose_column = false;
+    bool is_escape_column = false;
     bool notGetLine = true;
     bool reachBuffEnd = false;
-    _fields.clear();
+    _columns.clear();
     while (true) {
-        // At the end of a row, or the end of a field, no new data is read.
-        if (LIKELY(curState != NEWROW && curState != FIELD_DELIMITER)) {
+        // At the end of a row, or the end of a column, no new data is read.
+        if (LIKELY(curState != NEWROW && curState != COLUMN_DELIMITER)) {
             READ_MORE()
         }
         // Advance to the next state each time based on the current state + the current character stream.
@@ -198,7 +198,7 @@ Status CSVReader::more_rows() {
                     READ_MORE()
                 }
             }
-            field_start = _buff.position_offset();
+            column_start = _buff.position_offset();
 
             // newrow
             if (UNLIKELY(is_row_delimiter(notGetLine))) {
@@ -207,8 +207,8 @@ Status CSVReader::more_rows() {
             }
 
             // delimiter
-            if (UNLIKELY(is_field_delimiter(notGetLine))) {
-                curState = FIELD_DELIMITER;
+            if (UNLIKELY(is_column_delimiter(notGetLine))) {
+                curState = COLUMN_DELIMITER;
                 break;
             }
 
@@ -226,27 +226,27 @@ Status CSVReader::more_rows() {
             if (UNLIKELY(*(_buff.position()) == _parse_options.enclose)) {
                 _buff.skip(1);
                 READ_MORE()
-                field_start = _buff.position_offset();
+                column_start = _buff.position_offset();
                 if (*(_buff.position()) != _parse_options.enclose) {
                     curState = ENCLOSE;
-                    is_enclose_field = true;
+                    is_enclose_column = true;
                     break;
                 } else {
                     // ""something
-                    // We need to determine whether the field is empty or escaped.
+                    // We need to determine whether the column is empty or escaped.
                     _buff.skip(1);
                     READ_MORE_ENCLOSE()
                     // ""rowseperator
                     if (is_row_delimiter(notGetLine)) {
-                        is_enclose_field = true;
+                        is_enclose_column = true;
                         curState = NEWROW;
                         break;
                     }
 
                     // ""delimiter
-                    if (is_field_delimiter(notGetLine)) {
-                        is_enclose_field = true;
-                        curState = FIELD_DELIMITER;
+                    if (is_column_delimiter(notGetLine)) {
+                        is_enclose_column = true;
+                        curState = COLUMN_DELIMITER;
                         break;
                     }
 
@@ -264,7 +264,7 @@ Status CSVReader::more_rows() {
         // 1. trimspace is not enabled
         //    a. "some
         //    b. ""aaa, enclose is just used as an escape and you can't go into ENCLOSE state.
-        //    c. "", empty fields must be read next to field delimiters or newrows.
+        //    c. "", empty columns must be read next to column delimiters or newrows.
         // 2. trimspace is enabled
         //    Remove the leading space before judging.
         case ENCLOSE:
@@ -313,13 +313,13 @@ Status CSVReader::more_rows() {
                 _buff.skip(1);
                 break;
             }
-            // escape row FIELD_DELIMITER
+            // escape row COLUMN_DELIMITER
             if (is_row_delimiter(notGetLine)) {
                 curState = preState;
                 break;
             }
-            // escape field separator
-            if (is_field_delimiter(notGetLine)) {
+            // escape column separator
+            if (is_column_delimiter(notGetLine)) {
                 curState = preState;
                 break;
             }
@@ -332,8 +332,8 @@ Status CSVReader::more_rows() {
             }
 
             // delimiter
-            if (UNLIKELY(is_field_delimiter(notGetLine))) {
-                curState = FIELD_DELIMITER;
+            if (UNLIKELY(is_column_delimiter(notGetLine))) {
+                curState = COLUMN_DELIMITER;
                 break;
             }
 
@@ -359,55 +359,55 @@ Status CSVReader::more_rows() {
             curState = ORDINARY;
             break;
 
-        case FIELD_DELIMITER:
-            field_end = _buff.position_offset();
-            // The field has an escape and needs to be stripped of the escape character and copied to a separate storage space.
+        case COLUMN_DELIMITER:
+            column_end = _buff.position_offset();
+            // The column has an escape and needs to be stripped of the escape character and copied to a separate storage space.
             if (UNLIKELY(_escape_pos.size() > 0)) {
-                is_escape_field = true;
-                size_t new_field_start = _escape_data.size();
-                for (size_t i = field_start; i < _buff.position_offset(); i++) {
+                is_escape_column = true;
+                size_t new_column_start = _escape_data.size();
+                for (size_t i = column_start; i < _buff.position_offset(); i++) {
                     if (_escape_pos.count(i)) {
                         continue;
                     }
                     _escape_data.push_back(_buff.get_char(i));
                 }
                 _escape_pos.clear();
-                field_start = new_field_start;
-                field_end = _escape_data.size();
+                column_start = new_column_start;
+                column_end = _escape_data.size();
             }
-            // push field
-            if (UNLIKELY(is_enclose_field)) {
+            // push column
+            if (UNLIKELY(is_enclose_column)) {
                 if (_parse_options.trim_space) {
                     const char* basePtr = _buff.base_ptr();
-                    if (is_escape_field) {
+                    if (is_escape_column) {
                         basePtr = _escape_data.data();
                     }
                     std::pair<const char*, size_t> newPos =
-                            trim(basePtr + field_start, field_end - _field_delimiter_length - field_start - 1);
-                    _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                            trim(basePtr + column_start, column_end - _column_delimiter_length - column_start - 1);
+                    _columns.emplace_back(newPos.first - basePtr, newPos.second, is_escape_column);
                 } else {
                     // Remove the last enclose character.
-                    _fields.emplace_back(field_start, field_end - _field_delimiter_length - field_start - 1,
-                                         is_escape_field);
+                    _columns.emplace_back(column_start, column_end - _column_delimiter_length - column_start - 1,
+                                         is_escape_column);
                 }
 
             } else {
                 if (UNLIKELY(_parse_options.trim_space)) {
                     const char* basePtr = _buff.base_ptr();
-                    if (is_escape_field) {
+                    if (is_escape_column) {
                         basePtr = _escape_data.data();
                     }
                     std::pair<const char*, size_t> newPos =
-                            trim(basePtr + field_start, field_end - _field_delimiter_length - field_start);
-                    _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                            trim(basePtr + column_start, column_end - _column_delimiter_length - column_start);
+                    _columns.emplace_back(newPos.first - basePtr, newPos.second, is_escape_column);
                 } else {
-                    _fields.emplace_back(field_start, field_end - _field_delimiter_length - field_start,
-                                         is_escape_field);
+                    _columns.emplace_back(column_start, column_end - _column_delimiter_length - column_start,
+                                         is_escape_column);
                 }
             }
-            is_escape_field = false;
+            is_escape_column = false;
             curState = START;
-            is_enclose_field = false;
+            is_enclose_column = false;
             break;
 
         newrow_label:
@@ -422,66 +422,66 @@ Status CSVReader::more_rows() {
             // push row
             if (LIKELY(status.ok() || status.is_end_of_file())) {
                 // For empty row, skip it. And restart state machine.
-                if (UNLIKELY(_fields.size() == 0 &&
-                             _buff.position_offset() - _row_delimiter_length - field_start == 0)) {
+                if (UNLIKELY(_columns.size() == 0 &&
+                             _buff.position_offset() - _row_delimiter_length - column_start == 0)) {
                     curState = START;
-                    is_enclose_field = false;
-                    is_escape_field = false;
+                    is_enclose_column = false;
+                    is_escape_column = false;
                     if (status.is_end_of_file()) {
                         return status;
                     }
                     parsed_start = _buff.position_offset();
-                    field_start = _buff.position_offset();
+                    column_start = _buff.position_offset();
                     break;
                 }
-                if (field_start != std::string::npos) {
-                    field_end = _buff.position_offset();
+                if (column_start != std::string::npos) {
+                    column_end = _buff.position_offset();
                     if (UNLIKELY(_escape_pos.size() > 0)) {
-                        is_escape_field = true;
-                        size_t new_field_start = _escape_data.size();
-                        for (size_t i = field_start; i < _buff.position_offset(); i++) {
+                        is_escape_column = true;
+                        size_t new_column_start = _escape_data.size();
+                        for (size_t i = column_start; i < _buff.position_offset(); i++) {
                             if (_escape_pos.count(i)) {
                                 continue;
                             }
                             _escape_data.push_back(_buff.get_char(i));
                         }
                         _escape_pos.clear();
-                        field_start = new_field_start;
-                        field_end = _escape_data.size();
+                        column_start = new_column_start;
+                        column_end = _escape_data.size();
                     }
 
-                    if (UNLIKELY(is_enclose_field)) {
+                    if (UNLIKELY(is_enclose_column)) {
                         if (_parse_options.trim_space) {
                             const char* basePtr = _buff.base_ptr();
-                            if (is_escape_field) {
+                            if (is_escape_column) {
                                 basePtr = _escape_data.data();
                             }
                             std::pair<const char*, size_t> newPos =
-                                    trim(basePtr + field_start, field_end - _row_delimiter_length - field_start - 1);
-                            _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                                    trim(basePtr + column_start, column_end - _row_delimiter_length - column_start - 1);
+                            _columns.emplace_back(newPos.first - basePtr, newPos.second, is_escape_column);
                         } else {
-                            _fields.emplace_back(field_start, field_end - _row_delimiter_length - field_start - 1,
-                                                 is_escape_field);
+                            _columns.emplace_back(column_start, column_end - _row_delimiter_length - column_start - 1,
+                                                 is_escape_column);
                         }
                         notGetLine = false;
                     } else {
                         if (UNLIKELY(_parse_options.trim_space)) {
                             const char* basePtr = _buff.base_ptr();
-                            if (is_escape_field) {
+                            if (is_escape_column) {
                                 basePtr = _escape_data.data();
                             }
                             std::pair<const char*, size_t> newPos =
-                                    trim(basePtr + field_start, field_end - _row_delimiter_length - field_start);
-                            _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                                    trim(basePtr + column_start, column_end - _row_delimiter_length - column_start);
+                            _columns.emplace_back(newPos.first - basePtr, newPos.second, is_escape_column);
                         } else {
-                            _fields.emplace_back(field_start, field_end - _row_delimiter_length - field_start,
-                                                 is_escape_field);
+                            _columns.emplace_back(column_start, column_end - _row_delimiter_length - column_start,
+                                                 is_escape_column);
                         }
                         notGetLine = false;
                     }
-                    field_start = std::string::npos;
+                    column_start = std::string::npos;
                     CSVRow newRow;
-                    newRow.fields = _fields;
+                    newRow.columns = _columns;
                     newRow.parsed_start = parsed_start;
                     newRow.parsed_end = parsed_end;
                     _csv_buff.push(newRow);
@@ -490,10 +490,10 @@ Status CSVReader::more_rows() {
             if (UNLIKELY(!status.ok())) {
                 return status;
             }
-            _fields.clear();
+            _columns.clear();
             curState = START;
-            is_escape_field = false;
-            is_enclose_field = false;
+            is_escape_column = false;
+            is_enclose_column = false;
             parsed_start = _buff.position_offset();
             if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
                 return Status::EndOfFile("Reached limit");
@@ -507,7 +507,7 @@ Status CSVReader::more_rows() {
 }
 
 Status CSVReader::next_record(CSVRow& row) {
-    row.fields.clear();
+    row.columns.clear();
     if (_csv_buff.empty()) {
         Status status = more_rows();
         if (!status.ok() && !status.is_end_of_file()) {
@@ -519,7 +519,7 @@ Status CSVReader::next_record(CSVRow& row) {
     }
     const CSVRow newRow = _csv_buff.front();
     _csv_buff.pop();
-    row.fields = newRow.fields;
+    row.columns = newRow.columns;
     row.parsed_start = newRow.parsed_start;
     row.parsed_end = newRow.parsed_end;
 
@@ -579,19 +579,19 @@ Status CSVReader::_expand_buffer_loosely() {
     return Status::OK();
 }
 
-void CSVReader::split_record(const Record& record, Fields* fields) const {
+void CSVReader::split_record(const Record& record, Fields* columns) const {
     const char* value = record.data;
     const char* ptr = record.data;
     const size_t size = record.size;
 
-    if (_field_delimiter_length == 1) {
+    if (_column_delimiter_length == 1) {
         for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _parse_options.field_delimiter[0]) {
+            if (*ptr == _parse_options.column_delimiter[0]) {
                 if (_parse_options.trim_space) {
                     std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    fields->emplace_back(newPos.first, newPos.second);
+                    columns->emplace_back(newPos.first, newPos.second);
                 } else {
-                    fields->emplace_back(value, ptr - value);
+                    columns->emplace_back(value, ptr - value);
                 }
                 value = ptr + 1;
             }
@@ -600,16 +600,16 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
         const auto* const base = ptr;
 
         do {
-            ptr = static_cast<char*>(memmem(value, size - (value - base), _parse_options.field_delimiter.data(),
-                                            _field_delimiter_length));
+            ptr = static_cast<char*>(memmem(value, size - (value - base), _parse_options.column_delimiter.data(),
+                                            _column_delimiter_length));
             if (ptr != nullptr) {
                 if (_parse_options.trim_space) {
                     std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    fields->emplace_back(newPos.first, newPos.second);
+                    columns->emplace_back(newPos.first, newPos.second);
                 } else {
-                    fields->emplace_back(value, ptr - value);
+                    columns->emplace_back(value, ptr - value);
                 }
-                value = ptr + _field_delimiter_length;
+                value = ptr + _column_delimiter_length;
             }
         } while (ptr != nullptr);
 
@@ -617,9 +617,9 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
     }
     if (_parse_options.trim_space) {
         std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-        fields->emplace_back(newPos.first, newPos.second);
+        columns->emplace_back(newPos.first, newPos.second);
     } else {
-        fields->emplace_back(value, ptr - value);
+        columns->emplace_back(value, ptr - value);
     }
 }
 

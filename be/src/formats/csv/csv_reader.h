@@ -92,34 +92,34 @@ private:
 enum ParseState {
     START = 0,
     ORDINARY = 1,
-    FIELD_DELIMITER = 2,
+    COLUMN_DELIMITER = 2,
     NEWROW = 3,
     ESCAPE = 4,
     ENCLOSE = 5,
     ENCLOSE_ESCAPE = 6
 };
 
-struct CSVField {
+struct CSVColumn {
     size_t start_pos;
     size_t length;
-    bool isEscapeField;
-    CSVField(size_t pos, size_t len, bool isEscape) : start_pos(pos), length(len), isEscapeField(isEscape) {}
+    bool is_escaped_column;
+    CSVColumn(size_t pos, size_t len, bool isEscape) : start_pos(pos), length(len), is_escaped_column(isEscape) {}
 };
 
 struct CSVRow {
-    std::vector<CSVField> fields;
+    std::vector<CSVColumn> columns;
     size_t parsed_start;
     size_t parsed_end;
 
     std::string debug_string(const char* buffBasePtr, const char* escapeDataPtr) {
         std::stringstream ss;
-        for (int i = 0; i < fields.size(); i++) {
-            auto& field = fields[i];
-            const char* basePtr = field.isEscapeField ? escapeDataPtr : buffBasePtr;
-            if (i != fields.size() - 1) {
-                ss << std::string(basePtr + field.start_pos, field.length) << "|";
+        for (int i = 0; i < columns.size(); i++) {
+            auto& column = columns[i];
+            const char* basePtr = column.is_escaped_column ? escapeDataPtr : buffBasePtr;
+            if (i != columns.size() - 1) {
+                ss << std::string(basePtr + column.start_pos, column.length) << "|";
             } else {
-                ss << std::string(basePtr + field.start_pos, field.length) << std::endl;
+                ss << std::string(basePtr + column.start_pos, column.length) << std::endl;
             }
         }
         return ss.str();
@@ -128,15 +128,15 @@ struct CSVRow {
 
 struct CSVParseOptions {
     std::string row_delimiter;
-    std::string field_delimiter;
+    std::string column_delimiter;
     int64_t skip_header;
     bool trim_space;
     char escape;
     char enclose;
-    CSVParseOptions(const std::string row_delimiter_, const std::string field_delimiter_, int64_t skip_header_ = 0,
+    CSVParseOptions(const std::string row_delimiter_, const std::string column_delimiter_, int64_t skip_header_ = 0,
                     bool trim_space_ = false, char escape_ = 0, char enclose_ = 0) {
         row_delimiter = row_delimiter_;
-        field_delimiter = field_delimiter_;
+        column_delimiter = column_delimiter_;
         skip_header = skip_header_;
         trim_space = trim_space_;
         escape = escape_;
@@ -144,7 +144,7 @@ struct CSVParseOptions {
     }
     CSVParseOptions() {
         row_delimiter = '\n';
-        field_delimiter = ',';
+        column_delimiter = ',';
         skip_header = false;
         trim_space = false;
         escape = 0;
@@ -169,7 +169,7 @@ public:
     CSVReader(const CSVParseOptions& parse_options, const size_t bufferSize = kMinBufferSize)
             : _parse_options(parse_options), _storage(bufferSize), _buff(_storage.data(), _storage.size()) {
         _row_delimiter_length = parse_options.row_delimiter.size();
-        _field_delimiter_length = parse_options.field_delimiter.size();
+        _column_delimiter_length = parse_options.column_delimiter.size();
     }
 
     virtual ~CSVReader() = default;
@@ -186,7 +186,7 @@ public:
 
     bool is_row_delimiter(bool expandBuffer);
 
-    bool is_field_delimiter(bool expandBuffer);
+    bool is_column_delimiter(bool expandBuffer);
 
     Status readMore(bool expandBuffer);
 
@@ -202,14 +202,14 @@ public:
 protected:
     CSVParseOptions _parse_options;
     size_t _row_delimiter_length;
-    size_t _field_delimiter_length;
+    size_t _column_delimiter_length;
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
     std::queue<CSVRow> _csv_buff;
     std::unordered_set<size_t> _escape_pos;
-    std::vector<CSVField> _fields;
+    std::vector<CSVColumn> _columns;
 
 private:
     Status _expand_buffer();

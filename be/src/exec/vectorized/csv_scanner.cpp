@@ -67,9 +67,9 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
                        ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {
     if (scan_range.params.__isset.multi_column_separator) {
-        _parse_options.field_delimiter = scan_range.params.multi_column_separator;
+        _parse_options.column_delimiter = scan_range.params.multi_column_separator;
     } else {
-        _parse_options.field_delimiter = scan_range.params.column_separator;
+        _parse_options.column_delimiter = scan_range.params.column_separator;
     }
     if (scan_range.params.__isset.multi_row_delimiter) {
         _parse_options.row_delimiter = scan_range.params.multi_row_delimiter;
@@ -261,7 +261,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
         }
 
         // skip empty row
-        if (row.fields.size() == 0) {
+        if (row.columns.size() == 0) {
             if (status.is_end_of_file()) {
                 break;
             }
@@ -270,14 +270,14 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
         CSVReader::Record record(data, row.parsed_end - row.parsed_start);
-        if (row.fields.size() != _num_fields_in_csv) {
+        if (row.columns.size() != _num_fields_in_csv) {
             if (status.is_end_of_file()) {
                 break;
             }
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
-                          << "Expect " << _num_fields_in_csv << ", but got " << row.fields.size();
+                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size();
 
                 _report_error(record.to_string(), error_msg.str());
             }
@@ -297,15 +297,15 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             if (slot == nullptr) {
                 continue;
             }
-            const CSVField& field = row.fields[j];
+            const CSVColumn& column = row.columns[j];
             char* basePtr = nullptr;
-            if (field.isEscapeField) {
+            if (column.is_escaped_column) {
                 basePtr = _curr_reader->escapeDataPtr();
             } else {
                 basePtr = _curr_reader->buffBasePtr();
             }
 
-            const Slice data(basePtr + field.start_pos, field.length);
+            const Slice data(basePtr + column.start_pos, column.length);
             options.type_desc = &(slot->type());
             if (!_converters[k]->read_string(_column_raw_ptrs[k], data, options)) {
                 chunk->set_num_rows(num_rows);
