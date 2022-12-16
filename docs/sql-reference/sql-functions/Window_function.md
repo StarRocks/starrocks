@@ -447,7 +447,7 @@ from mail_merge;
 
 Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
 
-Data types that can be queried by `lead()` are the same as those supported by [lag](#lag).
+Data types that can be queried by `lead()` are the same as those supported by [lag()](#lag).
 
 Syntax：
 
@@ -668,7 +668,7 @@ from int_t;
 +---+---+------+
 ~~~
 
-### QUALIFY
+### QUALIFY()
 
 The QUALIFY clause filters the results of window functions. In a SELECT statement, you can use the QUALIFY clause to apply conditions to a column to filter results. QUALIFY is analogous to the HAVING clause in aggregate functions.
 
@@ -790,7 +790,7 @@ ORDER BY city_id;
 +---------+--------+-------+
 ~~~
 
-Usage notes:
+**Usage notes:**
 
 The execution order of clauses in a query with QUALIFY is evaluated in the following order:
 

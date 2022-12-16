@@ -40,6 +40,7 @@ MySQL > select bitmap_to_string(bitmap_empty());
 +----------------------------------+
 |                                  |
 +----------------------------------+
+```
 
 Example 3: Convert a bitmap that contains one bit into a string.
 
@@ -61,5 +62,4 @@ MySQL > select bitmap_to_string(bitmap_or(to_bitmap(1), to_bitmap(2)));
 +---------------------------------------------------------+
 | 1,2                                                     |
 +---------------------------------------------------------+
-
 ```
