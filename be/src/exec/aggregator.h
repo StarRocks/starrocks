@@ -30,6 +30,7 @@
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/aggregator_allocator.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
@@ -42,71 +43,8 @@
 
 namespace starrocks {
 
-struct HashTableKeyAllocator;
-
-struct RawHashTableIterator {
-    RawHashTableIterator(HashTableKeyAllocator* alloc_, size_t x_, int y_) : alloc(alloc_), x(x_), y(y_) {}
-    bool operator==(const RawHashTableIterator& other) { return x == other.x && y == other.y; }
-    bool operator!=(const RawHashTableIterator& other) { return !this->operator==(other); }
-    inline void next();
-    // return alloc[x]->states[y]
-    inline uint8_t* value();
-    HashTableKeyAllocator* alloc;
-    size_t x;
-    int y;
-};
-
-struct HashTableKeyAllocator {
-    // number of states allocated consecutively in a single alloc
-    static auto constexpr alloc_batch_size = 1024;
-    // memory aligned when allocate
-    static size_t constexpr aligned = 16;
-
-    int aggregate_key_size = 0;
-    std::vector<std::pair<void*, int>> vecs;
-    MemPool* pool = nullptr;
-
-    RawHashTableIterator begin() { return {this, 0, 0}; }
-
-    RawHashTableIterator end() { return {this, vecs.size(), 0}; }
-
-    AggDataPtr allocate() {
-        if (vecs.empty() || vecs.back().second == alloc_batch_size) {
-            uint8_t* mem = pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned);
-            vecs.emplace_back(mem, 0);
-        }
-        return static_cast<AggDataPtr>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
-    }
-
-    uint8_t* allocate_null_key_data() { return pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned); }
-
-    void reset() { vecs.clear(); }
-};
-
-inline void RawHashTableIterator::next() {
-    y++;
-    if (y == alloc->vecs[x].second) {
-        y = 0;
-        x++;
-    }
-}
-
-inline uint8_t* RawHashTableIterator::value() {
-    return static_cast<uint8_t*>(alloc->vecs[x].first) + alloc->aggregate_key_size * y;
-}
-
 class Aggregator;
 class SortedStreamingAggregator;
-
-template <class HashMapWithKey>
-struct AllocateState {
-    AllocateState(Aggregator* aggregator_) : aggregator(aggregator_) {}
-    inline AggDataPtr operator()(const typename HashMapWithKey::KeyType& key);
-    inline AggDataPtr operator()(std::nullptr_t);
-
-private:
-    Aggregator* aggregator;
-};
 
 struct AggFunctionTypes {
     TypeDescriptor result_type;
@@ -287,6 +225,17 @@ public:
 protected:
     AggregatorParamsPtr _params;
 
+    // Aggregate allocate state func which will allocate key and value at the same time.
+    template <class HashMapWithKey>
+    struct AllocateState {
+        AllocateState(Aggregator* aggregator_) : aggregator(aggregator_) {}
+        inline AggDataPtr operator()(const typename HashMapWithKey::KeyType& key);
+        inline AggDataPtr operator()(std::nullptr_t);
+
+    private:
+        Aggregator* aggregator;
+    };
+
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
@@ -436,36 +385,16 @@ protected:
     void _reset_exprs();
     Status _evaluate_exprs(Chunk* chunk);
 
+    Status _prepare_agg_fn_types(RuntimeState* state, size_t agg_size, bool has_outer_join_child);
+
+    void _init_state_allocator(size_t key_type_size);
+
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     void _release_agg_memory();
-
-    template <class HashMapWithKey>
-    friend struct AllocateState;
 };
-
-template <class HashMapWithKey>
-inline AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
-    AggDataPtr agg_state = aggregator->_state_allocator.allocate();
-    *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
-    for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
-        aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
-                                              agg_state + aggregator->_agg_states_offsets[i]);
-    }
-    return agg_state;
-}
-
-template <class HashMapWithKey>
-inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
-    AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
-    for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
-        aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
-                                              agg_state + aggregator->_agg_states_offsets[i]);
-    }
-    return agg_state;
-}
 
 template <class T>
 class AggregatorFactoryBase {

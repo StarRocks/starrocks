@@ -63,6 +63,27 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     return params;
 }
 
+template <class HashMapWithKey>
+inline AggDataPtr Aggregator::AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate();
+    *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
+    for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
+        aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                              agg_state + aggregator->_agg_states_offsets[i]);
+    }
+    return agg_state;
+}
+
+template <class HashMapWithKey>
+inline AggDataPtr Aggregator::AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
+    for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
+        aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                              agg_state + aggregator->_agg_states_offsets[i]);
+    }
+    return agg_state;
+}
+
 Aggregator::Aggregator(AggregatorParamsPtr&& params) : _params(std::move(params)) {}
 
 Status Aggregator::open(RuntimeState* state) {
@@ -94,9 +115,17 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(promise_st->get_future().get());
     }
 
+    // For SQL: select distinct id from table or select id from from table group by id;
+    // we don't need to allocate memory for agg states.
+    if (_is_only_group_by_columns) {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
+    } else {
+        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
+    }
+
     // AggregateFunction::create needs to call create in JNI,
     // but prepare is executed in bthread, which will cause the JNI code to crash
-
+    DCHECK_LT(0, _agg_states_total_size);
     if (_group_by_expr_ctxs.empty()) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
@@ -116,14 +145,6 @@ Status Aggregator::open(RuntimeState* state) {
         if (_agg_expr_ctxs.empty()) {
             return Status::InternalError("Invalid agg query plan");
         }
-    }
-
-    // For SQL: select distinct id from table or select id from from table group by id;
-    // we don't need to allocate memory for agg states.
-    if (_is_only_group_by_columns) {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_set_variant));
-    } else {
-        TRY_CATCH_BAD_ALLOC(_init_agg_hash_variant(_hash_map_variant));
     }
 
     RETURN_IF_ERROR(check_has_error());
@@ -275,29 +296,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     _mem_pool = std::make_unique<MemPool>();
 
-    _agg_states_total_size = 16;
-    // compute agg state total size and offsets
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _agg_states_offsets[i] = _agg_states_total_size;
-        _agg_states_total_size += _agg_functions[i]->size();
-        _max_agg_state_align_size = std::max(_max_agg_state_align_size, _agg_functions[i]->alignof_size());
-
-        // If not the last aggregate_state, we need pad it so that next aggregate_state will be aligned.
-        if (i + 1 < _agg_fn_ctxs.size()) {
-            size_t next_state_align_size = _agg_functions[i + 1]->alignof_size();
-            // Extend total_size to next alignment requirement
-            // Add padding by rounding up '_agg_states_total_size' to be a multiplier of next_state_align_size.
-            _agg_states_total_size = (_agg_states_total_size + next_state_align_size - 1) / next_state_align_size *
-                                     next_state_align_size;
-        }
-    }
-    // we need to allocate contiguous memory, so we need some alignment operations
-    _max_agg_state_align_size = std::max(_max_agg_state_align_size, HashTableKeyAllocator::aligned);
-    _agg_states_total_size = (_agg_states_total_size + _max_agg_state_align_size - 1) / _max_agg_state_align_size *
-                             _max_agg_state_align_size;
-    _state_allocator.aggregate_key_size = _agg_states_total_size;
-    _state_allocator.pool = _mem_pool.get();
-
     _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
 
     _agg_stat = _pool->add(new AggStatistics(_runtime_profile));
@@ -334,6 +332,41 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     }
 
     return Status::OK();
+}
+
+void Aggregator::_init_state_allocator(size_t key_type_size) {
+    //  use hashtable key size as align
+    _agg_states_total_size = key_type_size;
+    if (_agg_fn_ctxs.size() > 0) {
+        size_t next_state_align_size = _agg_functions[0]->alignof_size();
+        _max_agg_state_align_size = std::max(_max_agg_state_align_size, key_type_size);
+        // Extend total_size to next alignment requirement
+        // Add padding by rounding up '_agg_states_total_size' to be a multiplier of next_state_align_size.
+        _agg_states_total_size =
+                (_agg_states_total_size + next_state_align_size - 1) / next_state_align_size * next_state_align_size;
+    }
+
+    // compute agg state total size and offsets
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        _agg_states_offsets[i] = _agg_states_total_size;
+        _agg_states_total_size += _agg_functions[i]->size();
+        _max_agg_state_align_size = std::max(_max_agg_state_align_size, _agg_functions[i]->alignof_size());
+
+        // If not the last aggregate_state, we need pad it so that next aggregate_state will be aligned.
+        if (i + 1 < _agg_fn_ctxs.size()) {
+            size_t next_state_align_size = _agg_functions[i + 1]->alignof_size();
+            // Extend total_size to next alignment requirement
+            // Add padding by rounding up '_agg_states_total_size' to be a multiplier of next_state_align_size.
+            _agg_states_total_size = (_agg_states_total_size + next_state_align_size - 1) / next_state_align_size *
+                                     next_state_align_size;
+        }
+    }
+    // we need to allocate contiguous memory, so we need some alignment operations
+    _max_agg_state_align_size = std::max(_max_agg_state_align_size, HashTableKeyAllocator::aligned);
+    _agg_states_total_size = (_agg_states_total_size + _max_agg_state_align_size - 1) / _max_agg_state_align_size *
+                             _max_agg_state_align_size;
+    _state_allocator.aggregate_key_size = _agg_states_total_size;
+    _state_allocator.pool = _mem_pool.get();
 }
 
 Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
@@ -968,6 +1001,8 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             variant->fixed_byte_size = fixed_byte_size;
         }
     });
+
+    _init_state_allocator(hash_variant.key_type_size());
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {

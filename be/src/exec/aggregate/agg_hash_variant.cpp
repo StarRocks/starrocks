@@ -195,6 +195,12 @@ size_t AggHashMapVariant::size() const {
     });
 }
 
+size_t AggHashMapVariant::key_type_size() const {
+    return visit([](const auto& hash_map_with_key) {
+        return sizeof(typename decltype(hash_map_with_key->hash_map)::key_type);
+    });
+}
+
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
         return hash_map_with_key->hash_map.dump_bound() + pool->total_reserved_bytes();
@@ -255,6 +261,12 @@ size_t AggHashSetVariant::size() const {
             sz += hash_set_with_key->has_null_key ? 1 : 0;
         }
         return sz;
+    });
+}
+
+size_t AggHashSetVariant::key_type_size() const {
+    return visit([](const auto& hash_set_with_key) {
+        return sizeof(typename decltype(hash_set_with_key->hash_set)::key_type);
     });
 }
 

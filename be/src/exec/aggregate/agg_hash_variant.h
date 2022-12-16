@@ -477,6 +477,7 @@ struct AggHashMapVariant {
 
     size_t capacity() const;
     size_t size() const;
+    size_t key_type_size() const;
     size_t reserved_memory_usage(const MemPool* pool) const;
     size_t allocated_memory_usage(const MemPool* pool) const;
 
@@ -573,6 +574,8 @@ struct AggHashSetVariant {
     size_t capacity() const;
 
     size_t size() const;
+
+    size_t key_type_size() const;
 
     size_t reserved_memory_usage(const MemPool* pool) const;
 
