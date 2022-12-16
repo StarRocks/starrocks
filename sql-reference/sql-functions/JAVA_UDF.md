@@ -494,7 +494,13 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 
 ## 删除 UDF
 
-执行`DROP FUNCTION`，删除函数。更多信息，请参见[DROP FUNCTION](../sql-reference/sql-statements/data-definition/drop-function.md)。
+运行以下命令删除指定的 UDF。
+
+```sql
+DROP FUNCTION function_name(arg_type [, ...]);
+```
+
+更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/drop-function.md)。
 
 ## 类型映射关系
 
