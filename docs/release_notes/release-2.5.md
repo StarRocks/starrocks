@@ -1,6 +1,6 @@
 # StarRocks version 2.5
 
-## 2.5.0
+## 2.5.0 RC
 
 Release date: December 15, 2022
 
