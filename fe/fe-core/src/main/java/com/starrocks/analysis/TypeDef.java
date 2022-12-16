@@ -22,12 +22,14 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 
 import java.util.List;
 
@@ -79,6 +81,17 @@ public class TypeDef implements ParseNode {
         isAnalyzed = true;
     }
 
+    public void analyze(boolean isOlap) throws AnalysisException {
+        if (isOlap && (!FeConstants.runningUnitTest)) {
+            // we haven't support create table with map or struct type column in native table
+            Type innerType = Type.getInnermostType(parsedType);
+            if (innerType.isMapType() || innerType.isStructType()) {
+                throw new AnalysisException("Unsupported data type: " + parsedType.toSql());
+            }
+        }
+        analyze();
+    }
+
     private void analyze(Type type) throws AnalysisException {
         if (!type.isSupported()) {
             throw new AnalysisException("Unsupported data type: " + type.toSql());
@@ -89,6 +102,8 @@ public class TypeDef implements ParseNode {
             analyzeArrayType((ArrayType) type);
         } else if (type.isStructType()) {
             analyzeStructType((StructType) type);
+        } else if (type.isMapType()) {
+            analyzeMapType((MapType) type);
         } else {
             throw new AnalysisException("Unsupported data type: " + type.toSql());
         }
@@ -162,6 +177,13 @@ public class TypeDef implements ParseNode {
         for (StructField structField: structFields) {
             analyze(structField.getType());
         }
+    }
+
+    private void analyzeMapType(MapType type) throws AnalysisException {
+        Type keyType = type.getKeyType();
+        analyze(keyType);
+        Type valueType = type.getValueType();
+        analyze(valueType);
     }
 
     public Type getType() {
