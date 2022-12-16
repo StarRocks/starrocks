@@ -102,6 +102,10 @@ public:
         return Status::NotSupported("PageDecoder Not Support");
     }
 
+    virtual Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count, vectorized::Column* column) {
+        return Status::NotSupported("PageDecoder Not Support");
+    }
+
     // Return the number of elements in this page.
     virtual uint32_t count() const = 0;
 

@@ -218,7 +218,7 @@ Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
 template <LogicalType Type>
 void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
     _dict_decoder = down_cast<BinaryPlainPageDecoder<Type>*>(dict_decoder);
-    _max_value_legth = _dict_decoder->max_value_length();
+    _max_value_length = _dict_decoder->max_value_length();
 }
 
 template <LogicalType Type>
@@ -264,7 +264,50 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
         }
     }
 
-    CHECK(dst->append_strings_overflow(slices, _max_value_legth));
+    CHECK(dst->append_strings_overflow(slices, _max_value_length));
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count, vectorized::Column* column) {
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, count, column);
+    }
+    DCHECK(_parsed);
+    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
+    if (PREDICT_FALSE(*count == 0)) {
+        return Status::OK();
+    }
+    if (_vec_code_buf == nullptr) {
+        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+    }
+    _vec_code_buf->resize(0);
+    _vec_code_buf->reserve(*count);
+    size_t read_count = 0;
+    RETURN_IF_ERROR(_data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, &read_count, _vec_code_buf.get()));
+    DCHECK_EQ(_vec_code_buf->size(), read_count);
+
+    if (PREDICT_FALSE(read_count == 0)) {
+        *count = 0;
+        return Status::OK();
+    }
+    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    std::vector<Slice> slices;
+    slices.reserve(read_count);
+    if constexpr (Type == TYPE_CHAR) {
+        for (size_t i = 0;i < read_count;i++) {
+            Slice element = _dict_decoder->string_at_index(codewords[i]);
+            element.size = strnlen(element.data, element.size);
+            slices.emplace_back(element);
+        }
+    } else {
+        for (size_t i = 0;i < read_count;i ++) {
+            slices.emplace_back(_dict_decoder->string_at_index(codewords[i]));
+        }
+    }
+    *count = read_count;
+    CHECK(column->append_strings_overflow(slices, _max_value_length));
     return Status::OK();
 }
 
