@@ -29,8 +29,7 @@ public:
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     void _output_chunk_from_hash_set(ChunkPtr* chunk);

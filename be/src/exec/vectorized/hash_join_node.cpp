@@ -446,12 +446,14 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-            TPartitionType::type part_type =
-                    down_cast<SourceOperatorFactory*>(rhs_operators[0].get())->partition_type();
-
+            auto* rhs_source_op = context->source_operator(rhs_operators);
+            TPartitionType::type part_type = rhs_source_op->partition_type();
             // Make sure that local shuffle use the same hash function as the remote exchange sink do
             if (context->could_local_shuffle(rhs_operators)) {
-                if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+                if (!rhs_source_op->partition_exprs().empty()) {
+                    rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
+                            runtime_state(), rhs_operators, rhs_source_op->partition_exprs(), part_type);
+                } else if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_build_equivalence_partition_expr_ctxs.empty());
                     rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
                             runtime_state(), rhs_operators, _build_equivalence_partition_expr_ctxs, part_type);
@@ -460,8 +462,14 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                                       _build_expr_ctxs, part_type);
                 }
             }
+
+            auto* lhs_source_op = context->source_operator(lhs_operators);
+            DCHECK_EQ(part_type, lhs_source_op->partition_type());
             if (context->could_local_shuffle(lhs_operators)) {
-                if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+                if (!lhs_source_op->partition_exprs().empty()) {
+                    lhs_operators = context->maybe_interpolate_local_shuffle_exchange(
+                            runtime_state(), lhs_operators, lhs_source_op->partition_exprs(), part_type);
+                } else if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_probe_equivalence_partition_expr_ctxs.empty());
                     lhs_operators = context->maybe_interpolate_local_shuffle_exchange(
                             runtime_state(), lhs_operators, _probe_equivalence_partition_expr_ctxs, part_type);

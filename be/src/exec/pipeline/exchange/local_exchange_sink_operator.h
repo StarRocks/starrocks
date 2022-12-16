@@ -64,6 +64,9 @@ public:
         return std::make_shared<LocalExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence, _exchanger);
     }
 
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
 private:
     std::shared_ptr<LocalExchanger> _exchanger;
 };

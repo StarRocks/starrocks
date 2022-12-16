@@ -36,6 +36,9 @@ public:
                             LocalExchangeSourceOperatorFactory* source)
             : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {}
 
+    virtual Status prepare(RuntimeState* state) { return Status::OK(); }
+    virtual void close(RuntimeState* state) {}
+
     virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
     virtual void finish(RuntimeState* state) {
@@ -119,12 +122,16 @@ public:
                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                        const std::vector<ExprContext*>& _partition_expr_ctxs, size_t num_sinks);
 
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
     Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
 private:
     // Used for local shuffle exchanger.
     // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner.
     // TODO(lzh): limit the size of _partitioners, because it will cost too much memory when dop is high.
+    std::vector<ExprContext*> _partition_exprs;
     std::vector<Partitioner> _partitioners;
 };
 

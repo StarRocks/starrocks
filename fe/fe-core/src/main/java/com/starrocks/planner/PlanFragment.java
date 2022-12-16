@@ -635,4 +635,12 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public void setCacheParam(TCacheParam cacheParam) {
         this.cacheParam = cacheParam;
     }
+
+    public PlanNode getLeftMostLeafNode() {
+        PlanNode node = planRoot;
+        while (!node.getChildren().isEmpty()) {
+            node = node.getChild(0);
+        }
+        return node;
+    }
 }

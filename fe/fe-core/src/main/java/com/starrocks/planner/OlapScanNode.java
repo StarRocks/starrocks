@@ -146,6 +146,8 @@ public class OlapScanNode extends ScanNode {
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
     public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
 
+    private List<Expr> partitionExprs = Lists.newArrayList();
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -193,6 +195,10 @@ public class OlapScanNode extends ScanNode {
 
     public long getActualRows() {
         return actualRows;
+    }
+
+    public void setPartitionExprs(List<Expr> partitionExprs) {
+        this.partitionExprs = partitionExprs;
     }
 
     // The column names applied dict optimization
@@ -627,6 +633,7 @@ public class OlapScanNode extends ScanNode {
                 keyColumnTypes.add(col.getPrimitiveType().toThrift());
             }
         }
+
         if (olapTable.isLakeTable()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
@@ -668,6 +675,11 @@ public class OlapScanNode extends ScanNode {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+
+            LOG.warn("[LocalShuffle] OlapScanNode [partitionExprs.size={}]", partitionExprs.size());
+            if (!partitionExprs.isEmpty()) {
+                msg.olap_scan_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+            }
         }
     }
 
