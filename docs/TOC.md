@@ -28,9 +28,9 @@
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
-  + [Overview of data unloading](./unloading/Export.md)
-  + [Use Spark connector to read data from StarRocks](./unloading/Spark_connector.md)
-  + [Use Flink connector to read data from StarRocks](./unloading/Flink_connector.md)
+  + [Export data using brokers](./unloading/Export.md)
+  + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
+  + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
 + Query Data Sources
   + [Use catalogs to manage internal and external data](./data_source/Manage_data.md)
   + [External tables](./data_source/External_table.md)
