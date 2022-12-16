@@ -647,13 +647,16 @@ public class PlanFragmentBuilder {
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
-            List<ColumnRefOperator> partitionColumns = getPartitionColumns(node.getDistributionSpec());
-            List<Expr> usedPartitionExprs  = partitionColumns.stream()
-                    .filter(c -> node.getColRefToColumnMetaMap().containsKey(c))
-                    .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                    .collect(Collectors.toList());
-            scanNode.setPartitionExprs(usedPartitionExprs);
+            boolean isExecuteInOneTablet = node.getSelectedTabletId().size() <= 1;
+            if (!isExecuteInOneTablet) {
+                List<ColumnRefOperator> partitionColumns = getPartitionColumns(node.getDistributionSpec());
+                List<Expr> usedPartitionExprs  = partitionColumns.stream()
+                        .filter(c -> node.getColRefToColumnMetaMap().containsKey(c))
+                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        .collect(Collectors.toList());
+                scanNode.setPartitionExprs(usedPartitionExprs);
+            }
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
