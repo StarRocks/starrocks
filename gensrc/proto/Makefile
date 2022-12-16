@@ -37,7 +37,11 @@
 
 BUILD_DIR = ${CURDIR}/../build/
 
-PROTOC = ${STARROCKS_THIRDPARTY}/installed/bin/protoc
+ifneq ("$(wildcard ${STARROCKS_THIRDPARTY}/installed/bin/protoc)","")
+	PROTOC = ${STARROCKS_THIRDPARTY}/installed/bin/protoc
+else
+	PROTOC = protoc
+endif
 
 SOURCES = $(shell find ${CURDIR} -name "*.proto")
 OBJECTS = $(patsubst ${CURDIR}/%.proto, ${BUILD_DIR}/gen_cpp/%.pb.cc, ${SOURCES})
