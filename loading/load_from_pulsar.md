@@ -1,8 +1,8 @@
-# 从 Apache® Pulsar™ 持续导入
+# 【公测中】从 Apache® Pulsar™ 持续导入
 
 自 StarRocks 2.5 版本，Routine Load 支持持续消费 Apache® Pulsar™ 的消息并导入至 StarRocks 中。Pulsar 是一个分布式消息队列系统，采用存储计算分离架构。
 
-通过 Routine Load 将数据从 Pulsar 导入，与从 Apache Kafka 导入类似。本文以 CSV 格式的数据文件为例介绍如何通过 Routine Load  从 Pulsar 持续导入数据 。
+通过 Routine Load 将数据从 Pulsar 导入，与从 Apache Kafka 导入类似。本文以 CSV 格式的数据文件为例介绍如何通过 Routine Load  从 Pulsar 持续导入数据。
 
 ## 支持的数据文件格式
 
@@ -12,30 +12,29 @@ Routine Load 目前支持从 Pulsar 集群中消费 CSV、JSON 格式的数据�
 >
 > 对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 
-## Pulsar 专有概念
+## Pulsar 相关概念
 
-相较于其他消息队列系统， Pulsar 包含一些专有概念：
+**[Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#topics)**
 
-> **说明**
->
-> Pulsar 官网文档对其专有概念的说明，请参见 [Pulsar](https://pulsar.apache.org/docs/2.10.x/)。
+Topic 负责存储和发布消息。Producer 往 Topic 中写消息，Consumer 从 Topic 中读消息。Pulsar 的 Topic 分为 Partitioned Topic 和 Non-Partitioned Topic 两类。<br>
 
-- **[Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#topics)**
-  - Topic 负责存储和发布消息。Producer 往 Topic 中写消息，Consumer 从 Topic 中读消息。Pulsar 的 Topic 分为 Partitioned Topic 和 Non-Partitioned Topic 两类。
+- [Partitioned Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#partitioned-topics)：通过多个 Broker 提供服务，可以支持更高的吞吐量。Pulsar 通过多个 Internal Topic 来实现 Partitioned Topic。
+- Non-Partitioned Topic：只会有单个 Broker 提供服务，限制了 Topic 的吞吐量。
 
-  - **[Partitioned Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#partitioned-topics)**：通过多个 Broker 提供服务，可以支持更高的吞吐量。Pulsar 通过多个 Internal Topic 来实现 Partitioned Topic。
-  - **Non-Partitioned Topic**：只会有单个 Broker 提供服务，限制了 Topic 的吞吐量。
-- **[Message ID](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#messages)**
-  - Message ID 表示消息 ID ，在集群维度是唯一的，类似于 Kafka 的 Offset。Consumer 可以通过 seek 特定的 Message ID 移动消费进度。但是相比于 Kafka 的 Offset 为长整型数值，Pulsar 的 Message ID 由四部分构成:  `ledgerId:entryID:partition-index:batch-index`。
+**[Message ID](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#messages)**
 
-  - 因此，您无法直接通过消息就能得到 Message ID**。**因此，**目前 Routine Load 从 Pulsar 持续导入数据时暂不支持****自定义起始 Position，****仅支持从 Partition 开头或者结尾开始消费**。
-- **[Subscription](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#subscriptions)**
-  - 订阅是命名好的配置规则，指导消息如何投递给 Consumer，支持如下四种类型：
+ Message ID 表示消息 ID ，在集群维度是唯一的，类似于 Kafka 的 Offset。Consumer 可以通过 seek 特定的 Message ID 移动消费进度。但是相比于 Kafka 的 Offset 为长整型数值，Pulsar 的 Message ID 由四部分构成:  `ledgerId:entryID:partition-index:batch-index`.
 
-  - `exclusive` (默认)：一个 Subscription 只能与一个 Consumer 关联，只有这个 Consumer 可以接收到 Topic 的全部消息。
-  - `shared`：多个 Consumer 可以关联同一个 Subscription，消息按照 round-robin 的方式分发到 Consumer 上。
-  - `failover`：多个 Consumer 可以关联同一个 Subscription，其中部分 Consumer 会被作为 Master Consumer。 对于 Non-Partitioned Topic， 一个 Topic 会选出一个 Master Consumer。对于 Partitioned Topic，一个 Partition 会选出一个 Master Consumer。Master Consumer 负责消费消息。
-  - `key_shared`：多个 Consumer 可以关联同一个 Subscription，相同 Key 的消息会被分发到同一个 Consumer。
+ 因此，您无法直接通过消息就能得到 Message ID**。**所以目前暂不支持自定义起始 Position，仅支持从 Partition 开头或者结尾开始消费**。
+
+**[Subscription](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#subscriptions)**
+
+订阅是命名好的配置规则，指导消息如何投递给 Consumer，支持如下四种类型：
+
+- `exclusive` (默认)：一个 Subscription 只能与一个 Consumer 关联，只有这个 Consumer 可以接收到 Topic 的全部消息。
+- `shared`：多个 Consumer 可以关联同一个 Subscription，消息按照 round-robin 的方式分发到 Consumer 上。
+- `failover`：多个 Consumer 可以关联同一个 Subscription，其中部分 Consumer 会被作为 Master Consumer。 对于 Non-Partitioned Topic， 一个 Topic 会选出一个 Master Consumer。对于 Partitioned Topic，一个 Partition 会选出一个 Master Consumer。Master Consumer 负责消费消息。
+- `key_shared`：多个 Consumer 可以关联同一个 Subscription，相同 Key 的消息会被分发到同一个 Consumer。
 
 > **注意**
 >
