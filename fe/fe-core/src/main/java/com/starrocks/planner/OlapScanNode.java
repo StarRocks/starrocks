@@ -676,7 +676,6 @@ public class OlapScanNode extends ScanNode {
             }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
 
-            LOG.warn("[LocalShuffle] OlapScanNode [partitionExprs.size={}]", partitionExprs.size());
             if (!partitionExprs.isEmpty()) {
                 msg.olap_scan_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
             }
