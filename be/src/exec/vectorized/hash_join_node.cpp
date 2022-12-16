@@ -453,7 +453,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                       ? _build_equivalence_partition_expr_ctxs
                                                       : _build_expr_ctxs;
             rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), rhs_operators,
-                                                                              rhs_partition_exprs, part_type);
+                                                                              rhs_partition_exprs);
 
             auto* lhs_source_op = context->source_operator(lhs_operators);
             DCHECK_EQ(part_type, lhs_source_op->partition_type());
@@ -461,7 +461,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                       ? _probe_equivalence_partition_expr_ctxs
                                                       : _probe_expr_ctxs;
             lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), lhs_operators,
-                                                                              lhs_partition_exprs, part_type);
+                                                                              lhs_partition_exprs);
         }
     }
 
