@@ -451,6 +451,7 @@
       + [array_cum_sum](/sql-reference/sql-functions/array-functions/array_cum_sum.md)
       + [array_to_bitmap](/sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
+      + [unnest](/sql-reference/sql-functions/array-functions/unnest.md)
     + bit函数
       + [bitand](/sql-reference/sql-functions/bit-functions/bitand.md)
       + [bitnot](/sql-reference/sql-functions/bit-functions/bitnot.md)
