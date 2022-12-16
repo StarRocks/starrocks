@@ -34,7 +34,8 @@ FROM tests, UNNEST(scores) AS t ;
 ## 使用举例
 
 当前版本 StarRocks 支持 Bitmap、String、Array、Column 之间的转化关系如下：
-![Lateral Join 中一些类型间的转化](../assets/lateral_join_type_convertion.png)
+
+![Lateral Join 中一些类型间的转化](../assets/lateral_join_type_conversion.png)
 
 配合Unnest，我们可以实现以下功能：
 
