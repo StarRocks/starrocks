@@ -95,6 +95,39 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
+        RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& v1_partition_expr_ctxs,
+        const TPartitionType::type v1_part_type) {
+    auto* source_op = source_operator(pred_operators);
+    if (!source_op->could_local_shuffle()) {
+        return pred_operators;
+    }
+
+    if (!source_op->partition_exprs().empty()) {
+        return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, source_op->partition_exprs(),
+                                                            source_op->partition_type());
+    }
+
+    return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, v1_partition_expr_ctxs, v1_part_type);
+}
+
+OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
+        RuntimeState* state, OpFactories& pred_operators, const PartitionExprsGenerator& v1_partition_exprs_generator,
+        const TPartitionType::type v1_part_type) {
+    auto* source_op = source_operator(pred_operators);
+    if (!source_op->could_local_shuffle()) {
+        return pred_operators;
+    }
+
+    if (!source_op->partition_exprs().empty()) {
+        return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, source_op->partition_exprs(),
+                                                            source_op->partition_type());
+    }
+
+    return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, v1_partition_exprs_generator(),
+                                                        v1_part_type);
+}
+
+OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange(
         RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
         const TPartitionType::type part_type) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());

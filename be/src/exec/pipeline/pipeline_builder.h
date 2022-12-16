@@ -50,8 +50,13 @@ public:
     // the input chunks to build multiple partition HTs, and the probe HT operator can also partition the input chunks
     // and probe on multiple partition HTs in parallel.
     OpFactories maybe_interpolate_local_shuffle_exchange(
-            RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
-            const TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED);
+            RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& v1_partition_expr_ctxs,
+            const TPartitionType::type v1_part_type = TPartitionType::type::HASH_PARTITIONED);
+    using PartitionExprsGenerator = std::function<std::vector<ExprContext*>()>;
+    OpFactories maybe_interpolate_local_shuffle_exchange(
+            RuntimeState* state, OpFactories& pred_operators,
+            const PartitionExprsGenerator& v1e_partition_exprs_generator,
+            const TPartitionType::type v1_part_type = TPartitionType::type::HASH_PARTITIONED);
 
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.
@@ -91,6 +96,10 @@ public:
     static int localExchangeBufferChunks() { return kLocalExchangeBufferChunks; }
 
 private:
+    OpFactories _do_maybe_interpolate_local_shuffle_exchange(
+            RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs,
+            const TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED);
+
     static constexpr int kLocalExchangeBufferChunks = 8;
 
     FragmentContext* _fragment_context;
