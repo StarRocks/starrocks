@@ -133,17 +133,17 @@ Status CSVReader::readMore(bool expandBuffer) {
 
 #define DOUBLE_CHECK_AVAILABLE()                \
     if (_buff.available() < 1 && !notGetLine) { \
-        curState = NEWROW;                     \
+        curState = NEWROW;                      \
         reachBuffEnd = true;                    \
-        goto newrow_label;                     \
+        goto newrow_label;                      \
     }
 
 #define READ_MORE()                        \
     if (UNLIKELY(_buff.available() < 1)) { \
         status = readMore(notGetLine);     \
         if (!status.ok()) {                \
-            curState = NEWROW;            \
-            goto newrow_label;            \
+            curState = NEWROW;             \
+            goto newrow_label;             \
         }                                  \
         DOUBLE_CHECK_AVAILABLE()           \
     }
@@ -152,9 +152,9 @@ Status CSVReader::readMore(bool expandBuffer) {
     if (UNLIKELY(_buff.available() < 1)) { \
         status = readMore(notGetLine);     \
         if (!status.ok()) {                \
-            is_enclose_column = true;       \
-            curState = NEWROW;            \
-            goto newrow_label;            \
+            is_enclose_column = true;      \
+            curState = NEWROW;             \
+            goto newrow_label;             \
         }                                  \
         DOUBLE_CHECK_AVAILABLE()           \
     }
@@ -388,7 +388,7 @@ Status CSVReader::more_rows() {
                 } else {
                     // Remove the last enclose character.
                     _columns.emplace_back(column_start, column_end - _column_delimiter_length - column_start - 1,
-                                         is_escape_column);
+                                          is_escape_column);
                 }
 
             } else {
@@ -402,7 +402,7 @@ Status CSVReader::more_rows() {
                     _columns.emplace_back(newPos.first - basePtr, newPos.second, is_escape_column);
                 } else {
                     _columns.emplace_back(column_start, column_end - _column_delimiter_length - column_start,
-                                         is_escape_column);
+                                          is_escape_column);
                 }
             }
             is_escape_column = false;
@@ -461,7 +461,7 @@ Status CSVReader::more_rows() {
                             _columns.emplace_back(newPos.first - basePtr, newPos.second, is_escape_column);
                         } else {
                             _columns.emplace_back(column_start, column_end - _row_delimiter_length - column_start - 1,
-                                                 is_escape_column);
+                                                  is_escape_column);
                         }
                         notGetLine = false;
                     } else {
@@ -475,7 +475,7 @@ Status CSVReader::more_rows() {
                             _columns.emplace_back(newPos.first - basePtr, newPos.second, is_escape_column);
                         } else {
                             _columns.emplace_back(column_start, column_end - _row_delimiter_length - column_start,
-                                                 is_escape_column);
+                                                  is_escape_column);
                         }
                         notGetLine = false;
                     }
