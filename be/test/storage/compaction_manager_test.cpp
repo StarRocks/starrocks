@@ -119,9 +119,6 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
-    bool ret = StorageEngine::instance()->compaction_manager()->register_task(
-            tasks[config::max_compaction_concurrency].get());
-    ASSERT_FALSE(ret);
 
     ASSERT_EQ(config::max_compaction_concurrency, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
