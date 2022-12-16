@@ -20,7 +20,7 @@ map_size(any_map)
 
 ## 返回值说明
 
-返回值 INT 类型的值。如果输入参数是 NULL，结果也是 NULL。
+返回 INT 类型的值。如果输入参数是 NULL，结果也是 NULL。
 
 如果 MAP 中的某个 key 或 value 是 NULL，该 NULL 值正常计算。
 

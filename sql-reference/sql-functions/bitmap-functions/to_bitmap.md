@@ -2,8 +2,9 @@
 
 ## 功能
 
-输入为取值在 0 ~ 18446744073709551615 区间的 unsigned bigint，输出为包含该元素的 bitmap
-该函数主要用于 stream load 任务将整型字段导入 StarRocks 表的 bitmap 字段，如下例:
+输入为取值在 0 ~ 18446744073709551615 区间的 unsigned bigint，输出为包含该元素的 bitmap。如果输入值不在该范围内，会返回 NULL。
+
+该函数主要用于 Stream Load 导入时将整型字段导入 StarRocks 表中的 bitmap 字段，如下例:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
@@ -28,10 +29,31 @@ TO_BITMAP(expr)
 ## 示例
 
 ```Plain Text
-MySQL > select bitmap_count(to_bitmap(10));
+select bitmap_count(to_bitmap(10));
 +-----------------------------+
 | bitmap_count(to_bitmap(10)) |
 +-----------------------------+
 |                           1 |
 +-----------------------------+
+
+select bitmap_to_string(to_bitmap(10));
++---------------------------------+
+| bitmap_to_string(to_bitmap(10)) |
++---------------------------------+
+| 10                              |
++---------------------------------+
+
+select bitmap_to_string(to_bitmap(-5));
++---------------------------------+
+| bitmap_to_string(to_bitmap(-5)) |
++---------------------------------+
+| NULL                            |
++---------------------------------+
+
+select bitmap_to_string(to_bitmap(null));
++-----------------------------------+
+| bitmap_to_string(to_bitmap(NULL)) |
++-----------------------------------+
+| NULL                              |
++-----------------------------------+
 ```
