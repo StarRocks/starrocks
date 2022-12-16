@@ -134,7 +134,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
     auto partition_type = context->source_operator(ops_with_sink)->partition_type();
 
-    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, &context](bool post_cache) {
+    auto operators_generator = [this, should_cache, &could_local_shuffle, &partition_type, &context](bool post_cache) {
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
@@ -166,13 +166,16 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
             down_cast<AggregateDistinctBlockingSinkOperatorFactory*>(agg_sink_op.get())->partition_by_exprs();
     ops_with_sink =
             context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, agg_partition_exprs);
-
     ops_with_sink.push_back(std::move(agg_sink_op));
 
     // Aggregator must be used by a pair of sink and source operators,
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     auto* upstream_source_op = context->source_operator(ops_with_sink);
+    could_local_shuffle = context->source_operator(ops_with_sink)->could_local_shuffle();
+    partition_type = context->source_operator(ops_with_sink)->partition_type();
     agg_source_op->set_degree_of_parallelism(upstream_source_op->degree_of_parallelism());
+    agg_source_op->set_could_local_shuffle(could_local_shuffle);
+    agg_source_op->set_partition_type(partition_type);
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
