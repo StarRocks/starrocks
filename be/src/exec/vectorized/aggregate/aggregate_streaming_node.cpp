@@ -221,7 +221,7 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
                                                                               degree_of_parallelism, true);
     }
 
-    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, &context](bool post_cache) {
+    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, context](bool post_cache) {
         // shared by sink operator factory and source operator factory
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         auto aggr_mode = should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;

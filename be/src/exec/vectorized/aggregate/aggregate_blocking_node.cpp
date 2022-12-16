@@ -179,7 +179,7 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
     auto partition_type = context->source_operator(ops_with_sink)->partition_type();
-    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, &context](bool post_cache) {
+    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, context](bool post_cache) {
         // shared by sink operator and source operator
         auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;

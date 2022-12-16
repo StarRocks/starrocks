@@ -183,7 +183,7 @@ pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::Pip
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
     auto partition_type = context->source_operator(ops_with_sink)->partition_type();
 
-    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, &context](bool post_cache) {
+    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, context](bool post_cache) {
         // shared by sink operator factory and source operator factory
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode =
