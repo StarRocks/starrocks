@@ -14,6 +14,7 @@
 
 #include "exprs/vectorized/binary_predicate.h"
 
+#include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
@@ -48,6 +49,33 @@ using EvalGt = std::greater<typename PredicateCmpType<ptype>::CmpType>;
 template <LogicalType ptype>
 using EvalGe = std::greater_equal<typename PredicateCmpType<ptype>::CmpType>;
 
+struct EvalCmp {
+    TExprOpcode::type op;
+
+    EvalCmp(TExprOpcode::type in_op) : op(in_op) {}
+
+    bool operator()(int cmp_value) {
+        switch (op) {
+        case TExprOpcode::EQ:
+            return cmp_value == 0;
+        case TExprOpcode::NE:
+            return cmp_value != 0;
+        case TExprOpcode::LE:
+            return cmp_value <= 0;
+        case TExprOpcode::LT:
+            return cmp_value < 0;
+        case TExprOpcode::GE:
+            return cmp_value >= 0;
+        case TExprOpcode::GT:
+            return cmp_value > 0;
+        case TExprOpcode::EQ_FOR_NULL:
+            return cmp_value == 0;
+        default:
+            CHECK(false) << "illegal operation: " << op;
+        }
+    }
+};
+
 // A wrapper for evaluator, to fit in the Expression framework
 template <typename CMP>
 struct BinaryPredFunc {
@@ -70,6 +98,35 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
+};
+
+class ArrayPredicate final : public Predicate {
+public:
+    explicit ArrayPredicate(const TExprNode& node) : Predicate(node), _comparator(node.opcode) {}
+    ~ArrayPredicate() override = default;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayPredicate(*this)); }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
+        auto lhs_arr = std::static_pointer_cast<ArrayColumn>(l);
+        auto rhs_arr = std::static_pointer_cast<ArrayColumn>(r);
+
+        ColumnBuilder<TYPE_BOOLEAN> builder(ptr->num_rows());
+        std::vector<int8_t> cmp_result;
+        lhs_arr->compare_column(*rhs_arr, &cmp_result);
+
+        // Convert the compare result (-1, 0, 1) to the predicate result (true/false)
+        for (int8_t cmp : cmp_result) {
+            bool pred_res = _comparator(cmp);
+            builder.append(pred_res);
+        }
+        return builder.build(ColumnHelper::is_all_const(ptr->columns()));
+    }
+
+private:
+    EvalCmp _comparator;
 };
 
 template <LogicalType Type, typename OP>
@@ -142,8 +199,11 @@ struct BinaryPredicateBuilder {
 
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     LogicalType type = thrift_to_type(node.child_type);
-
-    return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
+    if (type == TYPE_ARRAY) {
+        return new ArrayPredicate(node);
+    } else {
+        return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
+    }
 }
 
 } // namespace starrocks::vectorized
