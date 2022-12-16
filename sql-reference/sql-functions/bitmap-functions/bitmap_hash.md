@@ -2,8 +2,9 @@
 
 ## 功能
 
-对任意类型的输入计算 32 位的哈希值, 返回包含该哈希值的 bitmap
-主要用于 stream load 任务将非整型字段导入 StarRocks 表的 bitmap 字段, 如下例:
+对任意类型的输入计算 32 位的哈希值，返回包含该哈希值的 bitmap。
+
+主要用于 stream load 导入中将非整型字段导入到 StarRocks 表中的 bitmap 字段，如下例:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \
@@ -19,11 +20,11 @@ BITMAP_HASH(expr)
 
 ## 参数说明
 
-`expr`: 支持任意数据类型
+`expr`: 支持任意数据类型。
 
 ## 返回值说明
 
-返回值的数据类型为 BITMAP
+返回值的数据类型为 BITMAP。
 
 ## 示例
 
@@ -34,6 +35,13 @@ MySQL > select bitmap_count(bitmap_hash('hello'));
 +------------------------------------+
 |                                  1 |
 +------------------------------------+
+
+select bitmap_to_string(bitmap_hash('hello'));
++----------------------------------------+
+| bitmap_to_string(bitmap_hash('hello')) |
++----------------------------------------+
+| 1321743225                             |
++----------------------------------------+
 ```
 
 ## 关键词
