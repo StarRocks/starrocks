@@ -647,15 +647,16 @@ public class PlanFragmentBuilder {
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
-            boolean isExecuteInOneTablet = node.getSelectedTabletId().size() <= 1;
-            if (!isExecuteInOneTablet) {
-                List<ColumnRefOperator> partitionColumns = getPartitionColumns(node.getDistributionSpec());
-                List<Expr> usedPartitionExprs  = partitionColumns.stream()
-                        .filter(c -> node.getColRefToColumnMetaMap().containsKey(c))
+            List<ColumnRefOperator> partitionColumns = getPartitionColumns(node.getDistributionSpec());
+            boolean useAllPartColumns =
+                    partitionColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
+            if (useAllPartColumns) {
+                List<Expr> partitionExprs = partitionColumns.stream()
                         .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
-                scanNode.setPartitionExprs(usedPartitionExprs);
+                scanNode.setPartitionExprs(partitionExprs);
+                scanNode.setPartitionColumns(partitionColumns);
             }
 
             context.getScanNodes().add(scanNode);
@@ -1316,14 +1317,6 @@ public class PlanFragmentBuilder {
                 return inputFragment;
             }
 
-            PlanNode leafNode = sourceFragment.getLeftMostLeafNode();
-            if (leafNode instanceof OlapScanNode) {
-                // The partitions of OnePhaseLocalAgg in ScanNode->LocalShuffle->OnePhaseLocalAgg
-                // are not the same as that of OlapScanNode, so the partitions of OlapScanNode shouldn't pass to BE.
-                OlapScanNode olapScanNode = (OlapScanNode) leafNode;
-                olapScanNode.setPartitionExprs(Lists.newArrayList());
-            }
-
             // Traverse fragment in reverse to delete inputFragment,
             // because the last fragment is inputFragment for the most cases.
             ArrayList<PlanFragment> fragments = context.getFragments();
@@ -1335,6 +1328,23 @@ public class PlanFragmentBuilder {
             }
 
             return sourceFragment;
+        }
+
+        private void maybeClearOlapScanNodePartitions(PlanFragment fragment, PhysicalHashAggregateOperator aggOp) {
+            PlanNode leafNode = fragment.getLeftMostLeafNode();
+            if (!(leafNode instanceof OlapScanNode)) {
+                return;
+            }
+
+            OlapScanNode olapScanNode = (OlapScanNode) leafNode;
+            Set<ColumnRefOperator> requiredPartColumns = new HashSet<>(aggOp.getPartitionByColumns());
+            boolean satisfy = requiredPartColumns.containsAll(olapScanNode.getPartitionColumns());
+            if (satisfy) {
+                return;
+            }
+
+            olapScanNode.setPartitionExprs(Lists.newArrayList());
+            olapScanNode.setPartitionColumns(Lists.newArrayList());
         }
 
         private static class AggregateExprInfo {
@@ -1435,6 +1445,8 @@ public class PlanFragmentBuilder {
 
             PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
             boolean withLocalShuffle = inputFragment != originalInputFragment;
+
+            maybeClearOlapScanNodePartitions(inputFragment, node);
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
@@ -2510,7 +2522,6 @@ public class PlanFragmentBuilder {
             public final List<Expr> otherJoin;
             public final List<Expr> conjuncts;
 
-
             public JoinExprInfo(List<Expr> eqJoinConjuncts, List<Expr> otherJoin, List<Expr> conjuncts) {
                 this.eqJoinConjuncts = eqJoinConjuncts;
                 this.otherJoin = otherJoin;
@@ -2565,7 +2576,6 @@ public class PlanFragmentBuilder {
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
-
 
             return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
         }

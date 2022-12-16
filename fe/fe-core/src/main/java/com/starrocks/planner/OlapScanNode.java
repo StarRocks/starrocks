@@ -75,6 +75,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
@@ -147,6 +148,7 @@ public class OlapScanNode extends ScanNode {
     public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
 
     private List<Expr> partitionExprs = Lists.newArrayList();
+    private List<ColumnRefOperator> partitionColumns = Lists.newArrayList();
 
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -195,6 +197,14 @@ public class OlapScanNode extends ScanNode {
 
     public long getActualRows() {
         return actualRows;
+    }
+
+    public List<ColumnRefOperator> getPartitionColumns() {
+        return partitionColumns;
+    }
+
+    public void setPartitionColumns(List<ColumnRefOperator> partitionColumns) {
+        this.partitionColumns = partitionColumns;
     }
 
     public void setPartitionExprs(List<Expr> partitionExprs) {
