@@ -37,6 +37,5 @@ using StreamChunk = vectorized::StreamChunk;
 using StreamChunkPtr = vectorized::StreamChunkPtr;
 using StreamChunkConverter = vectorized::StreamChunkConverter;
 using StreamRowOp = vectorized::StreamRowOp;
-using StreamRowOps = vectorized::StreamRowOps;
 
 } // namespace starrocks::stream

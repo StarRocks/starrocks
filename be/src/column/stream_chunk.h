@@ -19,13 +19,19 @@
 
 namespace starrocks::vectorized {
 
-using Int8ColumnPtr = std::shared_ptr<vectorized::Int8Column>;
-
-enum StreamRowOp : std::int8_t { INSERT = 0, DELETE = 1, UPDATE_BEFORE = 2, UPDATE_AFTER = 3 };
-using StreamRowOps = std::vector<StreamRowOp>;
+using Int8ColumnPtr = Int8Column::Ptr;
 
 using StreamChunk = Chunk;
 using StreamChunkPtr = std::shared_ptr<StreamChunk>;
+
+/**
+ * `StreamRowOp` represents a row's operation kind used in Incremental Materialized View.
+ * 
+ * `INSERT`: Add a new row.
+ * `DELETE`: Delete an existed row.
+ * `UPDATE_BEFORE`/`UPDATE_AFTER`: Represents previous and postvious detail of `UPDATE`.
+ */
+enum StreamRowOp : std::int8_t { INSERT = 0, DELETE = 1, UPDATE_BEFORE = 2, UPDATE_AFTER = 3 };
 
 /**
  * `StreamChunk` is used in Incremental MV which contains a hidden `ops` column, the `ops` column indicates
@@ -68,7 +74,7 @@ public:
 
     static Int8Column* ops_col(const StreamChunk& stream_chunk) {
         DCHECK(has_ops_column(stream_chunk));
-        auto extra_column_data = dynamic_cast<ChunkExtraColumnsData*>(stream_chunk.get_extra_data().get());
+        auto extra_column_data = down_cast<ChunkExtraColumnsData*>(stream_chunk.get_extra_data().get());
         DCHECK(extra_column_data);
         DCHECK_EQ(extra_column_data->columns().size(), 1);
         auto* op_col = ColumnHelper::as_raw_column<Int8Column>(extra_column_data->columns()[0]);
