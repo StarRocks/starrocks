@@ -93,7 +93,7 @@ enum ParseState {
     START = 0,
     ORDINARY = 1,
     FIELD_DELIMITER = 2,
-    NEWLINE = 3,
+    NEWROW = 3,
     ESCAPE = 4,
     ENCLOSE = 5,
     ENCLOSE_ESCAPE = 6
@@ -106,7 +106,7 @@ struct CSVField {
     CSVField(size_t pos, size_t len, bool isEscape) : start_pos(pos), length(len), isEscapeField(isEscape) {}
 };
 
-struct CSVLine {
+struct CSVRow {
     std::vector<CSVField> fields;
     size_t parsed_start;
     size_t parsed_end;
@@ -176,9 +176,9 @@ public:
 
     Status next_record(Record* record);
 
-    Status next_record(CSVLine& line);
+    Status next_record(CSVRow& row);
 
-    Status more_lines();
+    Status more_rows();
 
     void set_limit(size_t limit) { _limit = limit; }
 
@@ -207,7 +207,7 @@ protected:
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
-    std::queue<CSVLine> _csv_buff;
+    std::queue<CSVRow> _csv_buff;
     std::unordered_set<size_t> _escape_pos;
     std::vector<CSVField> _fields;
 

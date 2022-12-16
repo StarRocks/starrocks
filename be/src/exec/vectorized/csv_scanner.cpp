@@ -245,7 +245,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
-    CSVLine line;
+    CSVRow row;
 
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -255,29 +255,29 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
-        status = _curr_reader->next_record(line);
+        status = _curr_reader->next_record(row);
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
 
-        // skip empty line
-        if (line.fields.size() == 0) {
+        // skip empty row
+        if (row.fields.size() == 0) {
             if (status.is_end_of_file()) {
                 break;
             }
             continue;
         }
 
-        const char* data = _curr_reader->buffBasePtr() + line.parsed_start;
-        CSVReader::Record record(data, line.parsed_end - line.parsed_start);
-        if (line.fields.size() != _num_fields_in_csv) {
+        const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
+        CSVReader::Record record(data, row.parsed_end - row.parsed_start);
+        if (row.fields.size() != _num_fields_in_csv) {
             if (status.is_end_of_file()) {
                 break;
             }
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
-                          << "Expect " << _num_fields_in_csv << ", but got " << line.fields.size();
+                          << "Expect " << _num_fields_in_csv << ", but got " << row.fields.size();
 
                 _report_error(record.to_string(), error_msg.str());
             }
@@ -297,7 +297,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             if (slot == nullptr) {
                 continue;
             }
-            const CSVField& field = line.fields[j];
+            const CSVField& field = row.fields[j];
             char* basePtr = nullptr;
             if (field.isEscapeField) {
                 basePtr = _curr_reader->escapeDataPtr();
@@ -350,7 +350,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         } else if (!status.ok()) {
             return status;
         } else if (record.empty()) {
-            // always skip blank lines.
+            // always skip blank rows.
             continue;
         }
 

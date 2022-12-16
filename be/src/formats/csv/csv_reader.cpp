@@ -133,17 +133,17 @@ Status CSVReader::readMore(bool expandBuffer) {
 
 #define DOUBLE_CHECK_AVAILABLE()                \
     if (_buff.available() < 1 && !notGetLine) { \
-        curState = NEWLINE;                     \
+        curState = NEWROW;                     \
         reachBuffEnd = true;                    \
-        goto newline_label;                     \
+        goto newrow_label;                     \
     }
 
 #define READ_MORE()                        \
     if (UNLIKELY(_buff.available() < 1)) { \
         status = readMore(notGetLine);     \
         if (!status.ok()) {                \
-            curState = NEWLINE;            \
-            goto newline_label;            \
+            curState = NEWROW;            \
+            goto newrow_label;            \
         }                                  \
         DOUBLE_CHECK_AVAILABLE()           \
     }
@@ -153,13 +153,13 @@ Status CSVReader::readMore(bool expandBuffer) {
         status = readMore(notGetLine);     \
         if (!status.ok()) {                \
             is_enclose_field = true;       \
-            curState = NEWLINE;            \
-            goto newline_label;            \
+            curState = NEWROW;            \
+            goto newrow_label;            \
         }                                  \
         DOUBLE_CHECK_AVAILABLE()           \
     }
 
-Status CSVReader::more_lines() {
+Status CSVReader::more_rows() {
     if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
         return Status::EndOfFile("Reached limit");
     }
@@ -172,7 +172,7 @@ Status CSVReader::more_lines() {
     _escape_pos.clear();
     ParseState curState = START;
     ParseState preState = curState;
-    // parsed_start and parsed_end record a line at the start and end of the buff.
+    // parsed_start and parsed_end record a row at the start and end of the buff.
     size_t parsed_start = _buff.position_offset();
     size_t parsed_end = 0;
     // If field_start is initialized to the maximum value, the START state is not entered.
@@ -185,7 +185,7 @@ Status CSVReader::more_lines() {
     _fields.clear();
     while (true) {
         // At the end of a row, or the end of a field, no new data is read.
-        if (LIKELY(curState != NEWLINE && curState != FIELD_DELIMITER)) {
+        if (LIKELY(curState != NEWROW && curState != FIELD_DELIMITER)) {
             READ_MORE()
         }
         // Advance to the next state each time based on the current state + the current character stream.
@@ -200,9 +200,9 @@ Status CSVReader::more_lines() {
             }
             field_start = _buff.position_offset();
 
-            // newline
+            // newrow
             if (UNLIKELY(is_row_delimiter(notGetLine))) {
-                curState = NEWLINE;
+                curState = NEWROW;
                 break;
             }
 
@@ -239,7 +239,7 @@ Status CSVReader::more_lines() {
                     // ""rowseperator
                     if (is_row_delimiter(notGetLine)) {
                         is_enclose_field = true;
-                        curState = NEWLINE;
+                        curState = NEWROW;
                         break;
                     }
 
@@ -264,7 +264,7 @@ Status CSVReader::more_lines() {
         // 1. trimspace is not enabled
         //    a. "some
         //    b. ""aaa, enclose is just used as an escape and you can't go into ENCLOSE state.
-        //    c. "", empty fields must be read next to field delimiters or newlines.
+        //    c. "", empty fields must be read next to field delimiters or newrows.
         // 2. trimspace is enabled
         //    Remove the leading space before judging.
         case ENCLOSE:
@@ -325,9 +325,9 @@ Status CSVReader::more_lines() {
             }
 
         case ORDINARY:
-            // newline
+            // newrow
             if (UNLIKELY(is_row_delimiter(notGetLine))) {
-                curState = NEWLINE;
+                curState = NEWROW;
                 break;
             }
 
@@ -410,18 +410,18 @@ Status CSVReader::more_lines() {
             is_enclose_field = false;
             break;
 
-        newline_label:
-        case NEWLINE:
+        newrow_label:
+        case NEWROW:
             if (reachBuffEnd) {
-                // We dot get the complete line, back the read pointer, continue next time.
+                // We dot get the complete row, back the read pointer, continue next time.
                 _buff.set_position_offset(parsed_start);
                 return Status::OK();
             }
             _parsed_bytes += _buff.position_offset() - parsed_start;
             parsed_end = _buff.position_offset();
-            // push line
+            // push row
             if (LIKELY(status.ok() || status.is_end_of_file())) {
-                // For empty line, skip it. And restart state machine.
+                // For empty row, skip it. And restart state machine.
                 if (UNLIKELY(_fields.size() == 0 &&
                              _buff.position_offset() - _row_delimiter_length - field_start == 0)) {
                     curState = START;
@@ -480,11 +480,11 @@ Status CSVReader::more_lines() {
                         notGetLine = false;
                     }
                     field_start = std::string::npos;
-                    CSVLine newLine;
-                    newLine.fields = _fields;
-                    newLine.parsed_start = parsed_start;
-                    newLine.parsed_end = parsed_end;
-                    _csv_buff.push(newLine);
+                    CSVRow newRow;
+                    newRow.fields = _fields;
+                    newRow.parsed_start = parsed_start;
+                    newRow.parsed_end = parsed_end;
+                    _csv_buff.push(newRow);
                 }
             }
             if (UNLIKELY(!status.ok())) {
@@ -506,10 +506,10 @@ Status CSVReader::more_lines() {
     }
 }
 
-Status CSVReader::next_record(CSVLine& line) {
-    line.fields.clear();
+Status CSVReader::next_record(CSVRow& row) {
+    row.fields.clear();
     if (_csv_buff.empty()) {
-        Status status = more_lines();
+        Status status = more_rows();
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
@@ -517,11 +517,11 @@ Status CSVReader::next_record(CSVLine& line) {
     if (UNLIKELY(_csv_buff.empty())) {
         return Status::EndOfFile("Reached limit");
     }
-    const CSVLine newLine = _csv_buff.front();
+    const CSVRow newRow = _csv_buff.front();
     _csv_buff.pop();
-    line.fields = newLine.fields;
-    line.parsed_start = newLine.parsed_start;
-    line.parsed_end = newLine.parsed_end;
+    row.fields = newRow.fields;
+    row.parsed_start = newRow.parsed_start;
+    row.parsed_end = newRow.parsed_end;
 
     return Status::OK();
 }

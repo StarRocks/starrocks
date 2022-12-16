@@ -101,7 +101,7 @@ public:
 
     Status init_buffer() { return _csv_reader->init_buff(); }
 
-    Status get_all_v1(int64_t& read_line_cnt) {
+    Status get_all_v1(int64_t& read_row_cnt) {
         CSVReader::Record record;
         Status st = Status::OK();
         CSVReader::Fields fields;
@@ -112,20 +112,20 @@ public:
             }
             fields.clear();
             _csv_reader->split_record(record, &fields);
-            read_line_cnt++;
+            read_row_cnt++;
         }
         return st;
     }
 
-    Status get_all_v2(int64_t& read_line_cnt) {
-        CSVLine line;
+    Status get_all_v2(int64_t& read_row_cnt) {
+        CSVRow row;
         Status st = Status::OK();
         while (true) {
-            st = _csv_reader->next_record(line);
+            st = _csv_reader->next_record(row);
             if (!st.ok()) {
                 break;
             }
-            read_line_cnt++;
+            read_row_cnt++;
         }
         return st;
     }
@@ -206,19 +206,19 @@ int main(int argc, char** argv) {
     }
     // Benchmark 2: Parsing
     std::string version = argv[2];
-    int64_t read_line_cnt = 0;
+    int64_t read_row_cnt = 0;
     start = std::chrono::system_clock::now();
     if (version == "v1") {
-        st = scanner->get_all_v1(read_line_cnt);
+        st = scanner->get_all_v1(read_row_cnt);
     } else {
-        st = scanner->get_all_v2(read_line_cnt);
+        st = scanner->get_all_v2(read_row_cnt);
     }
     if (!st.ok() && !st.is_end_of_file()) {
         std::cout << "Scanner get all error. status: " << st.to_string();
     } else {
         auto end = std::chrono::system_clock::now();
         std::chrono::duration<double> diff = end - start;
-        std::cout << "Have read " << read_line_cnt << " records" << std::endl;
+        std::cout << "Have read " << read_row_cnt << " records" << std::endl;
         std::cout << "Parsing: " << diff.count() << std::endl;
     }
 }
