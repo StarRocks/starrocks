@@ -1330,7 +1330,7 @@ public class PlanFragmentBuilder {
             return sourceFragment;
         }
 
-        private void maybeClearOlapScanNodePartitions(PlanFragment fragment, PhysicalHashAggregateOperator aggOp) {
+        private void clearOlapScanNodePartitionsIfNotSatisfy(PlanFragment fragment, PhysicalHashAggregateOperator aggOp) {
             PlanNode leafNode = fragment.getLeftMostLeafNode();
             if (!(leafNode instanceof OlapScanNode)) {
                 return;
@@ -1446,7 +1446,7 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
             boolean withLocalShuffle = inputFragment != originalInputFragment;
 
-            maybeClearOlapScanNodePartitions(inputFragment, node);
+            clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
