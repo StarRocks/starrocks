@@ -179,9 +179,6 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
     const TTypeNode& curr_type_node = types[depth];
     switch (curr_type_node.type) {
     case TTypeNodeType::SCALAR: {
-        if (depth + 1 != types.size()) {
-            return Status::InvalidArgument("scalar type cannot have child node");
-        }
         TScalarType scalar = curr_type_node.scalar_type;
 
         LogicalType field_type = t_primitive_type_to_field_type(scalar.type, v);
@@ -210,7 +207,12 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
     case TTypeNodeType::STRUCT:
         return Status::NotSupported("struct not supported yet");
     case TTypeNodeType::MAP:
-        return Status::NotSupported("map not supported yet");
+        column_pb->set_type(logical_type_to_string(TYPE_MAP));
+        column_pb->set_length(TabletColumn::get_field_length_by_type(TYPE_MAP, sizeof(Collection)));
+        column_pb->set_index_length(column_pb->length());
+        RETURN_IF_ERROR(
+                t_column_to_pb_column(kFakeUniqueId, t_column, v, column_pb->add_children_columns(), depth + 1));
+        return t_column_to_pb_column(kFakeUniqueId, t_column, v, column_pb->add_children_columns(), depth + 2);
     }
     return Status::InternalError("Unreachable path");
 }
