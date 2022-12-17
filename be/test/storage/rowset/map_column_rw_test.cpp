@@ -37,7 +37,7 @@ static const std::string TEST_DIR = "/map_column_rw_test";
 
 class MapColumnRWTest : public testing::Test {
 public:
-    MapColumnRWTest() {}
+    MapColumnRWTest() = default;
 
     ~MapColumnRWTest() override = default;
 
