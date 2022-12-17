@@ -51,6 +51,7 @@
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/map_column_writer.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_builder.h"
@@ -267,6 +268,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         switch (column->type()) {
         case LogicalType::TYPE_ARRAY:
             return create_array_column_writer(opts, std::move(type_info), column, wfile);
+        case LogicalType::TYPE_MAP:
+            return create_map_column_writer(opts, std::move(type_info), column, wfile);
         default:
             return Status::NotSupported("unsupported type for ColumnWriter: " + std::to_string(type_info->type()));
         }
