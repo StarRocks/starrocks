@@ -21,7 +21,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
-import com.starrocks.sql.optimizer.operator.physical.stream.IMTInfo;
+import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -41,7 +41,7 @@ public class StreamAggNode extends PlanNode {
     private IMTInfo aggImt;
 
     public StreamAggNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo) {
-        super(id, aggInfo.getOutputTupleId().asList(), "STREAM_AGG");
+        super(id, aggInfo.getOutputTupleId().asList(), "StreamAgg");
         this.aggInfo = aggInfo;
         this.children.add(input);
     }

@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.sql.optimizer.operator.physical.stream;
+package com.starrocks.sql.optimizer.operator.stream;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.operator.OperatorType;

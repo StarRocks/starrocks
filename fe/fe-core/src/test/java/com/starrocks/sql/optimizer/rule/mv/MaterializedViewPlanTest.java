@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.sql.analyzer;
+package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -52,19 +52,17 @@ public class MaterializedViewPlanTest extends PlanTestBase {
 
         Pair<CreateMaterializedViewStatement, ExecPlan> pair = UtFrameUtils.planMVMaintenance(connectContext, sql);
         String plan = UtFrameUtils.printPlan(pair.second);
-        Assert.assertEquals("- Output => [1:v1, 7:count]\n" +
+        Assert.assertEquals(plan, "- Output => [1:v1, 7:count]\n" +
                 "    - StreamAgg[1:v1]\n" +
-                "            Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 1.0}\n" +
+                "            Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
                 "            7:count := count()\n" +
                 "        - StreamJoin/INNER JOIN [1:v1 = 4:v4] => [1:v1]\n" +
-                "                Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 1.0}\n" +
-                "            - SCAN [t0] => [1:v1]\n" +
-                "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.5}\n" +
-                "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
+                "                Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
+                "            - StreamScan [t0] => [1:v1]\n" +
+                "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
                 "                    predicate: 1:v1 IS NOT NULL\n" +
-                "            - SCAN [t1] => [4:v4]\n" +
-                "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.5}\n" +
-                "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
-                "                    predicate: 4:v4 IS NOT NULL\n", plan);
+                "            - StreamScan [t1] => [4:v4]\n" +
+                "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
+                "                    predicate: 4:v4 IS NOT NULL\n");
     }
 }
