@@ -202,7 +202,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     if (node.__isset.child_type_desc) {
         type = TypeDescriptor::from_thrift(node.child_type_desc).type;
     } else {
-        type = TypeDescriptor::from_thrift(node.type).type;
+        type = thrift_to_type(node.child_type);
     }
 
     if (type == TYPE_ARRAY) {
