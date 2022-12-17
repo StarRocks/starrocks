@@ -116,6 +116,7 @@ public enum OperatorType {
     LAMBDA_ARGUMENT,
     SUBQUERY,
     SUBFIELD,
+    MULTI_IN,
 
     /**
      * PATTERN

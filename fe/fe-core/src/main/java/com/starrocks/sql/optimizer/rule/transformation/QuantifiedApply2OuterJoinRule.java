@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -95,6 +96,11 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
         List<ScalarOperator> joinOnPredicate = Utils.extractConjuncts(apply.getCorrelationConjuncts());
+
+        if (apply.getSubqueryOperator() instanceof MultiInPredicateOperator) {
+            throw new SemanticException("Multi-column IN subquery not supported anywhere except conjuncts of the" +
+                    " WHERE clause");
+        }
 
         // IN/NOT IN
         InPredicateOperator inPredicate = (InPredicateOperator) apply.getSubqueryOperator();

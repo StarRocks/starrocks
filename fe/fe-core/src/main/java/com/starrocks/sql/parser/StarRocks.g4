@@ -1672,6 +1672,11 @@ booleanExpression
 
 predicate
     : valueExpression (predicateOperations[$valueExpression.ctx])?
+    | tupleInSubquery
+    ;
+
+tupleInSubquery
+    : '(' (expression (',' expression)*)? ')' NOT? IN '(' queryRelation ')'
     ;
 
 predicateOperations [ParserRuleContext value]

@@ -1161,6 +1161,7 @@ public class PlanTestBase {
         StringBuilder fragmentStatistics = new StringBuilder();
         StringBuilder dumpInfoString = new StringBuilder();
         StringBuilder planEnumerate = new StringBuilder();
+        StringBuilder exceptString = new StringBuilder();
 
         boolean isDebug = debug;
         boolean isComment = false;
@@ -1249,9 +1250,21 @@ public class PlanTestBase {
                         mode = "dump";
                         isDump = true;
                         continue;
+                    case "[except]":
+                        exceptString = new StringBuilder();
+                        mode = "except";
+                        continue;
                     case "[end]":
-                        Pair<String, ExecPlan> pair =
-                                UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        Pair<String, ExecPlan> pair = null;
+                        try {
+                            pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        } catch (Exception ex) {
+                            if (!exceptString.toString().isEmpty()) {
+                                Assert.assertEquals(ex.getMessage(), exceptString.toString());
+                                continue;
+                            }
+                            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+                        }
 
                         try {
                             String fra = null;
@@ -1323,6 +1336,9 @@ public class PlanTestBase {
                         break;
                     case "enum":
                         planEnumerate.append(tempStr).append("\n");
+                        break;
+                    case "except":
+                        exceptString.append(tempStr);
                         break;
                 }
             }

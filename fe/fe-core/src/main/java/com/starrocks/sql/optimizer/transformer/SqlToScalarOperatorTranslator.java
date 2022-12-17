@@ -38,6 +38,7 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -85,6 +86,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
@@ -528,6 +530,58 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn());
         }
 
+        private LogicalPlan getSubqueryPlan(QueryStatement queryStatement) {
+            QueryRelation relation = queryStatement.getQueryRelation();
+            LogicalPlan subqueryPlan = SubqueryUtils.getLogicalPlan(session, cteContext, columnRefFactory,
+                    relation, builder.getExpressionMapping());
+
+            if (relation instanceof SelectRelation &&
+                    !subqueryPlan.getCorrelation().isEmpty() && ((SelectRelation) relation).hasAggregation()) {
+                throw new SemanticException(
+                        "Unsupported correlated in predicate subquery with grouping or aggregation");
+            }
+            return subqueryPlan;
+        }
+
+        @Override
+        public ScalarOperator visitMultiInPredicate(MultiInPredicate node, Context context) throws SemanticException {
+            if (!(node.getChild(node.getTupleSize()) instanceof Subquery)) {
+                throw new SemanticException("multi-column IN predicate is only supported for subquery expressions");
+
+            }
+            QueryStatement queryStatement = ((Subquery) node.getChild(node.getTupleSize())).getQueryStatement();
+            LogicalPlan subqueryPlan = getSubqueryPlan(queryStatement);
+            List<ColumnRefOperator> leftCorrelationColumns = Lists.newArrayList();
+            List<ScalarOperator> leftExprs = Lists.newArrayList();
+            for (int i = 0; i < node.getTupleSize(); ++i) {
+                ScalarOperator leftColRef = SqlToScalarOperatorTranslator.translate(node.getChild(i),
+                        builder.getExpressionMapping(), leftCorrelationColumns, columnRefFactory);
+                if (leftCorrelationColumns.size() > 0) {
+                    throw new SemanticException("Unsupported complex nested in-subquery");
+                }
+                leftExprs.add(leftColRef);
+            }
+            List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
+            if (rightColRefs.size() != leftExprs.size()) {
+                throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
+            }
+            ScalarOperator inPredicateOperator = new MultiInPredicateOperator(node.isNotIn(), leftExprs, rightColRefs);
+            ColumnRefOperator outputPredicateRef = columnRefFactory.create(inPredicateOperator,
+                    inPredicateOperator.getType(), inPredicateOperator.isNullable());
+            ((Subquery) node.getChild(node.getTupleSize())).setUseSemiAnti(context.useSemiAnti);
+
+            LogicalApplyOperator applyOperator = LogicalApplyOperator.builder().setOutput(outputPredicateRef)
+                    .setSubqueryOperator(inPredicateOperator)
+                    .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
+                    .setUseSemiAnti(context.useSemiAnti).build();
+
+            SubqueryOperator subqueryOperator = new SubqueryOperator(rightColRefs.get(0).getType(), queryStatement,
+                    applyOperator, subqueryPlan.getRootBuilder());
+
+            subqueryPlaceholders.put(outputPredicateRef, subqueryOperator);
+            return outputPredicateRef;
+        }
+
         @Override
         public ScalarOperator visitInPredicate(InPredicate node, Context context)
                 throws SemanticException {
@@ -539,14 +593,7 @@ public final class SqlToScalarOperatorTranslator {
             }
 
             QueryStatement queryStatement = ((Subquery) node.getChild(1)).getQueryStatement();
-            QueryRelation relation = queryStatement.getQueryRelation();
-            LogicalPlan subqueryPlan = SubqueryUtils.getLogicalPlan(session, cteContext, columnRefFactory,
-                    relation, builder.getExpressionMapping());
-            if (relation instanceof SelectRelation &&
-                    !subqueryPlan.getCorrelation().isEmpty() && ((SelectRelation) relation).hasAggregation()) {
-                throw new SemanticException(
-                        "Unsupported correlated in predicate subquery with grouping or aggregation");
-            }
+            LogicalPlan subqueryPlan = getSubqueryPlan(queryStatement);
 
             List<ColumnRefOperator> leftCorrelationColumns = Lists.newArrayList();
             ScalarOperator leftColRef = SqlToScalarOperatorTranslator.translate(node.getChild(0),

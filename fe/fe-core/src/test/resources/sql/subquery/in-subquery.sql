@@ -886,3 +886,101 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [19: cast = 20: abs AND add(cast(9: t1
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[null])
 [end]
 
+[sql]
+select t0.v1 from t0 where (v1, v2) IN (select t1.v4, t1.v5 from t1)
+[result]
+LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE SHUFFLE[4]
+        SCAN (columns[4: v4, 5: v5] predicate[4: v4 IS NOT NULL AND 5: v5 IS NOT NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where (v1, v2) NOT IN (select t1.v4, t1.v5 from t1)
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v4, 5: v5] predicate[null])
+[end]
+
+[sql]
+select * from t0 where (v1, v2) IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10)
+[result]
+LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v6] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 > 10])
+    EXCHANGE SHUFFLE[4]
+        SCAN (columns[4: v4, 5: v5, 6: v6] predicate[5: v5 > 10])
+[end]
+
+[sql]
+select * from t0 where (v1, v2) NOT IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10)
+[result]
+NULL AWARE LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v6] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v4, 5: v5, 6: v6] predicate[5: v5 > 10])
+[end]
+
+[sql]
+select * from t0 where (v1, v2) IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10) AND v3 > 10
+[result]
+LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v6] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 > 10 AND 3: v3 > 10])
+    EXCHANGE SHUFFLE[4]
+        SCAN (columns[4: v4, 5: v5, 6: v6] predicate[5: v5 > 10 AND 6: v6 > 10])
+[end]
+
+[sql]
+select * from t0 where (v1, v2) IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10) OR v3 > 10
+[except]
+Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause
+[end]
+
+[sql]
+select (v1, v2) IN (select t1.v4, t1.v5 from t1) from t0
+[except]
+Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause
+[end]
+
+[sql]
+select * from t0 where (v1, v2) NOT IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10) OR v3 > 10
+[except]
+Multi-column IN subquery not supported anywhere except conjuncts of the WHERE clause
+[end]
+
+[sql]
+select * from test_all_type where (t1e, t1f) IN (select v4, v5 from t1)
+[result]
+LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 6: t1f = 17: cast] post-join-predicate [null])
+    SCAN (columns[1: t1a, 2: t1b, 3: t1c, 4: t1d, 5: t1e, 6: t1f, 7: t1g, 8: id_datetime, 9: id_date, 10: id_decimal] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[11: v4, 12: v5] predicate[cast(11: v4 as double) IS NOT NULL AND cast(12: v5 as double) IS NOT NULL])
+[end]
+
+[sql]
+select * from tarray where (v1, v3) IN (select v4, v5 from t1)
+[except]
+HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate
+[end]
+
+[sql]
+select t0.v1 from t0 where (v1 + 10, v2 + v2) IN (select t1.v4 + t1.v5, t1.v5 from t1)
+[result]
+LEFT SEMI JOIN (join-predicate [9: add = 7: expr AND 10: add = 5: v5] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[4: v4, 5: v5] predicate[add(4: v4, 5: v5) IS NOT NULL AND 5: v5 IS NOT NULL])
+[end]
+
+[sql]
+select t0.v1 from t0 where (v1, v2) IN (select t1.v4, t1.v5, t1.v5 from t1)
+[except]
+subquery must return the same number of columns as provided by the IN predicate
+[end]
+
+[sql]
+select 1 from t0 where (v1, v2) IN (select v_int, v_json from tjson)
+[except]
+InPredicate of JSON is not supported
+[end]
