@@ -25,7 +25,11 @@ Status BinlogManager::create_and_init(Tablet& tablet, std::shared_ptr<BinlogMana
             std::make_shared<BinlogManager>(tablet.schema_hash_path(), config::binlog_file_max_size,
                                             config::binlog_page_max_size, tablet.tablet_schema().compression_type());
     Status st = (*binlog_manager)->init(tablet);
-    LOG_IF(WARNING, !st.ok()) << "Failed to init binlog for tablet " << tablet.full_name() << " : " << st;
+    if (st.ok()) {
+        LOG(INFO) << "Create and init binlog for tablet " << tablet.full_name();
+    } else {
+        LOG(WARNING) << "Failed to init binlog for tablet " << tablet.full_name() << ", " << st;
+    }
     return st;
 }
 
@@ -40,6 +44,7 @@ BinlogManager::~BinlogManager() {
     std::lock_guard lock(_write_lock);
     if (_active_binlog_writer != nullptr) {
         _active_binlog_writer->close();
+        _active_binlog_writer.reset();
     }
 }
 
@@ -53,30 +58,26 @@ Status BinlogManager::init(Tablet& tablet) {
 Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
     // TODO will block publish RPC
     std::lock_guard lock(_write_lock);
-    if (!_binlog_file_metas.empty()) {
-        BinlogFileMetaPBSharedPtr file_meta = _binlog_file_metas.rbegin()->second;
-        if (file_meta->end_version() >= rowset->start_version()) {
-            LOG(INFO) << "Skip to generate binlog for rowset " << rowset->rowset_id() << ", version "
-                      << rowset->start_version() << ", binlog max version " << file_meta->end_version()
-                      << ". This maybe happen if versions are published out of order or retried.";
-            return Status::OK();
+    {
+        std::shared_lock meta_lock(_meta_lock);
+        if (!_binlog_file_metas.empty()) {
+            BinlogFileMetaPBSharedPtr file_meta = _binlog_file_metas.rbegin()->second;
+            if (file_meta->end_version() >= rowset->start_version()) {
+                LOG(INFO) << "Skip to add rowset to binlog because it's a smaller version."
+                          << " rowset id" << rowset->rowset_id() << ", rowset version " << rowset->start_version()
+                          << ", binlog current max version " << file_meta->end_version()
+                          << ". This maybe happen if versions are published out of order or retried.";
+                return Status::OK();
+            }
         }
     }
 
-    std::vector<std::shared_ptr<BinlogFileWriter>> pending_writers;
+    // The open writer is not full
+    std::vector<std::shared_ptr<BinlogFileWriter>> pending_commit_writers;
     std::shared_ptr<BinlogFileWriter> current_writer;
     if (_active_binlog_writer != nullptr && _active_binlog_writer->committed_file_size() < _max_file_size) {
         current_writer = _active_binlog_writer;
-        pending_writers.emplace_back(current_writer);
-    } else if (_active_binlog_writer != nullptr) {
-        Status status = _active_binlog_writer->close();
-        // close failure does not affect new binlog, so ignore it
-        if (!status.ok()) {
-            LOG(WARNING) << "Fail to close file writer when inserting new rowset " << rowset->rowset_id()
-                         << ", version " << rowset->version() << ", binlog file id " << _active_binlog_writer->file_id()
-                         << ", binlog file name " << _active_binlog_writer->file_name() << ", " << status;
-        }
-        _active_binlog_writer.reset();
+        pending_commit_writers.emplace_back(current_writer);
     }
 
     int64_t next_file_id = _binlog_file_metas.empty() ? 0 : _binlog_file_metas.rbegin()->second->id() + 1;
@@ -109,7 +110,7 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
             }
             int64_t next_seq_id = current_writer == nullptr ? 0 : current_writer->pending_end_seq_id() + 1;
             current_writer = status_or.value();
-            pending_writers.emplace_back(current_writer);
+            pending_commit_writers.emplace_back(current_writer);
             next_file_id += 1;
             status = current_writer->prepare(rowset->start_version(), rowset->rowset_id(), next_seq_id,
                                              rowset->creation_time() * 1000000);
@@ -148,14 +149,14 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
         }
     }
 
-    int committed_writer_index = pending_writers.size();
+    int committed_writer_index = pending_commit_writers.size();
     if (status.ok()) {
         bool last_writer = true;
         // commit writers backward, so that we can abort the first writer rather than
         // rollback it if it is shared with the previous version, and other writers
         // commit failed
-        for (int i = pending_writers.size() - 1; i >= 0; i--) {
-            std::shared_ptr<BinlogFileWriter> writer = pending_writers[i];
+        for (int i = pending_commit_writers.size() - 1; i >= 0; i--) {
+            std::shared_ptr<BinlogFileWriter> writer = pending_commit_writers[i];
             status = writer->commit(last_writer);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to commit binlog writer " << writer->file_name() << ", rowset "
@@ -169,10 +170,10 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
         // update file metas if all writers commit successfully
         if (committed_writer_index == 0) {
             std::vector<BinlogFileMetaPBSharedPtr> new_file_metas;
-            for (int i = 0; i < pending_writers.size(); i++) {
-                std::shared_ptr<BinlogFileWriter> writer = pending_writers[i];
+            for (int i = 0; i < pending_commit_writers.size(); i++) {
+                std::shared_ptr<BinlogFileWriter> writer = pending_commit_writers[i];
                 // close writers except the last one
-                if (i < pending_writers.size() - 1) {
+                if (i < pending_commit_writers.size() - 1) {
                     // just ignore close failure because data has been committed
                     writer->close();
                 }
@@ -181,15 +182,16 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
                 new_file_metas.emplace_back(file_meta);
             }
             _update_metas_after_commit(rowset, new_file_metas);
-            for (int i = 0; i < pending_writers.size() - 1; i++) {
-                Status st = pending_writers[i]->close();
+            for (int i = 0; i < pending_commit_writers.size() - 1; i++) {
+                Status st = pending_commit_writers[i]->close();
                 if (!st.ok()) {
                     // just ignore close failure because data has been committed
-                    LOG(WARNING) << "Fail to close binlog writer after committed " << pending_writers[i]->file_name();
+                    LOG(WARNING) << "Fail to close binlog writer after committed "
+                                 << pending_commit_writers[i]->file_name();
                 }
             }
             // reuse last writer
-            _active_binlog_writer = pending_writers.back();
+            _active_binlog_writer = pending_commit_writers.back();
             // finish all of work
             return Status::OK();
         }
@@ -198,8 +200,8 @@ Status BinlogManager::add_insert_rowset(RowsetSharedPtr rowset) {
     // abort the pending writer, and delete useless files
     bool reuse_first_writer = _active_binlog_writer != nullptr;
     std::vector<std::string> files_to_delete;
-    for (int i = 0; i < pending_writers.size(); i++) {
-        std::shared_ptr<BinlogFileWriter> writer = pending_writers[i];
+    for (int i = 0; i < pending_commit_writers.size(); i++) {
+        std::shared_ptr<BinlogFileWriter> writer = pending_commit_writers[i];
         if (i < committed_writer_index) {
             Status st = writer->abort();
             if (!st.ok()) {

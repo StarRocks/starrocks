@@ -101,10 +101,10 @@ public:
 
     void delete_expired_binlog();
 
-    std::shared_ptr<BinlogReader> create_reader(vectorized::VectorizedSchema& schema, int chunk_size) {
+    std::shared_ptr<BinlogReader> create_reader(BinlogReaderParams& reader_params) {
         std::shared_lock lock(_meta_lock);
         int64_t reader_id = _next_reader_id++;
-        return std::make_shared<BinlogReader>(reader_id, shared_from_this(), schema, chunk_size);
+        return std::make_shared<BinlogReader>(shared_from_this(), reader_id, reader_params);
     }
 
     // Find the meta of binlog file which may contain a given <version, seq_id>.
@@ -114,6 +114,11 @@ public:
     RowsetSharedPtr get_rowset(const RowsetId& rowset_id) {
         std::shared_lock lock(_meta_lock);
         return _rowsets.find(rowset_id)->second;
+    }
+
+    int32_t num_binlog_files() {
+        std::shared_lock lock(_meta_lock);
+        return _binlog_file_metas.size();
     }
 
     std::string binlog_file_name(int32_t file_id) { return BinlogFileWriter::binlog_file_path(_path, file_id); }

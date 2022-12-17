@@ -189,6 +189,7 @@ void BinlogFileReader::_advance_log_entry() {
     log_entry_info->num_rows = num_rows;
     log_entry_info->end_of_version = _current_page_context->page_header.end_of_version() &&
                                      (next_log_entry_index == page_context->page_header.num_log_entries() - 1);
+    log_entry_info->timestamp_in_us = _current_page_context->page_header.timestamp_in_us();
     page_context->next_log_entry_index += 1;
 }
 

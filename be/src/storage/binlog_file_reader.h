@@ -25,6 +25,7 @@ struct LogEntryInfo {
     LogEntryPB* log_entry;
     int64_t version;
     int64_t start_seq_id;
+    // -1 for EMPTY log entry
     int64_t end_seq_id;
     // file id for INSERT_RANGE and UPDATE_AFTER, because the
     // log entry may share it with the previous, and not record
@@ -37,6 +38,7 @@ struct LogEntryInfo {
     int32_t num_rows;
     // whether this is the last log entry of the version
     bool end_of_version;
+    int64_t timestamp_in_us;
 };
 
 struct PageContext {
@@ -71,7 +73,11 @@ public:
     // if there is no next, and other status if there is other errors
     Status next();
 
-    // Get the information of the current log entry
+    // Get the information of the current log entry. The reader is
+    // responsible for the memory allocation and release used by
+    // the LogEntryInfo, and the memory also can be reused when next()
+    // is called. The caller should not modify the data, and dependent
+    // on it's state accross two next().
     LogEntryInfo* log_entry();
 
 private:

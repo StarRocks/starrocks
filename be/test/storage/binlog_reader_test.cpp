@@ -26,11 +26,13 @@
 
 namespace starrocks {
 
+class OutputVerifier;
+
 class BinlogReaderTest : public testing::Test {
 public:
     void SetUp() override {
-        fs::remove_all(_binlog_file_dir);
-        fs::create_directories(_binlog_file_dir);
+        CHECK_OK(fs::remove_all(_binlog_file_dir));
+        CHECK_OK(fs::create_directories(_binlog_file_dir));
         create_tablet_schema();
     }
 
@@ -69,20 +71,20 @@ protected:
         _schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
     }
 
+    vectorized::VectorizedFieldPtr make_field(ColumnId cid, const std::string& cname, LogicalType type) {
+        return std::make_shared<vectorized::VectorizedField>(cid, cname, get_type_info(type), false);
+    }
+
     void create_rowset_writer_context(RowsetId& rowset_id, int64_t version,
                                       RowsetWriterContext* rowset_writer_context) {
-        RowsetId rid;
-        rowset_id.init(rowset_id.to_string());
-        rowset_writer_context->rowset_id = rid;
-        rowset_writer_context->tablet_id = tablet_id;
+        rowset_writer_context->rowset_id = rowset_id;
+        rowset_writer_context->tablet_id = _tablet_id;
         rowset_writer_context->tablet_schema_hash = 1111;
         rowset_writer_context->partition_id = 10;
         rowset_writer_context->version = Version(version, 0);
         rowset_writer_context->rowset_path_prefix = _binlog_file_dir;
         rowset_writer_context->rowset_state = VISIBLE;
         rowset_writer_context->tablet_schema = _tablet_schema.get();
-        rowset_writer_context->version.first = 0;
-        rowset_writer_context->version.second = 0;
         rowset_writer_context->writer_type = kHorizontal;
     }
 
@@ -110,7 +112,7 @@ protected:
         for (int32_t num_rows : rows_per_segment) {
             seg_infos.emplace_back(std::make_unique<SegmentPB>());
             build_segment(*start_key, num_rows, rowset_writer.get(), seg_infos.back().get());
-            start_key += num_rows;
+            *start_key += num_rows;
             total_rows += num_rows;
         }
 
@@ -119,48 +121,83 @@ protected:
         ASSERT_EQ(rows_per_segment.size(), rowset->rowset_meta()->num_segments());
     }
 
+    void test_reader(vectorized::VectorizedSchema& output_schema, OutputVerifier& verifier);
+
 protected:
     std::unique_ptr<TabletSchema> _tablet_schema;
     vectorized::VectorizedSchema _schema;
-    int64_t tablet_id = 100;
+    int64_t _tablet_id = 100;
     std::string _binlog_file_dir = "binlog_reader_test";
+    std::shared_ptr<BinlogManager> _binlog_manager;
 };
 
-void verify_binlog_reader(std::shared_ptr<BinlogManager> binlog_manager, vectorized::VectorizedSchema& schema,
-                          std::vector<int32_t>& num_rows_vector, int32_t start_key, int64_t seek_version,
-                          int64_t seek_seq_id) {
-    std::shared_ptr<BinlogReader> binlog_reader = binlog_manager->create_reader(schema, 100);
+struct VersionInfo {
+    int64_t version;
+    int64_t create_time_in_us;
+    int64_t culmulitive_num_rows;
+};
+
+struct ExpectRowInfo {
+    int32_t key;
+    int8_t op;
+    int64_t version;
+    int64_t seq_id;
+    int64_t timestamp;
+};
+
+class OutputVerifier {
+public:
+    virtual void verify(vectorized::DatumTuple& actual_tuple, ExpectRowInfo& row_info) = 0;
+};
+
+void verify_binlog_reader(std::shared_ptr<BinlogManager> binlog_manager, vectorized::VectorizedSchema& output_schema,
+                          std::vector<VersionInfo>& version_infos, int64_t seek_version, int64_t seek_seq_id,
+                          OutputVerifier* verifier) {
+    BinlogReaderParams params;
+    params.chunk_size = 100;
+    params.output_schema = output_schema;
+    std::shared_ptr<BinlogReader> binlog_reader = binlog_manager->create_reader(params);
+    ASSERT_OK(binlog_reader->init());
     ASSERT_OK(binlog_reader->seek(seek_version, seek_seq_id));
-    vectorized::ChunkPtr chunk = ChunkHelper::new_chunk(schema, 100);
-    int num_rows = start_key;
-    int next_version = 1;
-    while (num_rows < num_rows_vector.back()) {
+    vectorized::ChunkPtr chunk = ChunkHelper::new_chunk(output_schema, 100);
+    int32_t num_rows = version_infos[seek_version - 1].culmulitive_num_rows + seek_seq_id;
+    int64_t next_version = seek_version;
+    int64_t next_seq_id = seek_seq_id;
+    ExpectRowInfo row_info;
+    row_info.op = 0;
+    while (num_rows < version_infos.back().culmulitive_num_rows) {
         ASSERT_EQ(next_version, binlog_reader->next_version());
-        ASSERT_EQ(num_rows - num_rows_vector[next_version - 1], binlog_reader->next_version());
+        ASSERT_EQ(next_seq_id, binlog_reader->next_seq_id());
         chunk->reset();
         ASSERT_OK(binlog_reader->get_next(&chunk, 4));
-        ASSERT_GE(0, chunk->num_rows());
+        ASSERT_EQ(output_schema.num_fields(), chunk->num_columns());
         for (int32_t i = 0; i < chunk->num_rows(); i++) {
-            ASSERT_EQ(i + num_rows, chunk->get(i)[0].get_int32());
-            ASSERT_EQ(i + num_rows, chunk->get(i)[0].get_int32());
-            ASSERT_EQ(i + num_rows, chunk->get(i)[0].get_int32());
+            row_info.key = num_rows;
+            row_info.op = 0;
+            row_info.version = next_version;
+            row_info.seq_id = next_seq_id;
+            row_info.timestamp = version_infos[next_version].create_time_in_us;
+            vectorized::DatumTuple actual_row = chunk->get(i);
+            verifier->verify(actual_row, row_info);
+            num_rows += 1;
+            next_seq_id += 1;
         }
-        num_rows += chunk->num_rows();
-        if (num_rows >= num_rows_vector[next_version]) {
+        if (num_rows >= version_infos[next_version].culmulitive_num_rows) {
             next_version += 1;
+            next_seq_id = 0;
         }
     }
     chunk->reset();
     ASSERT_TRUE(binlog_reader->get_next(&chunk, 4).is_end_of_file());
     ASSERT_EQ(4, binlog_reader->next_version());
-    ASSERT_EQ(0, binlog_reader->next_version());
+    ASSERT_EQ(0, binlog_reader->next_seq_id());
+    ASSERT_EQ(num_rows, version_infos.back().culmulitive_num_rows);
     binlog_reader->close();
 }
 
-TEST_F(BinlogReaderTest, test_basic) {
+void BinlogReaderTest::test_reader(vectorized::VectorizedSchema& output_schema, OutputVerifier& verifier) {
     RowsetId rowset_id;
     int32_t start_key = 0;
-
     std::vector<RowsetSharedPtr> rowsets;
     rowsets.emplace_back(RowsetSharedPtr());
     rowset_id.init(2, 1, 2, 3);
@@ -176,45 +213,128 @@ TEST_F(BinlogReaderTest, test_basic) {
 
     std::shared_ptr<BinlogManager> binlog_manager =
             std::make_shared<BinlogManager>(_binlog_file_dir, 100, 20, LZ4_FRAME);
+    // TODO init tablet
     for (const auto& rowset : rowsets) {
+        ASSERT_OK(rowset->load());
         ASSERT_OK(binlog_manager->add_insert_rowset(rowset));
     }
+    // ensure there are multiple binlog files
+    ASSERT_EQ(6, binlog_manager->num_binlog_files());
 
-    std::vector<int32_t> num_rows_vector{0};
+    std::vector<VersionInfo> version_infos;
+    version_infos.emplace_back();
     for (const auto& rowset : rowsets) {
-        num_rows_vector.emplace_back(num_rows_vector.back() + rowset->num_rows());
+        VersionInfo info;
+        info.version = rowset->start_version();
+        info.create_time_in_us = rowset->creation_time() * 1000000;
+        info.culmulitive_num_rows = version_infos.back().culmulitive_num_rows + rowset->num_rows();
+        version_infos.emplace_back(info);
     }
 
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 0, 1, 0);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 500, 1, 500);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 999, 1, 999);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1000, 1, 1000);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1005, 1, 1005);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1009, 1, 1009);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1010, 1, 1010);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1020, 1, 1020);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1029, 1, 1029);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 0, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 500, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 999, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 1000, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 1005, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 1009, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 1010, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 1020, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 1, 1029, &verifier);
 
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1030, 2, 1030);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1032, 2, 1032);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1034, 2, 1034);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1035, 2, 1035);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1100, 2, 1100);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1124, 2, 1124);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1125, 2, 1125);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 2, 0, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 2, 3, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 2, 4, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 2, 5, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 2, 50, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 2, 94, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 2, 95, &verifier);
 
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1126, 3, 1126);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1131, 3, 1131);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1135, 3, 1135);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1136, 3, 1136);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1156, 3, 1156);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1175, 3, 1175);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1180, 3, 1180);
-    verify_binlog_reader(binlog_manager, _schema, num_rows_vector, 1184, 3, 1184);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 0, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 5, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 9, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 10, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 25, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 49, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 50, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 55, &verifier);
+    verify_binlog_reader(binlog_manager, output_schema, version_infos, 3, 59, &verifier);
 
-    std::shared_ptr<BinlogReader> binlog_reader = binlog_manager->create_reader(_schema, 100);
+    BinlogReaderParams params;
+    params.chunk_size = 100;
+    params.output_schema = output_schema;
+    std::shared_ptr<BinlogReader> binlog_reader = binlog_manager->create_reader(params);
+    ASSERT_OK(binlog_reader->init());
     ASSERT_TRUE(binlog_reader->seek(4, 0).is_not_found());
     binlog_reader->close();
+}
+
+// verifier for the output including both data and meta columns
+class FullColumnsVerifier : public OutputVerifier {
+public:
+    void verify(vectorized::DatumTuple& actual_tuple, ExpectRowInfo& row_info) override {
+        ASSERT_EQ(row_info.key, actual_tuple[0].get_int32());
+        ASSERT_EQ(row_info.key, actual_tuple[1].get_int32());
+        ASSERT_EQ(std::to_string(row_info.key), actual_tuple[2].get_slice());
+        ASSERT_EQ(row_info.op, actual_tuple[3].get_int8());
+        ASSERT_EQ(row_info.version, actual_tuple[4].get_int64());
+        ASSERT_EQ(row_info.seq_id, actual_tuple[5].get_int64());
+        ASSERT_EQ(row_info.timestamp, actual_tuple[6].get_int64());
+    }
+};
+
+TEST_F(BinlogReaderTest, test_read_full_columns) {
+    vectorized::VectorizedSchema schema;
+    vectorized::VectorizedFieldPtr op = make_field(4, BINLOG_OP, TYPE_TINYINT);
+    vectorized::VectorizedFieldPtr version = make_field(5, BINLOG_VERSION, TYPE_BIGINT);
+    vectorized::VectorizedFieldPtr seq_id = make_field(6, BINLOG_SEQ_ID, TYPE_BIGINT);
+    vectorized::VectorizedFieldPtr timestamp = make_field(7, BINLOG_TIMESTAMP, TYPE_BIGINT);
+    schema.append(_schema.field(0));
+    schema.append(_schema.field(1));
+    schema.append(_schema.field(2));
+    schema.append(op);
+    schema.append(version);
+    schema.append(seq_id);
+    schema.append(timestamp);
+
+    FullColumnsVerifier verifier;
+    test_reader(schema, verifier);
+}
+
+// verifier for the output only including data columns
+class DataColumnsVerifier : public OutputVerifier {
+public:
+    void verify(vectorized::DatumTuple& actual_tuple, ExpectRowInfo& row_info) override {
+        ASSERT_EQ(row_info.key, actual_tuple[0].get_int32());
+        ASSERT_EQ(row_info.key, actual_tuple[1].get_int32());
+        ASSERT_EQ(std::to_string(row_info.key), actual_tuple[2].get_slice());
+    }
+};
+
+TEST_F(BinlogReaderTest, test_read_data_columns) {
+    DataColumnsVerifier verifier;
+    test_reader(_schema, verifier);
+}
+
+// verify the result for BinlogReaderTest#_output_partial_schema
+class RandomColumnsVerifier : public OutputVerifier {
+public:
+    void verify(vectorized::DatumTuple& actual_tuple, ExpectRowInfo& row_info) override {
+        ASSERT_EQ(row_info.op, actual_tuple[0].get_int8());
+        ASSERT_EQ(std::to_string(row_info.key), actual_tuple[1].get_slice());
+        ASSERT_EQ(row_info.key, actual_tuple[2].get_int32());
+    }
+};
+
+// verifier for the output including random columns
+TEST_F(BinlogReaderTest, test_read_random_columns) {
+    vectorized::VectorizedSchema schema;
+    vectorized::VectorizedFieldPtr op = make_field(4, BINLOG_OP, TYPE_TINYINT);
+    schema.append(op);
+    schema.append(_schema.field(2));
+    schema.append(_schema.field(0));
+
+    RandomColumnsVerifier verifier;
+    test_reader(schema, verifier);
 }
 
 } // namespace starrocks

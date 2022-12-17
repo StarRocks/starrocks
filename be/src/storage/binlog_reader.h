@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "fs/fs.h"
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_file_reader.h"
@@ -27,6 +28,20 @@ class BinlogManager;
 
 using BinlogFileMetaPBSharedPtr = std::shared_ptr<BinlogFileMetaPB>;
 using BinlogFileReaderSharedPtr = std::shared_ptr<BinlogFileReader>;
+
+struct BinlogReaderParams {
+    // Chunk size to read from a segment at a time
+    int chunk_size;
+    // The schema of output from the reader
+    vectorized::VectorizedSchema output_schema;
+};
+
+// Column names for metas
+const string BINLOG_PREFIX = "_binlog";
+const string BINLOG_OP = BINLOG_PREFIX + "_op";
+const string BINLOG_VERSION = BINLOG_PREFIX + "_version";
+const string BINLOG_SEQ_ID = BINLOG_PREFIX + "_seq_id";
+const string BINLOG_TIMESTAMP = BINLOG_PREFIX + "_timestamp";
 
 // Read binlog in a tablet. Binlog can be treated as a table with schema. The schema includes the
 // data columns of base table and meta columns of binlog. The name and SQL data type of meta columns
@@ -70,8 +85,11 @@ using BinlogFileReaderSharedPtr = std::shared_ptr<BinlogFileReader>;
 class BinlogReader final {
 public:
     // The last column of schema should include a column
-    BinlogReader(int64_t reader_id, std::shared_ptr<BinlogManager> binlog_manager, vectorized::VectorizedSchema& schema,
-                 int chunk_size);
+    BinlogReader(std::shared_ptr<BinlogManager> binlog_manager, int64_t reader_id, BinlogReaderParams reader_params);
+
+    ~BinlogReader() { close(); }
+
+    Status init();
 
     // Seek to the position at <version, seq_id>. The position is inclusive.
     // Returns Status::OK() if find the change event, Status::NotFound() if
@@ -79,9 +97,15 @@ public:
     Status seek(int64_t version, int64_t seq_id);
 
     // Get a chunk of change events less than the *max_version_exclusive*.
-    // Return Status::OK() if there is at least one change event in the chunk,
-    // Status::EndOfFile() if there is no more change events, and other status
-    // if error happens
+    // The schema of chunk should be the same with BinlogReaderParams#schema.
+    // Return Status::OK() if there is at least one change event in the chunk
+    // Return Status::EndOfFile() if there is no more change events, or the
+    // version of left change events are no less than *max_version_exclusive*.
+    // Return Status::NotFound if can't find the change event for the
+    // <_next_version, _seq_id> before calling get_next(). This may happen when
+    // the versions are not continuous in a tablet replica, and you may need
+    // to get the data from ather replicas.
+    // Return other status if error happens.
     Status get_next(vectorized::ChunkPtr* chunk, int64_t max_version_exclusive);
 
     // The version of next binlog to read, and will update after seek/get_next is called.
@@ -90,29 +114,46 @@ public:
     // The sequence number of next change event to read, and will update after seek/get_next is called.
     int64_t next_seq_id() { return _next_seq_id; }
 
-    void close() { _reset(); }
+    void close();
 
 private:
-    Status _seek_to_file_meta(int64_t version, int64_t seq_id);
-    Status _seek_to_segment_row(int64_t seq_id);
-    Status _init_segment_iterator(int32_t start_row_id);
+    Status _seek_binlog_file_reader(int64_t version, int64_t seq_id);
+    Status _init_segment_iterator();
+    void _release_segment_iterator(bool release_rowset);
     void _reset();
+    void _swap_output_and_data_chunk(vectorized::Chunk* output_chunk);
+    void _append_meta_column(vectorized::Chunk* output_chunk, int32_t num_rows, int64_t version, int64_t timestamp,
+                             int64_t start_seq_id);
 
-    uint64_t _reader_id;
     std::shared_ptr<BinlogManager> _binlog_manager;
-    vectorized::VectorizedSchema _schema;
-    int32_t _chunk_size;
-    bool _has_meta_columns;
-    vectorized::VectorizedSchema _schema_without_meta;
+    int64_t _reader_id;
+    BinlogReaderParams _reader_params;
+    // Schema for data columns, used to read data from segments
+    vectorized::VectorizedSchema _data_schema;
+    // Index of each _data_schema column in the _reader_params#output_schema
+    std::vector<uint32_t> _data_column_index;
+    // Index of each meta column in the _reader_params#output_schema.
+    // -1 if they are not in the output schema
+    int32_t _binlog_op_column_index = -1;
+    int32_t _binlog_version_column_index = -1;
+    int32_t _binlog_seq_id_column_index = -1;
+    int32_t _binlog_timestamp_column_index = -1;
 
+    // current binlog file to read
     BinlogFileMetaPBSharedPtr _file_meta;
     BinlogFileReaderSharedPtr _binlog_file_reader;
     // owned by _binlog_file_reader
     LogEntryInfo* _log_entry_info;
     int64_t _next_version = -1;
     int64_t _next_seq_id = -1;
+
+    OlapReaderStatistics _stats;
     RowsetSharedPtr _rowset;
     ChunkIteratorPtr _segment_iterator;
+    // the chunk delivered to the segment iterator for get_next()
+    vectorized::ChunkPtr _data_chunk;
+
+    bool _closed = false;
 };
 
 using BinlogReaderSharedPtr = std::shared_ptr<BinlogReader>;
