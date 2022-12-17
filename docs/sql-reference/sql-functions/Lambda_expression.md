@@ -38,7 +38,7 @@ Simple examples of lambda expressions:
 
 ```SQL
 -- Accepts no parameters and returns 5.
-() -> 3    
+() -> 5    
 -- Takes x and returns the value of (x + 2).
 x -> x + 2 
 -- Takes x and y, and returns their sum.

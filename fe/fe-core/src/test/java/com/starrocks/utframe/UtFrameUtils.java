@@ -585,7 +585,7 @@ public class UtFrameUtils {
                 new ColumnRefSet(logicalPlan.getOutputColumn()),
                 columnRefFactory);
 
-        ExecPlan execPlan = new PlanFragmentBuilder()
+        ExecPlan execPlan = PlanFragmentBuilder
                 .createPhysicalPlan(optimizedPlan, connectContext,
                         logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
                         TResultSinkType.MYSQL_PROTOCAL, true);
