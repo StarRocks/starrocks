@@ -21,9 +21,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.EnumSet;
@@ -47,7 +47,7 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
 
     @Override
     public ModifyOp visitPhysicalFilter(OptExpression optExpression, Void ctx) {
-        return visit(optExpression.inputAt(0), ctx);
+        return infer(optExpression.inputAt(0));
     }
 
     @Override

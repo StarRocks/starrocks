@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.sql.optimizer.operator.physical.stream;
+package com.starrocks.sql.optimizer.operator.stream;
 
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -53,7 +52,6 @@ public class PhysicalStreamJoinOperator extends PhysicalStreamOperator {
     public String getJoinHint() {
         return joinHint;
     }
-
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {

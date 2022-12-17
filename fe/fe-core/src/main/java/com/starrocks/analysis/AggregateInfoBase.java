@@ -203,6 +203,10 @@ public abstract class AggregateInfoBase {
         return outputTupleDesc_.getId();
     }
 
+    public void setOutputTupleDesc(TupleDescriptor tupleDesc) {
+        this.outputTupleDesc_ = tupleDesc;
+    }
+
     public boolean requiresIntermediateTuple() {
         Preconditions.checkNotNull(intermediateTupleDesc_);
         Preconditions.checkNotNull(outputTupleDesc_);

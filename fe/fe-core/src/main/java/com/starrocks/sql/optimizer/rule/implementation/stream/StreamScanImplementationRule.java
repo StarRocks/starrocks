@@ -12,42 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.implementation.stream;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class StreamAggregateImplementationRule extends StreamImplementationRule {
+public class StreamScanImplementationRule extends StreamImplementationRule {
 
-    private static final StreamAggregateImplementationRule INSTANCE =
-            new StreamAggregateImplementationRule(RuleType.IMP_STREAM_AGG);
+    private static final StreamScanImplementationRule INSTANCE =
+            new StreamScanImplementationRule(RuleType.IMP_BINLOG_SCAN);
 
-    public static StreamAggregateImplementationRule getInstance() {
+    public static StreamScanImplementationRule getInstance() {
         return INSTANCE;
     }
 
-    private StreamAggregateImplementationRule(RuleType type) {
-        super(type, Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
+    private StreamScanImplementationRule(RuleType type) {
+        super(type, Pattern.create(OperatorType.LOGICAL_BINLOG_SCAN));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator logical = (LogicalAggregationOperator) input.getOp();
-        PhysicalStreamAggOperator physical = new PhysicalStreamAggOperator(
-                logical.getGroupingKeys(),
-                logical.getAggregations(),
+        LogicalScanOperator logical = (LogicalScanOperator) input.getOp();
+        PhysicalStreamScanOperator physical = new PhysicalStreamScanOperator(
+                logical.getTable(),
+                logical.getColRefToColumnMetaMap(),
                 logical.getPredicate(),
                 logical.getProjection());
-        OptExpression result = OptExpression.create(physical, input.getInputs());
-        return Lists.newArrayList(result);
+        return Lists.newArrayList(OptExpression.create(physical, input.getInputs()));
     }
 }

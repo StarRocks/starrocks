@@ -18,7 +18,7 @@ package com.starrocks.scheduler.mv;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.io.DataOutputBuffer;
-import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.sql.plan.ExecPlan;
 import mockit.Mock;
 import mockit.MockUp;
@@ -50,7 +50,7 @@ class MVMaintenanceJobTest {
         assertTrue(job.isRunnable());
         assertEquals(MVMaintenanceJob.JobState.STARTED, job.getState());
 
-        new MockUp<Coordinator>() {
+        new MockUp<CoordinatorPreprocessor>() {
             @Mock
             public void prepareExec() throws Exception {
             }

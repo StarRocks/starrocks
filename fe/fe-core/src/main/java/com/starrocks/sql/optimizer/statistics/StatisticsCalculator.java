@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
@@ -47,6 +46,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -118,6 +118,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -218,6 +220,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
+                node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitLogicalBinlogScan(LogicalBinlogScanOperator node, ExpressionContext context) {
+        return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
+                node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalStreamScan(PhysicalStreamScanOperator node, ExpressionContext context) {
+        return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
                 node.getColRefToColumnMetaMap());
     }
 
@@ -552,7 +566,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             List<Partition> selectedPartitions;
-            if (node.isLogical()) {
+            if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
+                    node.getOpType() == OperatorType.PHYSICAL_STREAM_SCAN) {
+                return 1;
+            } else if (node.isLogical()) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
                         olapTable::getPartition).collect(Collectors.toList());
