@@ -19,6 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergUtil;
@@ -76,7 +77,8 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties, hdfsEnvironment);
         Assert.assertEquals(IcebergCatalogType.CUSTOM_CATALOG, customCatalog.getIcebergCatalogType());
     }
 
@@ -102,7 +104,8 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties, hdfsEnvironment);
         Table table = customCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -128,8 +131,9 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergCustomTestingCatalog icebergCustomCatalog = (IcebergCustomTestingCatalog) getIcebergCustomCatalog(
-                catalogImpl, icebergProperties);
+                catalogImpl, icebergProperties, hdfsEnvironment);
         List<String> dbs = icebergCustomCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

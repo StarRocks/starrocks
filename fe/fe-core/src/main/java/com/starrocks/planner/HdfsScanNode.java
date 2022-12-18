@@ -22,7 +22,11 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.RemoteScanRangeLocations;
+import com.starrocks.connector.hive.HiveConnector;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -50,6 +54,7 @@ public class HdfsScanNode extends ScanNode {
     private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
     private HiveTable hiveTable = null;
+    private CloudConfiguration cloudConfiguration = null;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -75,6 +80,14 @@ public class HdfsScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
         scanRangeLocations.setupScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
+    }
+
+    public void setupCloudCredential() {
+        HiveConnector connector = (HiveConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+                getConnector(hiveTable.getCatalogName());
+        if (connector != null) {
+            cloudConfiguration = connector.getCloudConfiguration();
+        }
     }
 
     @Override
@@ -172,6 +185,12 @@ public class HdfsScanNode extends ScanNode {
         if (hiveTable != null) {
             msg.hdfs_scan_node.setHive_column_names(hiveTable.getDataColumnNames());
             msg.hdfs_scan_node.setTable_name(hiveTable.getName());
+        }
+
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
     }
 

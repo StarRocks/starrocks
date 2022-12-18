@@ -24,9 +24,13 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -65,6 +69,7 @@ public class DeltaLakeScanNode extends ScanNode {
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private Optional<Expression> deltaLakePredicates = Optional.empty();
+    private CloudConfiguration cloudConfiguration = null;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -77,6 +82,14 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public DeltaLakeTable getDeltaLakeTable() {
         return deltaLakeTable;
+    }
+
+    public void setupCloudCredential() {
+        DeltaLakeConnector connector = (DeltaLakeConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+                getConnector(deltaLakeTable.getCatalogName());
+        if (connector != null) {
+            cloudConfiguration = connector.getCloudConfiguration();
+        }
     }
 
     @Override
@@ -254,6 +267,12 @@ public class DeltaLakeScanNode extends ScanNode {
 
         if (deltaLakeTable != null) {
             msg.hdfs_scan_node.setTable_name(deltaLakeTable.getName());
+        }
+
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
     }
 

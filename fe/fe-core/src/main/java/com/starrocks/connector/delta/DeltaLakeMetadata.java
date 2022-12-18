@@ -19,8 +19,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,12 +28,12 @@ import java.util.List;
 
 public class DeltaLakeMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetadata.class);
-    private final Configuration configuration;
     private final String catalogName;
     private final HiveMetastoreOperations hmsOps;
+    private final HdfsEnvironment hdfsEnvironment;
 
-    public DeltaLakeMetadata(Configuration configuration, String catalogName, HiveMetastoreOperations hmsOps) {
-        this.configuration = configuration;
+    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, HiveMetastoreOperations hmsOps) {
+        this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.hmsOps = hmsOps;
     }
@@ -60,9 +60,14 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        Table table = hmsOps.getTable(dbName, tblName);
-        HiveTable hiveTable = (HiveTable) table;
-        String path = hiveTable.getTableLocation();
-        return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path, configuration);
+        try {
+            Table table = hmsOps.getTable(dbName, tblName);
+            HiveTable hiveTable = (HiveTable) table;
+            String path = hiveTable.getTableLocation();
+            return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path, hdfsEnvironment.getConfiguration());
+        } catch (Exception e) {
+            LOG.warn(e.getMessage());
+            return null;
+        }
     }
 }
