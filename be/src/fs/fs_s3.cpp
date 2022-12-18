@@ -39,7 +39,6 @@
 #include "common/config.h"
 #include "common/s3_uri.h"
 #include "fs/output_stream_adapter.h"
-#include "gen_cpp/CloudConfiguration_types.h"
 #include "gutil/strings/util.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
@@ -183,6 +182,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.endpointOverride = aws_cloud_credential.endpoint;
     }
 
+    // Duplicate code for cache s3 client
     std::lock_guard l(_lock);
 
     for (size_t i = 0; i < _items; i++) {
