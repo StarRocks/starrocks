@@ -35,15 +35,15 @@ static CompressionTypePB return_compression_type_from_filename(const std::string
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
-    HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator,
+    HdfsScannerCSVReader(RandomAccessFile* file, const std::string& row_delimiter, const std::string& column_separator,
                          size_t file_length)
-            : CSVReader(row_delimiter, column_separator) {
+            : CSVReader(CSVParseOptions(row_delimiter, column_separator)) {
         _file = file;
         _offset = 0;
         _remain_length = file_length;
         _file_length = file_length;
         _row_delimiter_length = row_delimiter.size();
-        _column_separator_length = column_separator.size();
+        _column_delimiter_length = column_separator.size();
     }
 
     Status reset(size_t offset, size_t remain_length);
@@ -114,9 +114,10 @@ Status HdfsScannerCSVReader::_fill_buffer() {
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself, ONLY IF we have space.
         // But if we don't have any space, which means a single csv record size has exceed buffer max size.
-        if (n >= _row_delimiter_length && _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        if (n >= _row_delimiter_length &&
+            _buff.find(_parse_options.row_delimiter, n - _row_delimiter_length) == nullptr) {
             if (_buff.free_space() >= _row_delimiter_length) {
-                for (char ch : _row_delimiter) {
+                for (char ch : _parse_options.row_delimiter) {
                     _buff.append(ch);
                 }
             } else {
