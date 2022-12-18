@@ -61,6 +61,10 @@ public class StreamLoadInfo {
     private String mergeConditionStr;
     private ColumnSeparator columnSeparator;
     private RowDelimiter rowDelimiter;
+    private long skipHeader;
+    private boolean trimSpace;
+    private byte enclose;
+    private byte escape;
     private PartitionNames partitions;
     private String path;
     private boolean negative = false;
@@ -127,6 +131,22 @@ public class StreamLoadInfo {
 
     public RowDelimiter getRowDelimiter() {
         return rowDelimiter;
+    }
+
+    public boolean getTrimSpace() {
+        return trimSpace;
+    }
+
+    public long getSkipHeader() {
+        return skipHeader;
+    }
+
+    public byte getEnclose() {
+        return enclose;
+    }
+
+    public byte getEscape() {
+        return escape;
     }
 
     public PartitionNames getPartitions() {
@@ -290,6 +310,18 @@ public class StreamLoadInfo {
         }
         if (request.isSetRowDelimiter()) {
             rowDelimiter = new RowDelimiter(request.getRowDelimiter());
+        }
+        if (request.isSetSkipHeader()) {
+            skipHeader = request.getSkipHeader();
+        }
+        if (request.isSetEnclose()) {
+            enclose = request.getEnclose();
+        }
+        if (request.isSetEscape()) {
+            escape = request.getEscape();
+        }
+        if (request.isSetTrimSpace()) {
+            trimSpace = request.isSetTrimSpace();
         }
         if (request.isSetPartitions()) {
             String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
