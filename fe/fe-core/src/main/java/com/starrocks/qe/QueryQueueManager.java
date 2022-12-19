@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.qe;
 
@@ -116,6 +129,7 @@ public class QueryQueueManager {
         long startMs = System.currentTimeMillis();
         long timeoutMs;
         PendingQueryInfo info = new PendingQueryInfo(connectCtx, lock, coord);
+        boolean isPending = false;
 
         try {
             lock.lock();
@@ -126,9 +140,10 @@ public class QueryQueueManager {
             if (!canQueueMore()) {
                 throw new UserException("Need be queued but exceed query queue capacity");
             }
+
+            isPending = true;
             info.connectCtx.setPending(true);
             pendingQueryInfoMap.put(info.connectCtx, info);
-
             MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(1L);
             MetricRepo.COUNTER_QUERY_QUEUE_TOTAL.increase(1L);
 
@@ -147,11 +162,12 @@ public class QueryQueueManager {
                 }
             }
         } finally {
-            info.connectCtx.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
-            info.connectCtx.setPending(false);
-            pendingQueryInfoMap.remove(info.connectCtx);
-
-            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
+            if (isPending) {
+                info.connectCtx.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
+                MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
+                pendingQueryInfoMap.remove(info.connectCtx);
+                info.connectCtx.setPending(false);
+            }
 
             lock.unlock();
         }

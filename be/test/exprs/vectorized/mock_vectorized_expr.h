@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -44,7 +44,10 @@ class MockCostExpr : public Expr {
 public:
     explicit MockCostExpr(const TExprNode& t) : Expr(t) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { DCHECK(false); }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override {
+        DCHECK(false);
+        __builtin_unreachable();
+    }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockCostExpr(*this)); }
 
     int64_t cost_ns() { return _ns; }

@@ -4,17 +4,19 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exprs/vectorized/cast_expr.h"
 
 #include <ryu/ryu.h>
+
+#include <utility>
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -38,6 +40,7 @@
 #include "runtime/types.h"
 #include "types/bitmap_value_detail.h"
 #include "types/hll.h"
+#include "types/logical_type.h"
 #include "util/date_func.h"
 #include "util/json.h"
 #include "util/mysql_global.h"
@@ -1438,6 +1441,21 @@ private:
         }                                                                  \
     }
 
+template <template <bool> class T, typename... Args>
+Expr* dispatch_throw_exception(bool throw_exception, Args&&... args) {
+    if (throw_exception) {
+        return new T<true>(std::forward<Args>(args)...);
+    } else {
+        return new T<false>(std::forward<Args>(args)...);
+    }
+}
+
+template <bool throw_exception>
+using CastVarcharToHll = VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, throw_exception>;
+
+template <bool throw_exception>
+using CastVarcharToBitmap = VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, throw_exception>;
+
 Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& node, bool allow_throw_exception) {
     LogicalType to_type = TypeDescriptor::from_thrift(node.type).type;
     LogicalType from_type = thrift_to_type(node.child_type);
@@ -1499,11 +1517,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
     }
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
-        if (allow_throw_exception) {
-            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, true>(node);
-        } else {
-            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, false>(node);
-        }
+        return dispatch_throw_exception<CastVarcharToHll>(allow_throw_exception, node);
     }
     // Cast string to array<ANY>
     if ((from_type == TYPE_VARCHAR || from_type == TYPE_JSON) && to_type == TYPE_ARRAY) {
@@ -1526,18 +1540,14 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         }
 
         if (from_type == TYPE_VARCHAR) {
-            return new CastStringToArray(node, cast_element_expr, cast_to);
+            return new CastStringToArray(node, cast_element_expr, cast_to, allow_throw_exception);
         } else {
             return new CastJsonToArray(node, cast_element_expr, cast_to);
         }
     }
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
-        if (allow_throw_exception) {
-            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, true>(node);
-        } else {
-            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, false>(node);
-        }
+        return dispatch_throw_exception<CastVarcharToBitmap>(allow_throw_exception, node);
     }
 
     if (to_type == TYPE_VARCHAR) {

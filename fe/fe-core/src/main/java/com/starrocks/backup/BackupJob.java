@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/backup/BackupJob.java
 
@@ -129,6 +142,8 @@ public class BackupJob extends AbstractJob {
 
     private AgentBatchTask batchTask;
 
+    private boolean testPrimaryKey = false;
+
     public BackupJob() {
         super(JobType.BACKUP);
     }
@@ -138,6 +153,10 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
         this.state = BackupJobState.PENDING;
+    }
+
+    public void setTestPrimaryKey() {
+        testPrimaryKey = true;
     }
 
     public BackupJobState getState() {
@@ -608,9 +627,14 @@ public class BackupJob extends AbstractJob {
     private void saveMetaInfo() {
         String createTimeStr = TimeUtils.longToTimeString(createTime,
                 new SimpleDateFormat(TIMESTAMP_FORMAT));
-        // local job dir: backup/label__createtime/
-        localJobDirPath = Paths.get(BackupHandler.BACKUP_ROOT_DIR.toString(),
-                label + "__" + UUIDUtil.genUUID().toString()).normalize();
+        if (testPrimaryKey) {
+            localJobDirPath = Paths.get(BackupHandler.TEST_BACKUP_ROOT_DIR.toString(),
+                    label + "__" + UUIDUtil.genUUID().toString()).normalize();
+        } else {
+            // local job dir: backup/label__createtime/
+            localJobDirPath = Paths.get(BackupHandler.BACKUP_ROOT_DIR.toString(),
+                    label + "__" + UUIDUtil.genUUID().toString()).normalize();
+        }
 
         try {
             // 1. create local job dir of this backup job

@@ -1,7 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
@@ -9,13 +22,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -42,6 +55,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.InternalServiceVersion;
@@ -63,10 +77,15 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -78,11 +97,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
     private static final int BUCKET_ABSENT = 2147483647;
+    static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final Random random = new Random();
 
@@ -106,6 +127,7 @@ public class CoordinatorPreprocessor {
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
     private final Set<TUniqueId> instanceIds = Sets.newHashSet();
 
+    private final TDescriptorTable descriptorTable;
     private final List<PlanFragment> fragments;
     private final List<ScanNode> scanNodes;
 
@@ -136,18 +158,60 @@ public class CoordinatorPreprocessor {
     private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
 
     // Resource group
-    private ResourceGroup resourceGroup = null;
+    private TWorkGroup resourceGroup = null;
 
     public CoordinatorPreprocessor(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
-                                   List<ScanNode> scanNodes,
+                                   List<ScanNode> scanNodes, TDescriptorTable descriptorTable,
                                    TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
         this.connectContext = context;
         this.queryId = queryId;
+        this.descriptorTable = descriptorTable;
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryGlobals = queryGlobals;
         this.queryOptions = queryOptions;
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    @VisibleForTesting
+    CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
+        this.scanNodes = scanNodes;
+        this.connectContext = StatisticUtils.buildConnectContext();
+        this.queryId = connectContext.getExecutionId();
+        this.queryGlobals =
+                genQueryGlobals(System.currentTimeMillis(), connectContext.getSessionVariable().getTimeZone());
+        this.queryOptions = connectContext.getSessionVariable().toThrift();
+        this.usePipeline = true;
+        this.descriptorTable = null;
+        this.fragments = fragments;
+
+        this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        this.idToComputeNode = buildComputeNodeInfo();
+
+        Map<PlanFragmentId, PlanFragment> fragmentMap =
+                fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, x -> x));
+        for (ScanNode scan : scanNodes) {
+            PlanFragmentId id = scan.getFragmentId();
+            PlanFragment fragment = fragmentMap.get(id);
+            if (fragment == null) {
+                // Fake a fragment for this node
+                fragment = new PlanFragment(id, scan, DataPartition.RANDOM);
+            }
+            fragmentExecParamsMap.put(scan.getFragmentId(), new FragmentExecParams(fragment));
+        }
+    }
+
+    public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
+        TQueryGlobals queryGlobals = new TQueryGlobals();
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        queryGlobals.setNow_string(nowString);
+        queryGlobals.setTimestamp_ms(startTime);
+        if (timezone.equals("CST")) {
+            queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+        } else {
+            queryGlobals.setTime_zone(timezone);
+        }
+        return queryGlobals;
     }
 
     public TNetworkAddress getCoordAddress() {
@@ -196,6 +260,10 @@ public class CoordinatorPreprocessor {
 
     public Set<TUniqueId> getInstanceIds() {
         return instanceIds;
+    }
+
+    public TDescriptorTable getDescriptorTable() {
+        return descriptorTable;
     }
 
     public List<PlanFragment> getFragments() {
@@ -266,7 +334,7 @@ public class CoordinatorPreprocessor {
         return addressToBackendID;
     }
 
-    public ResourceGroup getResourceGroup() {
+    public TWorkGroup getResourceGroup() {
         return resourceGroup;
     }
 
@@ -276,10 +344,11 @@ public class CoordinatorPreprocessor {
 
     public void prepareExec() throws Exception {
         // prepare information
+        resetFragmentState();
         prepareFragments();
 
         // prepare workgroup
-        this.resourceGroup = prepareResourceGroup(connectContext,
+        resourceGroup = prepareResourceGroup(connectContext,
                 queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
                         : ResourceGroupClassifier.QueryType.SELECT);
 
@@ -289,7 +358,22 @@ public class CoordinatorPreprocessor {
         computeBeInstanceNumbers();
     }
 
-    private void prepareFragments() {
+    /**
+     * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
+     */
+    private void resetFragmentState() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment instanceof MultiCastPlanFragment) {
+                MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+                for (List<TPlanFragmentDestination> destination : multiSink.getDestinations()) {
+                    destination.clear();
+                }
+            }
+        }
+    }
+
+    @VisibleForTesting
+    void prepareFragments() {
         for (PlanFragment fragment : fragments) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }
@@ -888,9 +972,14 @@ public class CoordinatorPreprocessor {
         }
     }
 
+    public FragmentScanRangeAssignment getFragmentScanRangeAssignment(PlanFragmentId fragmentId) {
+        return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
+    }
+
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
-    private void computeScanRangeAssignment() throws Exception {
+    @VisibleForTesting
+    void computeScanRangeAssignment() throws Exception {
         boolean forceScheduleLocal = connectContext.getSessionVariable().isForceScheduleLocal();
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
@@ -936,7 +1025,8 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    private void computeFragmentExecParams() throws Exception {
+    @VisibleForTesting
+    void computeFragmentExecParams() throws Exception {
         // fill hosts field in fragmentExecParams
         computeFragmentHosts();
 
@@ -1191,6 +1281,9 @@ public class CoordinatorPreprocessor {
             }
             return infoStr;
         } else {
+            if (MapUtils.isEmpty(this.idToBackend)) {
+                return "";
+            }
             StringBuilder infoStr = new StringBuilder("backend: ");
             for (Map.Entry<Long, Backend> entry : this.idToBackend.entrySet()) {
                 Long backendID = entry.getKey();
@@ -1216,13 +1309,12 @@ public class CoordinatorPreprocessor {
         return null;
     }
 
-    public static ResourceGroup prepareResourceGroup(ConnectContext connect,
-                                                     ResourceGroupClassifier.QueryType queryType) {
-        ResourceGroup resourceGroup = null;
+    public static TWorkGroup prepareResourceGroup(ConnectContext connect, ResourceGroupClassifier.QueryType queryType) {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
-            return resourceGroup;
+            return null;
         }
         SessionVariable sessionVariable = connect.getSessionVariable();
+        TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
@@ -1233,8 +1325,7 @@ public class CoordinatorPreprocessor {
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = new ResourceGroup();
-            resourceGroup.setId(workgroupId);
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -1255,7 +1346,7 @@ public class CoordinatorPreprocessor {
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
     // FragmentExecParams
-    static class FInstanceExecParam {
+    public static class FInstanceExecParam {
         static final int ABSENT_PIPELINE_DOP = -1;
         static final int ABSENT_DRIVER_SEQUENCE = -1;
 
@@ -1312,6 +1403,10 @@ public class CoordinatorPreprocessor {
 
         public Map<Integer, Map<Integer, List<TScanRangeParams>>> getNodeToPerDriverSeqScanRanges() {
             return nodeToPerDriverSeqScanRanges;
+        }
+
+        public int getBackendNum() {
+            return backendNum;
         }
 
         public TNetworkAddress getHost() {
@@ -1425,7 +1520,7 @@ public class CoordinatorPreprocessor {
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
                     if (enableResourceGroup && resourceGroup != null) {
-                        commonParams.setWorkgroup(resourceGroup.toThrift());
+                        commonParams.setWorkgroup(resourceGroup);
                     }
                 }
             }
@@ -1686,6 +1781,13 @@ public class CoordinatorPreprocessor {
             }
             sb.append("]"); // end of instances
             sb.append("}");
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder();
+            appendTo(sb);
+            return sb.toString();
         }
     }
 

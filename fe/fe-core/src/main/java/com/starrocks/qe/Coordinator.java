@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/Coordinator.java
 
@@ -38,7 +51,6 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
@@ -82,9 +94,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -108,7 +117,6 @@ import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
 
     // Overall status of the entire query; set to the first reported fragment error
@@ -121,7 +129,7 @@ public class Coordinator {
     // When `NOW()` function is in sql, we need only one now(),
     // but, we execute `NOW()` distributed.
     // So we make a query global value here to make one `now()` value in one query process.
-    private final TQueryGlobals queryGlobals = new TQueryGlobals();
+    private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
     // protects all fields below
     private final Lock lock = new ReentrantLock();
@@ -176,22 +184,16 @@ public class Coordinator {
         this.returnedAllResults = false;
         this.queryOptions = context.getSessionVariable().toThrift();
         long startTime = context.getStartTime();
-        if (context.getSessionVariable().getTimeZone().equals("CST")) {
-            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-        } else {
-            this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
-        }
-        String nowString =
-                DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
+        String timezone = context.getSessionVariable().getTimeZone();
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
         this.needReport = context.getSessionVariable().isEnableProfile();
 
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
+                        queryOptions);
     }
 
     // Used for broker export task coordinator
@@ -219,14 +221,12 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
-        this.queryGlobals.setTime_zone(timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, this.descTable, queryGlobals,
+                        queryOptions);
     }
 
     // Used for broker load task coordinator
@@ -249,20 +249,18 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
-        this.queryGlobals.setTime_zone(timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, this.descTable, queryGlobals,
+                        queryOptions);
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
+        ConnectContext context = loadPlanner.getContext();
         this.isBlockQuery = true;
         this.jobId = loadPlanner.getLoadJobId();
-        ConnectContext context = loadPlanner.getContext();
         this.queryId = loadPlanner.getLoadId();
         this.connectContext = context;
         this.descTable = loadPlanner.getDescTable().toThrift();
@@ -286,27 +284,24 @@ public class Coordinator {
             }
         }
 
-        long startTime = loadPlanner.getStartTime();
-        String timezone = loadPlanner.getTimeZone();
-        if (timezone.equals("CST")) {
-            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-        } else {
-            this.queryGlobals.setTime_zone(timezone);
-        }
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(loadPlanner.getStartTime(),
+                loadPlanner.getTimeZone());
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
 
         this.needReport = true;
         this.coordinatorPreprocessor =
-                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
+                        queryOptions);
     }
 
     public long getJobId() {
         return jobId;
+    }
+
+    public void setJobId(Long jobId) {
+        this.jobId = jobId;
     }
 
     public TUniqueId getQueryId() {
@@ -315,10 +310,6 @@ public class Coordinator {
 
     public void setQueryId(TUniqueId queryId) {
         this.queryId = queryId;
-    }
-
-    public void setJobId(Long jobId) {
-        this.jobId = jobId;
     }
 
     public void setQueryType(TQueryType type) {

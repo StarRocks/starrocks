@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_schema.h
 
@@ -41,6 +41,7 @@
 
 #include "column/chunk.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
 #include "storage/type_utils.h"
 #include "storage/types.h"
@@ -71,9 +72,9 @@ public:
     using ColumnScale = uint8_t;
 
     TabletColumn();
-    TabletColumn(FieldAggregationMethod agg, LogicalType type);
-    TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable);
-    TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable, int32_t unique_id, size_t length);
+    TabletColumn(StorageAggregateType agg, LogicalType type);
+    TabletColumn(StorageAggregateType agg, LogicalType type, bool is_nullable);
+    TabletColumn(StorageAggregateType agg, LogicalType type, bool is_nullable, int32_t unique_id, size_t length);
 
     ~TabletColumn();
 
@@ -112,8 +113,8 @@ public:
     ColumnLength length() const { return _length; }
     void set_length(ColumnLength length) { _length = length; }
 
-    FieldAggregationMethod aggregation() const { return _aggregation; }
-    void set_aggregation(FieldAggregationMethod agg) { _aggregation = agg; }
+    StorageAggregateType aggregation() const { return _aggregation; }
+    void set_aggregation(StorageAggregateType agg) { _aggregation = agg; }
 
     bool has_precision() const { return _check_flag(kHasPrecisionShift); }
     ColumnPrecision precision() const { return _precision; }
@@ -148,8 +149,6 @@ public:
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
-    static std::string get_string_by_aggregation_type(FieldAggregationMethod aggregation_type);
-    static FieldAggregationMethod get_aggregation_type_by_string(const std::string& str);
     size_t estimate_field_size(size_t variable_length) const;
     static uint32_t get_field_length_by_type(LogicalType type, uint32_t string_length);
 
@@ -200,7 +199,7 @@ private:
     ColumnName _col_name;
     ColumnUID _unique_id = 0;
     ColumnLength _length = 0;
-    FieldAggregationMethod _aggregation = OLAP_FIELD_AGGREGATION_NONE;
+    StorageAggregateType _aggregation = STORAGE_AGGREGATE_NONE;
     LogicalType _type = TYPE_UNKNOWN;
 
     ColumnIndexLength _index_length = 0;

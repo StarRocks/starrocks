@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/types.h
 
@@ -64,9 +64,6 @@ class TypeInfo {
 public:
     using Datum = vectorized::Datum;
 
-    virtual bool equal(const void* left, const void* right) const = 0;
-    virtual int cmp(const void* left, const void* right) const = 0;
-
     virtual void shallow_copy(void* dest, const void* src) const = 0;
 
     virtual void deep_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
@@ -81,7 +78,6 @@ public:
     virtual void set_to_max(void* buf) const = 0;
     virtual void set_to_min(void* buf) const = 0;
 
-    virtual uint32_t hash_code(const void* data, uint32_t seed) const = 0;
     virtual size_t size() const = 0;
 
     virtual LogicalType type() const = 0;

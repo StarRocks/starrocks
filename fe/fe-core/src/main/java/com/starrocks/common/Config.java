@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/Config.java
 
@@ -1081,7 +1094,7 @@ public class Config extends ConfigBase {
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
     @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
-    public static int tablet_sched_slot_num_per_path = 2;
+    public static int tablet_sched_slot_num_per_path = 4;
 
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
@@ -1106,9 +1119,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
-
-    @ConfField(aliases = {"tablet_balancer_strategy"})
-    public static String tablet_sched_balancer_strategy = "disk_and_tablet";
 
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
@@ -1396,6 +1406,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect = true;
+
+    /**
+     * The start time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_start_time = "00:00:00";
+
+    /**
+     * The end time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_end_time = "23:59:59";
 
     /**
      * a period of create statistics table automatically by the StatisticsMetaManager
@@ -1757,12 +1779,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
-    /**
-     * default bucket number when create OLAP table without buckets info
-     */
-    @ConfField(mutable = true)
-    public static int default_bucket_num = 10;
-
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
 
@@ -1873,6 +1889,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int profile_info_reserved_num = 500;
+
+    /**
+     * format of profile infos reserved by `ProfileManager` for recently executed query.
+     * Default value: "default"
+     */
+    @ConfField(mutable = true)
+    public static String profile_info_format = "default";
 
     /**
      * Max number of roles that can be granted to user including all direct roles and all parent roles

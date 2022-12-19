@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -46,11 +46,16 @@ private:
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     const TupleDescriptor* _dest_tuple_desc;
-    std::unique_ptr<vectorized::SchemaScanner> _scanner;
+    std::unique_ptr<vectorized::SchemaScanner> _schema_scanner;
 
     OlapSchemaScanContextPtr _ctx;
 
     RuntimeProfile::Counter* _filter_timer = nullptr;
+
+    // Because schema_scanner returns column data based on column index.
+    // So a mapping relationship between the slot list of schema_scanner and the tuple slot list is needed
+    // (it can be understood as the relationship between input slots and output slots of schema_scan)
+    std::vector<int> _index_map;
 };
 } // namespace pipeline
 } // namespace starrocks

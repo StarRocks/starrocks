@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet.cpp
 
@@ -1184,7 +1184,11 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
                     std::static_pointer_cast<Tablet>(shared_from_this()));
         }
     }
-    return _compaction_task;
+    if (_compaction_task && _compaction_task.use_count() == 1) {
+        return _compaction_task;
+    } else {
+        return nullptr;
+    }
 }
 
 bool Tablet::has_compaction_task() {
@@ -1195,10 +1199,23 @@ bool Tablet::has_compaction_task() {
 bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task == nullptr && _enable_compaction) {
+        _compaction_context->type = INVALID_COMPACTION;
         if (_compaction_context != nullptr &&
             _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             // if there is running task, return false
             // else, return true
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Tablet::force_base_compaction() {
+    std::lock_guard lock(_compaction_task_lock);
+    if (_compaction_task == nullptr && _enable_compaction) {
+        _compaction_context->type = BASE_COMPACTION;
+        if (_compaction_context != nullptr &&
+            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
         }
     }
@@ -1219,14 +1236,14 @@ void Tablet::stop_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task) {
         _compaction_task->stop();
-        _compaction_task.reset();
+        _compaction_task = nullptr;
     }
     _enable_compaction = false;
 }
 
 void Tablet::reset_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    _compaction_task.reset();
+    _compaction_task = nullptr;
 }
 
 bool Tablet::enable_compaction() {

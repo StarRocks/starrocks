@@ -239,7 +239,7 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 - The maximum length per JSON value is the same as the maximum length per STRING value.
 
-- The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](https://docs.starrocks.com/zh-cn/2.2/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json).
+- The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
 
 - JSON columns are supported only in tables that use the Duplicate Key model. Such JSON columns cannot be defined as sort keys in the tables to which they belong.
 

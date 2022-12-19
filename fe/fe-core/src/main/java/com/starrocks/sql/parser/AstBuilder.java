@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
@@ -68,6 +81,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -4376,6 +4390,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return ArithmeticExpr.Operator.BITOR;
             case StarRocksLexer.BITXOR:
                 return ArithmeticExpr.Operator.BITXOR;
+            case StarRocksLexer.BIT_SHIFT_LEFT:
+                return ArithmeticExpr.Operator.BIT_SHIFT_LEFT;
+            case StarRocksLexer.BIT_SHIFT_RIGHT:
+                return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT;
+            case StarRocksLexer.BIT_SHIFT_RIGHT_LOGICAL:
+                return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL;
         }
 
         throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());
@@ -5317,6 +5337,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return getArrayType(context.arrayType());
         } else if (context.structType() != null) {
             return getStructType(context.structType());
+        } else if (context.mapType() != null) {
+            return getMapType(context.mapType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
@@ -5422,6 +5444,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new StructType(fields);
+    }
+
+    public MapType getMapType(StarRocksParser.MapTypeContext context) {
+        Type keyType = getType(context.type(0));
+        if (keyType.isComplexType()) {
+            throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
+        }
+        Type valueType = getType(context.type(1));
+        return new MapType(keyType, valueType);
     }
 
     @Override

@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.analysis;
 
+import com.clearspring.analytics.util.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
@@ -17,6 +31,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+
+import static org.junit.Assert.fail;
 
 public class CreateMVStmtTest {
 
@@ -142,7 +158,7 @@ public class CreateMVStmtTest {
         String sql = "create materialized view star_view as select c_1_4 from t1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            Assert.fail();
+            fail();
         } catch (AnalysisException e) {
             Assert.assertEquals("Data type of first column cannot be DOUBLE", e.getMessage());
         }
@@ -218,7 +234,7 @@ public class CreateMVStmtTest {
                     "FROM t1";
             try {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-                Assert.fail();
+                fail();
             } catch (Exception ex) {
                 Assert.assertEquals("Materialized view does not support distinct function count(DISTINCT `test`.`t1`.`c_1_9`)",
                         ex.getMessage());
@@ -230,7 +246,7 @@ public class CreateMVStmtTest {
                     "FROM t1";
             try {
                 UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-                Assert.fail();
+                fail();
             } catch (Exception ex) {
                 Assert.assertEquals("Materialized view does not support distinct function sum(DISTINCT `test`.`t1`.`c_1_9`)",
                         ex.getMessage());
@@ -325,6 +341,52 @@ public class CreateMVStmtTest {
             Assert.assertFalse(jsonKey);
         } catch (Exception ex) {
             Assert.assertTrue(ex.getMessage().contains("Invalid data type of materialized key column"));
+        }
+    }
+
+    @Test
+    public void testCreateMVWithOnlyOneAggFunc() {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        List<String> invalidSqls = Lists.newArrayList();
+        invalidSqls.add("create materialized view mv_01 as select sum(c_1_4) from t1");
+        invalidSqls.add("create materialized view mv_01 as select sum(c_1_4) from t1 group by c_1_1");
+        for (String sql : invalidSqls) {
+            try {
+                UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                fail("wrong sql, should fail");
+            } catch (Exception ex) {
+                Assert.assertTrue(ex.getMessage()
+                        .contains("Please add group by clause and at least one group by column in the select list"));
+            }
+        }
+
+        List<String> validSqls = Lists.newArrayList();
+        validSqls.add("create materialized view mv_01 as select c_1_1, sum(c_1_4) from t1 group by c_1_1");
+        validSqls.add("create materialized view mv_01 as select c_1_1, sum(c_1_4) from t1 group by c_1_1, c_1_2");
+        for (String sql : validSqls) {
+            try {
+                UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            } catch (Exception ex) {
+                fail("valid sql, should success");
+                System.out.println(ex.getMessage());
+            }
+        }
+    }
+
+    @Test
+    public void testCreateMVWithColBeforeAgg() {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        List<String> invalidSqls = Lists.newArrayList();
+        invalidSqls.add("create materialized view mv_01 as select sum(c_1_4), c_1_1 from t1 group by c_1_1");
+        invalidSqls.add("create materialized view mv_01 as select c_1_2, sum(c_1_4), c_1_1 from t1 group by c_1_1, c_1_2");
+        for (String sql : invalidSqls) {
+            try {
+                UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                fail("wrong sql, should fail");
+            } catch (Exception ex) {
+                Assert.assertTrue(ex.getMessage()
+                        .contains("Any single column should be before agg column"));
+            }
         }
     }
 }

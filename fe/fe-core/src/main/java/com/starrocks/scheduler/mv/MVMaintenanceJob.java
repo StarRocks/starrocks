@@ -1,9 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.scheduler.mv;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -13,12 +27,12 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TDescriptorTable;
@@ -27,6 +41,8 @@ import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceStopTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TQueryGlobals;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,12 +51,12 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -54,6 +70,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class MVMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
+    private static final int MV_QUERY_TIMEOUT = 120;
 
     // Persisted state
     @SerializedName("jobId")
@@ -75,9 +92,9 @@ public class MVMaintenanceJob implements Writable {
     private transient MaterializedView view;
     private transient ConnectContext connectContext;
     // TODO(murphy) implement a real query coordinator
-    private transient Coordinator queryCoordinator;
+    private transient CoordinatorPreprocessor queryCoordinator;
     private transient TxnBasedEpochCoordinator epochCoordinator;
-    private transient List<MVMaintenanceTask> tasks;
+    private transient Map<Long, MVMaintenanceTask> taskMap;
 
     public MVMaintenanceJob(MaterializedView view) {
         this.jobId = view.getId();
@@ -87,6 +104,14 @@ public class MVMaintenanceJob implements Writable {
         this.serializedState = JobState.INIT;
         this.state.set(JobState.INIT);
         this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
+    }
+
+    public static MVMaintenanceJob read(DataInput input) throws IOException {
+        MVMaintenanceJob job = GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
+        job.state = new AtomicReference<>();
+        job.inSchedule = new AtomicBoolean();
+        job.state.set(job.getSerializedState());
+        return job;
     }
 
     public void startJob() {
@@ -164,19 +189,28 @@ public class MVMaintenanceJob implements Writable {
     private void prepare() throws Exception {
         this.state.set(JobState.PREPARING);
         try {
-            // TODO(murphy) fill connection context
-            // Build conenction context
-            this.connectContext = new ConnectContext();
-            this.connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            this.connectContext.setQueryId(new UUID(1, 2));
-            this.connectContext.setExecutionId(new TUniqueId(1, 2));
+            // TODO(murphy) fill current user
+            // Build connection context
+            this.connectContext = StatisticUtils.buildConnectContext();
+            Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
+            this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
+            if (db != null) {
+                this.connectContext.setDatabase(db.getFullName());
+            }
+            TUniqueId queryId = connectContext.getExecutionId();
 
             // Build  query coordinator
             ExecPlan execPlan = this.view.getMaintenancePlan();
             List<PlanFragment> fragments = execPlan.getFragments();
             List<ScanNode> scanNodes = execPlan.getScanNodes();
             TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
-            this.queryCoordinator = new Coordinator(connectContext, fragments, scanNodes, descTable);
+            TQueryGlobals queryGlobals =
+                    CoordinatorPreprocessor.genQueryGlobals(connectContext.getStartTime(),
+                            connectContext.getSessionVariable().getTimeZone());
+            TQueryOptions queryOptions = connectContext.getSessionVariable().toThrift();
+            this.queryCoordinator =
+                    new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, descTable, queryGlobals,
+                            queryOptions);
             this.epochCoordinator = new TxnBasedEpochCoordinator(this);
 
             // Build physical plan instance
@@ -202,31 +236,33 @@ public class MVMaintenanceJob implements Writable {
     private void buildPhysicalTopology() throws Exception {
         queryCoordinator.prepareExec();
 
-        List<PlanFragment> fragments = queryCoordinator.getFragments();
         Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
                 queryCoordinator.getFragmentExecParamsMap();
         // FIXME(murphy) all of these are faked
         Set<TUniqueId> instanceIds = new HashSet<>();
-        TDescriptorTable descTable = queryCoordinator.getDescTable();
+        TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
         Set<Long> dbIds = connectContext.getCurrentSqlDbIds();
         boolean enablePipeline = true;
         int tabletSinkDop = 1;
 
-        this.tasks = new ArrayList<>();
+        // Group all fragment instances by BE id, and package them into a task
+        Map<Long, MVMaintenanceTask> tasksByBe = new HashMap<>();
         int taskId = 0;
         for (Map.Entry<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
-            PlanFragmentId fragmentId = kv.getKey();
             CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
             List<TExecPlanFragmentParams> tParams =
                     execParams.toThrift(instanceIds, descTable, dbIds, enablePipeline, tabletSinkDop, tabletSinkDop);
 
-            for (TExecPlanFragmentParams tParam : tParams) {
-                TUniqueId instanceId = tParam.params.fragment_instance_id;
-                long beId = 0;
-                MVMaintenanceTask task = MVMaintenanceTask.build(this, taskId, beId, fragmentId, instanceId, tParam);
-                this.tasks.add(task);
+            for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
+                long beId = execParams.instanceExecParams.get(i).getBackendNum();
+                TNetworkAddress beHost = execParams.instanceExecParams.get(i).getHost();
+                MVMaintenanceTask task =
+                        tasksByBe.computeIfAbsent(beId,
+                                k -> MVMaintenanceTask.build(this, taskId, beId, beHost, new ArrayList<>()));
+                task.addFragmentInstance(tParams.get(i));
             }
         }
+        this.taskMap = tasksByBe;
     }
 
     /**
@@ -235,7 +271,7 @@ public class MVMaintenanceJob implements Writable {
      */
     private void deployTasks() throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
-        for (MVMaintenanceTask task : tasks) {
+        for (MVMaintenanceTask task : taskMap.values()) {
             long beId = task.getBeId();
             long taskId = task.getTaskId();
             Backend backend =
@@ -244,7 +280,6 @@ public class MVMaintenanceJob implements Writable {
             TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
             // Request information
             String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
-            TExecPlanFragmentParams planParam = task.getFragmentInstance();
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
@@ -252,9 +287,9 @@ public class MVMaintenanceJob implements Writable {
             request.setJob_id(getJobId());
             request.setTask_id(taskId);
             request.setStart_maintenance(new TMVMaintenanceStartTask());
-            request.start_maintenance.setDb_name(dbName);
-            request.start_maintenance.setMv_name(view.getName());
-            request.start_maintenance.setPlan_params(planParam);
+            request.setDb_name(dbName);
+            request.setMv_name(view.getName());
+            request.start_maintenance.setFragments(task.getFragmentInstances());
 
             try {
                 Future<PMVMaintenanceTaskResult> resultFuture =
@@ -272,7 +307,7 @@ public class MVMaintenanceJob implements Writable {
         Exception ex = null;
         for (Future<PMVMaintenanceTaskResult> future : results) {
             try {
-                future.wait();
+                future.get();
             } catch (InterruptedException e) {
                 if (ex == null) {
                     ex = e;
@@ -287,7 +322,7 @@ public class MVMaintenanceJob implements Writable {
 
     private void stopTasks() throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
-        for (MVMaintenanceTask task : tasks) {
+        for (MVMaintenanceTask task : taskMap.values()) {
             long beId = task.getBeId();
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
             request.setTask_type(MVTaskType.STOP_MAINTENANCE);
@@ -312,7 +347,7 @@ public class MVMaintenanceJob implements Writable {
         Exception ex = null;
         for (Future<PMVMaintenanceTaskResult> future : results) {
             try {
-                future.wait();
+                future.get();
             } catch (InterruptedException e) {
                 if (ex == null) {
                     ex = e;
@@ -356,12 +391,12 @@ public class MVMaintenanceJob implements Writable {
         return jobId;
     }
 
-    public Coordinator getQueryCoordinator() {
+    public CoordinatorPreprocessor getQueryCoordinator() {
         return queryCoordinator;
     }
 
-    public List<MVMaintenanceTask> getTasks() {
-        return tasks;
+    public Map<Long, MVMaintenanceTask> getTasks() {
+        return taskMap;
     }
 
     private JobState getSerializedState() {
@@ -397,14 +432,6 @@ public class MVMaintenanceJob implements Writable {
     @Override
     public int hashCode() {
         return Objects.hash(jobId, viewId, epoch, state.get());
-    }
-
-    public static MVMaintenanceJob read(DataInput input) throws IOException {
-        MVMaintenanceJob job = GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
-        job.state = new AtomicReference<>();
-        job.inSchedule = new AtomicBoolean();
-        job.state.set(job.getSerializedState());
-        return job;
     }
 
     @Override

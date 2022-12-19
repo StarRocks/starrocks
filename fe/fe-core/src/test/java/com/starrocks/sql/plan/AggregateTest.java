@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -400,12 +413,12 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select count(distinct id_bool) from test_bool";
         String plan = getCostExplain(sql);
         assertContains(plan, "aggregate: multi_distinct_count[([11: id_bool, BOOLEAN, true]); " +
-                "args: BOOLEAN; result: VARCHAR;");
+                "args: BOOLEAN; result: VARBINARY;");
 
         sql = "select sum(distinct id_bool) from test_bool";
         plan = getCostExplain(sql);
         assertContains(plan, "aggregate: multi_distinct_sum[([11: id_bool, BOOLEAN, true]); " +
-                "args: BOOLEAN; result: VARCHAR;");
+                "args: BOOLEAN; result: VARBINARY;");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -415,7 +428,7 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select count(distinct t1e) from test_all_type";
         String plan = getCostExplain(sql);
         assertContains(plan, "aggregate: multi_distinct_count[([5: t1e, FLOAT, true]); " +
-                "args: FLOAT; result: VARCHAR; args nullable: true; result nullable: false");
+                "args: FLOAT; result: VARBINARY; args nullable: true; result nullable: false");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -662,10 +675,10 @@ public class AggregateTest extends PlanTestBase {
                 "  |  aggregate: count[(if[(1: t1a IS NULL, NULL, [2: t1b, SMALLINT, true]); " +
                 "args: BOOLEAN,SMALLINT,SMALLINT; result: SMALLINT; args nullable: true; result nullable: true]); " +
                 "args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], " +
-                "avg[([12: avg, VARCHAR, true]); args: INT; result: VARCHAR; args nullable: true; " +
+                "avg[([12: avg, VARBINARY, true]); args: INT; result: VARBINARY; args nullable: true; " +
                 "result nullable: true]");
         assertContains(plan, " 1:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARCHAR; " +
+                "  |  aggregate: avg[([3: t1c, INT, true]); args: INT; result: VARBINARY; " +
                 "args nullable: true; result nullable: true]\n" +
                 "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true]");
         FeConstants.runningUnitTest = false;
@@ -707,7 +720,7 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testVarianceStddevAnalyze() throws Exception {
         String sql = "select stddev_pop(1222) from (select 1) t;";
-        assertPlanContains(sql, "  1:AGGREGATE (update finalize)\n" +
+        assertPlanContains(sql, "1:AGGREGATE (update finalize)\n" +
                 "  |  output: stddev_pop(1222)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -1682,6 +1695,19 @@ public class AggregateTest extends PlanTestBase {
                     " result nullable: true]\n" +
                     "  |  group by: [1: v1, BIGINT, true]\n" +
                     "  |  sorted streaming: true");
+        }
+        {
+            try {
+                FeConstants.USE_MOCK_DICT_MANAGER = true;
+                connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+                sql = "select sum(t1b), t1a from test_all_type group by t1a";
+                plan = getCostExplain(sql);
+                assertContains(plan, "sorted streaming: true");
+                assertContains(plan, "Decode");
+            } finally {
+                connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+                FeConstants.USE_MOCK_DICT_MANAGER = false;
+            }
         }
         connectContext.getSessionVariable().setEnableSortAggregate(false);
     }

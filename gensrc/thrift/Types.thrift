@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -375,11 +375,11 @@ enum TTableType {
     HDFS_TABLE,
     ICEBERG_TABLE,
     HUDI_TABLE,
-    DELTALAKE_TABLE,
     JDBC_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
-    FILE_TABLE
+    FILE_TABLE,
+    DELTALAKE_TABLE
 }
 
 enum TKeysType {
@@ -478,4 +478,15 @@ enum TWriteQuorumType {
     ONE = 0;
     MAJORITY = 1;
     ALL = 2;
+}
+
+enum StreamSourceType {
+    BINLOG,
+    KAFKA, // NOT IMPLEMENTED
+}
+
+struct TBinlogOffset {
+    1: optional TTabletId tablet_id
+    2: optional TVersion version
+    3: optional i64 lsn
 }

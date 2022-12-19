@@ -4,17 +4,18 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exprs/vectorized/jsonpath.h"
 
 #include <re2/re2.h>
+#include <re2/stringpiece.h>
 
 #include <algorithm>
 #include <boost/tokenizer.hpp>
@@ -30,7 +31,10 @@
 
 namespace starrocks::vectorized {
 
-static const re2::RE2 JSONPATH_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)", re2::RE2::Quiet);
+// Regex for match "arr[0][1]", with two capture groups: variable-name, array-indices
+static const re2::RE2 JSONPATH_PATTERN(R"(^([^\"\[\]]*)((?:\[(?:[0-9\:\*]+)\])*))", re2::RE2::Quiet);
+// Regex for match "[0]"
+static const re2::RE2 ARRAY_INDEX_PATTERN(R"(\[([0-9\:\*]+)\])");
 static const re2::RE2 ARRAY_SINGLE_SELECTOR(R"(\d+)", re2::RE2::Quiet);
 static const re2::RE2 ARRAY_SLICE_SELECTOR(R"(\d+\:\d+)", re2::RE2::Quiet);
 static const std::string JSONPATH_ROOT = "$";
@@ -134,8 +138,8 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
     }
 
     for (int i = 0; i < path_exprs.size(); i++) {
-        std::string col;
-        std::string index;
+        std::string variable;
+        std::string array_pieces;
         auto& current = path_exprs[i];
 
         if (i == 0) {
@@ -148,13 +152,24 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
             }
         }
 
-        if (UNLIKELY(!RE2::FullMatch(path_exprs[i], JSONPATH_PATTERN, &col, &index))) {
+        if (!RE2::FullMatch(current, JSONPATH_PATTERN, &variable, &array_pieces)) {
             parsed_paths->emplace_back("", std::unique_ptr<ArraySelector>(new ArraySelectorNone()));
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", path_exprs[i]));
-        } else {
+        } else if (array_pieces.empty()) {
+            // No array selector
             std::unique_ptr<ArraySelector> selector;
-            RETURN_IF_ERROR(ArraySelector::parse(index, &selector));
-            parsed_paths->emplace_back(JsonPathPiece(col, std::move(selector)));
+            RETURN_IF_ERROR(ArraySelector::parse(array_pieces, &selector));
+            parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+        } else {
+            // Cosume multiple array selector
+            re2::StringPiece array_piece(array_pieces);
+            std::string single_piece;
+            while (RE2::Consume(&array_piece, ARRAY_INDEX_PATTERN, &single_piece)) {
+                std::unique_ptr<ArraySelector> selector;
+                RETURN_IF_ERROR(ArraySelector::parse(single_piece, &selector));
+                parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+                variable = "";
+            }
         }
     }
 

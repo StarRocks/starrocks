@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/column_reader.cpp
 
@@ -49,6 +49,7 @@
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
@@ -194,6 +195,55 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+        }
+        return Status::OK();
+    } else if (_column_type == LogicalType::TYPE_MAP) {
+        _sub_readers = std::make_unique<SubReaderList>();
+        if (meta->is_nullable()) {
+            if (meta->children_columns_size() != 4) {
+                return Status::InvalidArgument("nullable array should have 3 children columns");
+            }
+            _sub_readers->reserve(4);
+
+            // keys
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // values
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // null flags
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // offsets
+            res = ColumnReader::create(meta->mutable_children_columns(3), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+        } else {
+            if (meta->children_columns_size() != 3) {
+                return Status::InvalidArgument("non-nullable array should have 2 children columns");
+            }
+            _sub_readers->reserve(3);
+
+            // keys
+            auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // values
+            res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            // offsets
+            res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
         }
@@ -425,7 +475,7 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
-        ColumnIterator* element_iterator;
+        ColumnIterator* element_iterator = nullptr;
         RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&element_iterator));
 
         ColumnIterator* null_iterator = nullptr;
@@ -437,6 +487,24 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
         RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&array_size_iterator));
 
         *iterator = new ArrayColumnIterator(null_iterator, array_size_iterator, element_iterator);
+        return Status::OK();
+    } else if (_column_type == LogicalType::TYPE_MAP) {
+        size_t col = 0;
+        ColumnIterator* keys = nullptr;
+        RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&keys));
+
+        ColumnIterator* values = nullptr;
+        RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&values));
+
+        ColumnIterator* nulls = nullptr;
+        if (is_nullable()) {
+            RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&nulls));
+        }
+
+        ColumnIterator* offsets = nullptr;
+        RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&offsets));
+
+        *iterator = new MapColumnIterator(nulls, offsets, keys, values);
         return Status::OK();
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/planner/HashJoinNode.java
 
@@ -28,10 +41,14 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
+import com.starrocks.thrift.TNormalHashJoinNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Hash join between left child and right child.
@@ -109,4 +126,18 @@ public class HashJoinNode extends JoinNode {
         }
     }
 
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalHashJoinNode hashJoinNode = new TNormalHashJoinNode();
+        hashJoinNode.setJoin_op(getJoinOp().toThrift());
+        hashJoinNode.setDistribution_mode(getDistrMode().toThrift());
+        hashJoinNode.setEq_join_conjuncts(normalizer.normalizeExprs(new ArrayList<>(eqJoinConjuncts)));
+        hashJoinNode.setOther_join_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
+        hashJoinNode.setIs_rewritten_from_not_in(innerRef != null && innerRef.isJoinRewrittenFromNotIn());
+        hashJoinNode.setPartition_exprs(normalizer.normalizeOrderedExprs(partitionExprs));
+        hashJoinNode.setOutput_columns(normalizer.remapIntegerSlotIds(outputSlots));
+        planNode.setHash_join_node(hashJoinNode);
+        planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
 }

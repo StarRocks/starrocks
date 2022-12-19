@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://starrocks.io/index">
-    <img  width="526" src="images/logo.png">
+    <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png">
    </a>
 </p>
 <p align="center">
@@ -38,7 +38,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 
 <br>
  <p align="center">
-    <img src="images/banner.png">
+    <img src="https://cdn.starrocks.io/static/github/community.gif">
    </a>
 </p>
 </br>
@@ -99,7 +99,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
-**📝 License:** StaRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+**📝 License:** StarRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 **👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
   
@@ -120,4 +120,4 @@ This project is used by the following companies. Learn more about their use case
 
 StarRocks is built upon Apache® Doris™ 0.13 in early 2020. We have recreated many important parts of the database including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes. 
 
-Today, there are only less than 20% of the code in StarRocks is from Apache® Doris™.
+Today, only less than 20% of the code in StarRocks is from Apache® Doris™.

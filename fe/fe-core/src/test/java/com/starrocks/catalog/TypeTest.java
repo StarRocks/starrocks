@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/catalog/TypeTest.java
 
@@ -21,8 +34,12 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.ArrayList;
 
 public class TypeTest {
     @Test
@@ -142,6 +159,22 @@ public class TypeTest {
         // function (an invisible type for users, just used to express the lambda Functions in high-order functions)
         type = Type.FUNCTION;
         Assert.assertEquals(60, type.getMysqlResultSetFieldLength());
+
+        MapType mapType =
+                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.INT));
+        // default 20 * 3
+        Assert.assertEquals(60, mapType.getMysqlResultSetFieldLength());
+        Assert.assertEquals(0, mapType.getMysqlResultSetFieldDecimals());
+        Assert.assertEquals(33, mapType.getMysqlResultSetFieldCharsetIndex());
+
+        StructField structField = new StructField("a", ScalarType.createType(PrimitiveType.INT));
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField);
+        StructType structType = new StructType(structFields);
+        // default 20 * 3
+        Assert.assertEquals(60, structType.getMysqlResultSetFieldLength());
+        Assert.assertEquals(0, structType.getMysqlResultSetFieldDecimals());
+        Assert.assertEquals(33, structType.getMysqlResultSetFieldCharsetIndex());
     }
 
     @Test
@@ -161,5 +194,42 @@ public class TypeTest {
             String name = (String) tc[1];
             Assert.assertEquals(name, type.canonicalName());
         }
+    }
+
+    @Test
+    public void testMapSerialAndDeser() {
+        // map<int,struct<c1:int,cc1:string>>
+        StructType c1 = new StructType(Lists.newArrayList(
+                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+        ));
+        MapType mapType =
+                new MapType(ScalarType.createType(PrimitiveType.INT), c1);
+        String json = GsonUtils.GSON.toJson(mapType);
+        Type deType = GsonUtils.GSON.fromJson(json, Type.class);
+        Assert.assertTrue(deType.isMapType());
+        Assert.assertEquals("MAP<INT,STRUCT<c1:int(11), cc1:varchar(1048576)>>", deType.toString());
+        // test initialed selectedField by ctor in deserializer.
+        deType.setSelectedField(0, false);
+    }
+
+    @Test
+    public void testStructSerialAndDeser() {
+        // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
+        StructType c1 = new StructType(Lists.newArrayList(
+                new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+        ));
+        StructType root = new StructType(Lists.newArrayList(
+                new StructField("struct_test", ScalarType.createType(PrimitiveType.INT), "comment test"),
+                new StructField("c1", c1)
+        ));
+        String json = GsonUtils.GSON.toJson(root);
+        Type deType = GsonUtils.GSON.fromJson(json, Type.class);
+        Assert.assertTrue(deType.isStructType());
+        Assert.assertEquals("STRUCT<struct_test:int(11) COMMENT 'comment test', c1:STRUCT<c1:int(11), cc1:varchar(1048576)>>",
+                deType.toString());
+        // test initialed fieldMap by ctor in deserializer.
+        Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));
     }
 }

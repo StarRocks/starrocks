@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.clone;
 
@@ -303,7 +316,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (srcBePathSlot == null) {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "working slots not exist for src be");
         }
-        if (srcBePathSlot.takeBalanceSlot(pathHash) == -1) {
+        if (srcBePathSlot.takeSlot(pathHash) == -1) {
             throw new SchedException(SchedException.Status.SCHEDULE_FAILED, "path busy, wait for next round");
         }
     }
@@ -1512,8 +1525,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         long cost = (System.nanoTime() - start) / 1000000;
         lockTotalTime = lockTotalTime / 1000000;
-        LOG.info("finished to calculate partition stats. cost: {} ms, in lock time: {} ms",
-                cost, lockTotalTime);
+        if (lockTotalTime > Config.slow_lock_threshold_ms || cost > 30000) {
+            LOG.info("finished to calculate partition stats. cost: {} ms, in lock time: {} ms",
+                    cost, lockTotalTime);
+        }
 
         return partitionStats;
     }

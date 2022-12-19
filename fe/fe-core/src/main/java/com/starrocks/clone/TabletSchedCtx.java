@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/clone/TabletSchedCtx.java
 
@@ -38,7 +51,6 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
-import com.starrocks.clone.TabletScheduler.TabletBalancerStrategy;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -676,13 +688,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             Preconditions.checkState(srcPathHash != -1);
             PathSlot slot = tabletScheduler.getBackendsWorkingSlots().get(srcReplica.getBackendId());
             if (slot != null) {
-                if (type == Type.REPAIR) {
+                if (type == Type.REPAIR || isSrcPathResourceHold()) {
                     slot.freeSlot(srcPathHash);
-                } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
-                            || isSrcPathResourceHold()) {
-                        slot.freeBalanceSlot(srcPathHash);
-                    }
                 }
             }
         }
@@ -690,13 +697,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (destPathHash != -1) {
             PathSlot slot = tabletScheduler.getBackendsWorkingSlots().get(destBackendId);
             if (slot != null) {
-                if (type == Type.REPAIR) {
+                if (type == Type.REPAIR || isDestPathResourceHold()) {
                     slot.freeSlot(destPathHash);
-                } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
-                            || isDestPathResourceHold()) {
-                        slot.freeBalanceSlot(destPathHash);
-                    }
                 }
             }
         }
@@ -737,9 +739,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          * 2. repair task or balance task that dose not adopt strategy of TABLET_BALANCER_STRATEGY_DISK_AND_TABLET
          */
         if (state == State.PENDING
-                && (type == Type.REPAIR
-                || (type == Type.BALANCE &&
-                !TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)))) {
+                && (type == Type.REPAIR)) {
             if (!reserveTablet) {
                 this.tablet = null;
             }

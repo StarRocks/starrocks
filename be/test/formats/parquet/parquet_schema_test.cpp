@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include <gtest/gtest.h>
 
 #include <iostream>
@@ -30,7 +30,7 @@ public:
 TEST_F(ParquetSchemaTest, EmptySchema) {
     std::vector<tparquet::SchemaElement> t_schemas;
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -44,7 +44,7 @@ TEST_F(ParquetSchemaTest, OnlyRoot) {
         t_schema.__set_num_children(0);
     }
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -76,11 +76,11 @@ TEST_F(ParquetSchemaTest, OnlyLeafType) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
 
     {
-        auto idx = desc.get_column_index("col1", false);
+        auto idx = desc.get_column_index("col1");
         ASSERT_EQ(0, idx);
         auto field = desc.get_stored_column_by_idx(0);
         ASSERT_STREQ("col1", field->name.c_str());
@@ -91,7 +91,7 @@ TEST_F(ParquetSchemaTest, OnlyLeafType) {
     }
 
     {
-        auto idx = desc.get_column_index("col2", false);
+        auto idx = desc.get_column_index("col2");
         ASSERT_EQ(1, idx);
         auto field = desc.get_stored_column_by_idx(1);
         ASSERT_STREQ("col2", field->name.c_str());
@@ -184,7 +184,7 @@ TEST_F(ParquetSchemaTest, NestedType) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
 
     // Check col2
@@ -256,7 +256,7 @@ TEST_F(ParquetSchemaTest, InvalidCase1) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -288,7 +288,7 @@ TEST_F(ParquetSchemaTest, InvalidCase2) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -317,7 +317,7 @@ TEST_F(ParquetSchemaTest, InvalidList1) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -346,7 +346,7 @@ TEST_F(ParquetSchemaTest, InvalidList2) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -375,7 +375,7 @@ TEST_F(ParquetSchemaTest, InvalidList3) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -412,7 +412,7 @@ TEST_F(ParquetSchemaTest, InvalidList4) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -441,7 +441,7 @@ TEST_F(ParquetSchemaTest, SimpleArray) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
     {
         auto field = desc.resolve_by_name("col2");
@@ -494,7 +494,7 @@ TEST_F(ParquetSchemaTest, TwoLevelArray) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
     {
         auto field = desc.resolve_by_name("col2");
@@ -563,7 +563,7 @@ TEST_F(ParquetSchemaTest, MapNormal) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
     {
         auto field = desc.resolve_by_name("col2");
@@ -615,7 +615,7 @@ TEST_F(ParquetSchemaTest, InvalidMap1) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -661,7 +661,7 @@ TEST_F(ParquetSchemaTest, InvalidMap2) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -707,7 +707,7 @@ TEST_F(ParquetSchemaTest, InvalidMap3) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -761,7 +761,7 @@ TEST_F(ParquetSchemaTest, InvalidMap4) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -815,7 +815,7 @@ TEST_F(ParquetSchemaTest, InvalidMap5) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 
@@ -877,7 +877,7 @@ TEST_F(ParquetSchemaTest, InvalidMap6) {
     }
 
     SchemaDescriptor desc;
-    auto st = desc.from_thrift(t_schemas);
+    auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok());
 }
 

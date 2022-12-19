@@ -4,19 +4,20 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exec/vectorized/jdbc_scanner.h"
 
 #include <memory>
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -390,10 +391,29 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
         for (size_t i = 0; i < _slot_descs.size(); i++) {
             jobject jcolumn = helper.list_get(jchunk, i);
             LOCAL_REF_GUARD_ENV(env, jcolumn);
-            auto result_column = _result_chunk->columns()[i].get();
-            auto st = helper.get_result_from_boxed_array(_result_column_types[i], result_column, jcolumn, num_rows);
+            auto& result_column = _result_chunk->columns()[i];
+            auto st =
+                    helper.get_result_from_boxed_array(_result_column_types[i], result_column.get(), jcolumn, num_rows);
             RETURN_IF_ERROR(st);
-            down_cast<NullableColumn*>(result_column)->update_has_null();
+            // check data's length for string type
+            auto origin_type = _slot_descs[i]->type().type;
+            if (origin_type == TYPE_VARCHAR || origin_type == TYPE_CHAR) {
+                DCHECK_EQ(_result_column_types[i], TYPE_VARCHAR);
+                int max_len = _slot_descs[i]->type().len;
+                ColumnViewer<TYPE_VARCHAR> viewer(result_column);
+                for (int row = 0; row < viewer.size(); row++) {
+                    if (viewer.is_null(row)) {
+                        continue;
+                    }
+                    auto value = viewer.value(row);
+                    if ((int)value.size > max_len) {
+                        return Status::DataQualityError(fmt::format(
+                                "Value length exceeds limit on column[{}], max length is [{}], value is [{}]",
+                                _slot_descs[i]->col_name(), max_len, value));
+                    }
+                }
+            }
+            down_cast<NullableColumn*>(result_column.get())->update_has_null();
         }
     }
 

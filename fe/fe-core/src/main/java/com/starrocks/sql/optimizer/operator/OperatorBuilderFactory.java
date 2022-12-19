@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.operator;
 
 import com.starrocks.sql.common.ErrorType;
@@ -30,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 
 public class OperatorBuilderFactory {
     public static Operator.Builder<?, ?> build(Operator operator) {
@@ -87,6 +101,8 @@ public class OperatorBuilderFactory {
             return new LogicalCTEAnchorOperator.Builder();
         } else if (operator instanceof LogicalProjectOperator) {
             return new LogicalProjectOperator.Builder();
+        } else if (operator instanceof LogicalBinlogScanOperator) {
+            return new LogicalBinlogScanOperator.Builder();
         } else {
             throw new StarRocksPlannerException("not implement builder: " + operator.getOpType(),
                     ErrorType.INTERNAL_ERROR);

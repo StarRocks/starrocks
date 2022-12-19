@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -623,6 +623,14 @@ struct TStreamLoadPutRequest {
     31: optional string merge_condition
     // only valid when file type is CSV
     50: optional string rowDelimiter
+    // only valid when file type is CSV
+    51: optional i64 skipHeader
+    // only valid when file type is CSV
+    52: optional bool trimSpace
+    // only valid when file type is CSV
+    53: optional byte enclose
+    // only valid when file type is CSV
+    54: optional byte escape
 }
 
 struct TStreamLoadPutResult {

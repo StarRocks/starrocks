@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      https:#www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,7 +37,11 @@
 
 BUILD_DIR = ${CURDIR}/../build/
 
-PROTOC = ${STARROCKS_THIRDPARTY}/installed/bin/protoc
+ifneq ("$(wildcard ${STARROCKS_THIRDPARTY}/installed/bin/protoc)","")
+	PROTOC = ${STARROCKS_THIRDPARTY}/installed/bin/protoc
+else
+	PROTOC = protoc
+endif
 
 SOURCES = $(shell find ${CURDIR} -name "*.proto")
 OBJECTS = $(patsubst ${CURDIR}/%.proto, ${BUILD_DIR}/gen_cpp/%.pb.cc, ${SOURCES})

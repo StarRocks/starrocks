@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/olap_server.cpp
 
@@ -45,7 +45,6 @@
 #include "common/status.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_scheduler.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
@@ -174,11 +173,8 @@ Status StorageEngine::start_bg_threads() {
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
-        _compaction_scheduler = std::thread([] {
-            CompactionScheduler compaction_scheduler;
-            compaction_scheduler.schedule();
-        });
-        Thread::set_thread_name(_compaction_scheduler, "compact_sched");
+
+        _compaction_manager->schedule();
 
         _compaction_checker_thread = std::thread([this] { compaction_check(); });
         Thread::set_thread_name(_compaction_checker_thread, "compact_check");
@@ -688,7 +684,6 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(600);
-        break;
     }
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {

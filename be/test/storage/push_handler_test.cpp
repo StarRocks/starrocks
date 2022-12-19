@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/push_handler.h"
 
 #include <gtest/gtest.h>
@@ -48,7 +48,7 @@ VectorizedSchema PushHandlerTest::_create_schema() {
     fields.emplace_back(std::make_shared<VectorizedField>(1, "k2_smallint", get_type_info(TYPE_SMALLINT), true));
     fields.emplace_back(std::make_shared<VectorizedField>(2, "k3_varchar", get_type_info(TYPE_VARCHAR), true));
     fields.emplace_back(std::make_shared<VectorizedField>(3, "k4_bigint", get_type_info(TYPE_BIGINT), true));
-    fields.back()->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
+    fields.back()->set_aggregate_method(STORAGE_AGGREGATE_SUM);
     return VectorizedSchema(fields);
 }
 

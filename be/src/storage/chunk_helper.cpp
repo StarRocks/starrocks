@@ -4,20 +4,21 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/chunk_helper.h"
 
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_pool.h"
+#include "column/map_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_schema.h"
 #include "gutil/strings/fastmem.h"
@@ -124,7 +125,8 @@ starrocks::vectorized::VectorizedField ChunkHelper::convert_field_to_format_v2(C
     LogicalType type = TypeUtils::to_storage_format_v2(c.type());
 
     TypeInfoPtr type_info = nullptr;
-    if (type == TYPE_ARRAY || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
+        type == TYPE_DECIMAL128) {
         // ARRAY and DECIMAL should be handled specially
         // Array is nested type, the message is stored in TabletColumn
         // Decimal has precision and scale, the message is stored in TabletColumn
@@ -140,6 +142,12 @@ starrocks::vectorized::VectorizedField ChunkHelper::convert_field_to_format_v2(C
         const TabletColumn& sub_column = c.subcolumn(0);
         auto sub_field = convert_field_to_format_v2(id, sub_column);
         f.add_sub_field(sub_field);
+    } else if (type == TYPE_MAP) {
+        for (int i = 0; i < 2; ++i) {
+            const TabletColumn& sub_column = c.subcolumn(i);
+            auto sub_field = convert_field_to_format_v2(id, sub_column);
+            f.add_sub_field(sub_field);
+        }
     }
 
     // If origin type needs to be converted format v2, we should change its short key length
@@ -174,6 +182,22 @@ starrocks::vectorized::VectorizedSchema ChunkHelper::get_short_key_schema_with_f
         short_key_cids.push_back(sort_key_idxes[i]);
     }
     return starrocks::vectorized::VectorizedSchema(schema.schema(), short_key_cids);
+}
+
+starrocks::vectorized::VectorizedSchema ChunkHelper::get_sort_key_schema_with_format_v2(
+        const starrocks::TabletSchema& schema) {
+    std::vector<ColumnId> sort_key_iota_idxes(schema.sort_key_idxes().size());
+    std::iota(sort_key_iota_idxes.begin(), sort_key_iota_idxes.end(), 0);
+    return starrocks::vectorized::VectorizedSchema(schema.schema(), schema.sort_key_idxes(), sort_key_iota_idxes);
+}
+
+starrocks::vectorized::VectorizedSchema ChunkHelper::get_sort_key_schema_by_primary_key_format_v2(
+        const starrocks::TabletSchema& tablet_schema) {
+    std::vector<ColumnId> primary_key_iota_idxes(tablet_schema.num_key_columns());
+    std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+    std::vector<ColumnId> all_keys_iota_idxes(tablet_schema.num_columns());
+    std::iota(all_keys_iota_idxes.begin(), all_keys_iota_idxes.end(), 0);
+    return starrocks::vectorized::VectorizedSchema(tablet_schema.schema(), all_keys_iota_idxes, primary_key_iota_idxes);
 }
 
 ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::VectorizedSchema& schema) {
@@ -231,6 +255,12 @@ struct ColumnPtrBuilder {
             auto offsets = get_column_ptr<vectorized::UInt32Column, force>(chunk_size);
             auto array = vectorized::ArrayColumn::create(std::move(elements), offsets);
             return nullable(array);
+        } else if constexpr (ftype == TYPE_MAP) {
+            auto keys = field.sub_field(0).create_column();
+            auto values = field.sub_field(1).create_column();
+            auto offsets = get_column_ptr<vectorized::UInt32Column, force>(chunk_size);
+            auto map = vectorized::MapColumn::create(std::move(keys), std::move(values), offsets);
+            return nullable(map);
         } else {
             switch (ftype) {
             case TYPE_DECIMAL32:
@@ -340,6 +370,8 @@ struct ColumnBuilder {
 
         if constexpr (ftype == TYPE_ARRAY) {
             CHECK(false) << "array not supported";
+        } else if constexpr (ftype == TYPE_MAP) {
+            CHECK(false) << "array not supported";
         } else {
             return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
         }
@@ -369,6 +401,10 @@ vectorized::ColumnPtr ChunkHelper::column_from_field(const vectorized::Vectorize
         return NullableIfNeed(vectorized::ArrayColumn::create(column_from_field(field.sub_field(0)),
                                                               vectorized::UInt32Column::create()));
     }
+    case TYPE_MAP:
+        return NullableIfNeed(vectorized::MapColumn::create(column_from_field(field.sub_field(0)),
+                                                            column_from_field(field.sub_field(1)),
+                                                            vectorized::UInt32Column::create()));
     default:
         return NullableIfNeed(column_from_field_type(type, false));
     }
@@ -414,20 +450,6 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
         reordered_chunk.append_column(original_chunk.get_column_by_slot_id(slot_id), slot_id);
     }
     original_chunk.swap_chunk(reordered_chunk);
-}
-
-void ChunkHelper::build_selective(const std::vector<uint8_t>& filter, std::vector<uint32_t>& selective) {
-    size_t n = SIMD::count_nonzero(filter);
-    if (n == 0) {
-        return;
-    }
-    selective.resize(0);
-    selective.reserve(n);
-    for (int i = 0; i < filter.size(); i++) {
-        if (filter[i]) {
-            selective.push_back(i);
-        }
-    }
 }
 
 ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}

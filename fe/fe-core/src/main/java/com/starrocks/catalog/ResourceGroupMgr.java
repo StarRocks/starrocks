@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.catalog;
 
@@ -12,6 +24,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -144,8 +157,17 @@ public class ResourceGroupMgr implements Writable {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // TODO(yiming) will support RBAC later
-            return null;
+            try {
+                List<String> roleNameList = ctx.getGlobalStateMgr().getPrivilegeManager()
+                        .getRoleNamesByUser(ctx.getCurrentUserIdentity());
+                if (roleNameList.isEmpty()) {
+                    return null;
+                } else {
+                    return roleNameList.get(0);
+                }
+            } catch (PrivilegeException e) {
+                LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
+            }
         }
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
@@ -240,6 +262,15 @@ public class ResourceGroupMgr implements Writable {
             } else {
                 return null;
             }
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public ResourceGroup getResourceGroup(long id) {
+        readLock();
+        try {
+            return id2ResourceGroupMap.getOrDefault(id, null);
         } finally {
             readUnlock();
         }
@@ -439,28 +470,54 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public ResourceGroup chooseResourceGroupByName(String wgName) {
+    public TWorkGroup chooseResourceGroupByName(String wgName) {
         readLock();
         try {
-            return resourceGroupMap.get(wgName);
+            ResourceGroup rg = resourceGroupMap.get(wgName);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
         } finally {
             readUnlock();
         }
     }
 
-    public ResourceGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType,
-                                             Set<Long> databases) {
-        String user = getUnqualifiedUser(ctx);
-        String role = getUnqualifiedRole(ctx);
-        String remoteIp = ctx.getRemoteIP();
-        List<ResourceGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
-                .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
-                .collect(Collectors.toList());
-        if (classifierList.isEmpty()) {
-            return null;
-        } else {
-            return id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
+    public TWorkGroup chooseResourceGroupByID(long wgID) {
+        readLock();
+        try {
+            ResourceGroup rg = id2ResourceGroupMap.get(wgID);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
+        readLock();
+        try {
+            String user = getUnqualifiedUser(ctx);
+            String role = getUnqualifiedRole(ctx);
+            String remoteIp = ctx.getRemoteIP();
+            List<ResourceGroupClassifier> classifierList =
+                    classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                            .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
+                            .collect(Collectors.toList());
+            if (classifierList.isEmpty()) {
+                return null;
+            } else {
+                ResourceGroup rg =
+                        id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
+                if (rg == null) {
+                    return null;
+                }
+                return rg.toThrift();
+            }
+        } finally {
+            readUnlock();
         }
     }
 

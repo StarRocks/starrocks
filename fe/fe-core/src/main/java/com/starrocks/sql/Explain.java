@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql;
 
@@ -53,9 +66,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -72,6 +82,9 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.time.LocalDateTime;
@@ -686,7 +699,7 @@ public class Explain {
         public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, ExplainContext context) {
             PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
 
-            StringBuilder sb = new StringBuilder("- SCAN [")
+            StringBuilder sb = new StringBuilder("- StreamScan [")
                     .append(((OlapTable) scan.getTable()).getName())
                     .append("]")
                     .append(buildOutputColumns(scan,
@@ -717,9 +730,15 @@ public class Explain {
         public String visitConstant(ConstantOperator literal, Void context) {
             if (literal.getType().isDatetime()) {
                 LocalDateTime time = (LocalDateTime) Optional.ofNullable(literal.getValue()).orElse(LocalDateTime.MIN);
-                return String.format("%04d-%02d-%02d %02d:%02d:%02d",
-                        time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
-                        time.getHour(), time.getMinute(), time.getSecond());
+                if (time.getNano() > 0) {
+                    return String.format("%04d-%02d-%02d %02d:%02d:%02d.%6d",
+                            time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
+                            time.getHour(), time.getMinute(), time.getSecond(), time.getNano() / 1000);
+                } else {
+                    return String.format("%04d-%02d-%02d %02d:%02d:%02d",
+                            time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
+                            time.getHour(), time.getMinute(), time.getSecond());
+                }
             } else if (literal.getType().isDate()) {
                 LocalDateTime time = (LocalDateTime) Optional.ofNullable(literal.getValue()).orElse(LocalDateTime.MIN);
                 return String.format("%04d-%02d-%02d", time.getYear(), time.getMonthValue(), time.getDayOfMonth());

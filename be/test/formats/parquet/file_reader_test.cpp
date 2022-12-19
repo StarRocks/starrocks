@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "formats/parquet/file_reader.h"
 
 #include <gtest/gtest.h>
@@ -888,8 +888,11 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_chunk();
@@ -960,8 +963,11 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // c0 is conjunct filter column
     ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
@@ -1021,8 +1027,11 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_struct_chunk();
@@ -1178,7 +1187,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[0, ['abc'->123], ['def'->456]]");
+    EXPECT_EQ(chunk->debug_row(0), "[0, {'abc':123}, {'def':456}]");
 }
 
 TEST_F(FileReaderTest, TestReadMapColumn) {
@@ -1235,17 +1244,15 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[1, ['k1'->0, 'k2'->1], ['e1'->['f1'->1, 'f2'->2]], ['g1'->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':0, 'k2':1}, {'e1':{'f1':1, 'f2':2}}, {'g1':[1, 2]}]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, ['k1'->1, 'k3'->2, 'k4'->3], ['e1'->['f1'->1, 'f2'->2], 'e2'->['f1'->1, 'f2'->2]], ['g1'->[1], "
-              "'g3'->[2]]]");
-    EXPECT_EQ(chunk->debug_row(2),
-              "[3, ['k2'->2, 'k3'->3, 'k5'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g1'->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->3, 'k2'->4, 'k3'->5], ['e2'->['f2'->2]], ['g1'->[1]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->4], ['e2'->['f2'->2]], ['g1'->[NULL]]]");
-    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], ['e2'->['f2'->NULL]], ['g1'->[1]]]");
-    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->1, 'k2'->2], ['e2'->['f2'->2]], ['g1'->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(7), "[8, ['k3'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g2'->[1], 'g3'->[2]]]");
+              "[2, {'k1':1, 'k3':2, 'k4':3}, {'e1':{'f1':1, 'f2':2}, 'e2':{'f1':1, 'f2':2}}, {'g1':[1], 'g3':[2]}]");
+    EXPECT_EQ(chunk->debug_row(2), "[3, {'k2':2, 'k3':3, 'k5':4}, {'e1':{'f1':1, 'f2':2, 'f3':3}}, {'g1':[1, 2, 3]}]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':3, 'k2':4, 'k3':5}, {'e2':{'f2':2}}, {'g1':[1]}]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':4}, {'e2':{'f2':2}}, {'g1':[NULL]}]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {'e2':{'f2':NULL}}, {'g1':[1]}]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':1, 'k2':2}, {'e2':{'f2':2}}, {'g1':[1, 2, 3]}]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':4}, {'e1':{'f1':1, 'f2':2, 'f3':3}}, {'g2':[1], 'g3':[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadStruct) {
@@ -1415,16 +1422,26 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f1: 0, f2: NULL, f3: [0, 1, 2]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']", chunk->debug_row(0));
-    EXPECT_EQ("[1, {f1: 1, f2: NULL, f3: [1, 2, 3]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']", chunk->debug_row(1));
-    EXPECT_EQ("[2, {f1: 2, f2: NULL, f3: [2, 3, 4]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']", chunk->debug_row(2));
-    EXPECT_EQ("[3, {f1: 3, f2: NULL, f3: [3, 4, 5]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']", chunk->debug_row(3));
-    EXPECT_EQ("[4, {f1: 4, f2: NULL, f3: [4, 5, 6]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']", chunk->debug_row(4));
-    EXPECT_EQ("[5, {f1: 5, f2: NULL, f3: [5, 6, 7]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']", chunk->debug_row(5));
-    EXPECT_EQ("[6, {f1: 6, f2: NULL, f3: [6, 7, 8]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']", chunk->debug_row(6));
-    EXPECT_EQ("[7, {f1: 7, f2: NULL, f3: [7, 8, 9]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']", chunk->debug_row(7));
-    EXPECT_EQ("[8, {f1: 8, f2: NULL, f3: [8, 9, 10]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']", chunk->debug_row(8));
-    EXPECT_EQ("[9, {f1: 9, f2: NULL, f3: [9, 10, 11]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']", chunk->debug_row(9));
+    EXPECT_EQ("[0, {f1: 0, f2: NULL, f3: [0, 1, 2]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1: 1, f2: NULL, f3: [1, 2, 3]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1: 2, f2: NULL, f3: [2, 3, 4]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1: 3, f2: NULL, f3: [3, 4, 5]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
+              chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1: 4, f2: NULL, f3: [4, 5, 6]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
+              chunk->debug_row(4));
+    EXPECT_EQ("[5, {f1: 5, f2: NULL, f3: [5, 6, 7]}, 'c', [{e1: NULL, e2: 'c'}, {e1: NULL, e2: 'c'}], 'C']",
+              chunk->debug_row(5));
+    EXPECT_EQ("[6, {f1: 6, f2: NULL, f3: [6, 7, 8]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(6));
+    EXPECT_EQ("[7, {f1: 7, f2: NULL, f3: [7, 8, 9]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(7));
+    EXPECT_EQ("[8, {f1: 8, f2: NULL, f3: [8, 9, 10]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(8));
+    EXPECT_EQ("[9, {f1: 9, f2: NULL, f3: [9, 10, 11]}, 'a', [{e1: NULL, e2: 'a'}, {e1: NULL, e2: 'a'}], 'A']",
+              chunk->debug_row(9));
 
     //    for (int i = 0; i < 10; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1649,19 +1666,17 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[1, ['k1'->NULL, 'k2'->NULL], [NULL->['f1'->NULL, 'f2'->NULL]], [NULL->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':NULL, 'k2':NULL}, {NULL:{'f1':NULL, 'f2':NULL}}, {NULL:[1, 2]}]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, ['k1'->NULL, 'k3'->NULL, 'k4'->NULL], [NULL->['f1'->NULL, 'f2'->NULL], NULL->['f1'->NULL, "
-              "'f2'->NULL]], [NULL->[1], NULL->[2]]]");
+              "[2, {'k1':NULL, 'k3':NULL, 'k4':NULL}, {NULL:{'f1':NULL, 'f2':NULL}, NULL:{'f1':NULL, 'f2':NULL}}, "
+              "{NULL:[1], NULL:[2]}]");
     EXPECT_EQ(chunk->debug_row(2),
-              "[3, ['k2'->NULL, 'k3'->NULL, 'k5'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1, 2, "
-              "3]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->NULL, 'k2'->NULL, 'k3'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->NULL], [NULL->['f2'->NULL]], [NULL->[NULL]]]");
-    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
-    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->NULL, 'k2'->NULL], [NULL->['f2'->NULL]], [NULL->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(7),
-              "[8, ['k3'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1], NULL->[2]]]");
+              "[3, {'k2':NULL, 'k3':NULL, 'k5':NULL}, {NULL:{'f1':NULL, 'f2':NULL, 'f3':NULL}}, {NULL:[1, 2, 3]}]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':NULL, 'k2':NULL, 'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[NULL]}]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':NULL, 'k2':NULL}, {NULL:{'f2':NULL}}, {NULL:[1, 2, 3]}]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':NULL}, {NULL:{'f1':NULL, 'f2':NULL, 'f3':NULL}}, {NULL:[1], NULL:[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadNotNull) {
@@ -1715,9 +1730,9 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(3, chunk->num_rows());
 
-    EXPECT_EQ("[1, ['a'->1], {a: 'a', b: 1}]", chunk->debug_row(0));
-    EXPECT_EQ("[2, ['b'->2, 'c'->3], {a: 'b', b: 2}]", chunk->debug_row(1));
-    EXPECT_EQ("[3, ['c'->3], {a: 'c', b: 3}]", chunk->debug_row(2));
+    EXPECT_EQ("[1, {'a':1}, {a: 'a', b: 1}]", chunk->debug_row(0));
+    EXPECT_EQ("[2, {'b':2, 'c':3}, {a: 'b', b: 2}]", chunk->debug_row(1));
+    EXPECT_EQ("[3, {'c':3}, {a: 'c', b: 3}]", chunk->debug_row(2));
 
     for (int i = 0; i < 3; ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;

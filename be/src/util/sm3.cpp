@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "util/sm3.h"
 
 namespace starrocks {
@@ -21,7 +21,11 @@ bool Sm3::is_little_endian = (*(char*)&Sm3::ENDIAN_TEST_VALUE == 1) ? true : fal
 // Cyclic shift left k-bit operation
 unsigned int Sm3::left_rotate(unsigned int word, int k) {
     k = k % WORD_BITS;
-    return (word) << (k) | (word) >> (WORD_BITS - (k));
+    if (k == 0) {
+        return word;
+    } else {
+        return (word) << (k) | (word) >> (WORD_BITS - (k));
+    }
 }
 
 // is_little_endian:true, reverse word because the word should stored in big endian format.

@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exec/vectorized/analytor.h"
 
 #include <cmath>
@@ -25,18 +25,18 @@
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
-#include "udf/udf.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
 namespace vectorized {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, starrocks_udf::FunctionContext* context);
+                               const std::string& symbol, FunctionContext* context);
 } // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
@@ -164,8 +164,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
             }
 
-            _agg_fn_ctxs[i] = FunctionContextImpl::create_context(state, _mem_pool.get(), return_typedesc,
-                                                                  arg_typedescs, 0, false);
+            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_typedesc, arg_typedescs);
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -319,12 +318,6 @@ void Analytor::close(RuntimeState* state) {
     _is_closed = true;
 
     auto agg_close = [this, state]() {
-        for (auto* ctx : _agg_fn_ctxs) {
-            if (ctx != nullptr && ctx->impl()) {
-                ctx->impl()->close();
-            }
-        }
-
         // Note: we must free agg_states before _mem_pool free_all;
         _managed_fn_states.clear();
         _managed_fn_states.shrink_to_fit();

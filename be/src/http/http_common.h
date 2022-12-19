@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/http/http_common.h
 
@@ -47,6 +47,10 @@ static const std::string HTTP_COLUMNS = "columns";
 static const std::string HTTP_WHERE = "where";
 static const std::string HTTP_COLUMN_SEPARATOR = "column_separator";
 static const std::string HTTP_ROW_DELIMITER = "row_delimiter";
+static const std::string HTTP_SKIP_HEADER = "skip_header";
+static const std::string HTTP_TRIM_SPACE = "trim_space";
+static const std::string HTTP_ENCLOSE = "enclose";
+static const std::string HTTP_ESCAPE = "escape";
 static const std::string HTTP_MAX_FILTER_RATIO = "max_filter_ratio";
 static const std::string HTTP_TIMEOUT = "timeout";
 static const std::string HTTP_IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";

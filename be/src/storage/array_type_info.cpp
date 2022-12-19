@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/array_type_info.h"
 
 #include "gutil/casts.h"
@@ -25,85 +25,6 @@ public:
     virtual ~ArrayTypeInfo() = default;
     explicit ArrayTypeInfo(const TypeInfoPtr& item_type_info)
             : _item_type_info(item_type_info), _item_size(item_type_info->size()) {}
-
-    bool equal(const void* left, const void* right) const override {
-        auto l_value = unaligned_load<Collection>(left);
-        auto r_value = unaligned_load<Collection>(right);
-        if (l_value.length != r_value.length) {
-            return false;
-        }
-        size_t len = l_value.length;
-
-        if (!l_value.has_null && !r_value.has_null) {
-            for (size_t i = 0; i < len; ++i) {
-                if (!_item_type_info->equal((uint8_t*)(l_value.data) + i * _item_size,
-                                            (uint8_t*)(r_value.data) + i * _item_size)) {
-                    return false;
-                }
-            }
-        } else {
-            for (size_t i = 0; i < len; ++i) {
-                if (l_value.null_signs[i]) {
-                    if (r_value.null_signs[i]) { // both are null
-                        continue;
-                    } else { // left is null & right is not null
-                        return false;
-                    }
-                } else if (r_value.null_signs[i]) { // left is not null & right is null
-                    return false;
-                }
-                if (!_item_type_info->equal((uint8_t*)(l_value.data) + i * _item_size,
-                                            (uint8_t*)(r_value.data) + i * _item_size)) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    int cmp(const void* left, const void* right) const override {
-        auto l_value = unaligned_load<Collection>(left);
-        auto r_value = unaligned_load<Collection>(right);
-        size_t l_length = l_value.length;
-        size_t r_length = r_value.length;
-        size_t cur = 0;
-
-        if (!l_value.has_null && !r_value.has_null) {
-            while (cur < l_length && cur < r_length) {
-                int result = _item_type_info->cmp((uint8_t*)(l_value.data) + cur * _item_size,
-                                                  (uint8_t*)(r_value.data) + cur * _item_size);
-                if (result != 0) {
-                    return result;
-                }
-                ++cur;
-            }
-        } else {
-            while (cur < l_length && cur < r_length) {
-                if (l_value.null_signs[cur]) {
-                    if (!r_value.null_signs[cur]) { // left is null & right is not null
-                        return -1;
-                    }
-                } else if (r_value.null_signs[cur]) { // left is not null & right is null
-                    return 1;
-                } else { // both are not null
-                    int result = _item_type_info->cmp((uint8_t*)(l_value.data) + cur * _item_size,
-                                                      (uint8_t*)(r_value.data) + cur * _item_size);
-                    if (result != 0) {
-                        return result;
-                    }
-                }
-                ++cur;
-            }
-        }
-
-        if (l_length < r_length) {
-            return -1;
-        } else if (l_length > r_length) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
 
     void shallow_copy(void* dest, const void* src) const override {
         unaligned_store<Collection>(dest, unaligned_load<Collection>(src));
@@ -170,19 +91,6 @@ public:
     void set_to_max(void* buf) const override { DCHECK(false) << "set_to_max of list is not implemented."; }
 
     void set_to_min(void* buf) const override { DCHECK(false) << "set_to_min of list is not implemented."; }
-
-    uint32_t hash_code(const void* data, uint32_t seed) const override {
-        auto value = unaligned_load<Collection>(data);
-        uint32_t result = HashUtil::hash(&(value.length), sizeof(size_t), seed);
-        for (size_t i = 0; i < value.length; ++i) {
-            if (value.null_signs[i]) {
-                result = seed * result;
-            } else {
-                result = seed * result + _item_type_info->hash_code((uint8_t*)(value.data) + i * _item_size, seed);
-            }
-        }
-        return result;
-    }
 
     size_t size() const override { return sizeof(Collection); }
 

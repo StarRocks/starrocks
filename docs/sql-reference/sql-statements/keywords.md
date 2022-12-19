@@ -180,6 +180,10 @@ Following are the reserved keywords supported by StarRocks.
 - PRIMARY
 - PROCEDURE
 
+### Q
+
+- QUALIFY
+
 ### R
 
 - RANGE

@@ -1,14 +1,29 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.scheduler.mv;
 
-import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
-import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TNetworkAddress;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * TODO(murphy) implement the Coordinator to compute task correctly
@@ -25,22 +40,19 @@ public class MVMaintenanceTask {
 
     // Task specific information
     private long beId;
+    private TNetworkAddress beHost;
     private long taskId;
-    private PlanFragmentId fragmentId;
-    private TUniqueId instanceId;
-    private TExecPlanFragmentParams fragmentInstance;
+    private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
 
-    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, long beId, PlanFragmentId fragmentId,
-                                          TUniqueId instanceId,
-                                          TExecPlanFragmentParams fragmentInstance) {
+    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, long beId, TNetworkAddress beHost,
+                                          List<TExecPlanFragmentParams> fragmentInstances) {
         MVMaintenanceTask task = new MVMaintenanceTask();
         task.dbName = GlobalStateMgr.getCurrentState().getDb(job.getView().getDbId()).getFullName();
         task.job = job;
         task.beId = beId;
+        task.beHost = beHost;
         task.taskId = taskId;
-        task.fragmentId = fragmentId;
-        task.instanceId = instanceId;
-        task.fragmentInstance = fragmentInstance;
+        task.fragmentInstances = fragmentInstances;
 
         return task;
     }
@@ -52,9 +64,9 @@ public class MVMaintenanceTask {
         request.setJob_id(job.getJobId());
         request.setTask_id(taskId);
         request.setStart_maintenance(task);
-        task.setDb_name(dbName);
-        task.setMv_name(job.getView().getName());
-        task.setPlan_params(fragmentInstance);
+        request.setDb_name(dbName);
+        request.setMv_name(job.getView().getName());
+        task.setFragments(fragmentInstances);
 
         return request;
     }
@@ -91,28 +103,16 @@ public class MVMaintenanceTask {
         this.taskId = taskId;
     }
 
-    public PlanFragmentId getFragmentId() {
-        return fragmentId;
+    public void addFragmentInstance(TExecPlanFragmentParams instance) {
+        fragmentInstances.add(instance);
     }
 
-    public void setFragmentId(PlanFragmentId fragmentId) {
-        this.fragmentId = fragmentId;
+    public List<TExecPlanFragmentParams> getFragmentInstances() {
+        return fragmentInstances;
     }
 
-    public TUniqueId getInstanceId() {
-        return instanceId;
-    }
-
-    public void setInstanceId(TUniqueId instanceId) {
-        this.instanceId = instanceId;
-    }
-
-    public TExecPlanFragmentParams getFragmentInstance() {
-        return fragmentInstance;
-    }
-
-    public void setFragmentInstance(TExecPlanFragmentParams fragmentInstance) {
-        this.fragmentInstance = fragmentInstance;
+    public void setFragmentInstances(List<TExecPlanFragmentParams> fragmentInstances) {
+        this.fragmentInstances = fragmentInstances;
     }
 
     @Override
@@ -121,6 +121,7 @@ public class MVMaintenanceTask {
                 "job=" + job +
                 ", dbName='" + dbName + '\'' +
                 ", beId=" + beId +
+                ", host=" + beHost +
                 ", taskId=" + taskId +
                 '}';
     }

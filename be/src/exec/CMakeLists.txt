@@ -4,14 +4,14 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      https:#www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
+
 cmake_minimum_required(VERSION 2.8.12)
 
 # where to put generated libraries
@@ -216,7 +216,8 @@ set(EXEC_FILES
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
-    query_cache/ticket_checker.cpp)
+    query_cache/ticket_checker.cpp
+    stream/state/mem_state_table.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

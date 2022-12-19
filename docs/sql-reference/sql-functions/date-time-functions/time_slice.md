@@ -2,18 +2,21 @@
 
 ## Description
 
-Converts a given time to the start time of a time interval based on the specified time granularity.
+Converts a given time into the beginning or end of a time interval based on the specified time granularity.
 
 ## Syntax
 
-```Plain
-DATETIME time_slice(DATETIME dt, INTERVAL N type)
+```Haskell
+DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 ```
 
-## **Parameters**
+## Parameters
 
-- `dt`: the time to convert. The supported data type is DATETIME.
-- `INTERVAL N type`: the time granularity. `N` is a number of the INT type. `type` is the unit, which can be YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEK, and QUARTER.
+- `dt`: the time to convert, DATETIME.
+- `INTERVAL N type`: the time granularity, for example, `interval 5 second`.
+  - `N` is the length of time interval. It must be an INT value.
+  - `type` is the unit, which can be YEAR, QUARTER, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND.
+- `boundary`: optional. It is used to specify whether to return the beginning (`FLOOR`) or end (`CEIL`) of the time interval. Valid values: FLOOR, CEIL. If this parameter is not specified, `FLOOR` is the default.
 
 ## Return value
 
@@ -25,28 +28,76 @@ The time interval starts from A.D. `0001-01-01 00:00:00`.
 
 ## Examples
 
-Example 1: Convert a given time to the start time of a 5-second time interval.
+The following examples are provided based on the `test_all_type_select` table.
 
-In this example, the time granularity is 5 second. The first time interval is from `2022-04-26 19:01:00` to `2022-04-26 19:01:04`. `2022-04-26 19:01:07` falls into the second interval which starts from `2022-04-26 19:01:05` and this value is returned.
+```Plaintext
+select * from test_all_type_select order by id_int;
 
-```Plain
-mysql> select time_slice('2022-04-26 19:01:07', interval 5 second);
-+------------------------------------------------------+
-| time_slice('2022-04-26 19:01:07', INTERVAL 5 SECOND) |
-+------------------------------------------------------+
-| 2022-04-26 19:01:05                                  |
-+------------------------------------------------------+
++------------+---------------------+--------+
+| id_date    | id_datetime         | id_int |
++------------+---------------------+--------+
+| 2052-12-26 | 1691-12-23 04:01:09 |      0 |
+| 2168-08-05 | 2169-12-18 15:44:31 |      1 |
+| 1737-02-06 | 1840-11-23 13:09:50 |      2 |
+| 2245-10-01 | 1751-03-21 00:19:04 |      3 |
+| 1889-10-27 | 1861-09-12 13:28:18 |      4 |
++------------+---------------------+--------+
+5 rows in set (0.06 sec)
 ```
 
-Example 2: Convert a given time to the start time of a 5-day time interval.
+Example 1: Convert a given DATETIME value to the beginning of a 5-second time interval without specifying the `boundary` parameter.
 
-In this example, the time granularity is 5 day. The first time interval is from `0001-01-01 19:01:07` to `0001-01-05 19:01:07`. `0001-01-07 19:01:07` falls into the second interval which starts from `0001-01-06 19:01:07` and this value is returned.
+```Plaintext
+select time_slice(id_datetime, interval 5 second)
+from test_all_type_select
+order by id_int;
 
-```Plain
-mysql> select time_slice('0001-01-07 19:01:07', interval 5 day);
 +---------------------------------------------------+
-| time_slice('0001-01-07 19:01:07', INTERVAL 5 DAY) |
+| time_slice(id_datetime, INTERVAL 5 second, floor) |
 +---------------------------------------------------+
-| 0001-01-06 00:00:00                               |
+| 1691-12-23 04:01:05                               |
+| 2169-12-18 15:44:30                               |
+| 1840-11-23 13:09:50                               |
+| 1751-03-21 00:19:00                               |
+| 1861-09-12 13:28:15                               |
 +---------------------------------------------------+
+5 rows in set (0.16 sec)
+```
+
+Example 2: Convert a given DATETIME value to the beginning of a 5-day time interval with  `boundary` set to FLOOR.
+
+```Plaintext
+select time_slice(id_datetime, interval 5 day, FLOOR)
+from test_all_type_select
+order by id_int;
+
++------------------------------------------------+
+| time_slice(id_datetime, INTERVAL 5 day, floor) |
++------------------------------------------------+
+| 1691-12-22 00:00:00                            |
+| 2169-12-16 00:00:00                            |
+| 1840-11-21 00:00:00                            |
+| 1751-03-18 00:00:00                            |
+| 1861-09-12 00:00:00                            |
++------------------------------------------------+
+5 rows in set (0.15 sec)
+```
+
+Example 3: Convert a given DATETIME value to the end of a 5-day time interval.
+
+```Plaintext
+select time_slice(id_datetime, interval 5 day, CEIL)
+from test_all_type_select
+order by id_int;
+
++-----------------------------------------------+
+| time_slice(id_datetime, INTERVAL 5 day, ceil) |
++-----------------------------------------------+
+| 1691-12-27 00:00:00                           |
+| 2169-12-21 00:00:00                           |
+| 1840-11-26 00:00:00                           |
+| 1751-03-23 00:00:00                           |
+| 1861-09-17 00:00:00                           |
++-----------------------------------------------+
+5 rows in set (0.12 sec)
 ```

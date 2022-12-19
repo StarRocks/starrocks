@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exprs/vectorized/like_predicate.h"
 
 #include <memory>
@@ -44,7 +44,7 @@ static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))", re2::RE2::Qu
 static const char* PROMPT_INFO = " so we switch to use re2.";
 
 bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
-                                                 starrocks_udf::FunctionContext* context, const Slice& slice) {
+                                                 FunctionContext* context, const Slice& slice) {
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
@@ -68,7 +68,7 @@ bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, Lik
 
 template <bool full_match>
 Status LikePredicate::compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
-                                                    starrocks_udf::FunctionContext* context, const Slice& slice) {
+                                                    FunctionContext* context, const Slice& slice) {
     if (!hs_compile_and_alloc_scratch(pattern, state, context, slice)) {
         RE2::Options opts;
         opts.set_never_nl(false);
@@ -98,8 +98,7 @@ Status LikePredicate::compile_with_hyperscan_or_re2(const std::string& pattern, 
 // we use hyperscan.
 
 // like predicate
-Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status LikePredicate::like_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
@@ -144,8 +143,7 @@ Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status LikePredicate::like_close(starrocks_udf::FunctionContext* context,
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status LikePredicate::like_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
         auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
         delete state;
@@ -159,8 +157,7 @@ StatusOr<ColumnPtr> LikePredicate::like(FunctionContext* context, const starrock
 }
 
 // regex predicate
-Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
@@ -206,8 +203,7 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status LikePredicate::regex_close(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status LikePredicate::regex_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
         auto* state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
         delete state;

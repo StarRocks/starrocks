@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "aggregator.h"
 
 #include <algorithm>
@@ -33,7 +33,7 @@ namespace starrocks {
 namespace vectorized {
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         starrocks_udf::FunctionContext* context);
+                         FunctionContext* context);
 
 } // namespace vectorized
 Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}
@@ -292,9 +292,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _agg_fn_ctxs[i] = FunctionContextImpl::create_context(
+        _agg_fn_ctxs[i] = FunctionContext::create_context(
                 state, _mem_pool.get(), AnyValUtil::column_type_to_type_desc(_agg_fn_types[i].result_type),
-                _agg_fn_types[i].arg_typedescs, 0, false);
+                _agg_fn_types[i].arg_typedescs);
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 
@@ -390,14 +390,6 @@ void Aggregator::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
-        // AggregateFunction::destroy depends FunctionContext.
-        // so we close function context after destroy stage
-        for (auto ctx : _agg_fn_ctxs) {
-            if (ctx != nullptr && ctx->impl()) {
-                ctx->impl()->close();
-            }
-        }
-
         Expr::close(_group_by_expr_ctxs, state);
         for (const auto& i : _agg_expr_ctxs) {
             Expr::close(i, state);
@@ -476,8 +468,8 @@ void Aggregator::compute_single_agg_state(size_t chunk_size) {
                                                          _single_agg_state + _agg_states_offsets[i]);
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_columns[i][0].get(),
-                                                        _single_agg_state + _agg_states_offsets[i]);
+            _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i],
+                                                        _agg_input_columns[i][0].get(), 0, chunk_size);
         }
     }
 }
@@ -522,7 +514,7 @@ Status Aggregator::_evaluate_const_columns(int i) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
         const_columns.emplace_back(std::move(col));
     }
-    _agg_fn_ctxs[i]->impl()->set_constant_columns(const_columns);
+    _agg_fn_ctxs[i]->set_constant_columns(const_columns);
     return Status::OK();
 }
 

@@ -23,7 +23,7 @@ The following example creates a repository named `test_repo` in an Apache™ Had
 
 ```SQL
 CREATE REPOSITORY test_repo
-WITH BROKER hdfs_broker
+WITH BROKER
 ON LOCATION "hdfs://xxx.xx.xxx.xxxx:xxxx/data/sr_backup"
 PROPERTIES("username" = "xxxx");
 ```

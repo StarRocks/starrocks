@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -127,8 +140,8 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "left anti join " +
                 " (select * from t3 where cast(v10 as string) like 'ss%' ) sub2" +
                 " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
-        assertPlanContains(sql, " 11:Project\n" +
-                "  |  <slot 14> : 14: substr\n" +
+        assertPlanContains(sql, "11:Project\n" +
+                "  |  <slot 7> : 7: v7\n" +
                 "  |  \n" +
                 "  10:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
@@ -140,9 +153,9 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "right anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
+        assertVerbosePlanContains(sql, "4:Project\n" +
                 "  |  output columns:\n" +
-                "  |  28 <-> [28: id_tinyint, TINYINT, false]\n" +
+                "  |  34 <-> [34: id_char, CHAR, false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +

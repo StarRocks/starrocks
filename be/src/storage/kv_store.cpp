@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/olap_meta.cpp
 
@@ -39,6 +39,8 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "gutil/strings/substitute.h"
+#include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
@@ -84,6 +86,9 @@ Status KVStore::init(bool read_only) {
     options.create_missing_column_families = true;
     std::string db_path = _root_path + META_POSTFIX;
 
+    ColumnFamilyOptions meta_cf_options;
+    RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
+                                                              &meta_cf_options));
     // The index of each column family must be consistent with the enum `ColumnFamilyIndex`
     // defined in olap_define.h
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
@@ -92,6 +97,7 @@ Status KVStore::init(bool read_only) {
     cf_descs[1].name = STARROCKS_COLUMN_FAMILY;
     cf_descs[1].options.compression = rocksdb::kSnappyCompression;
     cf_descs[2].name = META_COLUMN_FAMILY;
+    cf_descs[2].options = meta_cf_options;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
     cf_descs[2].options.compression = rocksdb::kSnappyCompression;
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);

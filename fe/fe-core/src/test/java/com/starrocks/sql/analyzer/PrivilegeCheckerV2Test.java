@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.analyzer;
 
@@ -282,6 +295,77 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
+    public void testResourceGroupStmt() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createRg3Sql = "create resource group rg3\n" +
+                "to\n" +
+                "    (query_type in ('select'), source_ip='192.168.6.1/24'),\n" +
+                "    (query_type in ('select'))\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '1',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createRg3Sql, ctx), ctx);
+        ctxToTestUser();
+
+        // test no authorization on show resource groups
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("show resource groups", ctx);
+        PrivilegeCheckerV2.check(statement, ctx);
+
+        // test drop resource group
+        verifyGrantRevoke(
+                "drop resource group rg3",
+                "grant DROP on resource_group rg3 to test",
+                "revoke DROP on resource_group rg3 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        // test drop resource group
+        verifyGrantRevoke(
+                "drop resource group rg3",
+                "grant DROP on resource_group rg3 to test",
+                "revoke DROP on resource_group rg3 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        String sql = "" +
+                "ALTER RESOURCE GROUP rg3 \n" +
+                "ADD \n" +
+                "   (user='rg1_user5', role='rg1_role5', source_ip='192.168.4.1/16')";
+        // test drop resource group
+        verifyGrantRevoke(
+                sql,
+                "grant ALTER on resource_group rg3 to test",
+                "revoke ALTER on resource_group rg3 from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+
+        // test create resource group
+        String createRg4Sql = "create resource group rg4\n" +
+                "to\n" +
+                "    (query_type in ('select'), source_ip='192.168.6.1/24'),\n" +
+                "    (query_type in ('select'))\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '1',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+        verifyGrantRevoke(
+                createRg4Sql,
+                "grant create_resource_group on system to test",
+                "revoke create_resource_group on system from test",
+                "Access denied; you need (at least one of) the CREATE_RESOURCE_GROUP privilege(s) for this operation");
+
+        // test grant/revoke on all resource_groups
+        verifyGrantRevoke(
+                sql,
+                "grant ALTER on all resource_groups to test",
+                "revoke ALTER on all resource_groups from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+    }
+
+    @Test
     public void testAnalyzeStatements() throws Exception {
         // check analyze table: SELECT + INSERT on table
         verifyGrantRevoke(
@@ -553,6 +637,129 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on db1.tbl1 to test",
                 "revoke drop on db1.tbl1 from test",
                 "DROP command denied to user 'test'");
+
+        // check CTAS: CREATE_TABLE on db and SELECT on source table
+        String createTableAsSql = "create table db1.ctas_t1 as select k1,k2 from db1.tbl1;";
+        verifyMultiGrantRevoke(
+                createTableAsSql,
+                Arrays.asList(
+                        "grant create_table on database db1 to test",
+                        "grant select on table db1.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke create_table on database db1 from test",
+                        "revoke select on table db1.tbl1 from test"
+                ),
+                "Access denied for user 'test' to database 'db1'");
+
+        // check create table like: CREATE_TABLE on db and SELECT on existed table
+        String createTableLikeSql = "create table db1.like_tbl like db1.tbl1;";
+        verifyMultiGrantRevoke(
+                createTableLikeSql,
+                Arrays.asList(
+                        "grant create_table on database db1 to test",
+                        "grant select on table db1.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke create_table on database db1 from test",
+                        "revoke select on table db1.tbl1 from test"
+                ),
+                "Access denied for user 'test' to database 'db1'");
+
+        // check recover table: CREATE_TABLE on db and DROP on dropped table
+        verifyMultiGrantRevoke(
+                "recover table db1.tbl1",
+                Arrays.asList(
+                        "grant create_table on database db1 to test",
+                        "grant drop on table db1.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke create_table on database db1 from test",
+                        "revoke drop on table db1.tbl1 from test"
+                ),
+                "Access denied for user 'test' to database 'db1'");
+
+        // check refresh external table: ALTER
+        verifyGrantRevoke(
+                "refresh external table db1.tbl1",
+                "grant ALTER on db1.tbl1 to test",
+                "revoke ALTER on db1.tbl1 from test",
+                "ALTER command denied to user 'test'");
+
+        // check alter table: ALTER
+        verifyGrantRevoke(
+                "alter table db1.tbl1 drop partition p1",
+                "grant ALTER on db1.tbl1 to test",
+                "revoke ALTER on db1.tbl1 from test",
+                "ALTER command denied to user 'test'");
+
+        // check cancel alter table: ALTER
+        verifyGrantRevoke(
+                "cancel alter table rollup from db1.tbl1 (1, 2, 3)",
+                "grant ALTER on db1.tbl1 to test",
+                "revoke ALTER on db1.tbl1 from test",
+                "ALTER command denied to user 'test'");
+
+        List<String> sqls = Arrays.asList(
+                "desc db1.tbl1",
+                "show create table db1.tbl1",
+                "show columns from db1.tbl1",
+                "show partitions from db1.tbl1"
+        );
+        for (String sql : sqls) {
+            // check describe table: any privilege
+            verifyGrantRevoke(
+                    sql,
+                    "grant SELECT on db1.tbl1 to test",
+                    "revoke SELECT on db1.tbl1 from test",
+                    "Access denied for user 'test' to table");
+            verifyGrantRevoke(
+                    sql,
+                    "grant DELETE on db1.tbl1 to test",
+                    "revoke DELETE on db1.tbl1 from test",
+                    "Access denied for user 'test' to table");
+        }
+
+        // check show table status: only return table user has any privilege on
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("show table status from db1", ctx);
+        grantRevokeSqlAsRoot("grant SELECT on db1.tbl2 to test");
+        ctxToTestUser();
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) statement);
+        ShowResultSet showResultSet = showExecutor.execute();
+        grantRevokeSqlAsRoot("revoke SELECT on db1.tbl2 from test");
+        List<List<String>> resultRows = showResultSet.getResultRows();
+        System.out.println(resultRows);
+        Assert.assertEquals(1, resultRows.size());
+        Assert.assertEquals("tbl2", resultRows.get(0).get(0));
+
+        // check recover partition: CREATE_TABLE on db and DROP on dropped table
+        verifyMultiGrantRevoke(
+                "recover partition p1 from db1.tbl1",
+                Arrays.asList(
+                        "grant INSERT on table db1.tbl1 to test",
+                        "grant ALTER on table db1.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke INSERT on table db1.tbl1 from test",
+                        "revoke ALTER on table db1.tbl1 from test"
+                ),
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // check CTAS: CREATE_TABLE on db and SELECT on source table
+        String submitTaskSql = "submit task as create table db1.ctas_t1 as select k1,k2 from db1.tbl1;";
+        ctx.setDatabase("db1");
+        verifyMultiGrantRevoke(
+                submitTaskSql,
+                Arrays.asList(
+                        "grant create_table on database db1 to test",
+                        "grant select on table db1.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke create_table on database db1 from test",
+                        "revoke select on table db1.tbl1 from test"
+                ),
+                "Access denied for user 'test' to database 'db1'");
     }
 
     @Test
@@ -937,7 +1144,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testShowNodeStmt() throws Exception {
-
         verifyGrantRevoke(
                 "show backends",
                 "grant OPERATE on system to test",
@@ -982,7 +1188,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testShowTabletStmt() throws Exception {
-
         verifyGrantRevoke(
                 "show tablet from example_db.example_table",
                 "grant OPERATE on system to test",
@@ -992,7 +1197,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testShowTransactionStmt() throws Exception {
-
         ctxToTestUser();
         ConnectContext ctx = starRocksAssert.getCtx();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW TRANSACTION FROM db WHERE ID=4005;", ctx);
@@ -1002,7 +1206,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testAdminOperateStmt() throws Exception {
-
         // AdminSetConfigStmt
         verifyGrantRevoke(
                 "admin set frontend config (\"key\" = \"value\");",
@@ -1064,7 +1267,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testAlterSystemStmt() throws Exception {
-
         // AlterSystemStmt
         verifyNODEAndGRANT("ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
                            "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
@@ -1097,7 +1299,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testSetStmt() throws Exception {
-
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
         String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
         verifyNODEAndGRANT(sql, expectError);
@@ -1105,7 +1306,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testRoutineLoadStmt() throws Exception {
-
         // CREATE ROUTINE LOAD STMT
         String createSql = "CREATE ROUTINE LOAD db1.job_name2 ON tbl1 " +
                            "COLUMNS(c1) FROM KAFKA " +
@@ -1178,7 +1378,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testRoutineLoadShowStmt() throws Exception {
-
         ctxToRoot();
         String createSql = "CREATE ROUTINE LOAD db1.job_name1 ON tbl1 " +
                            "COLUMNS(c1) FROM KAFKA " +
@@ -1229,7 +1428,6 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testLoadStmt() throws Exception {
-
         // LOAD STMT
         // create resource
         UtFrameUtils.addBroker("broker0");

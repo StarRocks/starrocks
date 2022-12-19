@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,11 +19,11 @@
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/decimal_binary_function.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/unary_function.h"
-#include "udf/udf.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -284,10 +284,8 @@ public:
     // =====================================
 
     // rand's auxiliary method
-    static Status rand_prepare(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status rand_close(starrocks_udf::FunctionContext* context,
-                             starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status rand_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     /**
      * @param: []
      * @return: DoubleColumn

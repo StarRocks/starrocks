@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      https:#www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,12 +35,16 @@
 # This file used to compile all thrift files.
 BUILD_DIR = ${CURDIR}/../build/
 
-THRIFT = ${STARROCKS_THIRDPARTY}/installed/bin/thrift
+ifneq ("$(wildcard ${STARROCKS_THIRDPARTY}/installed/bin/thrift)","")
+	THRIFT = ${STARROCKS_THIRDPARTY}/installed/bin/thrift
+else
+	THRIFT = thrift
+endif
 
 SOURCES = $(shell find ${CURDIR} -name "*.thrift")
 OBJECTS = $(patsubst ${CURDIR}/%.thrift, ${BUILD_DIR}/gen_cpp/%_types.cpp, ${SOURCES})
 
-GEN_SOURCES = $(shell find ${THRIFT} -name "*.thrift")
+GEN_SOURCES = $(shell find ${CURDIR} -name "*.thrift")
 GEN_OBJECTS = $(patsubst ${BUILD_DIR}/thrift/%.thrift, ${BUILD_DIR}/gen_cpp/%_types.cpp, ${GEN_SOURCES})
 
 all: ${GEN_OBJECTS} ${OBJECTS}

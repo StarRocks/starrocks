@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/ConnectProcessor.java
 
@@ -189,6 +202,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -958,7 +972,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (backendNum <= 3) {
             bucketNum = 2 * backendNum;
         } else if (backendNum <= 6) {
-            bucketNum = backendNum;
+            bucketNum = (int) (1.5 * backendNum);
         } else if (backendNum <= 12) {
             bucketNum = 12;
         } else {
@@ -1032,7 +1046,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } else {
-            distributionInfo = defaultDistributionInfo;
+            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
+                distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
+            } else {
+                distributionInfo = defaultDistributionInfo;
+            }
         }
         return distributionInfo;
     }
@@ -1535,6 +1554,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+
+            if (olapTable instanceof MaterializedView) {
+                MaterializedView mv = (MaterializedView) olapTable;
+                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName);
+            }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
@@ -2042,7 +2066,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // storage cache property
                 boolean enableStorageCache =
                         PropertyAnalyzer.analyzeBooleanProp(properties,
-                                PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+                                PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
                 long storageCacheTtlS = 0;
                 try {
                     storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
@@ -4521,6 +4545,13 @@ public class LocalMetastore implements ConnectorMetadata {
         // remove the tablets in old partitions
         for (Long tabletId : oldTabletIds) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            // Ensure that only the leader records truncate information.
+            // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
+            // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
+            // solution.
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(tabletId);
+            }
         }
 
         // if it is lake table, need to delete shard and drop tablet

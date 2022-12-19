@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/chunk_extra_data.h"
 #include "common/statusor.h"
 #include "gen_cpp/data.pb.h" // ChunkPB
 
@@ -110,6 +111,8 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_consts;
     vectorized::Chunk::SlotHashMap slot_id_to_index;
     vectorized::Chunk::TupleHashMap tuple_id_to_index;
+    // extra data meta
+    std::vector<vectorized::ChunkExtraColumnsMeta> extra_data_metas;
 };
 
 class ProtobufChunkDeserializer {

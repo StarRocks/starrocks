@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "column/chunk.h"
 
 #include <utility>
@@ -69,7 +69,17 @@ bool Chunk::has_large_column() const {
     return false;
 }
 
-Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
+Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : Chunk(std::move(columns), std::move(schema), nullptr) {}
+
+// TODO: FlatMap don't support std::move
+Chunk::Chunk(Columns columns, SlotHashMap slot_map) : Chunk(std::move(columns), std::move(slot_map), nullptr) {}
+
+// TODO: FlatMap don't support std::move
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
+        : Chunk(std::move(columns), std::move(slot_map), std::move(tuple_map), nullptr) {}
+
+Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema, ChunkExtraDataPtr extra_data)
+        : _columns(std::move(columns)), _schema(std::move(schema)), _extra_data(std::move(extra_data)) {
     // bucket size cannot be 0.
     _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
     _slot_id_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
@@ -79,17 +89,18 @@ Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : _columns(std::move(c
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, SlotHashMap slot_map)
-        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)) {
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data)
+        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)), _extra_data(std::move(extra_data)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
     _tuple_id_to_index.reserve(1);
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map, ChunkExtraDataPtr extra_data)
         : _columns(std::move(columns)),
           _slot_id_to_index(std::move(slot_map)),
-          _tuple_id_to_index(std::move(tuple_map)) {
+          _tuple_id_to_index(std::move(tuple_map)),
+          _extra_data(std::move(extra_data)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
 
@@ -98,6 +109,7 @@ void Chunk::reset() {
         c->reset_column();
     }
     _delete_state = DEL_NOT_SATISFIED;
+    _extra_data.reset();
 }
 
 void Chunk::swap_chunk(Chunk& other) {
@@ -107,6 +119,7 @@ void Chunk::swap_chunk(Chunk& other) {
     _slot_id_to_index.swap(other._slot_id_to_index);
     _tuple_id_to_index.swap(other._tuple_id_to_index);
     std::swap(_delete_state, other._delete_state);
+    _extra_data.swap(other._extra_data);
 }
 
 void Chunk::set_num_rows(size_t count) {
@@ -241,6 +254,7 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
         chunk->_columns[idx] = std::move(column);
     }
     chunk->_owner_info = _owner_info;
+    chunk->_extra_data = std::move(_extra_data);
     chunk->check_or_die();
     return chunk;
 }

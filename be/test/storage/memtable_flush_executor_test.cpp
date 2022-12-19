@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/memtable_flush_executor.h"
 
 #include <gtest/gtest.h>
@@ -26,6 +26,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "storage/aggregate_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -110,7 +111,7 @@ static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) 
         }
         auto fd = new VectorizedField(cid, name, type, nullable);
         fd->set_is_key(i < nkey);
-        fd->set_aggregate_method(i < nkey ? OLAP_FIELD_AGGREGATION_NONE : OLAP_FIELD_AGGREGATION_REPLACE);
+        fd->set_aggregate_method(i < nkey ? STORAGE_AGGREGATE_NONE : STORAGE_AGGREGATE_REPLACE);
         fields.emplace_back(fd);
     }
     ret = std::make_unique<VectorizedSchema>(std::move(fields));

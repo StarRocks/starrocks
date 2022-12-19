@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/decimal_type_info.h"
 
 #include "column/datum.h"
@@ -38,10 +38,6 @@ public:
             : _delegate(get_scalar_type_info(DelegateType<TYPE>)), _precision(precision), _scale(scale) {
         static_assert(!ft_is_invalid<DelegateType<TYPE>>);
     }
-
-    bool equal(const void* left, const void* right) const override { return _delegate->equal(left, right); }
-
-    int cmp(const void* left, const void* right) const override { return _delegate->cmp(left, right); }
 
     void shallow_copy(void* dest, const void* src) const override { return _delegate->shallow_copy(dest, src); }
 
@@ -169,8 +165,6 @@ public:
         auto* data = reinterpret_cast<CppType*>(buf);
         *data = 1 - get_scale_factor<CppType>(_precision);
     }
-
-    uint32_t hash_code(const void* data, uint32_t seed) const override { return _delegate->hash_code(data, seed); }
 
     size_t size() const override { return _delegate->size(); }
 

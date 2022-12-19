@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
@@ -262,8 +275,15 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE not in ('1998-04-10', '1994-04-11', '1994-04-12');";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "3:AGGREGATE (merge finalize)");
-        assertContains(plan, "1:AGGREGATE (update serialize)");
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(39: count)\n" +
+                "  |  group by: ");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: LO_LINENUMBER");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -274,8 +294,15 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' " +
                         "and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "3:AGGREGATE (merge finalize)");
-        assertContains(plan, "1:AGGREGATE (update serialize)");
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(39: count)\n" +
+                "  |  group by: ");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: LO_LINENUMBE");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 

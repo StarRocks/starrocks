@@ -848,14 +848,20 @@ build_aliyun_oss_jars() {
     cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
 }
 
+build_tencent_cos_jars() {
+    check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
+    mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS
+    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/*cos* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS
+}
+
 build_aws_cpp_sdk() {
     OLD_CFLAGS=$CFLAGS
     export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -D_POSIX_C_SOURCE=200112L"
 
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
-    # only build s3, s3-crt and transfer manager, you can add more components if you want.
-    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
+    $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -G "${CMAKE_GENERATOR}" \
                -D_POSIX_C_SOURCE=200112L \
@@ -1009,6 +1015,7 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_oss_jars
+build_tencent_cos_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry

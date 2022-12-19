@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,7 +34,8 @@ public:
     std::shared_ptr<CompactionTask> create_compaction(TabletSharedPtr tablet) override;
 
 protected:
-    Status _pick_rowsets_to_size_tiered_compact(std::vector<RowsetSharedPtr>* input_rowsets, double* score);
+    Status _pick_rowsets_to_size_tiered_compact(bool force_base_compaction, std::vector<RowsetSharedPtr>* input_rowsets,
+                                                double* score);
     double _cal_compaction_score(int64_t segment_num, int64_t level_size, int64_t total_size, KeysType keys_type,
                                  bool reached_max_version);
     Status _check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets);

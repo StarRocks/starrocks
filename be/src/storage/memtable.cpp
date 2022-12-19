@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "storage/memtable.h"
 
 #include <memory>
@@ -44,7 +44,7 @@ VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
         // load slots have __op field, so add to _vectorized_schema
         auto op_column = std::make_shared<starrocks::vectorized::VectorizedField>((ColumnId)-1, LOAD_OP_COLUMN,
                                                                                   LogicalType::TYPE_TINYINT, false);
-        op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
+        op_column->set_aggregate_method(STORAGE_AGGREGATE_REPLACE);
         schema.append(op_column);
     }
     return schema;
@@ -243,8 +243,9 @@ Status MemTable::finalize() {
                     primary_key_idxes[i] = i;
                 }
                 const auto& sort_key_idxes = _vectorized_schema->sort_key_idxes();
-                if (std::mismatch(sort_key_idxes.begin(), sort_key_idxes.end(), primary_key_idxes.begin()).first !=
-                    sort_key_idxes.end()) {
+                if (std::mismatch(sort_key_idxes.begin(), sort_key_idxes.end(), primary_key_idxes.begin(),
+                                  primary_key_idxes.end())
+                            .first != sort_key_idxes.end()) {
                     _chunk = _result_chunk;
                     _sort(true, true);
                 }
@@ -370,6 +371,11 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
         // no deletes, short path
         *upserts = src;
         return Status::OK();
+    }
+    if (!_merge_condition.empty()) {
+        // Do not support delete with condition now
+        return Status::InternalError(
+                fmt::format("memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
     }
     vector<uint32_t> indexes[2];
     indexes[TOpType::UPSERT].reserve(nupsert);

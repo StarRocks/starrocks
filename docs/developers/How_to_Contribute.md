@@ -11,13 +11,13 @@ Contributing to StarRocks is cordially welcome from everyone. Contributing to St
 | **Help StarRocks users**            | You can help newcomers who meet difficulties in our community. |
 | **Spread the word about StarRocks** | You can author an article or give a talk about us to help spread our technology to the world. |
 
-**Community resources**
+## Community resources
 
 The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack Channel](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ). For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.
 
 You can also report issues and problems, or suggest new features, on [GitHub](https://github.com/StarRocks/starrocks/).
 
-**Code of conduct**
+## Code of conduct
 
 Our community strictly adheres to the [code of conduct](https://github.com/StarRocks/starrocks/blob/main/CODE_OF_CONDUCT.md).
 
@@ -51,21 +51,21 @@ Expectations and responsibilities:
 
 StarRocks Community Champions are a group of passionate community evangelists and pioneers who are well-versed in StarRocks technology. They enjoy sharing the latest developments and products in the community, and their enthusiasm drives the progress and development of the community.
 
-#### **Benefits**
+#### Benefits
 
-**Product**
+Product
 
 - Early access to new products/features.
 
 - Participate in exclusive meetings with the project core team.
 
-**Community**
+Community
 
 - Listed as a StarRocks champion on the website.
 
 - Exclusive prizes and badges.
 
-**Events**
+Events
 
 - Free access to StarRocks' events.
 
@@ -73,13 +73,13 @@ StarRocks Community Champions are a group of passionate community evangelists an
 
 - VIP seats and VIP events.
 
-#### **Requirements**
+#### Requirements
 
 1. Have published at least 3 StarRocks-related original and quality technical content (including articles, tutorials, videos, etc.).
 2. Participate in at least 2 online/offline technical sharing sessions as a speaker.
 3. Help answer user questions on Slack and other channels.
 
-#### **Other Requirements**
+#### Other Requirements
 
 1. StarRocks Champions must abide by the StarRocks Community [Code of Conduct.](https://github.com/StarRocks/starrocks/blob/main/CODE_OF_CONDUCT.md)
 2. StarRocks Champions are eligible for one year, and must reapply each year based on their contributions in the past year.
@@ -94,7 +94,7 @@ Everyone who contributes can become a StarRocks contributor. The members will pr
 
 - 1 merged PR in any StarRocks' public repos.
 
-#### As a Contributor, we expect you to
+As a Contributor, we expect you to
 
 - Actively participate in StarRocks' project development.
 
@@ -108,11 +108,11 @@ Everyone who contributes can become a StarRocks contributor. The members will pr
 
 - Be awarded a StarRocks Contributor e-certificate.
 
-## Active Contributor
+### Active Contributor
 
 Active contributors are contributors who have made outstanding contributions and sustained commitment to StarRocks. They actively participate in the community by contributing code, improving docs, and helping others.
 
-### How to become an Active Contributor?
+#### How to become an Active Contributor?
 
 - Have 5 merged PRs or fixed major bugs.
 
@@ -120,7 +120,7 @@ Active contributors are contributors who have made outstanding contributions and
 
 - Actively participate in community events such as online/offline meetups and community discussions.
 
-### Responsibilities and privileges
+#### Responsibilities and privileges
 
 - Join the community meeting and discussion.
 
@@ -130,13 +130,13 @@ Active contributors are contributors who have made outstanding contributions and
 
 - Be awarded a StarRocks Active Contributor e-certificate.
 
-## Committer
+### Committer
 
 Committers are promoted from Active Contributors.
 
 They have the authority to merge PRs into master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
 
-### How to become a Committer?
+#### How to become a Committer?
 
 - Have a deep understanding of StarRocks' principles and future plans.
 
@@ -146,7 +146,7 @@ They have the authority to merge PRs into master branches and are responsible fo
 
 - Receive at least two PMC nominations and pass voting.
 
-### Responsibilities and privileges
+#### Responsibilities and privileges
 
 - Mentor and guide other memberships in the community.
 
@@ -158,11 +158,11 @@ They have the authority to merge PRs into master branches and are responsible fo
 
 - Be awarded a StarRocks Committer e-certificate.
 
-## PMC
+### PMC
 
 PMCs are promoted from Committers. They have the authority to merge merge PRs into master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
 
-### How to become a PMC?
+#### How to become a PMC?
 
 - In-depth understanding of StarRocks principles and a clear understanding of StarRocks' future plans.
 
@@ -172,7 +172,7 @@ PMCs are promoted from Committers. They have the authority to merge merge PRs in
 
 - Receive at least two PMC nominations and pass voting.
 
-### Responsibilities and privileges
+#### Responsibilities and privileges
 
 - Mentor and guide other memberships in the community.
 

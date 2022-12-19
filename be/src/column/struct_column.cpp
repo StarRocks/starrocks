@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "column/struct_column.h"
 
 #include "column/column_helper.h"
@@ -35,11 +35,11 @@ uint8_t* StructColumn::mutable_raw_data() {
     return nullptr;
 }
 size_t StructColumn::size() const {
-    return _fields.at(0)->size();
+    return _fields[0]->size();
 }
 
 size_t StructColumn::capacity() const {
-    return _fields.at(0)->capacity();
+    return _fields[0]->capacity();
 }
 
 size_t StructColumn::type_size() const {
@@ -51,8 +51,6 @@ size_t StructColumn::byte_size() const {
     for (const auto& column : _fields) {
         total_size += column->byte_size();
     }
-    // We need plus _field_names size
-    total_size += _field_names->byte_size();
     return total_size;
 }
 
@@ -61,8 +59,6 @@ size_t StructColumn::byte_size(size_t idx) const {
     for (const auto& column : _fields) {
         total_size += column->byte_size(idx);
     }
-    // We need plus _field_names size
-    total_size += _field_names->byte_size();
     return total_size;
 }
 
@@ -121,7 +117,7 @@ void StructColumn::append_datum(const Datum& datum) {
     const DatumStruct& datum_struct = datum.get<DatumStruct>();
     DCHECK_EQ(_fields.size(), datum_struct.size());
     for (size_t col = 0; col < datum_struct.size(); col++) {
-        _fields.at(col)->append_datum(datum_struct.at(col));
+        _fields[col]->append_datum(datum_struct[col]);
     }
 }
 
@@ -135,8 +131,8 @@ void StructColumn::append(const Column& src, size_t offset, size_t count) {
     const auto& struct_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), struct_column.fields().size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        const Column& source_column = *struct_column.fields().at(i);
-        _fields.at(i)->append(source_column, offset, count);
+        const Column& source_column = *struct_column.fields()[i];
+        _fields[i]->append(source_column, offset, count);
     }
 }
 
@@ -151,7 +147,7 @@ Status StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const StructColumn& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        RETURN_IF_ERROR(_fields.at(i)->update_rows(*src_column._fields.at(i), indexes));
+        RETURN_IF_ERROR(_fields[i]->update_rows(*src_column._fields[i], indexes));
     }
     return Status::OK();
 }
@@ -161,7 +157,7 @@ void StructColumn::append_selective(const Column& src, const uint32_t* indexes, 
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields.at(i)->append_selective(*src_column._fields.at(i), indexes, from, size);
+        _fields[i]->append_selective(*src_column._fields[i], indexes, from, size);
     }
 }
 
@@ -170,7 +166,7 @@ void StructColumn::append_value_multiple_times(const Column& src, uint32_t index
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields.at(i)->append_value_multiple_times(*src_column._fields.at(i), index, size);
+        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size);
     }
 }
 
@@ -205,7 +201,7 @@ void StructColumn::append_value_multiple_times(const void* value, size_t count) 
     DCHECK_EQ(_fields.size(), struct_datum.size());
     for (size_t c = 0; c < count; ++c) {
         for (size_t i = 0; i < struct_datum.size(); ++i) {
-            _fields.at(i)->append_datum(struct_datum.at(i));
+            _fields[i]->append_datum(struct_datum[i]);
         }
     }
 }
@@ -223,54 +219,54 @@ void StructColumn::append_default(size_t count) {
 }
 
 uint32_t StructColumn::serialize(size_t idx, uint8_t* pos) {
-    // TODO(SmithCruise) Not tested.
     uint32_t ser_size = 0;
     for (ColumnPtr& column : _fields) {
-        ser_size += column->serialize(idx, pos);
-    }
-    for (size_t i = 0; i < _field_names->size(); i++) {
-        ser_size += _field_names->serialize(i, pos);
+        ser_size += column->serialize(idx, pos + ser_size);
     }
     return ser_size;
 }
 
 uint32_t StructColumn::serialize_default(uint8_t* pos) {
-    // TODO(SmithCruise) Not tested.
     uint32_t ser_size = 0;
     for (ColumnPtr& column : _fields) {
-        ser_size += column->serialize_default(pos);
-    }
-    for (size_t i = 0; i < _field_names->size(); i++) {
-        ser_size += _field_names->serialize(i, pos);
+        ser_size += column->serialize_default(pos + ser_size);
     }
     return ser_size;
 }
 
 void StructColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                    uint32_t max_one_row_size) {
-    // TODO(SmithCruise) Not tested.
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
 }
 
 const uint8_t* StructColumn::deserialize_and_append(const uint8_t* pos) {
-    DCHECK(false) << "Dont support it";
-    return nullptr;
+    for (size_t i = 0; i < _fields.size(); i++) {
+        pos = _fields[i]->deserialize_and_append(pos);
+    }
+    return pos;
 }
 
 void StructColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    DCHECK(false) << "Dont support it";
+    reserve(chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
+        srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
+    }
+}
+
+uint32_t StructColumn::max_one_element_serialize_size() const {
+    uint32_t max_size = 0;
+    for (const auto& column : _fields) {
+        max_size += column->max_one_element_serialize_size();
+    }
+    return max_size;
 }
 
 uint32_t StructColumn::serialize_size(size_t idx) const {
-    // TODO(SmithCruise) Not tested.
     uint32_t ser_size = 0;
     for (const ColumnPtr& column : _fields) {
         ser_size += column->serialize_size(idx);
-    }
-    for (size_t i = 0; i < _field_names->size(); i++) {
-        ser_size += _field_names->serialize_size(i);
     }
     return ser_size;
 }
@@ -289,11 +285,12 @@ MutableColumnPtr StructColumn::clone_empty() const {
 }
 
 size_t StructColumn::filter_range(const Filter& filter, size_t from, size_t to) {
-    // TODO(SmithCruise) Not tested.
-    size_t result_offset = _fields.at(0)->filter_range(filter, from, to);
+    size_t result_offset = _fields[0]->filter_range(filter, from, to);
     for (size_t i = 1; i < _fields.size(); i++) {
-        DCHECK_EQ(result_offset, _fields.at(i)->filter_range(filter, from, to));
+        size_t tmp_offset = _fields[i]->filter_range(filter, from, to);
+        DCHECK_EQ(result_offset, tmp_offset);
     }
+    // Don't need resize() anymore, because subfield's column will resize() by itself.
     return result_offset;
 }
 
@@ -329,7 +326,7 @@ void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
     for (size_t i = 0; i < _fields.size(); ++i) {
-        const auto& field = _fields.at(i);
+        const auto& field = _fields[i];
         buf->push_string(_field_names->get_slice(i).to_string());
         buf->separator(':');
         field->put_mysql_row_buffer(buf, idx);
@@ -346,7 +343,7 @@ std::string StructColumn::debug_item(uint32_t idx) const {
     std::stringstream ss;
     ss << '{';
     for (size_t i = 0; i < _fields.size(); i++) {
-        const auto& field = _fields.at(i);
+        const auto& field = _fields[i];
         ss << _field_names->get_slice(i).to_string();
         ss << ": ";
         ss << field->debug_item(idx);
@@ -379,9 +376,18 @@ Datum StructColumn::get(size_t idx) const {
     DCHECK(idx < size());
     DatumStruct res(_fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        res.at(i) = _fields.at(i)->get(idx);
+        res[i] = _fields[i]->get(idx);
     }
     return Datum(res);
+}
+
+size_t StructColumn::memory_usage() const {
+    size_t memory_usage = 0;
+    for (const auto& column : _fields) {
+        memory_usage += column->memory_usage();
+    }
+    memory_usage += _field_names->memory_usage();
+    return memory_usage;
 }
 
 size_t StructColumn::container_memory_usage() const {
@@ -393,10 +399,21 @@ size_t StructColumn::container_memory_usage() const {
     return memory_usage;
 }
 
+size_t StructColumn::element_memory_usage(size_t from, size_t size) const {
+    DCHECK_LE(from + size, this->size()) << "Range error";
+    size_t memorg_usage = 0;
+    for (const auto& column : _fields) {
+        memorg_usage += column->element_memory_usage(from, size);
+    }
+
+    // Do not need to include _field_names's element_memory_usage, because it's BinaryColumn, always return 0.
+    return memorg_usage;
+}
+
 void StructColumn::swap_column(Column& rhs) {
     StructColumn& struct_column = down_cast<StructColumn&>(rhs);
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields.at(i)->swap_column(*struct_column.fields_column().at(i));
+        _fields[i]->swap_column(*struct_column.fields_column()[i]);
     }
     // _field_names dont need swap
 }
@@ -441,7 +458,7 @@ Columns& StructColumn::fields_column() {
 ColumnPtr StructColumn::field_column(const std::string& field_name) {
     for (size_t i = 0; i < _field_names->size(); i++) {
         if (field_name == _field_names->get_slice(i)) {
-            return _fields.at(i);
+            return _fields[i];
         }
     }
     DCHECK(false) << "Struct subfield name: " << field_name << " not found!";

@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exprs/vectorized/math_functions.h"
 
 #include <runtime/decimalv3.h>
@@ -692,8 +692,7 @@ static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num
     return seed;
 }
 
-Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
-                                   starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
         int64_t seed = 0;
         if (context->get_num_args() == 1) {
@@ -721,8 +720,7 @@ Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status MathFunctions::rand_close(starrocks_udf::FunctionContext* context,
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     return Status::OK();
 }
 

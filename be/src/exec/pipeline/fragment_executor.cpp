@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "exec/pipeline/fragment_executor.h"
 
 #include <unordered_map>
@@ -822,7 +822,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // For insert into select, in the simplest case like insert into table select * from table2;
         // the desired_tablet_sink_dop set by FE is same as the source_operator_dop.
         // However, if the select statement is complex, like insert into table select * from table2 limit 1,
-        // the desired_tablet_sink_dop set by FE is same as the source_operator_dop, and it needs to
+        // the desired_tablet_sink_dop set by FE is not same as the source_operator_dop, and it needs to
         // add a local passthrough exchange here
         if (desired_tablet_sink_dop != source_operator_dop) {
             std::vector<OpFactories> pred_operators_list;

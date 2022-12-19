@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.tree;
 
@@ -385,7 +398,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
 
                     Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
-                    Column newColumn = new Column(oldColumn.getName(), ID_TYPE, oldColumn.isAllowNull());
+                    Column newColumn = new Column(oldColumn);
+                    newColumn.setType(ID_TYPE);
 
                     newColRefToColumnMetaMap.remove(stringColumn);
                     newColRefToColumnMetaMap.put(newDictColumn, newColumn);
@@ -431,6 +445,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
+                    newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
 
                     OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -702,9 +717,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (newStringToDicts.isEmpty()) {
                 context.hasEncoded = false;
             }
-            return new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
-                    aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
-                    aggOperator.getPredicate(), aggOperator.getProjection());
+            final PhysicalHashAggregateOperator newHashAggregator =
+                    new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
+                            aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
+                            aggOperator.getPredicate(), aggOperator.getProjection());
+            newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
+            return newHashAggregator;
         }
 
         @Override

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,8 +27,6 @@
 #include "util/time.h"
 
 namespace starrocks {
-
-class CompactionScheduler;
 
 enum CompactionTaskState { COMPACTION_INIT, COMPACTION_RUNNING, COMPACTION_FAILED, COMPACTION_SUCCESS };
 
@@ -209,8 +207,6 @@ public:
         return _task_info.to_string();
     }
 
-    void set_compaction_scheduler(CompactionScheduler* scheduler) { _scheduler = scheduler; }
-
 protected:
     virtual Status run_impl() = 0;
 
@@ -269,7 +265,6 @@ protected:
     std::unique_lock<std::mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
-    CompactionScheduler* _scheduler = nullptr;
 };
 
 } // namespace starrocks

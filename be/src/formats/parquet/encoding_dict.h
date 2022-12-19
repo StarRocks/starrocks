@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -122,6 +122,7 @@ public:
             data_column = down_cast<vectorized::FixedLengthColumn<T>*>(dst);
         }
 
+        RETURN_IF_ERROR(check_dict_code_out_of_range(_indexes, _dict));
         size_t cur_size = data_column->size();
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -185,6 +186,7 @@ public:
 
     Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
         std::vector<Slice> slices(dict_codes.size());
+        RETURN_IF_ERROR(check_dict_code_out_of_range(dict_codes, _dict));
         for (size_t i = 0; i < dict_codes.size(); i++) {
             slices[i] = _dict[dict_codes[i]];
         }
@@ -217,14 +219,17 @@ public:
         switch (content_type) {
         case DICT_CODE: {
             [[maybe_unused]] auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            DCHECK(ret) << "append_numbers failed";
             break;
         }
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
+            RETURN_IF_ERROR(check_dict_code_out_of_range(_indexes, _dict));
             for (int i = 0; i < count; ++i) {
                 _slices[i] = _dict[_indexes[i]];
             }
             [[maybe_unused]] auto ret = dst->append_strings_overflow(_slices, _max_value_length);
+            DCHECK(ret) << "append_strings_overflow failed";
             break;
         }
         default:

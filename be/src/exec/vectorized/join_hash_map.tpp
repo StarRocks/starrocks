@@ -4,15 +4,21 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "simd/simd.h"
+
+#define JOIN_HASH_MAP_TPP
+
+#ifndef JOIN_HASH_MAP_H
+#include "join_hash_map.h"
+#endif
 
 namespace starrocks::vectorized {
 template <LogicalType PT>
@@ -1478,6 +1484,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 
     size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
+        _probe_state->cur_row_match_count = 0;
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
             bool change_flag = false;
@@ -1542,7 +1549,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 
             RETURN_IF_CHUNK_FULL()
         }
-        _probe_state->cur_row_match_count = 0;
     }
     _probe_state->has_null_build_tuple = true;
     PROBE_OVER()
@@ -1702,3 +1708,5 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
 }
 
 } // namespace starrocks::vectorized
+
+#undef JOIN_HASH_MAP_TPP

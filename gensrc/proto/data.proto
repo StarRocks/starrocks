@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -62,6 +62,12 @@ message PRowBatch {
     required bool is_compressed = 5;
 };
 
+message ChunkExtraColumnsMetaPB {
+    optional PTypeDesc type_desc = 1;
+    optional bool is_null = 2;
+    optional bool is_const = 3;
+};
+
 // We only serialize slot_id_map, is_nulls, is_consts in first chunk when RPC.
 message ChunkPB {
     // Content for this chunk.
@@ -78,6 +84,7 @@ message ChunkPB {
     // we may estimate larger serialized_size but actually don't use that much space.
     optional int64 serialized_size  = 9; // how many bytes are really written into data.
     repeated int32 encode_level = 10; // the encode level for data columns, during upgrade, this must be 0.
+    repeated ChunkExtraColumnsMetaPB extra_data_metas = 11; // chunk's extra data meta.
 };
 
 message SegmentPB {

@@ -25,6 +25,7 @@ Parameters in brackets [] is optional.
 | PARTITION START () END () | no           | Manually refresh partitions within a certain time interval. |
 | partition_start_date      | no           | The start date of the partitions to refresh manually.  |
 | partition_end_date        | no           | The end date of the partitions to refresh manually.    |
+| FORCE                     | no           | If you specify this parameter, StarRocks forcibly refreshes the corresponding materialized view or partitions. If you do not specify this parameter, StarRocks automatically judges if a partition is updated and refreshes the partition only when needed. |
 
 ## Examples
 

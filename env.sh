@@ -21,14 +21,6 @@ if [[ -z ${STARROCKS_HOME} ]]; then
     exit 1
 fi
 
-# check OS type
-if [[ ! -z "$OSTYPE" ]]; then
-    if [[ "$OSTYPE" != "linux-gnu" ]]; then
-        echo "Error: Unsupported OS type: $OSTYPE"
-        exit 1
-    fi
-fi
-
 # include custom environment variables
 if [[ -f ${STARROCKS_HOME}/custom_env.sh ]]; then
     . ${STARROCKS_HOME}/custom_env.sh
@@ -109,10 +101,6 @@ export MVN_CMD
 CMAKE_CMD=cmake
 if [[ ! -z ${CUSTOM_CMAKE} ]]; then
     CMAKE_CMD=${CUSTOM_CMAKE}
-fi
-if ! ${CMAKE_CMD} --version; then
-    echo "Error: cmake is not found"
-    exit 1
 fi
 export CMAKE_CMD
 

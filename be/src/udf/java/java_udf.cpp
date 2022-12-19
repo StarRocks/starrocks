@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "udf/java/java_udf.h"
 
 #include <iterator>
@@ -27,7 +27,6 @@
 #include "runtime/primitive_type.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/utils.h"
-#include "udf/udf_internal.h"
 #include "util/defer_op.h"
 
 // find a jclass and return a global jclass ref
@@ -301,8 +300,8 @@ void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject
                                      int cols) {
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     LOCAL_REF_GUARD(input_arr);
-    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update,
-                               ctx->impl()->udaf_ctxs()->states->handle(), states, input_arr);
+    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update, ctx->udaf_ctxs()->states->handle(),
+                               states, input_arr);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
@@ -319,7 +318,7 @@ void JVMFunctionHelper::batch_update_if_not_null(FunctionContext* ctx, jobject u
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     LOCAL_REF_GUARD(input_arr);
     _env->CallStaticVoidMethod(_udf_helper_class, _batch_update_if_not_null, udaf, update,
-                               ctx->impl()->udaf_ctxs()->states->handle(), states, input_arr);
+                               ctx->udaf_ctxs()->states->handle(), states, input_arr);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
@@ -374,12 +373,12 @@ int JVMFunctionHelper::list_size(jobject obj) {
 
 // convert UDAF ctx to jobject
 jobject JVMFunctionHelper::convert_handle_to_jobject(FunctionContext* ctx, int state) {
-    auto* states = ctx->impl()->udaf_ctxs()->states.get();
+    auto* states = ctx->udaf_ctxs()->states.get();
     return states->get_state(ctx, _env, state);
 }
 
 jobject JVMFunctionHelper::convert_handles_to_jobjects(FunctionContext* ctx, jobject state_ids) {
-    auto* states = ctx->impl()->udaf_ctxs()->states.get();
+    auto* states = ctx->udaf_ctxs()->states.get();
     return states->get_state(ctx, _env, state_ids);
 }
 
