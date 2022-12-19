@@ -16,6 +16,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 #include "util/json.h"
+#include "util/slice.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -1344,15 +1345,16 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
     }
 }
 
-template <PrimitiveType toType>
-static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, std::string json_str) {
+template <PrimitiveType toType, class JsonValueType>
+static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, JsonValueType json_str) {
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
 
     std::cerr << "evaluate cast from json: " << json_str << std::endl;
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
-    auto json = JsonValue::parse(json_str);
+
+    StatusOr<JsonValue> json = JsonValue::from(json_str);
     if (!json.ok()) {
         return nullptr;
     }
@@ -1366,8 +1368,8 @@ static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& c
     return ColumnHelper::cast_to<toType>(ptr);
 }
 
-template <PrimitiveType toType>
-static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json_str) {
+template <PrimitiveType toType, class JsonValueType>
+static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, JsonValueType json_str) {
     std::cerr << "evaluate castCast: " << json_str << std::endl;
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
@@ -1376,7 +1378,8 @@ static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json
     if (!expr) {
         return nullptr;
     }
-    auto json = JsonValue::parse(json_str);
+    StatusOr<JsonValue> json = JsonValue::from(json_str);
+
     if (!json.ok()) {
         return nullptr;
     }
@@ -1402,10 +1405,10 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("{\"a\": 1}", jsonCol->get_data()[0]->to_string().value());
 
     // cast success
-    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, "1")->get_data()[0]);
-    EXPECT_EQ(1.1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "1.1")->get_data()[0]);
-    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "true")->get_data()[0]);
-    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "false")->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, 1)->get_data()[0]);
+    EXPECT_EQ(1.1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1.1)->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, false)->get_data()[0]);
     EXPECT_EQ("a", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"a\"")->get_data()[0]);
     EXPECT_EQ("1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"1\"")->get_data()[0]);
     EXPECT_EQ("[1, 2, 3]", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "[1,2,3]")->get_data()[0]);
@@ -1417,8 +1420,8 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "")->get_data()[0]);
 
     // implicit json type case
-    EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "1")->get_data()[0]);
-    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, "1.1")->get_data()[0]);
+    EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1)->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, 1.1)->get_data()[0]);
 
     // cast failed
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "\"a\"")));
@@ -1433,8 +1436,8 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "{}")));
 
     // overflow
-    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, "100000")));
-    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, "-100000")));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, 100000)));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, -100000)));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(
                          cast_expr, std::to_string(std::numeric_limits<int64_t>::max()))));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(
@@ -1525,7 +1528,7 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         EXPECT_EQ(R"("star")", evaluateCastToJson<TYPE_CHAR>(cast_expr, "star"));
         EXPECT_EQ(R"(" star")", evaluateCastToJson<TYPE_VARCHAR>(cast_expr, " star"));
 
-        EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_CHAR>(cast_expr, " 1"));
+        EXPECT_EQ(R"(" 1")", evaluateCastToJson<TYPE_CHAR>(cast_expr, " 1"));
         EXPECT_EQ(R"("1")", evaluateCastToJson<TYPE_CHAR>(cast_expr, "\"1\""));
         EXPECT_EQ(R"({})", evaluateCastToJson<TYPE_CHAR>(cast_expr, "{}"));
         EXPECT_EQ(R"({})", evaluateCastToJson<TYPE_CHAR>(cast_expr, "   {}"));
@@ -1543,9 +1546,32 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
     }
 }
 
-static std::string cast_string_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
+TTypeDesc gen_multi_array_type_desc(const TPrimitiveType::type field_type, size_t dim) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+
+    for (auto i = 0; i < dim; ++i) {
+        TTypeNode type_array;
+        type_array.type = TTypeNodeType::ARRAY;
+        types_list.push_back(type_array);
+    }
+
+    TTypeNode type_scalar;
+    TScalarType scalar_type;
+    scalar_type.__set_type(field_type);
+    scalar_type.__set_precision(0);
+    scalar_type.__set_scale(0);
+    scalar_type.__set_len(0);
+    type_scalar.__set_scalar_type(scalar_type);
+    types_list.push_back(type_scalar);
+
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
+static std::string cast_string_to_array(TExprNode& cast_expr, TTypeDesc type_desc, const std::string& str) {
     cast_expr.child_type = to_thrift(TYPE_VARCHAR);
-    cast_expr.type = gen_array_type_desc(to_thrift(element_type));
+    cast_expr.type = type_desc;
 
     ObjectPool pool;
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
@@ -1559,6 +1585,11 @@ static std::string cast_string_to_array(TExprNode& cast_expr, PrimitiveType elem
     return ptr->debug_item(0);
 }
 
+static std::string cast_string_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
+    auto type_desc = gen_array_type_desc(to_thrift(element_type));
+    return cast_string_to_array(cast_expr, type_desc, str);
+}
+
 TEST_F(VectorizedCastExprTest, string_to_array) {
     TExprNode cast_expr;
     cast_expr.opcode = TExprOpcode::CAST;
@@ -1568,6 +1599,7 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     cast_expr.__isset.child_type = true;
 
     EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
+    EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "1,2,3"));
     EXPECT_EQ("[1, 2, 3]", cast_string_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
     EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, "[]"));
     EXPECT_EQ("[]", cast_string_to_array(cast_expr, TYPE_INT, ""));
@@ -1576,12 +1608,72 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
 
     EXPECT_EQ("[1.1, 2.2, 3.3]", cast_string_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
 
+    // test invalid input
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[[1,2,3]"));
+    EXPECT_EQ("NULL", cast_string_to_array(cast_expr, TYPE_INT, "[]]"));
+
+    // test cast to string array
+    EXPECT_EQ(R"(['1', '2', '3'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(1,2,3)"));
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([a,b])"));
-    EXPECT_EQ(R"(['"a', '"b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a,"b])"));
+    EXPECT_EQ(R"(['"a,"b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a,"b])"));
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
     EXPECT_EQ(R"(['a', ' b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
     EXPECT_EQ(R"(['1', '2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
+
+    // test child type
+    {
+        // select cast('[[["1"]],[["1,3"],["2"],["1"]]]' as array<array<array<string>>>);
+        auto type = gen_multi_array_type_desc(to_thrift(TYPE_VARCHAR), 3);
+        EXPECT_EQ(R"([[['1']], [['1,3'], ['2'], ['1']]])",
+                  cast_string_to_array(cast_expr, type, R"([[["1"]],[["1,3"],["2"],["1"]]])"));
+        // select  cast('[[["1"]],[["1"],["2"],["1"]]]' as array<array<array<string>>>);
+        EXPECT_EQ(R"([[['1']], [['1'], ['2'], ['1']]])",
+                  cast_string_to_array(cast_expr, type, R"([[["1"]],[["1"],["2"],["1"]]])"));
+        //  select cast('[[4],[[1, 2]]]' as array<array<array<string>>>);
+        EXPECT_EQ(R"([[['4']], [['1', '2']]])", cast_string_to_array(cast_expr, type, R"([[[4]],[[1, 2]]])"));
+    }
+}
+
+void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vector<char>& stack);
+TEST_F(VectorizedCastExprTest, string_split_test) {
+    // normal test
+    Slice a;
+    std::vector<Slice> res;
+    std::vector<char> stack;
+    {
+        // case 1
+        res.clear();
+        a = "a, b,";
+        array_delimeter_split(a, res, stack);
+        EXPECT_EQ(res[0], Slice("a"));
+        EXPECT_EQ(res[1], Slice(" b"));
+        EXPECT_EQ(res[2], Slice(""));
+
+        // case 2
+        res.clear();
+        a = "aaaaa";
+        array_delimeter_split(a, res, stack);
+        EXPECT_EQ(res[0], Slice("aaaaa"));
+
+        // case 3
+        res.clear();
+        a = "[a, b],[c, d]";
+        array_delimeter_split(a, res, stack);
+        EXPECT_EQ(res[0], Slice("[a, b]"));
+        EXPECT_EQ(res[1], Slice("[c, d]"));
+
+        // case 4
+        res.clear();
+        a = R"([["1"]],[["1,3"],["2"],["1"]])";
+        array_delimeter_split(a, res, stack);
+        EXPECT_EQ(res[0], Slice(R"([["1"]])"));
+        EXPECT_EQ(res[1], Slice(R"([["1,3"],["2"],["1"]])"));
+
+        res.clear();
+        a = R"(["1"]][["1,3"],["2"],["1"]])";
+        array_delimeter_split(a, res, stack);
+    }
 }
 
 static std::string cast_json_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
