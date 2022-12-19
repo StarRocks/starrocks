@@ -10,7 +10,7 @@
 
 StarRocks 默认关闭查询队列。您可以通过设置相应的全局会话变量（Global session variable）来为 INSERT 导入、SELECT 查询和统计信息查询启用查询队列。
 
-- 为 INSERT 导入启用查询队列：
+- 为导入任务启用查询队列：
 
 ```SQL
 SET GLOBAL enable_query_queue_load = true;
