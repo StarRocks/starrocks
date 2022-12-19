@@ -212,8 +212,8 @@ TEST_F(ArrayFunctionsTest, array_length) {
         c->append_datum(Datum(DatumArray{}));
         c->append_datum(Datum());
         c->append_datum(Datum(DatumArray{Datum()}));
-        c->append_datum(Datum(DatumArray{DatumArray{Datum()}}));
-        c->append_datum(Datum(DatumArray{DatumArray{}}));
+        c->append_datum(Datum(DatumArray{Datum(DatumArray{Datum()})}));
+        c->append_datum(Datum(DatumArray{Datum(DatumArray{})}));
         c->append_datum(Datum(DatumArray{Datum(DatumArray{}), Datum(DatumArray{})}));
         c->append_datum(Datum(DatumArray{Datum(DatumArray{Datum((int32_t)1)}), Datum(DatumArray{Datum((int32_t)2)}),
                                          Datum(DatumArray{Datum((int32_t)3)})}));
@@ -478,7 +478,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{DatumArray{}});
+        array->append_datum(DatumArray{Datum(DatumArray{})});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
@@ -741,14 +741,14 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
     // array_contains_all([["a", "b"], ["c"], NULL], [["a", "b"], NULL])
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
-        array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
+        array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
         array->append_datum(Datum());
-        array->append_datum(DatumArray{DatumArray{"a", "b"}, DatumArray{"c"}, Datum()});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"}), Datum()});
 
         auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
-        target->append_datum(DatumArray{DatumArray{"c"}});
-        target->append_datum(DatumArray{DatumArray{"c"}});
-        target->append_datum(DatumArray{DatumArray{"a", "b"}, Datum()});
+        target->append_datum(DatumArray{Datum(DatumArray{"c"})});
+        target->append_datum(DatumArray{Datum(DatumArray{"c"})});
+        target->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum()});
 
         auto result = ArrayFunctions::array_contains_all(nullptr, {array, target}).value();
         EXPECT_EQ(3, result->size());
@@ -988,7 +988,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{DatumArray{}});
+        array->append_datum(DatumArray{Datum(DatumArray{})});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
@@ -1552,7 +1552,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{DatumArray{}});
+        array->append_datum(DatumArray{Datum(DatumArray{})});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
@@ -2003,10 +2003,10 @@ TEST_F(ArrayFunctionsTest, array_append) {
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true);
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{DatumArray{0, 1}});
+        array->append_datum(DatumArray{Datum(DatumArray{0, 1})});
         array->append_datum(DatumArray{Datum()});
         array->append_datum(Datum());
-        array->append_datum(DatumArray{DatumArray{10, 11}, DatumArray{12, 13}});
+        array->append_datum(DatumArray{Datum(DatumArray{10, 11}), Datum(DatumArray{12, 13})});
 
         auto data = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         data->append_datum(Datum(DatumArray{}));
