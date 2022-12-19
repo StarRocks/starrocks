@@ -212,6 +212,18 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 `true` 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近 100 条开启了 `enable_profile` 的查询的 profile。
 
+* enable_query_queue_load
+
+  布尔值，用于控制是否为 INSERT 导入启用查询队列。默认值：`false`。
+
+* enable_query_queue_select
+
+  布尔值，用于控制是否为 SELECT 查询启用查询队列。默认值：`false`。
+
+* enable_query_queue_statistic
+
+  布尔值，用于控制是否为统计信息查询启用查询队列。默认值：`false`。
+
 * language
 
   用于兼容 MySQL 客户端。无实际作用。
@@ -300,10 +312,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   单个 BE 节点中内存使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。默认值：`0`。取值范围：[0, 1000]
 
-* query_queue_insert_enable
-
-  布尔值，用于控制是否为 INSERT 导入启用查询队列。默认值：`false`。
-
 * query_queue_max_queued_queries
 
   队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。默认值：`0`。
@@ -315,14 +323,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * query_queue_pending_timeout_second
 
   队列中单个查询的最大超时时间。当达到此阈值时，该查询将被拒绝执行。默认值：`300`。单位：秒。
-
-* query_queue_select_enable
-
-  布尔值，用于控制是否为 SELECT 查询启用查询队列。默认值：`false`。
-
-* query_queue_statistic_enable
-
-  布尔值，用于控制是否为统计信息查询启用查询队列。默认值：`false`。
 
 * query_timeout
 
