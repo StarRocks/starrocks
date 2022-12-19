@@ -1779,12 +1779,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
-    /**
-     * default bucket number when create OLAP table without buckets info
-     */
-    @ConfField(mutable = true)
-    public static int default_bucket_num = 10;
-
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
 
