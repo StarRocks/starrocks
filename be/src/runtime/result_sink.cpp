@@ -101,10 +101,10 @@ Status ResultSink::prepare(RuntimeState* state) {
         _writer.reset(new (std::nothrow) FileResultWriter(_file_opts.get(), _output_expr_ctxs, _profile));
         break;
     case TResultSinkType::STATISTIC:
-        _writer.reset(new (std::nothrow) vectorized::StatisticResultWriter(_sender.get(), _output_expr_ctxs, _profile));
+        _writer.reset(new (std::nothrow) StatisticResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
     case TResultSinkType::VARIABLE:
-        _writer.reset(new (std::nothrow) vectorized::VariableResultWriter(_sender.get(), _output_expr_ctxs, _profile));
+        _writer.reset(new (std::nothrow) VariableResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -119,7 +119,7 @@ Status ResultSink::open(RuntimeState* state) {
     return Expr::open(_output_expr_ctxs, state);
 }
 
-Status ResultSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status ResultSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     // The ResultWriter memory that sends the results is no longer recorded to the query memory.
     // There are two reason:
     // 1. the query result has come out, and then the memory limit is triggered, cancel, it is not necessary

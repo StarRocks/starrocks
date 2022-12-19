@@ -25,10 +25,8 @@
 namespace starrocks {
 
 class ExprContext;
-namespace vectorized {
 class ConnectorScanNode;
 class RuntimeFilterProbeCollector;
-} // namespace vectorized
 
 namespace connector {
 
@@ -41,7 +39,7 @@ public:
     virtual ~DataSource() = default;
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
-    virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
+    virtual Status get_next(RuntimeState* state, ChunkPtr* chunk) { return Status::OK(); }
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;
@@ -59,19 +57,17 @@ public:
     // 4. read limit: for case like `select xxxx from table limit 10`.
     void set_runtime_profile(RuntimeProfile* runtime_profile) { _runtime_profile = runtime_profile; }
     void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
-    void set_runtime_filters(const vectorized::RuntimeFilterProbeCollector* runtime_filters) {
-        _runtime_filters = runtime_filters;
-    }
+    void set_runtime_filters(const RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
 
 protected:
     int64_t _read_limit = -1; // no limit
     std::vector<ExprContext*> _conjunct_ctxs;
-    const vectorized::RuntimeFilterProbeCollector* _runtime_filters;
+    const RuntimeFilterProbeCollector* _runtime_filters;
     RuntimeProfile* _runtime_profile;
     const TupleDescriptor* _tuple_desc = nullptr;
-    void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
+    void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
 
 using DataSourcePtr = std::unique_ptr<DataSource>;
@@ -125,10 +121,10 @@ public:
     // First version we use TPlanNode to construct data source provider.
     // Later version we could use user-defined data.
 
-    virtual DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                               const TPlanNode& plan_node) const = 0;
 
-    // virtual DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    // virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
     //                                                         const std::string& table_handle) const;
 
     virtual ConnectorType connector_type() const = 0;

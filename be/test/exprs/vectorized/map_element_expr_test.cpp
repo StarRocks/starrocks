@@ -20,7 +20,7 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 namespace {
 
 class FakeConstExpr : public starrocks::Expr {
@@ -320,4 +320,4 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

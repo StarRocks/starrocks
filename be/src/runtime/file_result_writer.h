@@ -97,7 +97,7 @@ public:
     ~FileResultWriter() override;
 
     Status init(RuntimeState* state) override;
-    Status append_chunk(vectorized::Chunk* chunk) override;
+    Status append_chunk(Chunk* chunk) override;
     Status close() override;
     Status open(RuntimeState* state) override;
 

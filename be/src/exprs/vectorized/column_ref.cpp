@@ -17,7 +17,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ColumnRef::ColumnRef(const TExprNode& node)
         : Expr(node, true), _column_id(node.slot_ref.slot_id), _tuple_id(node.slot_ref.tuple_id) {}
@@ -51,10 +51,10 @@ StatusOr<ColumnPtr> ColumnRef::evaluate_checked(ExprContext* context, Chunk* ptr
     return get_column(this, ptr);
 }
 
-vectorized::ColumnPtr& ColumnRef::get_column(Expr* expr, vectorized::Chunk* chunk) {
+ColumnPtr& ColumnRef::get_column(Expr* expr, Chunk* chunk) {
     auto* ref = (ColumnRef*)expr;
     ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
     return column;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

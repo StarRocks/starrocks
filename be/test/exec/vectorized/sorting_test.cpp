@@ -32,7 +32,7 @@
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int slot_index, int32_t start, int32_t count,
                                      int32_t step) {
@@ -358,4 +358,4 @@ TEST(SortingTest, merge_sorted_stream) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

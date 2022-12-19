@@ -19,7 +19,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct InConstPredicateBuilder {
     template <LogicalType ptype>
@@ -51,4 +51,4 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     return nullptr;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

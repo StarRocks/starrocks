@@ -22,7 +22,7 @@
 
 #include <cstdint>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct SIMDGather {
     // https://johnysswlab.com/when-vectorization-hits-the-memory-wall-investigating-the-avx2-memory-gather-instruction
@@ -66,4 +66,4 @@ struct SIMDGather {
         }
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

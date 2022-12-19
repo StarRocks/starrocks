@@ -23,7 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
@@ -108,4 +108,4 @@ void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionCo
     _common_sub_expr.clear();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

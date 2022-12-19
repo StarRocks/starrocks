@@ -21,7 +21,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "util/timezone_hsscan.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // TODO:
 class TimeFunctions {
@@ -471,20 +471,18 @@ public:
     // try to transfer content to date format based on "%Y-%m-%d",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
-    static StatusOr<ColumnPtr> str_to_date_from_date_format(FunctionContext* context,
-                                                            const starrocks::vectorized::Columns& columns,
+    static StatusOr<ColumnPtr> str_to_date_from_date_format(FunctionContext* context, const starrocks::Columns& columns,
                                                             const char* str_format);
 
     // try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
     static StatusOr<ColumnPtr> str_to_date_from_datetime_format(FunctionContext* context,
-                                                                const starrocks::vectorized::Columns& columns,
+                                                                const starrocks::Columns& columns,
                                                                 const char* str_format);
 
     // Try to process string content, based on uncommon string format
-    static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context,
-                                                    const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context, const starrocks::Columns& columns);
     /**
      *
      * cast string to datetime
@@ -606,9 +604,9 @@ private:
     static std::string convert_format(const Slice& format);
 
     static StatusOr<ColumnPtr> from_unix_with_format_general(FunctionContext* context,
-                                                             const starrocks::vectorized::Columns& columns);
+                                                             const starrocks::Columns& columns);
     static StatusOr<ColumnPtr> from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                           const starrocks::vectorized::Columns& columns);
+                                                           const starrocks::Columns& columns);
 
     static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 
@@ -670,4 +668,4 @@ private:
     friend StatusOr<ColumnPtr> do_format(const FormatCtx* ctx, const Columns& cols);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

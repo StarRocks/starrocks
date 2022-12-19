@@ -27,7 +27,7 @@
 #include "exec/vectorized/aggregator.h"
 #include "runtime/current_thread.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status DistinctBlockingNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
@@ -195,4 +195,4 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     return ops_with_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

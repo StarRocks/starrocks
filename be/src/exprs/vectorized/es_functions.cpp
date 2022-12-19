@@ -17,7 +17,7 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<ColumnPtr> ESFunctions::match(FunctionContext* context, const Columns& columns) {
     auto size = columns[0]->size();
@@ -29,4 +29,4 @@ StatusOr<ColumnPtr> ESFunctions::match(FunctionContext* context, const Columns& 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -19,7 +19,7 @@
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& message) {
     if (_jni_env->ExceptionCheck()) {
@@ -155,7 +155,7 @@ Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
 template <LogicalType type, typename CppType>
 void JniScanner::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
-        using ColumnType = typename vectorized::RunTimeColumnType<type>;
+        using ColumnType = typename starrocks::RunTimeColumnType<type>;
         auto* runtime_column = down_cast<ColumnType*>(column);
         runtime_column->append(value);
     };
@@ -184,7 +184,7 @@ Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, i
     memcpy(null_data.data(), null_column_ptr, num_rows);
 
     auto* data_column = nullable_column->data_column().get();
-    using ColumnType = typename vectorized::RunTimeColumnType<type>;
+    using ColumnType = typename starrocks::RunTimeColumnType<type>;
     auto* runtime_column = down_cast<ColumnType*>(data_column);
     memcpy(runtime_column->get_data().data(), column_ptr, num_rows * sizeof(CppType));
 
@@ -231,7 +231,7 @@ Status JniScanner::_append_string_data(long num_rows, long* chunk_meta_ptr, int&
     memcpy(null_data.data(), null_column_ptr, num_rows);
 
     auto* data_column = nullable_column->data_column().get();
-    using ColumnType = typename vectorized::RunTimeColumnType<type>;
+    using ColumnType = typename starrocks::RunTimeColumnType<type>;
     auto* runtime_column = down_cast<ColumnType*>(data_column);
 
     int total_length = offset_ptr[num_rows];
@@ -358,4 +358,4 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     return status;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

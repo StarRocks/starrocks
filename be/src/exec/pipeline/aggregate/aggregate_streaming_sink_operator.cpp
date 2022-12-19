@@ -42,11 +42,11 @@ Status AggregateStreamingSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
@@ -66,7 +66,7 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vec
 
 Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming() {
     SCOPED_TIMER(_aggregator->streaming_timer());
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _aggregator->output_chunk_by_streaming(&chunk);
     _aggregator->offer_chunk_to_buffer(chunk);
     return Status::OK();
@@ -120,7 +120,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
         // very poor aggregation
         if (zero_count == 0) {
             SCOPED_TIMER(_aggregator->streaming_timer());
-            vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+            ChunkPtr chunk = std::make_shared<Chunk>();
             _aggregator->output_chunk_by_streaming(&chunk);
             _aggregator->offer_chunk_to_buffer(chunk);
         }
@@ -136,7 +136,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
             }
             {
                 SCOPED_TIMER(_aggregator->streaming_timer());
-                vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+                ChunkPtr chunk = std::make_shared<Chunk>();
                 _aggregator->output_chunk_by_streaming_with_selection(&chunk);
                 _aggregator->offer_chunk_to_buffer(chunk);
             }

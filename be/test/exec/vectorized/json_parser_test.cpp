@@ -23,7 +23,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JsonParserTest : public ::testing::Test {
 public:
@@ -504,4 +504,4 @@ PARALLEL_TEST(JsonParserTest, test_big_json) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

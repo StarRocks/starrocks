@@ -23,10 +23,8 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-namespace vectorized {
 class SchemaScannerParam;
 class SchemaScanner;
-} // namespace vectorized
 
 namespace pipeline {
 class OlapSchemaScanContext;
@@ -52,7 +50,7 @@ public:
 
     std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
 
-    vectorized::SchemaScannerParam* param() { return _param.get(); }
+    SchemaScannerParam* param() { return _param.get(); }
 
 private:
     Status _prepare_params(RuntimeState* state);
@@ -62,7 +60,7 @@ private:
     TupleId _tuple_id;
 
     std::vector<ExprContext*> _conjunct_ctxs;
-    std::shared_ptr<vectorized::SchemaScannerParam> _param;
+    std::shared_ptr<SchemaScannerParam> _param;
 
     BalancedChunkBuffer& _chunk_buffer;
     ObjectPool _obj_pool;

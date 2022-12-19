@@ -17,7 +17,7 @@
 #include "column/chunk.h"
 #include "serde/column_array_serde.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunkExtraColumnsData;
 using ChunkExtraColumnsDataPtr = std::shared_ptr<ChunkExtraColumnsData>;
@@ -127,4 +127,4 @@ private:
     std::vector<ChunkExtraColumnsMeta> _data_metas;
     Columns _columns;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

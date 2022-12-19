@@ -19,7 +19,7 @@
 #include "storage/column_aggregator.h"
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // SUM
 template <typename ColumnType, typename StateType>
@@ -687,8 +687,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
     return nullptr;
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
-        const starrocks::vectorized::VectorizedFieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const starrocks::VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::StorageAggregateType method = field->aggregate_method();
     if (method != STORAGE_AGGREGATE_NONE) {
@@ -714,7 +713,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
 }
 
 ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
-        const starrocks::vectorized::VectorizedFieldPtr& field) {
+        const starrocks::VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::StorageAggregateType method = field->aggregate_method();
     if (method == STORAGE_AGGREGATE_NONE) {
@@ -736,4 +735,4 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         }
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -3,7 +3,7 @@
 #include <type_traits>
 #include <variant>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 namespace detail {
 template <AggHashMapVariant::Type>
@@ -162,7 +162,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 }
 
 #define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                                            \
-    if (_type == vectorized::AggHashMapVariant::Type::SRC) {                                                          \
+    if (_type == AggHashMapVariant::Type::SRC) {                                                                      \
         auto dst = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::DST>::HashMapWithKeyType>(              \
                 state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
@@ -175,7 +175,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \
                                                                                                                       \
-        _type = vectorized::AggHashMapVariant::Type::DST;                                                             \
+        _type = AggHashMapVariant::Type::DST;                                                                         \
         hash_map_with_key = std::move(dst);                                                                           \
         return;                                                                                                       \
     }
@@ -223,7 +223,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg
 }
 
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                            \
-    if (type == vectorized::AggHashSetVariant::Type::SRC) {                                                           \
+    if (type == AggHashSetVariant::Type::SRC) {                                                                       \
         auto dst = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>(              \
                 state->chunk_size());                                                                                 \
         std::visit(                                                                                                   \
@@ -235,7 +235,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_set_with_key);                                                                                   \
-        type = vectorized::AggHashSetVariant::Type::DST;                                                              \
+        type = AggHashSetVariant::Type::DST;                                                                          \
         hash_set_with_key = std::move(dst);                                                                           \
         return;                                                                                                       \
     }
@@ -272,4 +272,4 @@ size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
     });
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

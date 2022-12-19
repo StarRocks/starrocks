@@ -14,7 +14,7 @@
 
 #include "exprs/vectorized/dictmapping_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 DictMappingExpr::DictMappingExpr(const TExprNode& node) : Expr(node, false) {}
 
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
@@ -28,4 +28,4 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

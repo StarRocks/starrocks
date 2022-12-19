@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 PlaceHolderRef::PlaceHolderRef(const TExprNode& node) : Expr(node, true), _column_id(node.vslot_ref.slot_id) {}
 
 StatusOr<ColumnPtr> PlaceHolderRef::evaluate_checked(ExprContext* context, Chunk* ptr) {
@@ -24,4 +24,4 @@ StatusOr<ColumnPtr> PlaceHolderRef::evaluate_checked(ExprContext* context, Chunk
     return column;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

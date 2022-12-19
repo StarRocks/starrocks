@@ -21,7 +21,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class MoneyFormatDecimalTest : public ::testing::Test {};
 using TestCase = std::tuple<std::string, std::string>;
 using TestArray = std::vector<TestCase>;
@@ -97,4 +97,4 @@ TEST_F(MoneyFormatDecimalTest, moneyFormatDecimalScaleEqPrecision) {
     test_money_format_decimal<TYPE_DECIMAL128>(test_cases, 38, 38);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,7 +20,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedBinaryNullableTest : public ::testing::Test {
 public:
@@ -74,4 +74,4 @@ TEST_F(VectorizedBinaryNullableTest, allArgsNull) {
     auto result = MathFunctions::pow(function_context, columns).value();
     ASSERT_TRUE(result->is_null(0));
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

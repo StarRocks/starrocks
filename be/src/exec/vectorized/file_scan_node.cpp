@@ -30,7 +30,7 @@
 #include "util/runtime_profile.h"
 #include "util/thread.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 FileScanNode::FileScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs), _tuple_id(tnode.file_scan_node.tuple_id) {}
@@ -353,4 +353,4 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

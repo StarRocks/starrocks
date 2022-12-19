@@ -26,7 +26,7 @@
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
@@ -145,8 +145,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 min_chunk->columns()[i]->append_nulls(1);
                 max_chunk->columns()[i]->append_nulls(1);
             } else {
-                auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(
-                        _scanner_ctx.partition_values[part_idx]);
+                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
                 min_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
                 max_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
             }
@@ -213,10 +212,10 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         if (dict->dictionaryOffset.size() > _reader->runtime_state()->chunk_size()) {
             continue;
         }
-        vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
+        ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
         // always assume there is a possibility of null value in ORC column.
         // and we evaluate with null always.
-        ColumnPtr column_ptr = vectorized::ColumnHelper::create_column(slot_desc->type(), true);
+        ColumnPtr column_ptr = ColumnHelper::create_column(slot_desc->type(), true);
         dict_value_chunk->append_column(column_ptr, slot_id);
 
         auto* nullable_column = down_cast<NullableColumn*>(column_ptr.get());
@@ -481,4 +480,4 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     // todo: build predicate hook and ranges hook.
     return Status::OK();
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -19,7 +19,7 @@
 #include "exprs/vectorized/json_functions.h"
 #include "simdjson.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JsonParser {
 public:
@@ -219,4 +219,4 @@ private:
     bool _curr_ready = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

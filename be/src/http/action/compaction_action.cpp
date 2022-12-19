@@ -177,7 +177,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
                 }
             }
         } else {
-            vectorized::CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
+            CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
 
             Status res = cumulative_compaction.compact();
             if (!res.ok()) {
@@ -212,7 +212,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
                         fmt::format("Failed to base compaction tablet={} no need to do", tablet->full_name()));
             }
         } else {
-            vectorized::BaseCompaction base_compaction(mem_tracker, tablet);
+            BaseCompaction base_compaction(mem_tracker, tablet);
 
             Status res = base_compaction.compact();
             if (!res.ok()) {

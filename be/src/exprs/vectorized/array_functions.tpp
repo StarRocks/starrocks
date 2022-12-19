@@ -24,7 +24,7 @@
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <LogicalType PT>
 class ArrayDistinct {
 public:
@@ -1290,4 +1290,4 @@ private:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

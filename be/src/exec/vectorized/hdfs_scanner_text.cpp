@@ -22,7 +22,7 @@
 #include "util/compression/stream_compression.h"
 #include "util/utf8_check.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
@@ -311,7 +311,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 Column* column = _column_raw_ptrs[index];
                 ColumnPtr partition_value = _scanner_ctx.partition_values[p];
                 DCHECK(partition_value->is_constant());
-                auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
+                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
                 const ColumnPtr& data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
                     column->append_nulls(1);
@@ -378,4 +378,4 @@ Status HdfsTextScanner::_get_hive_column_index(const std::string& column_name) {
     return Status::InvalidArgument("Can not get index of column name " + column_name);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

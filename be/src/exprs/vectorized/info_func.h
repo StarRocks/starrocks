@@ -17,7 +17,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedInfoFunc final : public Expr {
 public:
@@ -27,7 +27,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInfoFunc(*this)); }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
     std::string debug_string() const override;
 
@@ -35,4 +35,4 @@ private:
     // @IMPORTANT: BinaryColumnPtr's build_slice will cause multi-thread(OLAP_SCANNER) crash
     ColumnPtr _value;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

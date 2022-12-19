@@ -16,9 +16,9 @@
 
 #include "storage/chunk_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
-ChunkIteratorPtr new_empty_iterator(vectorized::VectorizedSchema&& schema, int chunk_size);
-ChunkIteratorPtr new_empty_iterator(const vectorized::VectorizedSchema& schema, int chunk_size);
+ChunkIteratorPtr new_empty_iterator(VectorizedSchema&& schema, int chunk_size);
+ChunkIteratorPtr new_empty_iterator(const VectorizedSchema& schema, int chunk_size);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -16,7 +16,7 @@
 
 namespace starrocks::pipeline {
 
-StatusOr<vectorized::ChunkPtr> IntersectOutputSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> IntersectOutputSourceOperator::pull_chunk(RuntimeState* state) {
     return _intersect_ctx->pull_chunk(state);
 }
 

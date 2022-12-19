@@ -16,7 +16,7 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class HdfsParquetScanner final : public HdfsScanner {
 public:
@@ -33,4 +33,4 @@ private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -22,7 +22,7 @@
 #include "column/column_helper.h"
 #include "storage/column_aggregate_func.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(ChunkAggregatorTest, testNoneAggregator) {
     VectorizedFieldPtr key = std::make_shared<VectorizedField>(1, "key", LogicalType::TYPE_INT, false);
@@ -126,4 +126,4 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
     ASSERT_EQ(false, aggregator.is_finish());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -16,11 +16,11 @@
 
 #include "exprs/predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedIsNullPredicateFactory {
 public:
     static Expr* from_thrift(const TExprNode& node);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

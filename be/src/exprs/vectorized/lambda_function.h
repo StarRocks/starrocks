@@ -25,7 +25,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // The children of lambda function include 3 parts: lambda expr, lambda arguments and optimal common sub expressions,
 // the layout may be:
@@ -66,4 +66,4 @@ private:
     std::vector<Expr*> _common_sub_expr;
     int _common_sub_expr_num;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

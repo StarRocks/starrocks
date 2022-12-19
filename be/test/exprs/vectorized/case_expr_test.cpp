@@ -29,7 +29,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType child_type>
 struct VectorizedCaseExprTestBuilder {
@@ -565,4 +565,4 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

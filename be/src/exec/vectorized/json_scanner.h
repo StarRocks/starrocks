@@ -26,7 +26,7 @@
 #include "util/raw_container.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct SimpleJsonPath;
 class JsonReader;
@@ -135,4 +135,4 @@ private:
 #endif
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

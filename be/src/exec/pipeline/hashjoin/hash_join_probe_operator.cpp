@@ -57,12 +57,12 @@ bool HashJoinProbeOperator::is_finished() const {
     return _join_prober->is_done();
 }
 
-Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    _join_prober->push_chunk(state, std::move(const_cast<vectorized::ChunkPtr&>(chunk)));
+Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    _join_prober->push_chunk(state, std::move(const_cast<ChunkPtr&>(chunk)));
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
     return _join_prober->pull_chunk(state);
 }
 

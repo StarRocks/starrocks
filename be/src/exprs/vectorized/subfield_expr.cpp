@@ -21,7 +21,7 @@
 #include "column/struct_column.h"
 #include "common/object_pool.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SubfieldExpr final : public Expr {
 public:
@@ -30,7 +30,7 @@ public:
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(1, _children.size());
 
         ASSIGN_OR_RETURN(ColumnPtr col, _children.at(0)->evaluate_checked(context, chunk));
@@ -82,4 +82,4 @@ Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
     return new SubfieldExpr(node);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

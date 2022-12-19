@@ -42,7 +42,7 @@
 #include "util/sm3.h"
 #include "util/utf8.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)", re2::RE2::Quiet);
 
@@ -698,7 +698,7 @@ static inline void utf8_right_not_const(const size_t row_nums, ColumnViewer<TYPE
     }
 }
 
-static inline ColumnPtr substr_not_const(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+static inline ColumnPtr substr_not_const(FunctionContext* context, const starrocks::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     ColumnViewer<TYPE_INT> off_viewer(columns[1]);
 
@@ -729,7 +729,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static inline ColumnPtr right_not_const(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+static inline ColumnPtr right_not_const(FunctionContext* context, const starrocks::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     ColumnViewer<TYPE_INT> len_viewer(columns[1]);
 
@@ -756,8 +756,7 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
  * @paramType: [BinaryColumn, IntColumn, IntColumn]
  * @return: BinaryColumn
  */
-StatusOr<ColumnPtr> StringFunctions::substring(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::substring(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = reinterpret_cast<SubstrState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state != nullptr && state->is_const) {
@@ -1563,8 +1562,7 @@ DEFINE_UNARY_FN_WITH_IMPL(utf8LengthImpl, str) {
     return utf8_len(str.data, str.data + str.size);
 }
 
-StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context,
-                                                 const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStrictUnaryFunction<utf8LengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0]);
 }
 
@@ -1963,7 +1961,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(trimImpl, str) {
     return std::string(str.data + begin, end - begin + 1);
 }
 
-StatusOr<ColumnPtr> StringFunctions::trim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::trim(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedUnaryFunction<AdaptiveTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1976,7 +1974,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(ltrimImpl, str) {
     return std::string(str.data + begin, str.size - begin);
 }
 
-StatusOr<ColumnPtr> StringFunctions::ltrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::ltrim(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedUnaryFunction<AdaptiveLTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1993,7 +1991,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(rtrimImpl, str) {
     return std::string(str.data, (str.data[end] == ' ') ? end : end + 1);
 }
 
-StatusOr<ColumnPtr> StringFunctions::rtrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::rtrim(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedUnaryFunction<AdaptiveRTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2004,7 +2002,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_intImpl, v) {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> StringFunctions::hex_int(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::hex_int(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<hex_intImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2019,8 +2017,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_stringImpl, str) {
     return ss.str();
 }
 
-StatusOr<ColumnPtr> StringFunctions::hex_string(FunctionContext* context,
-                                                const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::hex_string(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<hex_stringImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2069,7 +2066,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
     return std::string(result.data(), result_len);
 }
 
-StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2103,7 +2100,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
     return result.str();
 }
 
-StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2456,8 +2453,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
  * @paramType: [BinaryColumn]
  * @return: BooleanColumn
  */
-StatusOr<ColumnPtr> StringFunctions::null_or_empty(FunctionContext* context,
-                                                   const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::null_or_empty(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
@@ -2917,8 +2913,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
     return regexp_replace_general(context, options, columns);
 }
 
-StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* context,
-                                                         const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* context, const starrocks::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
 
     auto size = columns[0]->size();
@@ -2937,8 +2932,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* contex
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> StringFunctions::money_format_bigint(FunctionContext* context,
-                                                         const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_bigint(FunctionContext* context, const starrocks::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_BIGINT>(columns[0]);
 
     auto size = columns[0]->size();
@@ -2958,7 +2952,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_bigint(FunctionContext* contex
 }
 
 StatusOr<ColumnPtr> StringFunctions::money_format_largeint(FunctionContext* context,
-                                                           const starrocks::vectorized::Columns& columns) {
+                                                           const starrocks::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_LARGEINT>(columns[0]);
 
     auto size = columns[0]->size();
@@ -2980,7 +2974,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_largeint(FunctionContext* cont
 }
 
 StatusOr<ColumnPtr> StringFunctions::money_format_decimalv2val(FunctionContext* context,
-                                                               const starrocks::vectorized::Columns& columns) {
+                                                               const starrocks::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_DECIMALV2>(columns[0]);
 
     auto size = columns[0]->size();
@@ -3043,8 +3037,7 @@ Status StringFunctions::parse_url_close(FunctionContext* context, FunctionContex
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
-                                                       const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context, const starrocks::Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto part_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
@@ -3082,7 +3075,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
 }
 
 StatusOr<ColumnPtr> StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                                     const starrocks::vectorized::Columns& columns) {
+                                                     const starrocks::Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -3109,8 +3102,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_const(UrlParser::UrlPart* url_par
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     auto* state = reinterpret_cast<ParseUrlState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -3122,4 +3114,4 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context,
     return parse_url_general(context, columns);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

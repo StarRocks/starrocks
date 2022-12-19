@@ -24,21 +24,21 @@
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
 static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
 
 // avoid format function OOM, the value just based on experience
 const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
 
-#define DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                                  \
-    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));          \
+#define DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                         \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {    \
+        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0)); \
     }
 
-#define DEFINE_TIME_STRING_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                           \
-    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        return VectorizedStringStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));    \
+#define DEFINE_TIME_STRING_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                        \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {          \
+        return VectorizedStringStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0)); \
     }
 
 #define DEFINE_TIME_UNARY_FN_WITH_IMPL(NAME, TYPE, RESULT_TYPE, FN) \
@@ -46,7 +46,7 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
     DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE);
 
 #define DEFINE_TIME_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                         \
-    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {             \
         return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
                                                                                                VECTORIZED_FN_ARGS(1)); \
     }
@@ -55,9 +55,9 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
     DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                  \
     DEFINE_TIME_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
 
-#define DEFINE_TIME_UNARY_FN_EXTEND(NAME, TYPE, RESULT_TYPE, IDX)                                                      \
-    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(IDX));        \
+#define DEFINE_TIME_UNARY_FN_EXTEND(NAME, TYPE, RESULT_TYPE, IDX)                                               \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {      \
+        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(IDX)); \
     }
 
 template <LogicalType Type>
@@ -104,11 +104,11 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
     }
 }
 
-#define DEFINE_TIME_CALC_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                           \
-    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        auto p = VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(                      \
-                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                                         \
-        return date_valid<RESULT_TYPE>(p);                                                                             \
+#define DEFINE_TIME_CALC_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                               \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) { \
+        auto p = VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(          \
+                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                             \
+        return date_valid<RESULT_TYPE>(p);                                                                 \
     }
 
 Status TimeFunctions::convert_tz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -776,14 +776,14 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     return Status::OK();
 }
 
-#define DEFINE_TIME_SLICE_FN_CALL(TypeName, UNIT, LType, RType, ResultType)                   \
-    StatusOr<ColumnPtr> TimeFunctions::time_slice_##TypeName##_start_##UNIT(                  \
-            FunctionContext* context, const starrocks::vectorized::Columns& columns) {        \
-        return time_slice_function_##UNIT<LType, RType, ResultType, true>(context, columns);  \
-    }                                                                                         \
-    StatusOr<ColumnPtr> TimeFunctions::time_slice_##TypeName##_end_##UNIT(                    \
-            FunctionContext* context, const starrocks::vectorized::Columns& columns) {        \
-        return time_slice_function_##UNIT<LType, RType, ResultType, false>(context, columns); \
+#define DEFINE_TIME_SLICE_FN_CALL(TypeName, UNIT, LType, RType, ResultType)                                      \
+    StatusOr<ColumnPtr> TimeFunctions::time_slice_##TypeName##_start_##UNIT(FunctionContext* context,            \
+                                                                            const starrocks::Columns& columns) { \
+        return time_slice_function_##UNIT<LType, RType, ResultType, true>(context, columns);                     \
+    }                                                                                                            \
+    StatusOr<ColumnPtr> TimeFunctions::time_slice_##TypeName##_end_##UNIT(FunctionContext* context,              \
+                                                                          const starrocks::Columns& columns) {   \
+        return time_slice_function_##UNIT<LType, RType, ResultType, false>(context, columns);                    \
     }
 
 #define DEFINE_TIME_SLICE_FN(UNIT)                                                                     \
@@ -1247,7 +1247,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& form
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* context,
-                                                                     const starrocks::vectorized::Columns& columns) {
+                                                                     const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -1365,7 +1365,7 @@ Status TimeFunctions::str_to_date_prepare(FunctionContext* context, FunctionCont
 // if successful, return result TimestampValue
 // else take a uncommon approach to process this content.
 StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext* context,
-                                                                const starrocks::vectorized::Columns& columns,
+                                                                const starrocks::Columns& columns,
                                                                 const char* str_format) {
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
@@ -1407,7 +1407,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
 // if successful, return result TimestampValue
 // else take a uncommon approach to process this content.
 StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_datetime_format(FunctionContext* context,
-                                                                    const starrocks::vectorized::Columns& columns,
+                                                                    const starrocks::Columns& columns,
                                                                     const char* str_format) {
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
@@ -1705,7 +1705,7 @@ bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, c
 }
 
 template <LogicalType Type>
-StatusOr<ColumnPtr> standard_format(const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> standard_format(const std::string& fmt, int len, const starrocks::Columns& columns) {
     if (fmt.size() <= 0) {
         return ColumnHelper::create_const_null_column(columns[0]->size());
     }
@@ -1980,8 +1980,7 @@ Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionConte
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> TimeFunctions::date_trunc_day(FunctionContext* context,
-                                                  const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::date_trunc_day(FunctionContext* context, const starrocks::Columns& columns) {
     return columns[1];
 }
 
@@ -2037,4 +2036,4 @@ std::string TimeFunctions::info_reported_by_time_slice = "time used with time_sl
 #undef DEFINE_TIME_STRING_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_EXTEND
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,7 +20,7 @@
 #include "runtime/global_dict/parser.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class ProjectNode final : public ExecNode {
 public:
     ProjectNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc);
@@ -35,8 +35,7 @@ public:
     Status close(RuntimeState* state) override;
 
     void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) override;
-    void push_down_join_runtime_filter(RuntimeState* state,
-                                       vectorized::RuntimeFilterProbeCollector* collector) override;
+    void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
     void push_down_tuple_slot_mappings(RuntimeState* state,
                                        const std::vector<TupleSlotMapping>& parent_mappings) override;
 
@@ -57,4 +56,4 @@ private:
     DictOptimizeParser _dict_optimize_parser;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

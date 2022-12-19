@@ -24,7 +24,7 @@
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayExprTest : public ::testing::Test {
 protected:
@@ -156,4 +156,4 @@ TEST_F(ArrayExprTest, test_evaluate) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -21,7 +21,7 @@
 #include "jni.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct JniScannerProfile {
     RuntimeProfile::Counter* rows_read_counter = nullptr;
@@ -86,4 +86,4 @@ private:
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

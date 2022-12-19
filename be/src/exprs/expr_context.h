@@ -45,10 +45,8 @@
 
 namespace starrocks {
 
-namespace vectorized {
 class OlapScanNode;
 class Chunk;
-} // namespace vectorized
 
 class Expr;
 class MemPool;
@@ -56,8 +54,6 @@ class MemTracker;
 class RuntimeState;
 class ObjectPool;
 class TColumnValue;
-
-using vectorized::ColumnPtr;
 
 /// An ExprContext contains the state for the execution of a tree of Exprs, in particular
 /// the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -116,13 +112,13 @@ public:
 
     std::string get_error_msg() const;
 
-    StatusOr<ColumnPtr> evaluate(vectorized::Chunk* chunk, uint8_t* filter = nullptr);
-    StatusOr<ColumnPtr> evaluate(Expr* expr, vectorized::Chunk* chunk, uint8_t* filter = nullptr);
+    StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
+    StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
 
 private:
     friend class Expr;
     friend class OlapScanNode;
-    friend class vectorized::OlapScanNode;
+    friend class OlapScanNode;
     friend class EsPredicate;
 
     /// FunctionContexts for each registered expression. The FunctionContexts are created
@@ -153,13 +149,13 @@ private:
         }                                          \
     } while (false)
 
-#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                         \
-    [](ExprContext* c, Expr* e, vectorized::Chunk* ptr) {                                                \
-        auto st = c->evaluate(e, ptr);                                                                   \
-        if (st.ok()) {                                                                                   \
-            return st.value();                                                                           \
-        }                                                                                                \
-        return vectorized::ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                             \
+    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                \
+        auto st = c->evaluate(e, ptr);                                                       \
+        if (st.ok()) {                                                                       \
+            return st.value();                                                               \
+        }                                                                                    \
+        return ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
     }(ctx, expr, chunk)
 
 } // namespace starrocks

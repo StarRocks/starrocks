@@ -24,7 +24,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class ExprsTestHelper {
 public:
     static TTypeDesc create_scalar_type_desc(const TPrimitiveType::type t_type) {
@@ -154,4 +154,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

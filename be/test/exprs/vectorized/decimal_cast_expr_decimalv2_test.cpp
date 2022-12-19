@@ -17,7 +17,7 @@
 #include "exprs/vectorized/decimal_cast_expr_test_helper.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 PARALLEL_TEST(VectorizedDecimalCastExprDecimalV2Test, testCastFromDecimalv2ToDecimal32p9s0Abnormal) {
     CastTestCaseArray test_cases = {{27, 9, "-761793644894596967.297381278", 9, 0, "", "true"},
                                     {27, 9, "-461280678806068693.412226701", 9, 0, "", "true"},
@@ -809,4 +809,4 @@ PARALLEL_TEST(VectorizedDecimalCastExprDecimalV2Test, testCastFromDecimal128p35s
             {35, 30, "0.009418270381033562004428747944", 27, 9, "0.009418270", "false"}};
     test_cast_all<TYPE_DECIMAL128, TYPE_DECIMALV2>(test_cases);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

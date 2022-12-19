@@ -36,14 +36,14 @@ public:
         return Status::OK();
     }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     bool _is_finished = false;
     std::atomic<int64_t>& _limit;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
+    ChunkPtr _cur_chunk = nullptr;
 };
 
 class LimitOperatorFactory final : public OperatorFactory {

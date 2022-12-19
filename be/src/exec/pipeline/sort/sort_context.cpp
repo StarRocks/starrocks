@@ -23,10 +23,6 @@
 
 namespace starrocks::pipeline {
 
-using vectorized::Permutation;
-using vectorized::Columns;
-using vectorized::SortedRuns;
-
 void SortContext::close(RuntimeState* state) {
     _chunks_sorter_partitions.clear();
 }
@@ -92,7 +88,7 @@ Status SortContext::_init_merger() {
 
     _partial_cursors.reserve(_num_partition_sinkers);
     for (int i = 0; i < _num_partition_sinkers; i++) {
-        vectorized::ChunkProvider provider = [i, this](vectorized::ChunkUniquePtr* out_chunk, bool* eos) -> bool {
+        ChunkProvider provider = [i, this](ChunkUniquePtr* out_chunk, bool* eos) -> bool {
             // data ready
             if (out_chunk == nullptr || eos == nullptr) {
                 return true;
@@ -106,8 +102,7 @@ Status SortContext::_init_merger() {
             *out_chunk = chunk->clone_unique();
             return true;
         };
-        _partial_cursors.push_back(
-                std::make_unique<vectorized::SimpleChunkSortCursor>(std::move(provider), &_sort_exprs));
+        _partial_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(std::move(provider), &_sort_exprs));
     }
 
     RETURN_IF_ERROR(_merger.init(_sort_desc, std::move(_partial_cursors)));

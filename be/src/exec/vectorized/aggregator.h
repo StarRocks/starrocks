@@ -69,12 +69,12 @@ struct HashTableKeyAllocator {
 
     RawHashTableIterator end() { return {this, vecs.size(), 0}; }
 
-    vectorized::AggDataPtr allocate() {
+    AggDataPtr allocate() {
         if (vecs.empty() || vecs.back().second == alloc_batch_size) {
             uint8_t* mem = pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned);
             vecs.emplace_back(mem, 0);
         }
-        return static_cast<vectorized::AggDataPtr>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
+        return static_cast<AggDataPtr>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
     }
 
     uint8_t* allocate_null_key_data() { return pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned); }
@@ -100,8 +100,8 @@ class SortedStreamingAggregator;
 template <class HashMapWithKey>
 struct AllocateState {
     AllocateState(Aggregator* aggregator_) : aggregator(aggregator_) {}
-    inline vectorized::AggDataPtr operator()(const typename HashMapWithKey::KeyType& key);
-    inline vectorized::AggDataPtr operator()(std::nullptr_t);
+    inline AggDataPtr operator()(const typename HashMapWithKey::KeyType& key);
+    inline AggDataPtr operator()(std::nullptr_t);
 
 private:
     Aggregator* aggregator;
@@ -189,8 +189,8 @@ public:
     AggrPhase get_aggr_phase() { return _aggr_phase; }
 
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
-    const vectorized::AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
-    const vectorized::AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
+    const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
+    const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
     const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
@@ -204,8 +204,8 @@ public:
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
 
     bool is_chunk_buffer_empty();
-    vectorized::ChunkPtr poll_chunk_buffer();
-    void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
+    ChunkPtr poll_chunk_buffer();
+    void offer_chunk_to_buffer(const ChunkPtr& chunk);
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
                                           int64_t ht_rows) const;
@@ -217,20 +217,20 @@ public:
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
-    Status convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
+    Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
 
-    void process_limit(vectorized::ChunkPtr* chunk);
+    void process_limit(ChunkPtr* chunk);
 
-    Status evaluate_exprs(vectorized::Chunk* chunk);
+    Status evaluate_exprs(Chunk* chunk);
 
-    void output_chunk_by_streaming(vectorized::ChunkPtr* chunk);
+    void output_chunk_by_streaming(ChunkPtr* chunk);
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    void output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk);
+    void output_chunk_by_streaming_with_selection(ChunkPtr* chunk);
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -247,8 +247,7 @@ public:
     // to produce the final result that will be populated into the cache.
     // refill_chunk: partial-hit result of stale version.
     // refill_op: pre-cache agg operator, Aggregator's holder.
-    Status reset_state(RuntimeState* state, const std::vector<vectorized::ChunkPtr>& refill_chunks,
-                       pipeline::Operator* refill_op);
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks, pipeline::Operator* refill_op);
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
@@ -282,7 +281,7 @@ protected:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::queue<vectorized::ChunkPtr> _buffer;
+    std::queue<ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 
     // Certain aggregates require a finalize step, which is the final step of the
@@ -301,8 +300,8 @@ protected:
     TStreamingPreaggregationMode::type _streaming_preaggregation_mode;
 
     // The key is all group by column, the value is all agg function column
-    vectorized::AggHashMapVariant _hash_map_variant;
-    vectorized::AggHashSetVariant _hash_set_variant;
+    AggHashMapVariant _hash_map_variant;
+    AggHashSetVariant _hash_set_variant;
     std::any _it_hash;
 
     // The offset of the n-th aggregate function in a row of aggregate functions.
@@ -313,22 +312,22 @@ protected:
     size_t _max_agg_state_align_size = 1;
     // The followings are aggregate function information:
     std::vector<FunctionContext*> _agg_fn_ctxs;
-    std::vector<const vectorized::AggregateFunction*> _agg_functions;
+    std::vector<const AggregateFunction*> _agg_functions;
     // agg state when no group by columns
-    vectorized::AggDataPtr _single_agg_state = nullptr;
+    AggDataPtr _single_agg_state = nullptr;
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<vectorized::ColumnPtr>> _agg_input_columns;
+    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
     //raw pointers in order to get multi-column values
-    std::vector<std::vector<const vectorized::Column*>> _agg_input_raw_columns;
+    std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     // The expr used to evaluate agg intermediate columns.
     std::vector<std::vector<ExprContext*>> _intermediate_agg_expr_ctxs;
 
     // Indicates we should use update or merge method to process aggregate column data
     std::vector<bool> _is_merge_funcs;
     // In order batch update agg states
-    vectorized::Buffer<vectorized::AggDataPtr> _tmp_agg_states;
+    Buffer<AggDataPtr> _tmp_agg_states;
     std::vector<AggFunctionTypes> _agg_fn_types;
 
     // Exprs used to evaluate conjunct
@@ -336,7 +335,7 @@ protected:
 
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;
-    vectorized::Columns _group_by_columns;
+    Columns _group_by_columns;
     std::vector<ColumnType> _group_by_types;
 
     // Tuple into which Update()/Merge()/Serialize() results are stored.
@@ -363,11 +362,11 @@ public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
-    Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);
-    void convert_hash_set_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
+    void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -392,17 +391,14 @@ protected:
     Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
-    vectorized::Columns _create_agg_result_columns(size_t num_rows);
-    vectorized::Columns _create_group_by_columns(size_t num_rows);
+    Columns _create_agg_result_columns(size_t num_rows);
+    Columns _create_group_by_columns(size_t num_rows);
 
-    void _serialize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
-                             const vectorized::Columns& agg_result_columns);
-    void _finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
-                            const vectorized::Columns& agg_result_columns);
-    void _destroy_state(vectorized::AggDataPtr __restrict state);
+    void _serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
+    void _finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
+    void _destroy_state(AggDataPtr __restrict state);
 
-    vectorized::ChunkPtr _build_output_chunk(const vectorized::Columns& group_by_columns,
-                                             const vectorized::Columns& agg_result_columns);
+    ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns);
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }
     bool is_passthrough() const { return _is_passthrough; }
@@ -412,7 +408,7 @@ protected:
     bool is_pending_reset_state() { return _is_pending_reset_state; }
 
     void _reset_exprs();
-    Status _evaluate_exprs(vectorized::Chunk* chunk);
+    Status _evaluate_exprs(Chunk* chunk);
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
@@ -425,8 +421,8 @@ protected:
 };
 
 template <class HashMapWithKey>
-inline vectorized::AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
-    vectorized::AggDataPtr agg_state = aggregator->_state_allocator.allocate();
+inline AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate();
     *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
     for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
         aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
@@ -436,8 +432,8 @@ inline vectorized::AggDataPtr AllocateState<HashMapWithKey>::operator()(const ty
 }
 
 template <class HashMapWithKey>
-inline vectorized::AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
-    vectorized::AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
+inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
     for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
         aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
                                               agg_state + aggregator->_agg_states_offsets[i]);

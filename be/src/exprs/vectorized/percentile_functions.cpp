@@ -21,7 +21,7 @@
 #include "util/percentile_value.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> viewer(columns[0]);
@@ -64,4 +64,4 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_approx_raw(FunctionContext* 
     return builder.build(columns[0]->is_constant());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

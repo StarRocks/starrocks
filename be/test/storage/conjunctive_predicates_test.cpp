@@ -36,7 +36,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
     static std::unordered_map<PredicateType, TExprOpcode::type> mapping = {
@@ -398,4 +398,4 @@ INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,
                                                           LogicalType::TYPE_LARGEINT, LogicalType::TYPE_VARCHAR,
                                                           LogicalType::TYPE_CHAR, LogicalType::TYPE_BOOLEAN)));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

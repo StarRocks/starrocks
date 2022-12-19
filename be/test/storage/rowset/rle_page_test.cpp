@@ -135,7 +135,7 @@ public:
         ASSERT_EQ(0, rle_page_decoder.current_index());
         ASSERT_EQ(size, rle_page_decoder.count());
 
-        auto column = vectorized::FixedLengthColumn<CppType>::create();
+        auto column = FixedLengthColumn<CppType>::create();
         size_t size_to_fetch = size;
         status = rle_page_decoder.next_batch(&size_to_fetch, column.get());
         ASSERT_TRUE(status.ok());
@@ -147,11 +147,11 @@ public:
 
         rle_page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, rle_page_decoder.current_index());
-        auto column1 = vectorized::FixedLengthColumn<CppType>::create();
-        vectorized::SparseRange read_range;
-        read_range.add(vectorized::Range(0, size / 3));
-        read_range.add(vectorized::Range(size / 2, (size * 2 / 3)));
-        read_range.add(vectorized::Range((size * 3 / 4), size));
+        auto column1 = FixedLengthColumn<CppType>::create();
+        SparseRange read_range;
+        read_range.add(Range(0, size / 3));
+        read_range.add(Range(size / 2, (size * 2 / 3)));
+        read_range.add(Range((size * 3 / 4), size));
         size_t read_num = read_range.span_size();
 
         status = rle_page_decoder.next_batch(read_range, column1.get());
@@ -159,9 +159,9 @@ public:
         ASSERT_EQ(read_num, column1->size());
 
         size_t offset = 0;
-        vectorized::SparseRangeIterator read_iter = read_range.new_iterator();
+        SparseRangeIterator read_iter = read_range.new_iterator();
         while (read_iter.has_more()) {
-            vectorized::Range r = read_iter.next(read_num);
+            Range r = read_iter.next(read_num);
             for (uint i = 0; i < r.span_size(); ++i) {
                 ASSERT_EQ(src[r.begin() + i], column1->get_data()[i + offset]);
             }

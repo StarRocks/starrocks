@@ -30,11 +30,10 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "util/compression/stream_compression.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
-                         const starrocks::TBrokerScanRangeParams& params,
-                         starrocks::vectorized::ScannerCounter* counter)
+                         const starrocks::TBrokerScanRangeParams& params, starrocks::ScannerCounter* counter)
         : _state(state),
           _profile(profile),
           _params(params),
@@ -133,7 +132,7 @@ Status FileScanner::open() {
     return Status::OK();
 }
 
-void FileScanner::fill_columns_from_path(starrocks::vectorized::ChunkPtr& chunk, int slot_start,
+void FileScanner::fill_columns_from_path(starrocks::ChunkPtr& chunk, int slot_start,
                                          const std::vector<std::string>& columns_from_path, int size) {
     auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     // fill column with partition values.
@@ -148,8 +147,7 @@ void FileScanner::fill_columns_from_path(starrocks::vectorized::ChunkPtr& chunk,
     }
 }
 
-StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src,
-                                            starrocks::vectorized::ChunkPtr& cast) {
+StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
 
     if (cast->num_rows() == 0) {
@@ -161,7 +159,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPt
 
     int ctx_index = 0;
     int before_rows = cast->num_rows();
-    vectorized::Column::Filter filter(cast->num_rows(), 1);
+    Column::Filter filter(cast->num_rows(), 1);
 
     // CREATE ROUTINE LOAD routine_load_job_1
     // on table COLUMNS (k1,k2,k3=k1)
@@ -328,4 +326,4 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -24,7 +24,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "util/url_parser.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct PadState {
     bool is_const;
@@ -318,36 +318,31 @@ public:
      * @paramType: [DoubleColumn]
      * @return: BinaryColumn
      */
-    static StatusOr<ColumnPtr> money_format_double(FunctionContext* context,
-                                                   const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_double(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: [BIGINT]
      * @paramType: [Int64Column]
      * @return: BinaryColumn
      */
-    static StatusOr<ColumnPtr> money_format_bigint(FunctionContext* context,
-                                                   const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_bigint(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: [DECIMALV2]
      * @paramType: [DecimalColumn]
      * @return: BinaryColumn
      */
-    static StatusOr<ColumnPtr> money_format_largeint(FunctionContext* context,
-                                                     const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_largeint(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: [LARGEINT]
      * @paramType: [Int128Column]
      * @return: BinaryColumn
      */
-    static StatusOr<ColumnPtr> money_format_decimalv2val(FunctionContext* context,
-                                                         const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_decimalv2val(FunctionContext* context, const starrocks::Columns& columns);
 
     template <LogicalType Type>
-    static StatusOr<ColumnPtr> money_format_decimal(FunctionContext* context,
-                                                    const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_decimal(FunctionContext* context, const starrocks::Columns& columns);
 
     // parse's auxiliary method
     static Status parse_url_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -448,10 +443,9 @@ private:
         ParseUrlState() : url_part() {}
     };
 
-    static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context,
-                                                 const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
     static StatusOr<ColumnPtr> parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns);
+                                               const starrocks::Columns& columns);
 
     template <LogicalType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
@@ -495,8 +489,7 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
 }
 
 template <LogicalType Type>
-StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* context,
-                                                          const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     using CppType = RunTimeCppType<Type>;
     static_assert(pt_is_decimal<Type>, "Invalid decimal type");
@@ -516,4 +509,4 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* conte
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -23,7 +23,7 @@
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class DictDecodeNode final : public ExecNode {
 public:
@@ -53,7 +53,7 @@ protected:
 private:
     void _init_counter();
 
-    std::shared_ptr<vectorized::Chunk> _input_chunk;
+    std::shared_ptr<Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
     std::vector<GlobalDictDecoderPtr> _decoders;
@@ -66,4 +66,4 @@ private:
     RuntimeProfile::Counter* _decode_timer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

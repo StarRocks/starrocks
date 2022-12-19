@@ -69,25 +69,23 @@ using std::make_pair;
 
 namespace starrocks {
 
-using vectorized::ChunkUniquePtr;
-
 Status DataStreamRecvr::create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(state, _keep_order);
-    vectorized::ChunkSuppliers chunk_suppliers;
+    _chunks_merger = std::make_unique<SortedChunksMerger>(state, _keep_order);
+    ChunkSuppliers chunk_suppliers;
     for (SenderQueue* q : _sender_queues) {
         // we use chunk_supplier in non-pipeline.
-        auto f = [q](vectorized::Chunk** chunk) -> Status { return q->get_chunk(chunk); };
+        auto f = [q](Chunk** chunk) -> Status { return q->get_chunk(chunk); };
         chunk_suppliers.emplace_back(std::move(f));
     }
-    vectorized::ChunkProbeSuppliers chunk_probe_suppliers;
+    ChunkProbeSuppliers chunk_probe_suppliers;
     for ([[maybe_unused]] auto _ : _sender_queues) {
         // we willn't use chunk_probe_supplier in non-pipeline.
-        auto f = [](vectorized::Chunk** chunk) -> bool { return false; };
+        auto f = [](Chunk** chunk) -> bool { return false; };
         chunk_probe_suppliers.emplace_back(std::move(f));
     }
-    vectorized::ChunkHasSuppliers chunk_has_suppliers;
+    ChunkHasSuppliers chunk_has_suppliers;
     for ([[maybe_unused]] auto _ : _sender_queues) {
         // we willn't use chunk_has_supplier in non-pipeline.
         auto f = []() -> bool { return false; };
@@ -106,11 +104,11 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
     DCHECK(_is_merging);
     _chunks_merger = nullptr;
     // TODO: set profile
-    _cascade_merger = std::make_unique<vectorized::CascadeChunkMerger>(state, state->runtime_profile());
+    _cascade_merger = std::make_unique<CascadeChunkMerger>(state, state->runtime_profile());
 
-    std::vector<vectorized::ChunkProvider> providers;
+    std::vector<ChunkProvider> providers;
     for (SenderQueue* q : _sender_queues) {
-        vectorized::ChunkProvider provider = [q](vectorized::ChunkUniquePtr* out_chunk, bool* eos) -> bool {
+        ChunkProvider provider = [q](ChunkUniquePtr* out_chunk, bool* eos) -> bool {
             // data ready
             if (out_chunk == nullptr || eos == nullptr) {
                 return q->has_chunk();
@@ -118,7 +116,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
             if (!q->has_chunk()) {
                 return false;
             }
-            vectorized::Chunk* chunk;
+            Chunk* chunk;
             if (q->try_get_chunk(&chunk)) {
                 out_chunk->reset(chunk);
                 return true;
@@ -190,12 +188,12 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     }
 }
 
-Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
+Status DataStreamRecvr::get_next(ChunkPtr* chunk, bool* eos) {
     DCHECK(_chunks_merger.get() != nullptr);
     return _chunks_merger->get_next(chunk, eos);
 }
 
-Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
+Status DataStreamRecvr::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
     DCHECK(_cascade_merger);
     return _cascade_merger->get_next(chunk, eos, should_exit);
 }
@@ -255,20 +253,19 @@ DataStreamRecvr::~DataStreamRecvr() {
     DCHECK(_mgr == nullptr) << "Must call close()";
 }
 
-Status DataStreamRecvr::get_chunk(std::unique_ptr<vectorized::Chunk>* chunk) {
+Status DataStreamRecvr::get_chunk(std::unique_ptr<Chunk>* chunk) {
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);
-    vectorized::Chunk* tmp_chunk = nullptr;
+    Chunk* tmp_chunk = nullptr;
     Status status = _sender_queues[0]->get_chunk(&tmp_chunk);
     chunk->reset(tmp_chunk);
     return status;
 }
 
-Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk,
-                                               const int32_t driver_sequence) {
+Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence) {
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);
-    vectorized::Chunk* tmp_chunk = nullptr;
+    Chunk* tmp_chunk = nullptr;
     Status status = _sender_queues[0]->get_chunk(&tmp_chunk, driver_sequence);
     chunk->reset(tmp_chunk);
     return status;

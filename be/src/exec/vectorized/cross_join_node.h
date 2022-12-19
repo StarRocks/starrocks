@@ -21,7 +21,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CrossJoinNode final : public ExecNode {
 public:
@@ -128,4 +128,4 @@ private:
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

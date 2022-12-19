@@ -74,7 +74,7 @@ struct PerLaneBuffer {
         return cached_version < required_version && (state == PLBS_HIT_TOTAL || state == PLBS_TOTAL);
     }
     bool is_partial() const { return state == PLBS_MISS || state == PLBS_HIT_PARTIAL || state == PLBS_PARTIAL; }
-    void append_chunk(const vectorized::ChunkPtr& chunk) {
+    void append_chunk(const ChunkPtr& chunk) {
         if (!is_partial()) {
             return;
         }
@@ -135,13 +135,13 @@ CacheOperator::CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_
     }
 }
 
-static inline vectorized::Chunks remap_chunks(const vectorized::Chunks& chunks, const SlotRemapping& slot_remapping) {
-    std::vector<vectorized::ChunkPtr> new_chunks;
+static inline Chunks remap_chunks(const Chunks& chunks, const SlotRemapping& slot_remapping) {
+    std::vector<ChunkPtr> new_chunks;
     new_chunks.reserve(chunks.size());
     for (auto i = 0; i < chunks.size(); ++i) {
         const auto& chunk = chunks[i];
         DCHECK(chunk != nullptr);
-        auto new_chunk = std::make_shared<vectorized::Chunk>();
+        auto new_chunk = std::make_shared<Chunk>();
         auto is_last_chunk = (i == (chunks.size() - 1));
         new_chunk->owner_info().set_owner_id(chunk->owner_info().owner_id(), is_last_chunk);
         if (chunk->is_empty()) {
@@ -328,7 +328,7 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
     buffer->chunks.back()->owner_info().set_last_chunk(true);
 }
 
-void CacheOperator::_update_probe_metrics(int64_t tablet_id, const std::vector<vectorized::ChunkPtr>& chunks) {
+void CacheOperator::_update_probe_metrics(int64_t tablet_id, const std::vector<ChunkPtr>& chunks) {
     auto num_bytes = 0L;
     auto num_rows = 0L;
     for (const auto& chunk : chunks) {
@@ -496,7 +496,7 @@ Status CacheOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner) 
     return Status::OK();
 }
 
-Status CacheOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status CacheOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr);
     if (_lane_arbiter->in_passthrough_mode()) {
         DCHECK(_passthrough_chunk == nullptr);
@@ -523,7 +523,7 @@ Status CacheOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr
     return Status::OK();
 }
 
-vectorized::ChunkPtr CacheOperator::_pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer) {
+ChunkPtr CacheOperator::_pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer) {
     if (buffer->has_chunks()) {
         auto chunk = buffer->get_next_chunk();
         if (buffer->can_release()) {
@@ -535,9 +535,9 @@ vectorized::ChunkPtr CacheOperator::_pull_chunk_from_per_lane_buffer(PerLaneBuff
     return nullptr;
 }
 
-StatusOr<vectorized::ChunkPtr> CacheOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> CacheOperator::pull_chunk(RuntimeState* state) {
     auto passthrough_mode = _lane_arbiter->in_passthrough_mode();
-    auto update_metrics = [this, passthrough_mode](vectorized::ChunkPtr& chunk) {
+    auto update_metrics = [this, passthrough_mode](ChunkPtr& chunk) {
         if (!passthrough_mode || chunk == nullptr) {
             return;
         }

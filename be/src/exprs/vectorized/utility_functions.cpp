@@ -45,7 +45,7 @@
 #include "util/time.h"
 #include "util/uid_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<ColumnPtr> UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_VARCHAR>("5.1.0", 1);
@@ -259,4 +259,4 @@ StatusOr<ColumnPtr> UtilityFunctions::host_name(FunctionContext* context, const 
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -43,7 +43,7 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {
@@ -830,4 +830,4 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

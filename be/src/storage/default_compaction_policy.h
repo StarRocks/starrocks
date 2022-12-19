@@ -18,7 +18,7 @@
 
 #include "storage/compaction_policy.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class DefaultCumulativeBaseCompactionPolicy : public CompactionPolicy {
 public:
@@ -54,4 +54,4 @@ protected:
     CompactionType _compaction_type = INVALID_COMPACTION;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

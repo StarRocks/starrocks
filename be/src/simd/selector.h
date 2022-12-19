@@ -27,7 +27,7 @@
 #include "runtime/primitive_type.h"
 #include "simd/simd_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #ifdef __AVX2__
 template <typename T, bool left_const = false, bool right_const = false, std::enable_if_t<sizeof(T) == 1, int> = 1>
@@ -333,4 +333,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

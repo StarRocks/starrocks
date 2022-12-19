@@ -17,7 +17,7 @@
 #include "column/column_helper.h"
 #include "exprs/vectorized/unary_function.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define DEFINE_CLASS_CONSTRUCT_FN(NAME)              \
     NAME(const TExprNode& node) : Predicate(node) {} \
@@ -34,7 +34,7 @@ class VectorizedIsNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNullPredicate);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
         if (column->only_null()) {
@@ -58,7 +58,7 @@ class VectorizedIsNotNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNotNullPredicate);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
         if (column->only_null()) {
@@ -82,4 +82,4 @@ Expr* VectorizedIsNullPredicateFactory::from_thrift(const TExprNode& node) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

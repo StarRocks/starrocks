@@ -28,13 +28,13 @@
 #include "runtime/time_types.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType Type>
 class VerbatimVectorizedExpr : public MockCostExpr {
 public:
     VerbatimVectorizedExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), column(column) {}
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override { return column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override { return column; }
 
 private:
     ColumnPtr column;
@@ -288,4 +288,4 @@ void test_cast_all_fail(CastTestCaseArray const& test_cases) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

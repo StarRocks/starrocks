@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "column/struct_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 namespace {
 class FakeConstExpr : public starrocks::Expr {
@@ -177,4 +177,4 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

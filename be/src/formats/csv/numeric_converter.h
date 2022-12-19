@@ -16,7 +16,7 @@
 
 #include "formats/csv/converter.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 template <typename T>
 class NumericConverter final : public Converter {
@@ -32,4 +32,4 @@ public:
     bool read_quoted_string(Column* column, Slice s, const Options& options) const override;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

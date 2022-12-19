@@ -34,7 +34,7 @@
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct RetentionState {
     static void udpate(uint64_t* value_ptr, const ArrayColumn* column, size_t row_num) {
         const auto& ele_col = column->elements();
@@ -173,4 +173,4 @@ public:
     std::string get_name() const override { return "retention"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -16,11 +16,11 @@
 
 #include "exprs/expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayExprFactory {
 public:
     static Expr* from_thrift(const TExprNode& node);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

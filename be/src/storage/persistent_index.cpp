@@ -2417,8 +2417,8 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
 }
 
 Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
-                                        const vectorized::VectorizedSchema& pkey_schema, int64_t apply_version,
-                                        std::unique_ptr<vectorized::Column> pk_column) {
+                                        const VectorizedSchema& pkey_schema, int64_t apply_version,
+                                        std::unique_ptr<Column> pk_column) {
     OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;
     rowids.reserve(4096);
@@ -2446,7 +2446,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    vectorized::Column* pkc = nullptr;
+                    Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
@@ -2627,7 +2627,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                   << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
                   << total_dels << "=" << total_rows - total_dels << " bytes:" << total_data_size;
     }
-    std::unique_ptr<vectorized::Column> pk_column;
+    std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
             CHECK(false) << "create column for primary key encoder failed";

@@ -25,7 +25,7 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // =====================
 // one level agg hash set
@@ -511,4 +511,4 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     int32_t _chunk_size;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,7 +20,7 @@
 #include "join_hash_map.h"
 #endif
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <LogicalType PT>
 void JoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
@@ -1707,6 +1707,5 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
     PROBE_OVER()
 }
 
-} // namespace starrocks::vectorized
-
 #undef JOIN_HASH_MAP_TPP
+} // namespace starrocks

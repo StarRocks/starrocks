@@ -30,7 +30,7 @@
 #include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct JDBCScanContext {
     std::string driver_path;
@@ -125,4 +125,4 @@ private:
     static const int32_t DEFAULT_JDBC_CONNECTION_POOL_SIZE = 8;
     static const int32_t MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS = 10000;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

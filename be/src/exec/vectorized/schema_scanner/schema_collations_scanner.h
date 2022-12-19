@@ -19,7 +19,7 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SchemaCollationsScanner : public SchemaScanner {
 public:
@@ -45,4 +45,4 @@ private:
     static CollationStruct _s_collations[];
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,7 +20,7 @@
 #include "common/statusor.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
@@ -1513,4 +1513,4 @@ StatusOr<ColumnPtr> ArrayFunctions::array_max_varchar([[maybe_unused]] FunctionC
     return ArrayFunctions::template array_max<TYPE_VARCHAR>(columns);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
