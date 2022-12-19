@@ -225,7 +225,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
     MetaFileBuilder builder(tablet_metadata_pb);
-    if (metadata_ptr->schema().keys_type() == KeysType::PRIMARY_KEYS) {
+    if (tablet_metadata_pb->schema().keys_type() == KeysType::PRIMARY_KEYS) {
         RETURN_IF_ERROR(builder.finalize(_location_provider, _update_mgr));
     } else {
         RETURN_IF_ERROR(builder.finalize(_location_provider));

@@ -45,7 +45,6 @@
 #include "common/status.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_scheduler.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
