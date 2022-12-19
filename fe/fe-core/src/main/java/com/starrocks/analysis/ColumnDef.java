@@ -236,7 +236,7 @@ public class ColumnDef {
             typeDef.setType(AggregateType.extendedPrecision(typeDef.getType()));
         }
 
-        typeDef.analyze(null);
+        typeDef.analyze(isOlap);
 
         Type type = typeDef.getType();
 

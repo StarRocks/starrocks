@@ -67,6 +67,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -5238,6 +5239,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return getArrayType(context.arrayType());
         } else if (context.structType() != null) {
             return getStructType(context.structType());
+        } else if (context.mapType() != null) {
+            return getMapType(context.mapType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
@@ -5337,6 +5340,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new StructType(fields);
+    }
+
+    public MapType getMapType(StarRocksParser.MapTypeContext context) {
+        Type keyType = getType(context.type(0));
+        if (keyType.isComplexType()) {
+            throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
+        }
+        Type valueType = getType(context.type(1));
+        return new MapType(keyType, valueType);
     }
 
     @Override

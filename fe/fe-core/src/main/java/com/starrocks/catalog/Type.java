@@ -1572,7 +1572,7 @@ public abstract class Type implements Cloneable {
 
     // getInnermostType() is only used for array
     public static Type getInnermostType(Type type) throws AnalysisException {
-        if (type.isScalarType() || type.isStructType()) {
+        if (type.isScalarType() || type.isStructType() || type.isMapType()) {
             return type;
         }
         if (type.isArrayType()) {
