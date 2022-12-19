@@ -439,28 +439,54 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public ResourceGroup chooseResourceGroupByName(String wgName) {
+    public TWorkGroup chooseResourceGroupByName(String wgName) {
         readLock();
         try {
-            return resourceGroupMap.get(wgName);
+            ResourceGroup rg = resourceGroupMap.get(wgName);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
         } finally {
             readUnlock();
         }
     }
 
-    public ResourceGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType,
-                                             Set<Long> databases) {
-        String user = getUnqualifiedUser(ctx);
-        String role = getUnqualifiedRole(ctx);
-        String remoteIp = ctx.getRemoteIP();
-        List<ResourceGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
-                .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
-                .collect(Collectors.toList());
-        if (classifierList.isEmpty()) {
-            return null;
-        } else {
-            return id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
+    public TWorkGroup chooseResourceGroupByID(long wgID) {
+        readLock();
+        try {
+            ResourceGroup rg = id2ResourceGroupMap.get(wgID);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
+        readLock();
+        try {
+            String user = getUnqualifiedUser(ctx);
+            String role = getUnqualifiedRole(ctx);
+            String remoteIp = ctx.getRemoteIP();
+            List<ResourceGroupClassifier> classifierList =
+                    classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                            .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
+                            .collect(Collectors.toList());
+            if (classifierList.isEmpty()) {
+                return null;
+            } else {
+                ResourceGroup rg =
+                        id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
+                if (rg == null) {
+                    return null;
+                }
+                return rg.toThrift();
+            }
+        } finally {
+            readUnlock();
         }
     }
 
