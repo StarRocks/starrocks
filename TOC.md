@@ -276,6 +276,7 @@
       + [from_days](/sql-reference/sql-functions/date-time-functions/from_days.md)
       + [from_unixtime](/sql-reference/sql-functions/date-time-functions/from_unixtime.md)
       + [hour](/sql-reference/sql-functions/date-time-functions/hour.md)
+      + [hours_add](/sql-reference/sql-functions/date-time-functions/hours_add.md)
       + [hours_diff](/sql-reference/sql-functions/date-time-functions/hours_diff.md)
       + [minute](/sql-reference/sql-functions/date-time-functions/minute.md)
       + [minutes_diff](/sql-reference/sql-functions/date-time-functions/minutes_diff.md)
