@@ -31,7 +31,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -570,7 +569,7 @@ public class MaterializedViewAnalyzer {
             }
             if (distributionDesc == null) {
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
-                    distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
+                    distributionDesc = new HashDistributionDesc(0,
                             Lists.newArrayList(mvColumnItems.get(0).getName()));
                     statement.setDistributionDesc(distributionDesc);
                 } else {
