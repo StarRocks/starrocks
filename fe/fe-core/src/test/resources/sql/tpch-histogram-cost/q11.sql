@@ -118,7 +118,6 @@ OutPut Exchange Id: 30
 table: partsupp, rollup: partsupp
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10181,10183,10185,10187,10189,10191,10193,10195,10197,10199
 actualRows=0, avgRowSize=28.0
 cardinality: 80000000
 probe runtime filters:
