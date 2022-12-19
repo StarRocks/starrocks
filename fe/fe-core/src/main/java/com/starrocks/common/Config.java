@@ -1697,11 +1697,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    @ConfField
+    public static String hdfs_url = "";
+
+    /* default file store type used */
+    @ConfField
+    public static String default_fs_type = "S3";
+
     /**
-     * default bucket number when create OLAP table without buckets info
+     * default storage cache ttl of lake table
      */
     @ConfField(mutable = true)
-    public static int default_bucket_num = 10;
+    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
