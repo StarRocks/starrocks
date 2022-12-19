@@ -1182,6 +1182,7 @@ public class PlanTestBase {
                 e.printStackTrace();
             }
             System.out.println("DEBUG MODE!");
+            System.out.println("DEBUG FILE: " + debugFile.getPath());
         }
 
         Pattern regex = Pattern.compile("\\[plan-(\\d+)]");

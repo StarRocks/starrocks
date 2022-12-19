@@ -78,7 +78,7 @@ OutPut Exchange Id: 30
 |       cardinality: 1
 |
 10:AGGREGATE (update finalize)
-|  aggregate: sum[([20: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([20: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [1: PS_PARTKEY, INT, false]
 |  cardinality: 3200000
 |  probe runtime filters:
@@ -118,6 +118,7 @@ OutPut Exchange Id: 30
 table: partsupp, rollup: partsupp
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10181,10183,10185,10187,10189,10191,10193,10195,10197,10199
 actualRows=0, avgRowSize=28.0
 cardinality: 80000000
 probe runtime filters:
@@ -165,7 +166,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 22
 
 21:AGGREGATE (update serialize)
-|  aggregate: sum[([41: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([41: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[1.0, 9999000.0, 0.0, 8.0, 1.0] ESTIMATE
@@ -198,6 +199,7 @@ OutPut Exchange Id: 22
 table: partsupp, rollup: partsupp
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10181,10183,10185,10187,10189,10191,10193,10195,10197,10199
 actualRows=0, avgRowSize=20.0
 cardinality: 80000000
 probe runtime filters:
@@ -239,6 +241,7 @@ OutPut Exchange Id: 18
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
+tabletList=10176
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 probe runtime filters:
@@ -265,6 +268,7 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: [37: N_NAME, CHAR, false] = 'PERU'
 partitionsRatio=1/1, tabletsRatio=1/1
+tabletList=10250
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
@@ -303,6 +307,7 @@ OutPut Exchange Id: 07
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
+tabletList=10176
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 probe runtime filters:
@@ -329,6 +334,7 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: [16: N_NAME, CHAR, false] = 'PERU'
 partitionsRatio=1/1, tabletsRatio=1/1
+tabletList=10250
 actualRows=0, avgRowSize=29.0
 cardinality: 1
 column statistics:
