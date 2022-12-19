@@ -186,7 +186,7 @@ private:
 };
 
 // test map<int, int>, and nullable
-TEST_F(MapColumnRWTest, test_array_int) {
+TEST_F(MapColumnRWTest, test_map_int) {
     test_int_map();
 }
 
