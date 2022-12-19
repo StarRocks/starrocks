@@ -8,6 +8,7 @@
 
 ```Haskell
 POW(x,y);
+POWER(x,y);
 ```
 
 ## 参数说明
@@ -30,4 +31,13 @@ mysql> select pow(2,2);
 |         4 |
 +-----------+
 1 row in set (0.00 sec)
+
+mysql> select power(4,3);
++-------------+
+| power(4, 3) |
++-------------+
+|          64 |
++-------------+
+1 row in set (0.00 sec)
+
 ```
