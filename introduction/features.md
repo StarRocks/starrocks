@@ -38,7 +38,7 @@ StarRocks 能够支持秒级的导入延迟，提供准实时的服务能力。 
 
 ![columnar_storage_engine](../assets/1.2-6.png)
 
-StarRocks 存储引擎不仅能够提供高效的 Append 操作，也能高效的处理 Upsert 类操作。使用 Delete-and-insert 的实现方式，通过主键索引快速过滤，消除了读取时 Sort merge 操作，同时还可以充分利用其他二级索引。在大量更新的场景下，仍然可以保证查询的极速性能。
+StarRocks 存储引擎不仅能够提供高效的 Append 操作，也能高效的处理 Upsert 类操作。使用 Delete-and-insert (Merge_on_write)的实现方式，通过主键索引快速过滤，消除了读取时 Sort merge 操作，同时还可以充分利用其他二级索引。在大量更新的场景下，仍然可以保证查询的极速性能。
 
 ## 智能的物化视图
 
