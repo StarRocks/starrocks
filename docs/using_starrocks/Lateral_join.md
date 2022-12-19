@@ -2,7 +2,7 @@
 
 ## Background
 
-Row-to-column conversion is a common operation in ETL processing. Lateral is a special Join keyword that can associate a row with an internal subquery or table function. By using Lateral in conjunction with unnest, we can implement conversion from one-row to multi-row.
+Row-to-column conversion is a common operation in ETL processing. Lateral is a special Join keyword that can associate a row with an internal subquery or table function. By using Lateral in conjunction with [unnest()](../sql-reference/sql-functions/array-functions/unnest.md), users can implement conversion from one-row to multi-row.
 
 ## Instructions for use
 
@@ -173,5 +173,5 @@ select v1,unnest from lateral_test3 , unnest(bitmap_to_array(v2)) ;
 
 ## Caution
 
-* Currently, Lateral join is only used with Unnest to achieve row-to-column conversion. Other table functions / UDTF will be supported later.
+* Currently, Lateral join is only used with Unnest to achieve row-to-column conversion. Other table functions or UDTFs will be supported later.
 * Currently, Lateral join does not support subqueries.
