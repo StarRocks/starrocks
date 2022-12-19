@@ -31,9 +31,9 @@
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
-  + [Overview of data unloading](./unloading/Export.md)
-  + [Use Spark connector to read data from StarRocks](./unloading/Spark_connector.md)
-  + [Use Flink connector to read data from StarRocks](./unloading/Flink_connector.md)
+  + [Export data using brokers](./unloading/Export.md)
+  + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
+  + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
 + Query Data Sources
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
@@ -433,13 +433,22 @@
       + [to_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
     + Math Functions
+      + [acos](./sql-reference/sql-functions/math-functions/acos.md)
+      + [asin](./sql-reference/sql-functions/math-functions/asin.md)
+      + [atan](./sql-reference/sql-functions/math-functions/atan.md)
+      + [cos](./sql-reference/sql-functions/math-functions/cos.md)
+      + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
       + [least](./sql-reference/sql-functions/math-functions/least.md)
       + [log](./sql-reference/sql-functions/math-functions/log.md)
       + [log2](./sql-reference/sql-functions/math-functions/log2.md)
       + [log10](./sql-reference/sql-functions/math-functions/log10.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
+      + [sin](./sql-reference/sql-functions/math-functions/sin.md)
+      + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
+      + [tan](./sql-reference/sql-functions/math-functions/tan.md)
+      + [tanh](./sql-reference/sql-functions/math-functions/tanh.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [version](./sql-reference/sql-functions/utility-functions/version.md)

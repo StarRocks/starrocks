@@ -55,6 +55,7 @@ public:
 
 private:
     Slice _unquote(Slice slice);
+    Slice _trim(Slice slice);
 
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;

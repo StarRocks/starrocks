@@ -20,7 +20,7 @@
 namespace starrocks {
 
 static bool is_json_start_char(char ch) {
-    return ch == '{' || ch == '[' || ch == '"' || std::isdigit(ch);
+    return ch == '{' || ch == '[' || ch == '"';
 }
 
 StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
@@ -51,20 +51,15 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
 }
 
 Status JsonValue::parse(const Slice& src, JsonValue* out) {
-    try {
-        if (src.empty()) {
-            *out = JsonValue(emptyStringJsonSlice());
-            return Status::OK();
-        }
-        if (src.size > kJSONLengthLimit) {
-            return Status::NotSupported("JSON string exceed maximum length 16MB");
-        }
-        auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
-        out->assign(*b);
-    } catch (const vpack::Exception& e) {
-        return fromVPackException(e);
-    }
-    return Status::OK();
+    ASSIGN_OR_RETURN(auto json_value, parse_json_or_string(src));
+    *out = std::move(json_value);
+    return {};
+}
+
+StatusOr<JsonValue> JsonValue::parse(const Slice& src) {
+    JsonValue json;
+    RETURN_IF_ERROR(parse(src, &json));
+    return json;
 }
 
 JsonValue JsonValue::from_null() {
@@ -107,12 +102,6 @@ StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::value* value) {
 
 StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::object* obj) {
     return convert_from_simdjson(*obj);
-}
-
-StatusOr<JsonValue> JsonValue::parse(const Slice& src) {
-    JsonValue json;
-    RETURN_IF_ERROR(parse(src, &json));
-    return json;
 }
 
 size_t JsonValue::serialize(uint8_t* dst) const {
