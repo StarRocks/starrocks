@@ -228,7 +228,7 @@ If you are a user of StarRocks Enterprise Edition, you can visualize your query 
 
 The **Profile Overview** page displays some summary metrics, including the total execution time `ExecutionWallTime`, I/O metrics, network transmission size, and the proportion of CPU and I/O time.
 
-![img](../assets/profile-4.png)
+![img](../assets/profile-4.jpeg)
 
 By clicking the card of an operator (a node), you can view its detailed information in the right pane of the page. There are three tabs:
 
@@ -236,23 +236,23 @@ By clicking the card of an operator (a node), you can view its detailed informat
 - **Node Detail**: all metrics of this operator.
 - **Pipeline**: metrics of the pipeline to which the operator belongs. You do not need to pay much attention to this tab because it is related only to scheduling.
 
-![img](../assets/profile-5.png)
+![img](../assets/profile-5.jpeg)
 
 ### Identify bottlenecks
 
 The larger the proportion of time taken by an operator, the darker color its card becomes. This helps you easily identify bottlenecks of the query.
 
-![img](../assets/profile-6.png)
+![img](../assets/profile-6.jpeg)
 
 ### Check whether data is skewed
 
 Click the card of the operator that takes a large proportion of time, and check its `MaxTime` and `MinTime`. A noticeable difference between `MaxTime` and `MinTime` usually indicates data is skewed.
 
-![img](../assets/profile-7.png)
+![img](../assets/profile-7.jpeg)
 
 Then, click the **Node Detail** tab, and check if any metric shows an exception. In this example, the metric `PushRowNum` of the Aggregate operator shows data skew.
 
-![img](../assets/profile-8.png)
+![img](../assets/profile-8.jpeg)
 
 ### Check whether the partitioning or bucketing strategy takes effect
 
@@ -264,13 +264,13 @@ You can check whether the partitioning or bucketing strategy takes effect by vie
 
 Click the corresponding Scan operator and check the `Rollup` field on the **Node Detail** tab.
 
-![img](../assets/profile-10.png)
+![img](../assets/profile-10.jpeg)
 
 ### Check whether the JOIN plan is proper for left and right tables
 
 Usually, StarRocks selects the smaller table as the right table of Join. An exception occurs if the query profile shows otherwise.
 
-![img](../assets/profile-11.png)
+![img](../assets/profile-11.jpeg)
 
 ### Check whether the distribution type of JOIN is correct
 
@@ -284,19 +284,19 @@ For Inner Join, the right table can be the `HASH_PARTITIONED` and `BUCKET_SHUFFL
 
 In the following example, the type of the Exchange operator is Broadcast, but the size of data transmitted by the operator greatly exceeds the threshold.
 
-![img](../assets/profile-12.png)
+![img](../assets/profile-12.jpeg)
 
 ### Check whether JoinRuntimeFilter takes effect
 
 When the right child of Join is building a hash table, it creates a runtime filter. This runtime filter is sent to the left child tree, and is pushed down to the Scan operator if it is possible. You can check `JoinRuntimeFilter`-related metrics on the **Node Detail** tab of the Scan operator.
 
-![img](../assets/profile-13.png)
+![img](../assets/profile-13.jpeg)
 
 ## FAQ
 
 ### Why is the time cost of the Exchange operator abnormal?
 
-![img](../assets/profile-14.png)
+![img](../assets/profile-14.jpeg)
 
 The time cost of an Exchange operator consists of two parts: CPU time and network time. Network time relies on the system clock. Network time is calculated as follows:
 
@@ -314,4 +314,4 @@ Example:
 
 From the profile, we can see that `ExecutionWallTime` is about 55 ms. However, the total time cost of all operators is less than 10 ms, which is significantly less than `ExecutionWallTime`.
 
-![img](../assets/profile-15.png)
+![img](../assets/profile-15.jpeg)
