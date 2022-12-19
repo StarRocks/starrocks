@@ -18,6 +18,7 @@ package com.starrocks.privilege;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
@@ -1144,6 +1145,29 @@ public class PrivilegeManager {
                     }
                 }
                 return ret;
+            } finally {
+                roleReadUnlock();
+            }
+        } finally {
+            userReadUnlock();
+        }
+    }
+
+    public List<String> getRoleNamesByUser(UserIdentity user) throws PrivilegeException {
+        try {
+            userReadLock();
+            List<String> roleNameList = Lists.newArrayList();
+            try {
+                roleReadLock();
+                for (long roleId : getUserPrivilegeCollectionUnlocked(user).getAllRoles()) {
+                    RolePrivilegeCollection rolePrivilegeCollection =
+                            getRolePrivilegeCollectionUnlocked(roleId, false);
+                    // role may be removed
+                    if (rolePrivilegeCollection != null) {
+                        roleNameList.add(rolePrivilegeCollection.getName());
+                    }
+                }
+                return roleNameList;
             } finally {
                 roleReadUnlock();
             }

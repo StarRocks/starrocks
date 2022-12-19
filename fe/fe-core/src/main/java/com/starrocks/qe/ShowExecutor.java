@@ -640,7 +640,11 @@ public class ShowExecutor {
                     }
 
                     // check tbl privs
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), table.getName())) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                             db.getFullName(), table.getName(),
                             PrivPredicate.SHOW)) {
                         continue;
