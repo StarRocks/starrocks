@@ -16,6 +16,7 @@
 
 #include <bthread/bthread.h>
 
+#include <atomic>
 #include <chrono>
 #include <variant>
 
@@ -799,6 +800,7 @@ void* metadata_gc_trigger(void* arg) {
     auto lp = tablet_mgr->location_provider();
     // NOTE: Share the same thread pool with local tablet's clone task.
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    auto num_running = std::atomic<int>(0);
     while (!bthread_stopped(bthread_self())) {
         // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
         // configured value, which is ok now.
@@ -811,10 +813,9 @@ void* metadata_gc_trigger(void* arg) {
 
         LOG_IF(ERROR, !st.ok()) << st;
         auto master_info = get_master_info();
-
+        num_running.fetch_add(roots.size());
         for (const auto& root : roots) {
-            // TODO: limit GC concurrency
-            st = thread_pool->submit_func([=]() {
+            st = thread_pool->submit_func([&, root]() {
                 auto t1 = std::chrono::steady_clock::now();
                 auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_id);
                 auto t2 = std::chrono::steady_clock::now();
@@ -826,13 +827,17 @@ void* metadata_gc_trigger(void* arg) {
                     LOG(WARNING) << "Fail to do garbage collection of metadata for directory " << root
                                  << ". cost:" << cost << "ms error:" << r;
                 }
+                num_running.fetch_sub(1);
             });
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-                break;
+                num_running.fetch_sub(1);
             }
         }
-        // TODO: wait until all tasks finished.
+        while (num_running.load() > 0) {
+            LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
+            bthread_usleep(/*100ms=*/100 * 1000);
+        }
     }
     return nullptr;
 }
@@ -840,8 +845,9 @@ void* metadata_gc_trigger(void* arg) {
 void* segment_gc_trigger(void* arg) {
     auto tablet_mgr = static_cast<TabletManager*>(arg);
     auto lp = tablet_mgr->location_provider();
-    // NOTE: Share the same thread pool with local tablet's clone task.
-    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    // NOTE: Share the same thread pool with local tablet's drop task.
+    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+    auto num_running = std::atomic<int>(0);
     while (!bthread_stopped(bthread_self())) {
         // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
         // configured value, which is ok now.
@@ -853,10 +859,9 @@ void* segment_gc_trigger(void* arg) {
         auto st = lp->list_root_locations(&roots);
 
         LOG_IF(ERROR, !st.ok()) << st;
-
+        num_running.fetch_add(roots.size());
         for (const auto& root : roots) {
-            // TODO: limit GC concurrency
-            st = thread_pool->submit_func([=]() {
+            st = thread_pool->submit_func([&, root]() {
                 auto t1 = std::chrono::steady_clock::now();
                 auto r = segment_gc(root, tablet_mgr);
                 auto t2 = std::chrono::steady_clock::now();
@@ -868,13 +873,17 @@ void* segment_gc_trigger(void* arg) {
                     LOG(WARNING) << "Fail to do garbage collection of data for directory " << root << ". cost:" << cost
                                  << "ms error:" << r;
                 }
+                num_running.fetch_sub(1);
             });
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-                break;
+                num_running.fetch_sub(1);
             }
         }
-        // TODO: wait until all tasks finished.
+        while (num_running.load() > 0) {
+            LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
+            bthread_usleep(/*100ms=*/100 * 1000);
+        }
     }
     return nullptr;
 }
