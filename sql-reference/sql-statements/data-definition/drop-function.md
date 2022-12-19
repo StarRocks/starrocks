@@ -14,9 +14,9 @@ DROP FUNCTION <function_name>(arg_type [, ...]);
 
 参数说明：
 
-`function_name`: 待删除函数的名字，必选。
+`function_name`: 待删除函数的名字，必填。
 
-`arg_type`: 待删除函数的参数类型，必选。
+`arg_type`: 待删除函数的参数类型，必填。
 
 ## 示例
 
