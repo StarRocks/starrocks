@@ -203,11 +203,13 @@ Different merging strategies are adopted for different types of metrics:
   - `PullChunkNum` represents the total number of all concurrent instances.
   - `__MAX_OF_PullChunkNum` is the maximum value among all the concurrent instances.
   - `__MIN_OF_PullChunkNum` is the minimum value among all the concurrent instances.
-  - ```SQL
+
+  ```SQL
                  - PullChunkNum: 146.66K (146660)
                    - __MAX_OF_PullChunkNum: 24.45K (24450)
                    - __MIN_OF_PullChunkNum: 24.435K (24435)
-    ```
+  ```
+
 - Some special metrics, which do not have minimum and maximum values, have identical values among all the concurrent instances (for example, `DegreeOfParallelism`).
 
 #### Sharp difference between MIN and MAX
