@@ -214,7 +214,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_query_queue_load
 
-  布尔值，用于控制是否为 INSERT 导入启用查询队列。默认值：`false`。
+  布尔值，用于控制是否为导入任务启用查询队列。默认值：`false`。
 
 * enable_query_queue_select
 
