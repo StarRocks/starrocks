@@ -425,6 +425,12 @@ public class Config extends ConfigBase {
     public static String metadata_failure_recovery = "false";
 
     /**
+     * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
+     */
+    @ConfField
+    public static boolean start_with_incomplete_meta = false;
+
+    /**
      * If true, non-leader FE will ignore the meta data delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
      * Non-leader FE will still offer read service.
