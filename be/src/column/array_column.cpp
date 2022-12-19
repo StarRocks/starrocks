@@ -388,7 +388,7 @@ void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* 
     size_t rows = size();
     output->resize(rows);
     for (size_t i = 0; i < rows; i++) {
-        (*output)[i] = compare_at(i, i, rhs_column, -1);
+        (*output)[i] = compare_at(i, i, rhs_column, 1);
     }
 }
 

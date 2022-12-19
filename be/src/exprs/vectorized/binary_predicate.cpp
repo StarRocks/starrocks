@@ -49,27 +49,34 @@ using EvalGt = std::greater<typename PredicateCmpType<ptype>::CmpType>;
 template <LogicalType ptype>
 using EvalGe = std::greater_equal<typename PredicateCmpType<ptype>::CmpType>;
 
-struct EvalCmp {
+struct EvalCmpZero {
     TExprOpcode::type op;
 
-    EvalCmp(TExprOpcode::type in_op) : op(in_op) {}
+    EvalCmpZero(TExprOpcode::type in_op) : op(in_op) {}
 
-    bool operator()(int cmp_value) {
+    void eval(const std::vector<int8_t>& cmp_values, ColumnBuilder<TYPE_BOOLEAN>* output) {
+        auto cmp = build_comparator();
+        for (int8_t x : cmp_values) {
+            output->append(cmp(x));
+        }
+    }
+
+    std::function<bool(int)> build_comparator() {
         switch (op) {
         case TExprOpcode::EQ:
-            return cmp_value == 0;
+            return [](int x) { return x == 0; };
         case TExprOpcode::NE:
-            return cmp_value != 0;
+            return [](int x) { return x != 0; };
         case TExprOpcode::LE:
-            return cmp_value <= 0;
+            return [](int x) { return x <= 0; };
         case TExprOpcode::LT:
-            return cmp_value < 0;
+            return [](int x) { return x < 0; };
         case TExprOpcode::GE:
-            return cmp_value >= 0;
+            return [](int x) { return x >= 0; };
         case TExprOpcode::GT:
-            return cmp_value > 0;
+            return [](int x) { return x > 0; };
         case TExprOpcode::EQ_FOR_NULL:
-            return cmp_value == 0;
+            return [](int x) { return x == 0; };
         default:
             CHECK(false) << "illegal operation: " << op;
         }
@@ -118,15 +125,13 @@ public:
         lhs_arr->compare_column(*rhs_arr, &cmp_result);
 
         // Convert the compare result (-1, 0, 1) to the predicate result (true/false)
-        for (int8_t cmp : cmp_result) {
-            bool pred_res = _comparator(cmp);
-            builder.append(pred_res);
-        }
+        _comparator.eval(cmp_result, &builder);
+
         return builder.build(ColumnHelper::is_all_const(ptr->columns()));
     }
 
 private:
-    EvalCmp _comparator;
+    EvalCmpZero _comparator;
 };
 
 template <LogicalType Type, typename OP>
