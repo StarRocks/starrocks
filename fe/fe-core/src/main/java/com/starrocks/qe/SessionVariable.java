@@ -432,7 +432,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = WORKGROUP_ID, alias = WORKGROUP_ID_V2,
             show = WORKGROUP_ID_V2, flag = VariableMgr.INVISIBLE)
-    private int resourceGroupId = 0;
+    private int workgroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
