@@ -154,7 +154,7 @@ PROPERTIES (property [,property]);
 
 - `WITH SYNC | ASYNC MODE`: 如果不指定，默认为同步采集。
 
-- `WITH ``N`` BUCKETS`: `N`为直方图的分桶数。如果不指定，则使用 `fe.conf` 中的默认值。
+- `WITH N BUCKETS`: `N`为直方图的分桶数。如果不指定，则使用 `fe.conf` 中的默认值。
 
 - PROPERTIES: 采集任务的自定义参数。如果不指定，则使用 `fe.conf` 中的默认配置。
 
