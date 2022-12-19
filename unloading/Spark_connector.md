@@ -426,7 +426,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    ```Scala
    scala>  val df = spark.read.format("starrocks")
            .option("starrocks.table.identifier", s"test.mytable")
-           .option("starrocks.fenodes", s"<fe_host>:<fe_http_port")
+           .option("starrocks.fenodes", s"<fe_host>:<fe_http_port>")
            .option("user", s"root")
            .option("password", s"")
            .load()
