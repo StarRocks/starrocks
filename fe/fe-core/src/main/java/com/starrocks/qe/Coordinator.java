@@ -31,7 +31,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -100,6 +99,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -209,7 +209,7 @@ public class Coordinator {
     private final boolean usePipeline;
 
     // Resource group
-    WorkGroup workGroup = null;
+    TWorkGroup workGroup = null;
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -460,12 +460,13 @@ public class Coordinator {
         }
     }
 
-    public static WorkGroup prepareWorkGroup(ConnectContext connect) {
+    public static TWorkGroup prepareWorkGroup(ConnectContext connect) {
         WorkGroup workgroup = null;
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
-            return workgroup;
+            return null;
         }
         SessionVariable sessionVariable = connect.getSessionVariable();
+        TWorkGroup workgroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
@@ -476,8 +477,7 @@ public class Coordinator {
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getWorkGroupId();
         if (workgroup == null && workgroupId > 0) {
-            workgroup = new WorkGroup();
-            workgroup.setId(workgroupId);
+            workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -2318,7 +2318,7 @@ public class Coordinator {
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);
                         if (enableResourceGroup && workGroup != null) {
-                            params.setWorkgroup(workGroup.toThrift());
+                            params.setWorkgroup(workGroup);
                         }
                     }
 

@@ -474,14 +474,21 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (version_it == _workgroup_versions.end()) {
         return;
     }
-    auto version_id = version_it->second;
-    DCHECK(version_id < wg->version());
-    auto unique_id = WorkGroup::create_unique_id(id, version_id);
+
+    auto curr_version = version_it->second;
+    if (wg->version() <= curr_version) {
+        LOG(WARNING) << "try to delete workgroup with fresher version: "
+                     << "[delete_version=" << wg->version() << "] "
+                     << "[curr_version=" << curr_version << "]";
+        return;
+    }
+
+    auto unique_id = WorkGroup::create_unique_id(id, curr_version);
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
         _workgroup_expired_versions.push_back(unique_id);
-        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << version_id << ")";
+        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
     }
     LOG(INFO) << "delete workgroup " << wg->name();
 }
