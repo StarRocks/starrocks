@@ -229,6 +229,11 @@ TEST_F(ArrayFunctionsTest, array_length) {
         ASSERT_FALSE(result->get(5).is_null());
         ASSERT_FALSE(result->get(6).is_null());
 
+        auto datum = Datum(DatumArray{DatumArray{Datum()}});
+                           LOG(INFO) << "datum size=" << datum.get_array().size();
+
+        LOG(INFO) << c->debug_string();
+        LOG(INFO) << result->debug_string();
         EXPECT_EQ(0, result->get(0).get_int32());
         ASSERT_TRUE(result->get(1).is_null());
         EXPECT_EQ(1, result->get(2).get_int32());
@@ -4687,7 +4692,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_STREQ(dest_column->debug_string().c_str(),
-                     "[['5', '666', '33'], ['5', '666', '33'], ['5', '666', '33']]");
+                     "[['5','666','33'], ['5','666','33'], ['5','666','33']]");
     }
     // test normal
     {
@@ -4695,7 +4700,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 1);
-        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5', '666', '33']]");
+        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5','666','33']]");
     }
 }
 

@@ -343,17 +343,17 @@ TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 
-add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/query_cache/query_cache_test.cpp)
-
-TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
-
-add_executable(stream_mv_test
-        exec/stream/stream_mv_test.cpp
-        exec/stream/mem_state_table_test.cpp
-        )
-TARGET_LINK_LIBRARIES(stream_mv_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(stream_mv_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+# add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/query_cache/query_cache_test.cpp)
+# 
+# TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
+# SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+# 
+# add_executable(stream_mv_test
+#         exec/stream/stream_mv_test.cpp
+#         exec/stream/mem_state_table_test.cpp
+#         )
+# TARGET_LINK_LIBRARIES(stream_mv_test ${TEST_LINK_LIBS})
+# SET_TARGET_PROPERTIES(stream_mv_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
@@ -379,16 +379,16 @@ TARGET_LINK_LIBRARIES(bytes_test
 
 # =================================================
 # test cases must be compiled as a standalone binary
-ADD_BE_TEST(http/metrics_action_test)
-ADD_BE_TEST(http/http_client_test)
-
-ADD_BE_TEST(runtime/routine_load_task_executor_test)
-ADD_BE_TEST(runtime/small_file_mgr_test)
-ADD_BE_TEST(runtime/user_function_cache_test)
-
-ADD_BE_TEST(storage/delete_handler_test)
-ADD_BE_TEST(storage/options_test)
-ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+# ADD_BE_TEST(http/metrics_action_test)
+# ADD_BE_TEST(http/http_client_test)
+# 
+# ADD_BE_TEST(runtime/routine_load_task_executor_test)
+# ADD_BE_TEST(runtime/small_file_mgr_test)
+# ADD_BE_TEST(runtime/user_function_cache_test)
+# 
+# ADD_BE_TEST(storage/delete_handler_test)
+# ADD_BE_TEST(storage/options_test)
+# ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/vectorized/sorting_test)
