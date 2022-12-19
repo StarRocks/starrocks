@@ -104,7 +104,7 @@ The following bugs are fixed:
 
 ### Behavior Change
 
-- Add BE configuration `max_length_for_bitmap_function` for bitmap function, and add `max_length_for_to_base64` for base64 to prevent crash. [#10851](https://github.com/StarRocks/starrocks/pull/10851)
+- Add BE configuration `max_length_for_bitmap_function` with a default value 1000000 for bitmap function, and add `max_length_for_to_base64` with a default value 200000 for base64 to prevent crash. [#10851](https://github.com/StarRocks/starrocks/pull/10851)
 
 ## 2.3.1
 
