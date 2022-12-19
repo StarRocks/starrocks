@@ -457,6 +457,7 @@
       + [atan](./sql-reference/sql-functions/math-functions/atan.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
+      + [divide](./sql-reference/sql-functions/math-functions/divide.md)
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
       + [least](./sql-reference/sql-functions/math-functions/least.md)
       + [log](./sql-reference/sql-functions/math-functions/log.md)
