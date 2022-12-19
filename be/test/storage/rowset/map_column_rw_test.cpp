@@ -175,8 +175,8 @@ protected:
 
                 ASSERT_EQ("{1:1}", dst_column->debug_item(0));
                 ASSERT_EQ("{}", dst_column->debug_item(1));
-                ASSERT_EQ("{2:200, 3:3000}", dst_column->debug_item(2));
-                ASSERT_EQ("{4:-1, 5:-2, 6:-3}", dst_column->debug_item(3));
+                ASSERT_EQ("{2:200,3:3000}", dst_column->debug_item(2));
+                ASSERT_EQ("{4:-1,5:-2,6:-3}", dst_column->debug_item(3));
             }
         }
     }

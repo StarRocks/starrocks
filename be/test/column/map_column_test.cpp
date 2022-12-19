@@ -174,8 +174,8 @@ PARALLEL_TEST(MapColumnTest, test_get_kvs) {
     map1[(int32_t)6] = (int32_t)66;
     column->append_datum(map1);
 
-    ASSERT_EQ("{1:11, 2:22, 3:33}", column->debug_item(0));
-    ASSERT_EQ("{4:44, 5:55, 6:66}", column->debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", column->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -664,8 +664,8 @@ PARALLEL_TEST(MapColumnTest, test_array_value) {
     map1[(Slice) "g h"] = array_e;
     column->append_datum(map1);
 
-    ASSERT_EQ("{'a':[1, 2, 3],'b':[2, 3, 4],'c':[3]}", column->debug_item(0));
-    ASSERT_EQ("{'def':[4, 5, 6, 7],'g h':[5]}", column->debug_item(1));
+    ASSERT_EQ("{'a':[1,2,3],'b':[2,3,4],'c':[3]}", column->debug_item(0));
+    ASSERT_EQ("{'def':[4,5,6,7],'g h':[5]}", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -787,7 +787,7 @@ PARALLEL_TEST(MapColumnTest, test_swap_column) {
     ASSERT_EQ("{7:77,8:88,9:99}", column->debug_item(0));
     ASSERT_EQ(2, column2->size());
     ASSERT_EQ("{1:11,2:22,3:33}", column2->debug_item(0));
-    ASSERT_EQ("{4:44,5:55, 6:66}", column2->debug_item(1));
+    ASSERT_EQ("{4:44,5:55,6:66}", column2->debug_item(1));
 }
 
 // NOLINTNEXTLINE

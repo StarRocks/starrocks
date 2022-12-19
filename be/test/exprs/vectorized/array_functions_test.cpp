@@ -230,7 +230,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
         ASSERT_FALSE(result->get(6).is_null());
 
         auto datum = Datum(DatumArray{DatumArray{Datum()}});
-                           LOG(INFO) << "datum size=" << datum.get_array().size();
+        LOG(INFO) << "datum size=" << datum.get_array().size();
 
         LOG(INFO) << c->debug_string();
         LOG(INFO) << result->debug_string();
@@ -4691,8 +4691,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
-        ASSERT_STREQ(dest_column->debug_string().c_str(),
-                     "[['5','666','33'], ['5','666','33'], ['5','666','33']]");
+        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5','666','33'], ['5','666','33'], ['5','666','33']]");
     }
     // test normal
     {

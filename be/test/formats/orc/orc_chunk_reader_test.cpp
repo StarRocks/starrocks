@@ -1754,19 +1754,22 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         //        }
 
         EXPECT_EQ(
-                "[1, [{c11:2,c12:['danny1','Smith2','Cruise']},{c11:4,c12:['poal','alan','blossom']}], [{1:{c21:11,c22:'hi1'}},{5:{c21:23,c22:'p4'}},{9:{c21:25,c22:'p5'}}]]",
+                "[1, [{c11:2,c12:['danny1','Smith2','Cruise']},{c11:4,c12:['poal','alan','blossom']}], "
+                "[{1:{c21:11,c22:'hi1'}},{5:{c21:23,c22:'p4'}},{9:{c21:25,c22:'p5'}}]]",
                 result->debug_row(0));
         EXPECT_EQ(
-                "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], [{2:{c21:12,c22:'hi2'}},{6:{c21:24,c22:'p5'}}]]",
+                "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], "
+                "[{2:{c21:12,c22:'hi2'}},{6:{c21:24,c22:'p5'}}]]",
                 result->debug_row(1));
+        EXPECT_EQ("[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], [{3:{c21:13,c22:'hi3'}},{7:{c21:25,c22:'p6'}}]]",
+                  result->debug_row(2));
         EXPECT_EQ(
-                "[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], [{3:{c21:13,c22:'hi3'}},{7:{c21:25,c22:'p6'}}]]",
-                result->debug_row(2));
-        EXPECT_EQ(
-                "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], [{4:{c21:14,c22:'hi4'}},{8:{c21:26,c22:'p7'}}]]",
+                "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], "
+                "[{4:{c21:14,c22:'hi4'}},{8:{c21:26,c22:'p7'}}]]",
                 result->debug_row(3));
         EXPECT_EQ(
-                "[5, [{c11:6,c12:['danny4']},{c11:7,c12:['poal','alan']}], [{5:{c21:14,c22:'hi4'}},{9:{c21:26,c22:'p7'}}]]",
+                "[5, [{c11:6,c12:['danny4']},{c11:7,c12:['poal','alan']}], "
+                "[{5:{c21:14,c22:'hi4'}},{9:{c21:26,c22:'p7'}}]]",
                 result->debug_row(4));
     }
 
@@ -1819,19 +1822,24 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         //        }
 
         EXPECT_EQ(
-                "[1, [{c11:2,c12:['danny1','Smith2','Cruise']},{c11:4,c12:['poal','alan','blossom']}], [{1:{c21:NULL,c22:'hi1'}},{5:{c21:NULL,c22:'p4'}},{9:{c21:NULL,c22:'p5'}}]]",
+                "[1, [{c11:2,c12:['danny1','Smith2','Cruise']},{c11:4,c12:['poal','alan','blossom']}], "
+                "[{1:{c21:NULL,c22:'hi1'}},{5:{c21:NULL,c22:'p4'}},{9:{c21:NULL,c22:'p5'}}]]",
                 result->debug_row(0));
         EXPECT_EQ(
-                "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], [{2:{c21:NULL,c22:'hi2'}},{6:{c21:NULL,c22:'p5'}}]]",
+                "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], "
+                "[{2:{c21:NULL,c22:'hi2'}},{6:{c21:NULL,c22:'p5'}}]]",
                 result->debug_row(1));
         EXPECT_EQ(
-                "[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], [{3:{c21:NULL,c22:'hi3'}},{7:{c21:NULL,c22:'p6'}}]]",
+                "[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], "
+                "[{3:{c21:NULL,c22:'hi3'}},{7:{c21:NULL,c22:'p6'}}]]",
                 result->debug_row(2));
         EXPECT_EQ(
-                "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], [{4:{c21:NULL,c22:'hi4'}},{8:{c21:NULL,c22:'p7'}}]]",
+                "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], "
+                "[{4:{c21:NULL,c22:'hi4'}},{8:{c21:NULL,c22:'p7'}}]]",
                 result->debug_row(3));
         EXPECT_EQ(
-                "[5, [{c11:6,c12:['danny4']},{c11:7,c12:['poal','alan']}], [{5:{c21:NULL,c22:'hi4'}},{9:{c21:NULL,c22:'p7'}}]]",
+                "[5, [{c11:6,c12:['danny4']},{c11:7,c12:['poal','alan']}], "
+                "[{5:{c21:NULL,c22:'hi4'}},{9:{c21:NULL,c22:'p7'}}]]",
                 result->debug_row(4));
     }
 
