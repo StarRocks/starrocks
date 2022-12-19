@@ -152,5 +152,6 @@ public class SelectStmtTest {
         sql = "select localtimestamp()";
         starRocksAssert.query(sql).explainQuery();
         sql = "select localtimestamp";
+        starRocksAssert.query(sql).explainQuery();
     }
 }
