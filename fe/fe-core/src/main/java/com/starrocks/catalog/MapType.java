@@ -37,6 +37,13 @@ package com.starrocks.catalog;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
@@ -47,7 +54,9 @@ import java.util.Arrays;
  * Describes a MAP type. MAP types have a scalar key and an arbitrarily-typed value.
  */
 public class MapType extends Type {
+    @SerializedName(value = "keyType")
     private Type keyType;
+    @SerializedName(value = "valueType")
     private Type valueType;
 
     public MapType(Type keyType, Type valueType) {
@@ -167,6 +176,20 @@ public class MapType extends Type {
         clone.valueType = this.valueType.clone();
         clone.selectedFields = this.selectedFields.clone();
         return clone;
+    }
+
+    public static class MapTypeDeSerializer implements JsonDeserializer<MapType> {
+        @Override
+        public MapType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonObject key = dumpJsonObject.getAsJsonObject("keyType");
+            Type keyType = GsonUtils.GSON.fromJson(key, Type.class);
+            JsonObject value = dumpJsonObject.getAsJsonObject("valueType");
+            Type valueType = GsonUtils.GSON.fromJson(value, Type.class);
+            return new MapType(keyType, valueType);
+        }
     }
 }
 
