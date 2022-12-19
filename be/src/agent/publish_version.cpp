@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "publish_version.h"
 
@@ -23,13 +35,17 @@ const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 bvar::LatencyRecorder g_publish_latency("be", "publish");
 
 struct TabletPublishVersionTask {
+    // input params
     int64_t txn_id{0};
     int64_t partition_id{0};
     int64_t tablet_id{0};
-    int64_t version{0};
+    int64_t version{0}; // requested publish version
     RowsetSharedPtr rowset;
+    // output params
     Status st;
-    int64_t max_continuous_version{0}; // max continuous version after publish is done
+    // max continuous version after publish is done
+    // or 0 which means tablet not found or publish task cannot be submitted
+    int64_t max_continuous_version{0};
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
@@ -85,10 +101,10 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                 }
                 TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
                 if (!tablet) {
-                    task.st = Status::NotFound(
-                            fmt::format("Not found tablet to publish_version. tablet_id: {}, txn_id: {}",
-                                        task.tablet_id, task.txn_id));
-                    LOG(WARNING) << task.st;
+                    // tablet may get dropped, it's ok to ignore this situation
+                    LOG(WARNING) << fmt::format(
+                            "publish_version tablet not found tablet_id: {}, version: {} txn_id: {}", task.tablet_id,
+                            task.version, task.txn_id);
                     return;
                 }
                 {
@@ -107,7 +123,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                               << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                               << " rowset:" << task.rowset->rowset_id();
                 }
-                task.version = tablet->max_continuous_version();
+                task.max_continuous_version = tablet->max_continuous_version();
             });
             if (st.is_service_unavailable()) {
                 int64_t retry_sleep_ms = 50 * retry_time;
@@ -141,10 +157,10 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                 st = task.st;
             }
         }
-        if (task.version > 0) {
+        if (task.max_continuous_version > 0) {
             auto& pair = tablet_versions.emplace_back();
             pair.__set_tablet_id(task.tablet_id);
-            pair.__set_version(task.version);
+            pair.__set_version(task.max_continuous_version);
         }
     }
 

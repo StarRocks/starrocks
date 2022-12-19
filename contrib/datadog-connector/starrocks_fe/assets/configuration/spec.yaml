@@ -1,0 +1,28 @@
+name: StarRocks FE
+files:
+- name: starrocks_fe.yaml
+  options:
+    - template: init_config
+      options:
+        - template: init_config/openmetrics_legacy
+    - template: instances
+      options:
+        - name: fe_metric_url
+          required: true
+          description: The URL where StarRocks BE metrics.
+          value:
+            type: string
+            example: http://localhost:8030/metrics
+        - name: max_returned_metrics
+          required: true
+          description: The maximum number of metrics sent for each scraping.
+          value:
+            type: number
+            example: 10000
+        - template: instances/openmetrics_legacy
+          overrides:
+            prometheus_url.required: false
+            prometheus_url.hidden: true
+            send_distribution_buckets.required: true
+            send_distribution_buckets.value.example: true
+            metrics.hidden: false

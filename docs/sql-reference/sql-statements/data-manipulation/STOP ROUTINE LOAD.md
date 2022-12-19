@@ -1,6 +1,6 @@
 # STOP ROUTINE LOAD
 
-## example
+## Examples
 
 1. Stop the routine import job named test1.
 

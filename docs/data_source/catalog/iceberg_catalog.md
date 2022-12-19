@@ -8,13 +8,13 @@ An Iceberg catalog is an external catalog supported in StarRocks 2.4 and later v
 
 - StarRocks supports querying data files of Iceberg in the following formats: Parquet and ORC
 - StarRocks supports querying compressed data files of Iceberg in the following formats: gzip, Zstd, LZ4, and Snappy.
-- StarRocks supports querying Iceberg data in the following types: BOOLEAN, INTEGER, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, LIST, FIXED(L), and BINARY. Note that an error occurs when you query Iceberg data in unsupported data types. The following data types are not supported: TIMESTAMPTZ, STRUCT, and MAP.
+- StarRocks supports querying Iceberg data in the following types: BOOLEAN, INTEGER, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, LIST, FIXED(L), BINARY, STRUCT, and MAP. The TIMESTAMPTZ type is not supported. An error occurs when you query Iceberg data of the TIMESTAMPTZ type.
 - StarRocks supports querying Versions 1 tables (Analytic Data Tables). Versions 2 tables (Row-level Deletes) are not supported. For the differences between these two types of tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of an Iceberg table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create an Iceberg catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Iceberg cluster. StarRocks supports two data storage systems for Iceberg: HDFS and Amazon S3. StarRocks supports two metadata services for Iceberg: Hive metastore and custom metadata service. The configurations required for an Iceberg catalog are the same as that required for a Hive catalog. Therefore, see [Hive catalog](../catalog/hive_catalog.md) for more information about the configurations.
+Before you create an Iceberg catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Iceberg cluster. StarRocks supports two data storage systems for Iceberg: HDFS and Amazon S3. StarRocks supports three metadata services for Iceberg: Hive metastore, custom metadata service, and AWS Glue. The configurations required for an Iceberg catalog are the same as that required for a Hive catalog. Therefore, see [Hive catalog](../catalog/hive_catalog.md) for more information about the configurations.
 
 ## Create an Iceberg catalog
 
@@ -23,7 +23,7 @@ After you complete the preceding configurations, you can create an Iceberg catal
 ### Syntax
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
+CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
@@ -37,9 +37,7 @@ PROPERTIES ("key"="value", ...);
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Iceberg catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Iceberg cluster. In Iceberg, there is a component called [catalog](https://iceberg.apache.org/docs/latest/configuration/#catalog-properties), which is used to store the mapping of Iceberg tables and paths of storing Iceberg tables. If you use different metadata services, you need to configure different types of catalogs for your Iceberg cluster.
-  - Hive metastore: If you use Hive metastore, configure HiveCatalog for your Iceberg cluster.
-  - Custom metadata service: If you use the custom metadata service, configure a custom catalog for your Iceberg cluster.
+- `PROPERTIES`: the properties of the Iceberg catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Iceberg cluster. In Iceberg, there is a component called [catalog](https://iceberg.apache.org/docs/latest/configuration/#catalog-properties), which is used to store the mapping of Iceberg tables and paths of storing Iceberg tables. If you use different types of metadata services, you may need to configure different catalogs for your Iceberg cluster.
 
 #### Hive metastore
 
@@ -48,7 +46,7 @@ If you use Hive metastore for your Iceberg cluster, configure the following prop
 | **Property**           | **Required** | **Description**                                              |
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | type                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
-| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `HIVE`. |
+| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. If you use Hive metastore, you need to configure HiveCatalog for your Iceberg cluster. Therefore, set the value to `HIVE`. |
 | iceberg.catalog.hive.metastore.uris    | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
 #### Custom metadata service
@@ -60,8 +58,20 @@ After you complete the preceding operations, you can create an Iceberg catalog a
 | **Property**           | **Required** | **Description**                                              |
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | type                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
-| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
+| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. If you use a custom metadata service, you need to configure a custom catalog for your Iceberg cluster. Therefore, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
+
+#### [Preview] AWS Glue
+
+If you use AWS Glue for your Iceberg cluster, configure the following properties for the Iceberg catalog.
+
+| **Property**                           | **Required** | **Description**                                              |
+| -------------------------------------- | ------------ | ------------------------------------------------------------ |
+| type                                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
+| iceberg.catalog.type                   | Yes          | The metadata service used by your Iceberg cluster. Set the value to `glue`. |
+| aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
+| aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
+| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
 ## Caching strategy of Iceberg metadata
 

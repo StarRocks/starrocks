@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -70,7 +82,7 @@ class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
 
 public:
-    ~Analytor() {
+    ~Analytor() override {
         if (_state != nullptr) {
             close(_state);
         }
@@ -115,7 +127,7 @@ public:
     int64_t peer_group_end() const { return _peer_group_end; }
     const std::pair<bool, int64_t>& found_peer_group_end() const { return _found_peer_group_end; }
 
-    const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
+    const std::vector<FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
     const std::vector<std::vector<vectorized::ColumnPtr>>& agg_intput_columns() { return _agg_intput_columns; }
 
@@ -238,7 +250,7 @@ private:
     size_t _agg_states_total_size = 0;
     // The max align size for all window aggregate state
     size_t _max_agg_state_align_size = 1;
-    std::vector<starrocks_udf::FunctionContext*> _agg_fn_ctxs;
+    std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const vectorized::AggregateFunction*> _agg_functions;
     std::vector<ManagedFunctionStatesPtr> _managed_fn_states;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
@@ -281,8 +293,8 @@ private:
 // Helper class that properly invokes destructor when state goes out of scope.
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(std::vector<starrocks_udf::FunctionContext*>* ctxs,
-                          vectorized::AggDataPtr __restrict agg_states, Analytor* agg_node)
+    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, vectorized::AggDataPtr __restrict agg_states,
+                          Analytor* agg_node)
             : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
             _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
@@ -299,7 +311,7 @@ public:
     const uint8_t* data() const { return _agg_states; }
 
 private:
-    std::vector<starrocks_udf::FunctionContext*>* _ctxs;
+    std::vector<FunctionContext*>* _ctxs;
     vectorized::AggDataPtr _agg_states;
     Analytor* _agg_node;
 };

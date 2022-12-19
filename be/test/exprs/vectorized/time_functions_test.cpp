@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/time_functions.h"
 
@@ -14,13 +26,13 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
-#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 
@@ -866,7 +878,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -900,7 +912,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -926,7 +938,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         auto tc2 = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
 
         Columns columns = {tc1, tc2};
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1218,7 +1230,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1233,7 +1245,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1248,7 +1260,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1263,7 +1275,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1278,7 +1290,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1293,7 +1305,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1308,7 +1320,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1325,7 +1337,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1340,7 +1352,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1355,7 +1367,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1370,7 +1382,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1385,7 +1397,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1400,7 +1412,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1415,7 +1427,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1436,7 +1448,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         columns.emplace_back(dt_col);
         columns.emplace_back(fmt_col);
 
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::datetime_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1468,7 +1480,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         Columns columns;
         columns.emplace_back(date_col);
         columns.emplace_back(fmt_col);
-        ctx->impl()->set_constant_columns(columns);
+        ctx->set_constant_columns(columns);
         TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ColumnPtr result = TimeFunctions::date_format(ctx, columns).value();
         TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1588,7 +1600,7 @@ TEST_F(TimeFunctionsTest, convertTzGeneralTest) {
     columns.emplace_back(tc_from);
     columns.emplace_back(tc_to);
 
-    _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+    _utils->get_fn_ctx()->set_constant_columns(columns);
 
     ASSERT_TRUE(
             TimeFunctions::convert_tz_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1626,10 +1638,10 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
     columns.emplace_back(tc_from);
     columns.emplace_back(tc_to);
 
-    _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
-    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_DATETIME});
-    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_VARCHAR});
-    _utils->get_fn_ctx()->impl()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_VARCHAR});
+    _utils->get_fn_ctx()->set_constant_columns(columns);
+    _utils->get_fn_ctx()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_DATETIME});
+    _utils->get_fn_ctx()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_VARCHAR});
+    _utils->get_fn_ctx()->_arg_types.emplace_back(FunctionContext::TypeDesc{TYPE_VARCHAR});
 
     ASSERT_TRUE(
             TimeFunctions::convert_tz_prepare(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1784,7 +1796,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1817,7 +1829,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1850,7 +1862,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1883,7 +1895,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1916,7 +1928,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1949,7 +1961,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1982,7 +1994,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2015,7 +2027,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::datetime_trunc_prepare(_utils->get_fn_ctx(),
                                                           FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2058,7 +2070,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2090,7 +2102,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2122,7 +2134,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2154,7 +2166,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2186,7 +2198,7 @@ TEST_F(TimeFunctionsTest, dateTruncTest) {
         columns.emplace_back(format);
         columns.emplace_back(tc);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        _utils->get_fn_ctx()->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::date_trunc_prepare(_utils->get_fn_ctx(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2398,7 +2410,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2443,7 +2455,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2488,7 +2500,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2533,7 +2545,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2578,7 +2590,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2623,7 +2635,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2668,7 +2680,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2713,7 +2725,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2774,7 +2786,7 @@ TEST_F(TimeFunctionsTest, timeSliceCeilTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2797,6 +2809,53 @@ TEST_F(TimeFunctionsTest, timeSliceCeilTest) {
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
+    }
+}
+
+TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(0000, 1, 1, 0, 0, 0));
+
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME));
+    std::unique_ptr<FunctionContext> time_slice_context(
+            FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    //second
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("second");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
+
+        time_slice_context->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        StatusOr<ColumnPtr> result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(result.status().is_invalid_argument());
+        ASSERT_EQ(result.status().get_error_msg(), "time used with time_slice can't before 0001-01-01 00:00:00");
+
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
     }
 }
 
@@ -2835,7 +2894,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2879,7 +2938,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2923,7 +2982,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2967,7 +3026,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -3011,7 +3070,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -3071,7 +3130,7 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
         columns.emplace_back(unit_column);
         columns.emplace_back(boundary_column);
 
-        time_slice_context->impl()->set_constant_columns(columns);
+        time_slice_context->set_constant_columns(columns);
 
         ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)

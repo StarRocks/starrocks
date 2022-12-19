@@ -1,16 +1,16 @@
 # array_contains
 
-## description
+## Description
 
-### Syntax
+Checks whether the array contains a certain element. If yes, it returns 1; otherwise, it returns 0.
+
+## Syntax
 
 ```Haskell
 array_contains(any_array, any_element)
 ```
 
-Check whether the array contains a certain element. If yes, it returns 1; otherwise, it returns 0.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_contains(["apple","orange","pear"], "orange");

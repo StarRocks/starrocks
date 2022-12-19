@@ -1,16 +1,16 @@
 # money_format
 
-## description
+## Description
 
-### Syntax
+This function returns a string formatted as a currency string. The integer part is separated by comma every three bits and the decimal part is reserved for two bits.
+
+## Syntax
 
 ```Haskell
 VARCHAR money_format(Number)
 ```
 
-This function returns a string formatted as a currency string. The integer part is separated by comma every three bits and the decimal part is reserved for two bits.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select money_format(17014116);

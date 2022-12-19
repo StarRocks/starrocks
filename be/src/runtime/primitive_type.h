@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -56,7 +68,7 @@ inline bool is_type_compatible(LogicalType lhs, LogicalType rhs) {
     return lhs == rhs;
 }
 
-inline bool is_scalar_primitive_type(LogicalType ptype) {
+constexpr bool is_scalar_primitive_type(LogicalType ptype) {
     switch (ptype) {
     case TYPE_BOOLEAN:  /* 2 */
     case TYPE_TINYINT:  /* 3 */
@@ -105,6 +117,7 @@ VALUE_GUARD(LogicalType, StringPTGuard, pt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(LogicalType, BinaryPTGuard, pt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
 VALUE_GUARD(LogicalType, JsonGuard, pt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
+VALUE_GUARD(LogicalType, ObjectFamilyPTGuard, pt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
 
 VALUE_GUARD(LogicalType, DatePTGuard, pt_is_date, TYPE_DATE)
 VALUE_GUARD(LogicalType, DateTimePTGuard, pt_is_datetime, TYPE_DATETIME)
@@ -137,10 +150,8 @@ UNION_VALUE_GUARD(LogicalType, AggregatePTGuard, pt_is_aggregate, pt_is_arithmet
 TExprOpcode::type to_in_opcode(LogicalType t);
 LogicalType thrift_to_type(TPrimitiveType::type ttype);
 TPrimitiveType::type to_thrift(LogicalType ptype);
-TColumnType to_tcolumn_type_thrift(TPrimitiveType::type ttype);
 std::string type_to_string(LogicalType t);
 std::string type_to_string_v2(LogicalType t);
-std::string type_to_odbc_string(LogicalType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
 TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type);

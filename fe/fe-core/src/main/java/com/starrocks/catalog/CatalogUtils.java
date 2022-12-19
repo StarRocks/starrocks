@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
@@ -130,5 +143,22 @@ public class CatalogUtils {
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
+    }
+
+    public static int calBucketNumAccordingToBackends() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        // When POC, the backends is not greater than three most of the time.
+        // The bucketNum will be given a small multiplier factor for small backends.
+        int bucketNum = 0;
+        if (backendNum <= 3) {
+            bucketNum = 2 * backendNum;
+        } else if (backendNum <= 6) {
+            bucketNum = backendNum;
+        } else if (backendNum <= 12) {
+            bucketNum = 12;
+        } else {
+            bucketNum = Math.min(backendNum, 48);
+        }
+        return bucketNum;
     }
 }

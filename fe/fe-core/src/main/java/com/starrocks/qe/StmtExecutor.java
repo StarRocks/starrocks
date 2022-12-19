@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/StmtExecutor.java
 
@@ -81,13 +94,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
@@ -132,6 +145,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -239,6 +253,9 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+            sb.append(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP).append("=")
+                    .append(variables.getEnableAdaptiveSinkDop())
+                    .append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");
@@ -351,7 +368,7 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
+            try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     context.getDumpInfo().reset();
@@ -854,8 +871,14 @@ public class StmtExecutor {
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        // from current session, may execute analyze stmt
+        statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                context.getSessionVariable().getStatisticCollectParallelism());
+
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                             analyzeStmt.getProperties()),
@@ -863,7 +886,7 @@ public class StmtExecutor {
                     //Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         } else {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
@@ -882,7 +905,8 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropBasicStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
     }
 
@@ -893,10 +917,10 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
-
 
 
     private void handleKillAnalyzeStmt() {
@@ -1074,7 +1098,7 @@ public class StmtExecutor {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context, queryType);
+                TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
                 String resourceGroupStr =
                         resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
                 explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
@@ -1108,16 +1132,20 @@ public class StmtExecutor {
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+                String sql = AstToStringBuilder.toString(parsedStmt);
+                if (sql == null) {
+                    sql = originStmt.originStmt;
+                }
+                LOG.warn("DDL statement (" + sql + ") process failed.", e);
             }
             context.setState(e.getQueryState());
-        } catch (UserException e) {
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
-            // Return message to info client what happened.
-            context.getState().setError(e.getMessage());
         } catch (Throwable e) {
-            // Maybe our bug
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+            // Maybe our bug or wrong input parematers
+            String sql = AstToStringBuilder.toString(parsedStmt);
+            if (sql == null || sql.isEmpty()) {
+                sql = originStmt.originStmt;
+            }
+            LOG.warn("DDL statement (" + sql + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());
         }
     }
@@ -1145,16 +1173,6 @@ public class StmtExecutor {
             statisticsForAuditLog.memCostBytes = 0L;
         }
         return statisticsForAuditLog;
-    }
-
-    /**
-     * Below function is added by new analyzer
-     */
-    private boolean isStatisticsOrAnalyzer(StatementBase statement, ConnectContext context) {
-        return (statement instanceof InsertStmt &&
-                context.getDatabase().equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME))
-                || statement instanceof AnalyzeStmt
-                || statement instanceof CreateAnalyzeJobStmt;
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
@@ -1509,8 +1527,8 @@ public class StmtExecutor {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
             LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             errMsg = "Publish timeout " + timeoutInfo;
         }

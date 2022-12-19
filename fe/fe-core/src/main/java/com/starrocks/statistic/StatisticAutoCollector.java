@@ -1,11 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.statistic;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
@@ -14,6 +30,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.List;
 
@@ -34,6 +52,10 @@ public class StatisticAutoCollector extends LeaderDaemon {
         }
 
         if (!Config.enable_statistic_collect || FeConstants.runningUnitTest) {
+            return;
+        }
+
+        if (!checkoutAnalyzeTime(LocalTime.now(TimeUtils.getTimeZone().toZoneId()))) {
             return;
         }
 
@@ -58,13 +80,17 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
-                STATISTIC_EXECUTOR.collectStatistics(statsJob, analyzeStatus, true);
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
             }
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
             allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
-                analyzeJob.run(STATISTIC_EXECUTOR);
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
             }
         }
     }
@@ -80,5 +106,26 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(),
                 ScheduleStatus.PENDING, LocalDateTime.MIN);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
+    }
+
+    private boolean checkoutAnalyzeTime(LocalTime now) {
+        try {
+            LocalTime start = LocalTime.parse(Config.statistic_auto_analyze_start_time, DateUtils.TIME_FORMATTER);
+            LocalTime end = LocalTime.parse(Config.statistic_auto_analyze_end_time, DateUtils.TIME_FORMATTER);
+
+            if (start.isAfter(end) && (now.isAfter(start) || now.isBefore(end))) {
+                return true;
+            } else if (now.isAfter(start) && now.isBefore(end)) {
+                return true;
+            } else {
+                return false;
+            }
+        } catch (DateTimeParseException e) {
+            LOG.warn("Parse analyze start/end time format fail : " + e.getMessage());
+
+            // If the time format configuration is incorrect,
+            // processing can be run at any time without affecting the normal process
+            return true;
+        }
     }
 }

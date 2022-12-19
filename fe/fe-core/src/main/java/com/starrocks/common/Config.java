@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/Config.java
 
@@ -197,7 +210,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static String big_query_log_delete_age = "7d";
 
-
     /**
      * plugin_dir:
      * plugin install directory
@@ -231,7 +243,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
-
 
     /**
      * For Task framework do some background operation like cleanup Task/TaskRun.
@@ -473,6 +484,12 @@ public class Config extends ConfigBase {
     public static String metadata_failure_recovery = "false";
 
     /**
+     * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
+     */
+    @ConfField
+    public static boolean start_with_incomplete_meta = false;
+
+    /**
      * If true, non-leader FE will ignore the meta data delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
      * Non-leader FE will still offer read service.
@@ -543,7 +560,7 @@ public class Config extends ConfigBase {
      * some hang up problems in java.net.SocketInputStream.socketRead0
      */
     @ConfField
-    public static int thrift_client_timeout_ms = 0;
+    public static int thrift_client_timeout_ms = 5000;
 
     /**
      * The backlog_num for thrift server
@@ -668,6 +685,13 @@ public class Config extends ConfigBase {
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
+     * If there is no thread to handle new request, the request will be pend to a queue,
+     * the pending queue size is thrift_server_queue_size
+     */
+    @ConfField
+    public static int thrift_server_queue_size = 4096;
+
+    /**
      * Maximal wait seconds for straggler node in load
      * eg.
      * there are 3 replicas A, B, C
@@ -734,7 +758,7 @@ public class Config extends ConfigBase {
     /**
      * Max stream load load batch size
      */
-    @ConfField(mutable = true) 
+    @ConfField(mutable = true)
     public static int max_stream_load_batch_size_mb = 100;
 
     /**
@@ -861,13 +885,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_strict_storage_medium_check = false;
-
-    /**
-     * When create a table(or partition), you can specify its storage medium(HDD or SSD).
-     * If not set, this specifies the default medium when creat.
-     */
-    @ConfField
-    public static String default_storage_medium = "HDD";
 
     /**
      * After dropping database(table/partition), you can recover it by using RECOVER stmt.
@@ -1077,7 +1094,7 @@ public class Config extends ConfigBase {
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
     @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
-    public static int tablet_sched_slot_num_per_path = 2;
+    public static int tablet_sched_slot_num_per_path = 4;
 
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
@@ -1103,9 +1120,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
 
-    @ConfField(aliases = {"tablet_balancer_strategy"})
-    public static String tablet_sched_balancer_strategy = "disk_and_tablet";
-
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
     @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
@@ -1119,7 +1133,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
-
 
     /**
      * FOR BeLoadBalancer:
@@ -1393,6 +1406,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect = true;
+
+    /**
+     * The start time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_start_time = "00:00:00";
+
+    /**
+     * The end time of day when auto-updates are enabled
+     */
+    @ConfField(mutable = true)
+    public static String statistic_auto_analyze_end_time = "23:59:59";
 
     /**
      * a period of create statistics table automatically by the StatisticsMetaManager
@@ -1754,12 +1779,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
-    /**
-     * default bucket number when create OLAP table without buckets info
-     */
-    @ConfField(mutable = true)
-    public static int default_bucket_num = 10;
-
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
 
@@ -1851,7 +1870,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = false;
+    public static boolean enable_new_publish_mechanism = true;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
@@ -1870,6 +1889,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int profile_info_reserved_num = 500;
+
+    /**
+     * format of profile infos reserved by `ProfileManager` for recently executed query.
+     * Default value: "default"
+     */
+    @ConfField(mutable = true)
+    public static String profile_info_format = "default";
 
     /**
      * Max number of roles that can be granted to user including all direct roles and all parent roles

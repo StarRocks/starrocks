@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exprs/expr_context.cpp
 
@@ -33,12 +46,11 @@
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "udf/udf_internal.h"
 
 namespace starrocks {
 
 ExprContext::ExprContext(Expr* root)
-        : _fn_contexts_ptr(nullptr), _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
+        : _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
 
 ExprContext::~ExprContext() {
     // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
@@ -90,10 +102,6 @@ void ExprContext::close(RuntimeState* state) {
     FunctionContext::FunctionStateScope scope =
             _is_clone ? FunctionContext::THREAD_LOCAL : FunctionContext::FRAGMENT_LOCAL;
     _root->close(state, this, scope);
-
-    for (auto& _fn_context : _fn_contexts) {
-        _fn_context->impl()->close();
-    }
     // _pool can be nullptr if Prepare() was never called
     if (_pool != nullptr) {
         _pool->free_all();
@@ -101,12 +109,9 @@ void ExprContext::close(RuntimeState* state) {
     _pool.reset();
 }
 
-int ExprContext::register_func(RuntimeState* state, const starrocks_udf::FunctionContext::TypeDesc& return_type,
-                               const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types,
-                               int varargs_buffer_size) {
-    _fn_contexts.push_back(FunctionContextImpl::create_context(state, _pool.get(), return_type, arg_types,
-                                                               varargs_buffer_size, false));
-    _fn_contexts_ptr = &_fn_contexts[0];
+int ExprContext::register_func(RuntimeState* state, const FunctionContext::TypeDesc& return_type,
+                               const std::vector<FunctionContext::TypeDesc>& arg_types) {
+    _fn_contexts.push_back(FunctionContext::create_context(state, _pool.get(), return_type, arg_types));
     return _fn_contexts.size() - 1;
 }
 
@@ -118,47 +123,14 @@ Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** n
     *new_ctx = pool->add(new ExprContext(_root));
     (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
-        (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
+        (*new_ctx)->_fn_contexts.push_back(_fn_context->clone((*new_ctx)->_pool.get()));
     }
-    (*new_ctx)->_fn_contexts_ptr = &((*new_ctx)->_fn_contexts[0]);
 
     (*new_ctx)->_is_clone = true;
     (*new_ctx)->_prepared = true;
     (*new_ctx)->_opened = true;
 
     return _root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
-}
-
-Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx, Expr* root) {
-    DCHECK(_prepared);
-    DCHECK(_opened);
-    DCHECK(*new_ctx == nullptr);
-
-    *new_ctx = pool->add(new ExprContext(root));
-    (*new_ctx)->_pool = std::make_unique<MemPool>();
-    for (auto& _fn_context : _fn_contexts) {
-        (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
-    }
-    (*new_ctx)->_fn_contexts_ptr = &((*new_ctx)->_fn_contexts[0]);
-
-    (*new_ctx)->_is_clone = true;
-    (*new_ctx)->_prepared = true;
-    (*new_ctx)->_opened = true;
-
-    return root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
-}
-
-Status ExprContext::get_error(int start_idx, int end_idx) const {
-    DCHECK(_opened);
-    end_idx = end_idx == -1 ? _fn_contexts.size() : end_idx;
-    DCHECK_GE(start_idx, 0);
-    DCHECK_LE(end_idx, _fn_contexts.size());
-    for (int idx = start_idx; idx < end_idx; ++idx) {
-        DCHECK_LT(idx, _fn_contexts.size());
-        FunctionContext* fn_ctx = _fn_contexts[idx];
-        if (fn_ctx->has_error()) return Status::InternalError(fn_ctx->error_msg());
-    }
-    return Status::OK();
 }
 
 Status ExprContext::get_udf_error() {

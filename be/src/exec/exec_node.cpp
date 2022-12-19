@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exec/exec_node.cpp
 
@@ -27,6 +40,7 @@
 #include <sstream>
 
 #include "column/column_helper.h"
+#include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/empty_set_node.h"
@@ -366,7 +380,10 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     ExecNode* node = nullptr;
     RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
-    // assert(parent != NULL || (node_idx == 0 && root_expr != NULL));
+    DCHECK((parent != nullptr) || (root != nullptr));
+    if (UNLIKELY(parent == nullptr && root == nullptr)) {
+        return Status::InternalError("parent and root shouldn't both be null");
+    }
     if (parent != nullptr) {
         parent->_children.push_back(node);
     } else {

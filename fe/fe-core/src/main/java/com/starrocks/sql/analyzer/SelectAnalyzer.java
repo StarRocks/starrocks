@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
@@ -156,8 +169,7 @@ public class SelectAnalyzer {
             }
 
             List<Expr> orderSourceExpressions = Streams.concat(
-                    aggregationsInOrderBy.stream(),
-                    groupByExpressions.stream()).collect(Collectors.toList());
+                    aggregationsInOrderBy.stream(), groupByExpressions.stream()).collect(Collectors.toList());
 
             List<Field> sourceForOrderFields = orderSourceExpressions.stream()
                     .map(expression ->
@@ -186,6 +198,7 @@ public class SelectAnalyzer {
                                      AnalyzeState analyzeState, Scope scope) {
         ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
         ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+        List<Integer> outputExprInOrderByScope = new ArrayList<>();
 
         for (SelectListItem item : selectList.getItems()) {
             if (item.isStar()) {
@@ -225,18 +238,49 @@ public class SelectAnalyzer {
                 outputFields.addAll(fields);
 
             } else {
+                String name;
+                if (item.getExpr() instanceof SlotRef) {
+                    name = item.getAlias() == null ? ((SlotRef) item.getExpr()).getColumnName() : item.getAlias();
+                } else {
+                    name = item.getAlias() == null ? AstToStringBuilder.toString(item.getExpr()) : item.getAlias();
+                }
+
+
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
-
-                // We need get column name after analyzerExpression, because StructType's col name maybe a wrong value.
-                // The name here only refer to column name.
-                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
 
                 if (item.getExpr() instanceof SlotRef) {
                     outputFields.add(new Field(name, item.getExpr().getType(),
                             ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr()));
                 } else {
                     outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr()));
+                }
+
+                // outputExprInOrderByScope is used to record which expressions in outputExpression are to be
+                // recorded in the first level of OrderByScope (order by expressions can refer to columns in output)
+                // Which columns satisfy the condition?
+                // 1. An expression of type SlotRef.
+                //    When both tables t0 and t1 contain the v1 column, select t0.v1 from t0, t1 order by v1 will
+                //    refer to v1 in outputExpr instead of reporting an error.
+                // 2. There is an aliased output expression
+
+                // Why can't use all output expression?
+                // Because output expression and outputScope do not correspond one-to-one,
+                // you can refer to computeAndAssignOrderScope.
+                // Therefore, the first level Scope in orderByScope must be able to be resolved according to
+                // Expr in the projectForOrder function. If all Expr in outputExpression are used,
+                // FieldReference will fail to resolve.
+                // For example, "select *, v1 from t0 order by v2". star will be parsed into multiple FieldReferences.
+                // FieldReference cannot directly resolve the corresponding position in Scope according to resolve
+                // in Scope. Because Field records the location of sourceScope, and in projectForOrder,
+                // it needs to be resolved in orderScope.
+                // Summary: The output expression that can be resolved with a resolve name is meaningful
+                // for the analysis of the order by position, because this is an external legal Scope.
+                // And because in Transform, it is also necessary to parse the name according to the Scope
+                // to correspond to the corresponding ColumnRefOperator, so only the parsed Expr can find
+                // the corresponding fieldMappings in the Scope position according to the analysis.
+                if (item.getAlias() != null || item.getExpr() instanceof SlotRef) {
+                    outputExprInOrderByScope.add(outputFields.build().size() - 1);
                 }
             }
 
@@ -261,6 +305,7 @@ public class SelectAnalyzer {
 
         List<Expr> outputExpressions = outputExpressionBuilder.build();
         analyzeState.setOutputExpression(outputExpressions);
+        analyzeState.setOutputExprInOrderByScope(outputExprInOrderByScope);
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
         return outputExpressions;
     }
@@ -286,7 +331,14 @@ public class SelectAnalyzer {
                 expression = outputExpressions.get((int) ordinal - 1);
             }
 
-            analyzeExpression(expression, analyzeState, orderByScope);
+            if (expression instanceof FieldReference) {
+                // If the expression of order by is a FieldReference, it means that the type of sql is
+                // "select * from t order by 1", then this FieldReference cannot be parsed in OrderByScope,
+                // but should be parsed in sourceScope
+                analyzeExpression(expression, analyzeState, orderByScope.getParent());
+            } else {
+                analyzeExpression(expression, analyzeState, orderByScope);
+            }
 
             if (!expression.getType().canOrderBy()) {
                 throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
@@ -596,20 +648,22 @@ public class SelectAnalyzer {
         // The Scope used by order by allows parsing of the same column,
         // such as 'select v1 as v, v1 as v from t0 order by v'
         // but normal parsing does not allow it. So add a de-duplication operation here.
+
         List<Field> allFields = new ArrayList<>();
-        for (Field field : outputScope.getRelationFields().getAllFields()) {
+        for (int i = 0; i < analyzeState.getOutputExprInOrderByScope().size(); ++i) {
+            Field field = outputScope.getRelationFields()
+                    .getFieldByIndex(analyzeState.getOutputExprInOrderByScope().get(i));
             if (field.getName() != null && field.getOriginExpression() != null &&
-                    allFields.stream().anyMatch(f ->
-                            f.getOriginExpression() != null &&
-                                    f.getName() != null &&
-                                    field.getName().equals(f.getName()) &&
-                                    field.getOriginExpression().equals(f.getOriginExpression()))) {
+                    allFields.stream().anyMatch(f -> f.getOriginExpression() != null
+                            && f.getName() != null && field.getName().equals(f.getName())
+                            && field.getOriginExpression().equals(f.getOriginExpression()))) {
                 continue;
             }
             allFields.add(field);
         }
 
         Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
+
         /*
          * ORDER BY or HAVING should "see" both output and FROM fields
          * Because output scope and source scope may contain the same columns,

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/proc/EsPartitionsProcDir.java
 
@@ -67,10 +80,6 @@ public class EsPartitionsProcDir implements ProcDirInterface {
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         db.readLock();
         try {
-            RangePartitionInfo rangePartitionInfo = null;
-            if (esTable.getPartitionInfo().getType() == PartitionType.RANGE) {
-                rangePartitionInfo = (RangePartitionInfo) esTable.getEsTablePartitions().getPartitionInfo();
-            }
             Joiner joiner = Joiner.on(", ");
             Map<String, EsShardPartitions> unPartitionedIndices =
                     esTable.getEsTablePartitions().getUnPartitionedIndexStates();
@@ -86,20 +95,27 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 partitionInfo.add(1);  //  replica num
                 partitionInfos.add(partitionInfo);
             }
-            for (EsShardPartitions esShardPartitions : partitionedIndices.values()) {
-                List<Comparable> partitionInfo = new ArrayList<Comparable>();
-                partitionInfo.add(esShardPartitions.getIndexName());
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                List<String> colNames = new ArrayList<String>();
-                for (Column column : partitionColumns) {
-                    colNames.add(column.getName());
+
+            RangePartitionInfo rangePartitionInfo = null;
+            if (esTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+                rangePartitionInfo = (RangePartitionInfo) esTable.getEsTablePartitions().getPartitionInfo();
+            }
+            if (rangePartitionInfo != null) {
+                for (EsShardPartitions esShardPartitions : partitionedIndices.values()) {
+                    List<Comparable> partitionInfo = new ArrayList<Comparable>();
+                    partitionInfo.add(esShardPartitions.getIndexName());
+                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                    List<String> colNames = new ArrayList<String>();
+                    for (Column column : partitionColumns) {
+                        colNames.add(column.getName());
+                    }
+                    partitionInfo.add(joiner.join(colNames));  // partition key
+                    partitionInfo.add(rangePartitionInfo.getRange(esShardPartitions.getPartitionId()).toString()); // range
+                    partitionInfo.add("-");  // dis
+                    partitionInfo.add(esShardPartitions.getShardRoutings().size());  // shards
+                    partitionInfo.add(1);  //  replica num
+                    partitionInfos.add(partitionInfo);
                 }
-                partitionInfo.add(joiner.join(colNames));  // partition key
-                partitionInfo.add(rangePartitionInfo.getRange(esShardPartitions.getPartitionId()).toString()); // range
-                partitionInfo.add("-");  // dis
-                partitionInfo.add(esShardPartitions.getShardRoutings().size());  // shards
-                partitionInfo.add(1);  //  replica num
-                partitionInfos.add(partitionInfo);
             }
         } finally {
             db.readUnlock();

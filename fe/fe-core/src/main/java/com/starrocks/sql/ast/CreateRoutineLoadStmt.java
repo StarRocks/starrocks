@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.ast;
 
@@ -160,7 +173,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private boolean partialUpdate = false;
-    private String conditionalColumn;
+    private String mergeConditionStr;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -276,8 +289,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return partialUpdate;
     }
 
-    public String getConditionalColumn() {
-        return conditionalColumn;
+    public String getMergeConditionStr() {
+        return mergeConditionStr;
     }
 
     public String getFormat() {
@@ -338,6 +351,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public List<ParseNode> getLoadPropertyList() {
         return loadPropertyList;
+    }
+
+    public final Map<String, String> getJobProperties() {
+        return jobProperties;
+    }
+
+    public final Map<String, String> getDataSourceProperties() {
+        return dataSourceProperties;
     }
 
     public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
@@ -442,7 +463,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 false,
                 LoadStmt.PARTIAL_UPDATE + " should be a boolean");
 
-        conditionalColumn = jobProperties.get(LoadStmt.MERGE_CONDITION);
+        mergeConditionStr = jobProperties.get(LoadStmt.MERGE_CONDITION);
 
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
@@ -795,5 +816,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean needAuditEncryption() {
+        return true;
     }
 }

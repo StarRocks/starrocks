@@ -1,8 +1,8 @@
 # DATE
 
-## description
+## Description
 
-### Syntax
+## Syntax
 
 DATE function
 
@@ -14,7 +14,7 @@ Date type
 
 Date type, the current range of values is ['0000-01-01','9999-12-31'], and the default print form is 'YYYYY-MM-DD'.
 
-## example
+## Examples
 
 ```sql
 mysql> SELECT DATE('2003-12-31 01:02:03');

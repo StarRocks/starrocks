@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/bitmap_functions.h"
 
@@ -8,12 +20,12 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "exprs/base64.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "udf/udf.h"
 #include "util/phmap/phmap.h"
 #include "util/string_parser.hpp"
 
@@ -546,4 +558,34 @@ StatusOr<ColumnPtr> BitmapFunctions::sub_bitmap(FunctionContext* context,
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context,
+                                                      const starrocks::vectorized::Columns& columns) {
+    ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> builder(size);
+
+    for (int row = 0; row < size; ++row) {
+        BitmapValue* bitmap = viewer.value(row);
+        int byteSize = bitmap->getSizeInBytes();
+        std::unique_ptr<char[]> buf;
+        buf.reset(new char[byteSize]);
+
+        int len = (size_t)(4.0 * ceil((double)byteSize / 3.0)) + 1;
+        std::unique_ptr<char[]> p;
+        p.reset(new char[len]);
+        memset(p.get(), 0, len);
+
+        bitmap->write((char*)buf.get());
+
+        int resLen = base64_encode2((unsigned char*)buf.get(), byteSize, (unsigned char*)p.get());
+
+        if (resLen < 0) {
+            builder.append_null();
+            continue;
+        }
+        builder.append(Slice(p.get(), resLen));
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
 } // namespace starrocks::vectorized

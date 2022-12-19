@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.ast;
 
@@ -8,7 +21,6 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -22,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TTabletInternalParallelMode;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 
 // change one variable.
@@ -170,12 +183,22 @@ public class SetVar implements ParseNode {
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
-            String wgName = getResolvedExpression().getStringValue();
-            if (!StringUtils.isEmpty(wgName)) {
-                ResourceGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(wgName);
+            String rgName = getResolvedExpression().getStringValue();
+            if (!StringUtils.isEmpty(rgName)) {
+                TWorkGroup wg =
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
                 if (wg == null) {
-                    throw new SemanticException("resource group not exists: " + wgName);
+                    throw new SemanticException("resource group not exists: " + rgName);
+                }
+            }
+        } else if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP_ID) ||
+                getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP_ID_V2)) {
+            long rgID = getResolvedExpression().getLongValue();
+            if (rgID > 0) {
+                TWorkGroup wg =
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(rgID);
+                if (wg == null) {
+                    throw new SemanticException("resource group not exists: " + rgID);
                 }
             }
         }

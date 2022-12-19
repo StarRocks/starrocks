@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/planner/ExchangeNode.java
 
@@ -36,6 +49,9 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalExchangeNode;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSortInfo;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -282,4 +298,22 @@ public class ExchangeNode extends PlanNode {
         return false;
     }
 
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalExchangeNode exchangeNode = new TNormalExchangeNode();
+        exchangeNode.setInput_row_tuples(normalizer.remapTupleIds(tupleIds));
+        if (mergeInfo != null) {
+            TNormalSortInfo sortInfo = new TNormalSortInfo();
+            sortInfo.setOrdering_exprs(normalizer.normalizeOrderedExprs(mergeInfo.getOrderingExprs()));
+            sortInfo.setIs_asc_order(mergeInfo.getIsAscOrder());
+            sortInfo.setNulls_first(mergeInfo.getNullsFirst());
+            exchangeNode.setSort_info(sortInfo);
+        }
+        exchangeNode.setOffset(offset);
+        exchangeNode.setPartition_type(partitionType);
+        planNode.setExchange_node(exchangeNode);
+        planNode.setNode_type(TPlanNodeType.EXCHANGE_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+        super.toNormalForm(planNode, normalizer);
+    }
 }

@@ -1,13 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.UserException;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.ExportSink;
-import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
@@ -23,6 +35,7 @@ import org.awaitility.Awaitility;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -39,9 +52,14 @@ public class QueryQueueManagerTest {
     private int taskQueuePendingTimeoutSecond;
     private int taskQueueMaxQueuedQueries;
 
+    @BeforeClass
+    public static void beforeClass() {
+        MetricRepo.init();
+    }
+
     @Before
     public void before() {
-        taskQueueEnable = GlobalVariable.isQueryQueueSelectEnable();
+        taskQueueEnable = GlobalVariable.isEnableQueryQueueSelect();
         taskQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
         taskQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
         taskQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
@@ -51,7 +69,7 @@ public class QueryQueueManagerTest {
     @After
     public void after() {
         // Reset query queue configs.
-        GlobalVariable.setQueryQueueSelectEnable(taskQueueEnable);
+        GlobalVariable.setEnableQueryQueueSelect(taskQueueEnable);
         GlobalVariable.setQueryQueueConcurrencyLimit(taskQueueConcurrencyHardLimit);
         GlobalVariable.setQueryQueueMemUsedPctLimit(taskQueueMemUsedPctHardLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(taskQueuePendingTimeoutSecond);
@@ -126,7 +144,7 @@ public class QueryQueueManagerTest {
         // Case 1: Coordinator needn't check queue.
         mockCoordinatorNotNeedCheckQueue();
         mockCoordinatorEnableCheckQueue();
-        GlobalVariable.setQueryQueueSelectEnable(true);
+        GlobalVariable.setEnableQueryQueueSelect(true);
         manager.maybeWait(connectCtx, coordinator);
         Assert.assertEquals(-1, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
         Assert.assertEquals(0, manager.numPendingQueries());
@@ -134,7 +152,7 @@ public class QueryQueueManagerTest {
         // Case 2: Coordinator doesn't enable to check queue.
         mockCoordinatorNeedCheckQueue();
         mockCoordinatorNotEnableCheckQueue();
-        GlobalVariable.setQueryQueueSelectEnable(true);
+        GlobalVariable.setEnableQueryQueueSelect(true);
         manager.maybeWait(connectCtx, coordinator);
         Assert.assertEquals(-1, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
         Assert.assertEquals(0, manager.numPendingQueries());
@@ -160,7 +178,7 @@ public class QueryQueueManagerTest {
         mockNotCanRunMore();
 
         // Case 1: Pending timeout.
-        GlobalVariable.setQueryQueueSelectEnable(true);
+        GlobalVariable.setEnableQueryQueueSelect(true);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(1);
         Thread thread = new Thread(() -> {
             Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> {
@@ -288,8 +306,6 @@ public class QueryQueueManagerTest {
 
     @Test
     public void testEnableCheckQueue(@Mocked PlanFragment fragment,
-                                     @Mocked OlapTableSink olapTableSink,
-                                     @Mocked MysqlTableSink mysqlTableSink,
                                      @Mocked ExportSink exportSink) {
         QueryQueueManager manager = QueryQueueManager.getInstance();
 
@@ -300,7 +316,10 @@ public class QueryQueueManagerTest {
                 result = true;
             }
         };
+        GlobalVariable.setEnableQueryQueueLoad(false);
         Assert.assertFalse(manager.enableCheckQueue(coordinator));
+        GlobalVariable.setEnableQueryQueueLoad(true);
+        Assert.assertTrue(manager.enableCheckQueue(coordinator));
         new Expectations(coordinator) {
             {
                 coordinator.isLoadType();
@@ -308,36 +327,13 @@ public class QueryQueueManagerTest {
             }
         };
 
-        // 2. Insert to MySQL table.
+        // 2. Query for select.
         new Expectations(coordinator, fragment) {
             {
                 coordinator.getFragments();
                 result = ImmutableList.of(fragment);
             }
-
-            {
-                fragment.getSink();
-                result = mysqlTableSink;
-            }
         };
-        GlobalVariable.setQueryQueueInsertEnable(false);
-        Assert.assertFalse(manager.enableCheckQueue(coordinator));
-        GlobalVariable.setQueryQueueInsertEnable(true);
-        Assert.assertTrue(manager.enableCheckQueue(coordinator));
-
-        // 3. Insert to OLAP table.
-        new Expectations(coordinator, fragment) {
-            {
-                fragment.getSink();
-                result = olapTableSink;
-            }
-        };
-        GlobalVariable.setQueryQueueInsertEnable(false);
-        Assert.assertFalse(manager.enableCheckQueue(coordinator));
-        GlobalVariable.setQueryQueueInsertEnable(true);
-        Assert.assertTrue(manager.enableCheckQueue(coordinator));
-
-        // 4. Query for select.
         PlanNodeId nodeId = new PlanNodeId(0);
         ResultSink queryResultSink = new ResultSink(nodeId, TResultSinkType.MYSQL_PROTOCAL);
         new Expectations(coordinator, fragment) {
@@ -346,12 +342,12 @@ public class QueryQueueManagerTest {
                 result = queryResultSink;
             }
         };
-        GlobalVariable.setQueryQueueSelectEnable(false);
+        GlobalVariable.setEnableQueryQueueSelect(false);
         Assert.assertFalse(manager.enableCheckQueue(coordinator));
-        GlobalVariable.setQueryQueueSelectEnable(true);
+        GlobalVariable.setEnableQueryQueueSelect(true);
         Assert.assertTrue(manager.enableCheckQueue(coordinator));
 
-        // 5. Query for statistic.
+        // 3. Query for statistic.
         ResultSink statisticResultSink = new ResultSink(nodeId, TResultSinkType.STATISTIC);
         new Expectations(coordinator, fragment) {
             {
@@ -359,12 +355,12 @@ public class QueryQueueManagerTest {
                 result = statisticResultSink;
             }
         };
-        GlobalVariable.setQueryQueueStatisticEnable(false);
+        GlobalVariable.setEnableQueryQueueStatistic(false);
         Assert.assertFalse(manager.enableCheckQueue(coordinator));
-        GlobalVariable.setQueryQueueStatisticEnable(true);
+        GlobalVariable.setEnableQueryQueueStatistic(true);
         Assert.assertTrue(manager.enableCheckQueue(coordinator));
 
-        // 6. Query for outfile.
+        // 4. Query for outfile.
         ResultSink fileResultSink = new ResultSink(nodeId, TResultSinkType.FILE);
         new Expectations(coordinator, fragment) {
             {
@@ -374,7 +370,7 @@ public class QueryQueueManagerTest {
         };
         Assert.assertFalse(manager.enableCheckQueue(coordinator));
 
-        // 7. Export.
+        // 5. Export.
         new Expectations(coordinator, fragment) {
             {
                 fragment.getSink();

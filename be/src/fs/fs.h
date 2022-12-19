@@ -28,7 +28,6 @@ struct ResultFileOptions;
 class TUploadReq;
 class TDownloadReq;
 struct WritableFileOptions;
-struct RandomAccessFileOptions;
 
 struct SpaceInfo {
     // Total size of the filesystem, in bytes
@@ -80,6 +79,22 @@ struct FileStatus {
     int64_t size;
 };
 
+struct SequentialFileOptions {
+    SequentialFileOptions() = default;
+
+    // Don't cache remote file locally on read requests.
+    // This options can be ignored if the underlying filesystem does not support local cache.
+    bool skip_fill_local_cache = false;
+};
+
+struct RandomAccessFileOptions {
+    RandomAccessFileOptions() = default;
+
+    // Don't cache remote file locally on read requests.
+    // This options can be ignored if the underlying filesystem does not support local cache.
+    bool skip_fill_local_cache = false;
+};
+
 class FileSystem {
 public:
     enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET };
@@ -113,13 +128,20 @@ public:
     //  If the file does not exist, returns a non-OK status.
     //
     // The returned file will only be accessed by one thread at a time.
-    virtual StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& fname) = 0;
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& fname) {
+        return new_sequential_file(SequentialFileOptions(), fname);
+    }
+
+    virtual StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                          const std::string& fname) = 0;
 
     // Create a brand new random access read-only file with the
     // specified name.
     //
     // The returned file will only be accessed by one thread at a time.
-    virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& fname) = 0;
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& fname) {
+        return new_random_access_file(RandomAccessFileOptions(), fname);
+    }
 
     virtual StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                const std::string& fname) = 0;
@@ -220,16 +242,18 @@ public:
 
     // Determines the information about the filesystem on which the pathname 'path' is located.
     virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("FileSystem::space()"); }
-};
 
-struct RandomAccessFileOptions {
-    RandomAccessFileOptions() = default;
+    // Given the path to a remote file, delete the file's cache on the local file system, if any.
+    // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
+    virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
 };
 
 // Creation-time options for WritableFile
 struct WritableFileOptions {
     // Call Sync() during Close().
     bool sync_on_close = true;
+    // For remote filesystem, skip filling local filesystem cache on write requests
+    bool skip_fill_local_cache = false;
     // See OpenMode for details.
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
 };

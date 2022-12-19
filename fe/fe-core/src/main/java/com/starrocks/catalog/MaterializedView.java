@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -40,6 +53,7 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -165,7 +179,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     return db.getTable(tableId);
                 }
             } else {
+                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                    LOG.warn("catalog {} not exist", catalogName);
+                    return null;
+                }
                 Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+                if (table == null) {
+                    LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
+                    return null;
+                }
                 if (table.getTableIdentifier().equals(tableIdentifier)) {
                     return table;
                 }
@@ -209,6 +231,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public void setVersion(long version) {
             this.version = version;
+        }
+
+        @Override
+        public String toString() {
+            return "BasePartitionInfo{" +
+                    "id=" + id +
+                    ", version=" + version +
+                    '}';
         }
     }
 
@@ -292,6 +322,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.lastRefreshTime = 0;
         }
 
+        public boolean isIncremental() {
+            return this.type.equals(RefreshType.INCREMENTAL);
+        }
+
         public RefreshType getType() {
             return type;
         }
@@ -344,6 +378,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
+    // Maintenance plan for this MV
+    private transient ExecPlan maintenancePlan;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -361,8 +398,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.active = true;
     }
 
+    public MvId getMvId() {
+        return new MvId(getDbId(), id);
+    }
+
     public long getDbId() {
         return dbId;
+    }
+
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
     }
 
     public boolean isActive() {
@@ -387,6 +432,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setSimpleDefineSql(String simple) {
         this.simpleDefineSql = simple;
+    }
+
+    public Set<Long> getBaseTableIds() {
+        return baseTableIds;
+    }
+
+    public void setBaseTableIds(Set<Long> baseTableIds) {
+        this.baseTableIds = baseTableIds;
     }
 
     public List<BaseTableInfo> getBaseTableInfos() {
@@ -414,7 +467,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
-        if (!base.isOlapTable()) {
+        return getUpdatedPartitionNamesOfTable(base, false);
+    }
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean withMv) {
+        if (!base.isLocalTable()) {
             // TODO(ywb): support external table refresh according to partition later
             return Sets.newHashSet();
         }
@@ -447,6 +503,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     || basePartition.getVisibleVersion() > basePartitionInfo.getVersion()) {
                 result.add(basePartitionName);
             }
+        }
+        if (withMv && baseTable.isMaterializedView()) {
+            Set<String> partitionNames = ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv();
+            result.addAll(partitionNames);
         }
         return result;
     }
@@ -495,28 +555,27 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 return;
             }
         }
-        // register materialized view to base tables
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            if (!isInternalCatalog(baseTableInfo.catalogName)) {
-                // External catalogs have not finished load from image when loading mv, do not check the table exists
-                continue;
-            }
+
+        for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+            // Do not set the active when table is null, it would be checked in MVActiveChecker
             Table table = baseTableInfo.getTable();
-            if (table == null) {
-                LOG.warn("tableName :{} do not exist. set materialized view:{} to invalid",
-                        baseTableInfo.tableName, id);
-                active = false;
-                continue;
+            if (table != null) {
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                    LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                            baseTableInfo.getTableName(), id);
+                    active = false;
+                    continue;
+                }
+                MvId mvId = new MvId(db.getId(), id);
+                table.addRelatedMaterializedView(mvId);
             }
-            if (table instanceof MaterializedView && !((MaterializedView) table).active) {
-                LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
-                        baseTableInfo.tableName, id);
-                active = false;
-                continue;
-            }
-            MvId mvId = new MvId(db.getId(), id);
-            table.addRelatedMaterializedView(mvId);
         }
+        analyzePartitionInfo();
+    }
+
+    private void analyzePartitionInfo() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
         }
@@ -760,7 +819,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (!table.isLocalTable()) {
                     return Sets.newHashSet();
                 }
-                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
                 if (!partitionNames.isEmpty()) {
                     return getPartitionNames();
                 }
@@ -791,7 +850,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
             }
-            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
             if (!partitionNames.isEmpty()) {
                 return getPartitionNames();
             }
@@ -820,7 +879,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
 
-        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable);
+        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable, true);
         if (partitionExpr instanceof SlotRef) {
             for (String basePartitionName : baseChangedPartitionNames) {
                 needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(basePartitionName));
@@ -853,6 +912,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Pair<Table, Column> getPartitionTableAndColumn() {
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return null;
+        }
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
@@ -865,5 +927,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    public ExecPlan getMaintenancePlan() {
+        return maintenancePlan;
+    }
+
+    public void setMaintenancePlan(ExecPlan maintenancePlan) {
+        this.maintenancePlan = maintenancePlan;
     }
 }

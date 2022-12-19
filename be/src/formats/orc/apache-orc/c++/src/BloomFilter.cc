@@ -199,11 +199,11 @@ BloomFilterImpl::BloomFilterImpl(const proto::BloomFilter& bloomFilter) {
 }
 
 void BloomFilterImpl::addDouble(double data) {
-    addLong(reinterpret_cast<int64_t&>(data));
+    addLong(*reinterpret_cast<int64_t*>(&data));
 }
 
 bool BloomFilterImpl::testDouble(double data) const {
-    return testLong(reinterpret_cast<int64_t&>(data));
+    return testLong(*reinterpret_cast<int64_t*>(&data));
 }
 
 DIAGNOSTIC_POP

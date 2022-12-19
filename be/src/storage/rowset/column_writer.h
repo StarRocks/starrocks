@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/column_writer.h
 
@@ -90,8 +103,6 @@ public:
 
     virtual Status append(const vectorized::Column& column) = 0;
 
-    virtual Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) = 0;
-
     virtual Status finish_current_page() = 0;
 
     virtual uint64_t estimate_buffer_size() = 0;
@@ -143,11 +154,6 @@ public:
     Status init() override;
 
     Status append(const vectorized::Column& column) override;
-
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override;
-
-    // Write offset data, it's only used in ArrayColumn
-    Status append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     // Write offset column, it's only used in ArrayColumn
     Status append_array_offsets(const vectorized::Column& column);
@@ -207,6 +213,8 @@ private:
         _data_size += 20;
     }
 
+    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+
     Status _write_data_page(Page* page);
 
     ColumnWriterOptions _opts;
@@ -244,46 +252,6 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
-};
-
-class ArrayColumnWriter final : public ColumnWriter {
-public:
-    explicit ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
-                               std::unique_ptr<ScalarColumnWriter> null_writer,
-                               std::unique_ptr<ScalarColumnWriter> offset_writer,
-                               std::unique_ptr<ColumnWriter> element_writer);
-    ~ArrayColumnWriter() override = default;
-
-    Status init() override;
-
-    Status append(const vectorized::Column& column) override;
-
-    Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) override;
-
-    uint64_t estimate_buffer_size() override;
-
-    Status finish() override;
-    Status write_data() override;
-    Status write_ordinal_index() override;
-
-    Status finish_current_page() override;
-
-    Status write_zone_map() override { return Status::OK(); }
-
-    Status write_bitmap_index() override { return Status::OK(); }
-
-    Status write_bloom_filter_index() override { return Status::OK(); }
-
-    ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
-
-    uint64_t total_mem_footprint() const override;
-
-private:
-    ColumnWriterOptions _opts;
-
-    std::unique_ptr<ScalarColumnWriter> _null_writer;
-    std::unique_ptr<ScalarColumnWriter> _array_size_writer;
-    std::unique_ptr<ColumnWriter> _element_writer;
 };
 
 } // namespace starrocks

@@ -1,10 +1,30 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.AggregateInfo;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.JoinNode;
@@ -12,12 +32,20 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
+import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.stream.StreamAggNode;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
 import org.junit.Assert;
 import org.junit.Before;
@@ -30,10 +58,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-public class CoordinatorTest {
+public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
     Coordinator coordinator;
+    CoordinatorPreprocessor coordinatorPreprocessor;
 
     @Before
     public void setUp() throws IOException {
@@ -42,6 +72,7 @@ public class CoordinatorTest {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new Coordinator(ctx, Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
+        coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
@@ -51,10 +82,13 @@ public class CoordinatorTest {
         PlanFragment fragment =
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
-        Coordinator.FragmentExecParams params = coordinator.new FragmentExecParams(fragment);
-        Coordinator.FInstanceExecParam instance0 = new Coordinator.FInstanceExecParam(null, null, 0, params);
-        Coordinator.FInstanceExecParam instance1 = new Coordinator.FInstanceExecParam(null, null, 1, params);
-        Coordinator.FInstanceExecParam instance2 = new Coordinator.FInstanceExecParam(null, null, 2, params);
+        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(fragment);
+        CoordinatorPreprocessor.FInstanceExecParam instance0 =
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 0, params);
+        CoordinatorPreprocessor.FInstanceExecParam instance1 =
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 1, params);
+        CoordinatorPreprocessor.FInstanceExecParam instance2 =
+                new CoordinatorPreprocessor.FInstanceExecParam(null, null, 2, params);
         instance0.bucketSeqToDriverSeq = ImmutableMap.of(2, -1, 0, -1);
         instance1.bucketSeqToDriverSeq = ImmutableMap.of(1, -1, 4, -1);
         instance2.bucketSeqToDriverSeq = ImmutableMap.of(3, -1, 5, -1);
@@ -65,7 +99,7 @@ public class CoordinatorTest {
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
-        coordinator.computeBucketSeq2InstanceOrdinal(params, 6);
+        coordinatorPreprocessor.computeBucketSeq2InstanceOrdinal(params, 6);
         params.setBucketSeqToInstanceForRuntimeFilters();
         Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
     }
@@ -99,19 +133,20 @@ public class CoordinatorTest {
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        Coordinator.FragmentExecParams params = coordinator.new FragmentExecParams(null);
-        Coordinator.BucketSeqToScanRange bucketSeqToScanRange = new Coordinator.BucketSeqToScanRange();
+        CoordinatorPreprocessor.FragmentExecParams params = coordinatorPreprocessor.new FragmentExecParams(null);
+        CoordinatorPreprocessor.BucketSeqToScanRange bucketSeqToScanRange =
+                new CoordinatorPreprocessor.BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToAddress.keySet()) {
             bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
         }
 
-        coordinator.computeColocatedJoinInstanceParam(bucketSeqToAddress, bucketSeqToScanRange,
+        coordinatorPreprocessor.computeColocatedJoinInstanceParam(bucketSeqToAddress, bucketSeqToScanRange,
                 parallelExecInstanceNum, pipelineDop, enablePipeline, params);
         params.instanceExecParams.sort(Comparator.comparing(param -> param.host));
 
         Assert.assertEquals(expectedInstances, params.instanceExecParams.size());
         for (int i = 0; i < expectedInstances; ++i) {
-            Coordinator.FInstanceExecParam param = params.instanceExecParams.get(i);
+            CoordinatorPreprocessor.FInstanceExecParam param = params.instanceExecParams.get(i);
             Assert.assertEquals(expectedParamAddresses.get(i), param.host);
             Assert.assertEquals(expectedPipelineDops.get(i).intValue(), param.getPipelineDop());
 
@@ -381,6 +416,115 @@ public class CoordinatorTest {
         testComputeColocatedJoinInstanceParamHelper(scanId, bucketSeqToAddress, 1, 3, true,
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
+
+    }
+
+    @Test
+    public void testBinlogScan() throws Exception {
+        PlanFragmentId fragmentId = new PlanFragmentId(0);
+        PlanNodeId planNodeId = new PlanNodeId(1);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(2));
+
+        OlapTable olapTable = getOlapTable("t0");
+        List<Long> olapTableTabletIds =
+                olapTable.getAllPartitions().stream().flatMap(x -> x.getBaseIndex().getTabletIdsInOrder().stream())
+                        .collect(Collectors.toList());
+        Assert.assertFalse(olapTableTabletIds.isEmpty());
+        tupleDesc.setTable(olapTable);
+
+        new MockUp<BinlogScanNode>() {
+
+            @Mock
+            TBinlogOffset getBinlogOffset(long tabletId) {
+                TBinlogOffset offset = new TBinlogOffset();
+                offset.setTablet_id(1);
+                offset.setLsn(2);
+                offset.setVersion(3);
+                return offset;
+            }
+        };
+
+        BinlogScanNode binlogScan = new BinlogScanNode(planNodeId, tupleDesc);
+        binlogScan.setFragmentId(fragmentId);
+        binlogScan.finalizeStats(null);
+
+        List<ScanNode> scanNodes = Arrays.asList(binlogScan);
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes);
+        prepare.computeScanRangeAssignment();
+
+        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeMap =
+                prepare.getFragmentScanRangeAssignment(fragmentId);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
+        Assert.assertFalse(scanRangeMap.isEmpty());
+        TNetworkAddress expectedAddress = backend.getAddress();
+        Assert.assertTrue(scanRangeMap.containsKey(expectedAddress));
+        Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedAddress);
+        Assert.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
+        List<TScanRangeParams> ranges = rangesPerNode.get(planNodeId.asInt());
+        List<Long> tabletIds =
+                ranges.stream().map(x -> x.getScan_range().getBinlog_scan_range().getTablet_id())
+                        .collect(Collectors.toList());
+        Assert.assertEquals(olapTableTabletIds, tabletIds);
+    }
+
+    @Test
+    public void testStreamAgg() throws Exception {
+        new MockUp<BinlogScanNode>() {
+
+            @Mock
+            TBinlogOffset getBinlogOffset(long tabletId) {
+                TBinlogOffset offset = new TBinlogOffset();
+                offset.setTablet_id(1);
+                offset.setLsn(2);
+                offset.setVersion(3);
+                return offset;
+            }
+        };
+
+        PlanFragmentId fragmentId = new PlanFragmentId(0);
+        TupleDescriptor scanTuple = new TupleDescriptor(new TupleId(2));
+        scanTuple.setTable(getOlapTable("t0"));
+        TupleDescriptor aggTuple = new TupleDescriptor(new TupleId(3));
+        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", Type.INT, false);
+        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", Type.INT, false);
+        aggTuple.addSlot(groupBySlot);
+        aggTuple.addSlot(aggFuncSlot);
+
+        // Build scan node
+        List<PlanFragment> fragments = new ArrayList<>();
+        BinlogScanNode binlogScan = new BinlogScanNode(new PlanNodeId(1), scanTuple);
+        binlogScan.setFragmentId(fragmentId);
+        binlogScan.finalizeStats(null);
+        List<ScanNode> scanNodes = Arrays.asList(binlogScan);
+
+        // Build agg node
+        AggregateInfo aggInfo = new AggregateInfo(new ArrayList<>(), new ArrayList<>(), AggregateInfo.AggPhase.SECOND);
+        aggInfo.setOutputTupleDesc(aggTuple);
+        StreamAggNode aggNode = new StreamAggNode(new PlanNodeId(2), binlogScan, aggInfo);
+
+        // Build fragment
+        PlanFragment fragment = new PlanFragment(fragmentId, aggNode, DataPartition.RANDOM);
+        fragments.add(fragment);
+
+        // Build topology
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes);
+        prepare.prepareFragments();
+        prepare.computeScanRangeAssignment();
+        prepare.computeFragmentExecParams();
+
+        // Assert
+        Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentParams =
+                prepare.getFragmentExecParamsMap();
+        fragmentParams.forEach((k, v) -> {
+            System.err.println("Fragment " + k + " : " + v);
+        });
+        Assert.assertTrue(fragmentParams.containsKey(fragmentId));
+        CoordinatorPreprocessor.FragmentExecParams fragmentParam = fragmentParams.get(fragmentId);
+        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.scanRangeAssignment;
+        List<CoordinatorPreprocessor.FInstanceExecParam> instances = fragmentParam.instanceExecParams;
+        Assert.assertFalse(fragmentParams.isEmpty());
+        Assert.assertEquals(1, scanRangeAssignment.size());
+        Assert.assertEquals(1, instances.size());
 
     }
 }

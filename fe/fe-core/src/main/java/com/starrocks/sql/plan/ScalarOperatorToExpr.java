@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
@@ -192,7 +205,7 @@ public class ScalarOperatorToExpr {
                 } else if (type.isDatetime()) {
                     LocalDateTime ldt = literal.getDatetime();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), ldt.getHour(),
-                            ldt.getMinute(), ldt.getSecond());
+                            ldt.getMinute(), ldt.getSecond(), ldt.getNano() / 1000);
                 } else if (type.isTime()) {
                     return new FloatLiteral(literal.getTime(), Type.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {
@@ -424,6 +437,24 @@ public class ScalarOperatorToExpr {
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.BITNOT,
                             buildExpr.build(call.getChildren().get(0), context), null);
+                    break;
+                case "bit_shift_left":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_LEFT,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
+                    break;
+                case "bit_shift_right":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_RIGHT,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
+                    break;
+                case "bit_shift_right_logical":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 // FixMe(kks): InformationFunction shouldn't be CallOperator
                 case "database":

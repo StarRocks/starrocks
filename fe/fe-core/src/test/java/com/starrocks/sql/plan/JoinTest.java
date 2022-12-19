@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -2108,8 +2121,8 @@ public class JoinTest extends PlanTestBase {
                 "where 66 <= unix_timestamp() \n" +
                 "limit 155;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "7:Project\n" +
-                "  |  <slot 2> : 2: v2");
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 1> : 1: v1");
     }
 
     @Test
@@ -2627,5 +2640,32 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
                 "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
+    }
+
+    @Test
+    public void testComplexProjectionJoin() throws Exception {
+        connectContext.getSessionVariable().disableDPJoinReorder();
+        connectContext.getSessionVariable().disableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(3);
+
+        String sql = "select * from t4 join (   \n" +
+                "    select abs(xx1) as xxx1 from t3 join (       \n" +
+                "        select abs(x1) as xx1 from t2 join (          \n" +
+                "            select abs(t0.v1) as x1 from t0 join t1 \n" +
+                "            on v1 = t1.v4) y1        \n" +
+                "        on t2.v7 = x1) y2    \n" +
+                "    on t3.v10 = xx1) y3  \n" +
+                "on t4.v13 = xxx1";
+
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().enableDPJoinReorder();
+        connectContext.getSessionVariable().enableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+
+        assertContains(plan, "  13:Project\n" +
+                "  |  <slot 17> : abs(16: abs)\n" +
+                "  |  \n" +
+                "  12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)");
     }
 }

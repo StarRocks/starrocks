@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
@@ -68,6 +81,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -528,10 +542,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                 .stream().map(Identifier::getValue).collect(toList()));
     }
 
+    @Override
+    public ParseNode visitPartitionExpression(StarRocksParser.PartitionExpressionContext context) {
+        Expr expr = (Expr) visit(context.expression());
+        if (context.DAY() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("day"), expr));
+        } else if (context.HOUR() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("hour"), expr));
+        } else if (context.MONTH() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("month"), expr));
+        } else if (context.YEAR() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("year"), expr));
+        }
+        throw new ParsingException("No matching function with signature: %s(%s).", context.getText(), expr);
+    }
+
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
-        final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-        final List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
         List<PartitionDesc> partitionDescList = new ArrayList<>();
+        if (context.partitionExpression() != null) {
+            for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
+                final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+                partitionDescList.add(rangePartitionDesc);
+            }
+            Expr expr = (Expr) visit(context.partitionExpression().expression());
+            List<String> columnList;
+            if (expr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) expr;
+                columnList = ImmutableList.of(slotRef.getColumnName());
+            } else {
+                throw new ParsingException("Unsupported partition expression: %s", expr);
+            }
+            RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            return new ExpressionPartitionDesc(rangePartitionDesc, expr);
+        }
+
+        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
         PartitionDesc partitionDesc = null;
         if (context.RANGE() != null) {
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
@@ -1168,9 +1218,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (!Config.enable_experimental_mv) {
             throw new IllegalArgumentException("The experimental mv is disabled, " +
                     "you can set FE config enable_experimental_mv=true to enable it.");
-        }
-        if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-            throw new IllegalArgumentException("Realtime materialized view is not supported");
         }
 
         return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
@@ -4343,6 +4390,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return ArithmeticExpr.Operator.BITOR;
             case StarRocksLexer.BITXOR:
                 return ArithmeticExpr.Operator.BITXOR;
+            case StarRocksLexer.BIT_SHIFT_LEFT:
+                return ArithmeticExpr.Operator.BIT_SHIFT_LEFT;
+            case StarRocksLexer.BIT_SHIFT_RIGHT:
+                return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT;
+            case StarRocksLexer.BIT_SHIFT_RIGHT_LOGICAL:
+                return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL;
         }
 
         throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());
@@ -5296,6 +5349,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return getArrayType(context.arrayType());
         } else if (context.structType() != null) {
             return getStructType(context.structType());
+        } else if (context.mapType() != null) {
+            return getMapType(context.mapType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
@@ -5401,6 +5456,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new StructType(fields);
+    }
+
+    public MapType getMapType(StarRocksParser.MapTypeContext context) {
+        Type keyType = getType(context.type(0));
+        if (keyType.isComplexType()) {
+            throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
+        }
+        Type valueType = getType(context.type(1));
+        return new MapType(keyType, valueType);
     }
 
     @Override

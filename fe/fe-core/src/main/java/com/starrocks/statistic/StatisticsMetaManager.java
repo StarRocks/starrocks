@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.statistic;
 
@@ -18,6 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -114,7 +128,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
             "table_id", "column_name"
     );
 
-    private boolean createSampleStatisticsTable() {
+    private boolean createSampleStatisticsTable(ConnectContext context) {
         LOG.info("create statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
@@ -134,7 +148,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
+
+        Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -146,7 +161,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return checkTableExist(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
     }
 
-    private boolean createFullStatisticsTable() {
+    private boolean createFullStatisticsTable(ConnectContext context) {
         LOG.info("create statistics table v2 start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
@@ -167,7 +182,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 null,
                 "");
    
-        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
+        Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -179,7 +194,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return checkTableExist(StatsConstants.FULL_STATISTICS_TABLE_NAME);
     }
 
-    private boolean createHistogramStatisticsTable() {
+    private boolean createHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create statistics table v2 start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
@@ -200,7 +215,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 null,
                 "");
         
-        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
+        Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -257,12 +272,15 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private boolean createTable(String tableName) {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setThreadLocalInfo();
+
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
-            return createSampleStatisticsTable();
+            return createSampleStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
-            return createFullStatisticsTable();
+            return createFullStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
-            return createHistogramStatisticsTable();
+            return createHistogramStatisticsTable(context);
         } else {
             throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
         }

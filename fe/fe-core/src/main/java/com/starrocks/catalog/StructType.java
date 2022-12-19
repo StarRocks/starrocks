@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/StructType.java
 
@@ -22,10 +35,19 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
@@ -36,6 +58,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
@@ -45,6 +68,7 @@ public class StructType extends Type {
     private static final Logger LOG = LogManager.getLogger(StructType.class);
 
     private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
+    @SerializedName(value = "fields")
     private final ArrayList<StructField> fields;
 
     public StructType(ArrayList<StructField> structFields) {
@@ -79,6 +103,32 @@ public class StructType extends Type {
             size += structField.getType().getTypeSize();
         }
         return size;
+    }
+
+    @Override
+    public boolean matchesType(Type t) {
+        if (t.isPseudoType()) {
+            return t.matchesType(this);
+        }
+        if (!t.isStructType()) {
+            return false;
+        }
+
+        if (((StructType) t).getFields().size() != fields.size()) {
+            return false;
+        }
+
+        for (Map.Entry<String, StructField> field : fieldMap.entrySet()) {
+            StructField tField = ((StructType) t).getField(field.getValue().getName());
+            if (tField == null) {
+                return false;
+            }
+            if (!tField.getType().matchesType(field.getValue().getType())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Override
@@ -141,6 +191,21 @@ public class StructType extends Type {
         }
     }
 
+    /**
+     * @return 33 (utf8_general_ci) if type is array
+     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
+     * character_set (2) -- is the column character set and is defined in Protocol::CharacterSet.
+     */
+    @Override
+    public int getMysqlResultSetFieldCharsetIndex() {
+        return CHARSET_UTF8;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(fields);
+    }
+
     @Override
     public boolean equals(Object other) {
         if (!(other instanceof StructType)) {
@@ -173,6 +238,21 @@ public class StructType extends Type {
             structFields.add(field.clone());
         }
         return new StructType(structFields);
+    }
+
+    public static class StructTypeDeSerializer implements JsonDeserializer<StructType> {
+        @Override
+        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (JsonElement field : fields) {
+                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
+            }
+            return new StructType(structFields);
+        }
     }
 }
 

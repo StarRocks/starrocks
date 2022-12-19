@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/stored_column_reader.h"
 
@@ -201,10 +213,11 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
             _is_nulls.resize(num_parsed_levels);
             int null_pos = 0;
             for (int i = 0; i < num_parsed_levels; ++i) {
-                _is_nulls[null_pos] = _def_levels[i] < _field->max_def_level();
+                level_t def_level = _def_levels[i + _levels_parsed];
+                _is_nulls[null_pos] = (def_level < _field->max_def_level());
                 // if current def level < ancestor def level, the ancestor will be not defined too, so that we don't
                 // need to add null value to this column. Otherwise, we need to add null value to this column.
-                null_pos += _def_levels[i] >= _field->level_info.immediate_repeated_ancestor_def_level;
+                null_pos += (def_level >= _field->level_info.immediate_repeated_ancestor_def_level);
             }
             RETURN_IF_ERROR(_reader->decode_values(null_pos, &_is_nulls[0], content_type, dst));
         }
@@ -229,6 +242,7 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
     DCHECK_GT(_levels_decoded - _levels_parsed, 0);
     size_t levels_pos = _levels_parsed;
 
+#ifndef NDEBUG
     std::stringstream ss;
     ss << "rep=[";
     for (int i = levels_pos; i < _levels_decoded; ++i) {
@@ -239,7 +253,8 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
         ss << ", " << _def_levels[i];
     }
     ss << "]";
-    LOG(INFO) << ss.str();
+    VLOG_FILE << ss.str();
+#endif
 
     if (!_meet_first_record) {
         _meet_first_record = true;
@@ -252,7 +267,7 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
         rows_read += _rep_levels[levels_pos] == 0;
     }
 
-    LOG(INFO) << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
+    VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
     *num_rows = rows_read;
     *num_levels_parsed = levels_pos - _levels_parsed;
 }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/schema_change.cpp
 
@@ -59,18 +72,6 @@ int compare_chunk_row(const ChunkRow& lhs, const ChunkRow& rhs) {
     return 0;
 }
 
-class ChunkSorter {
-public:
-    explicit ChunkSorter(ChunkAllocator* allocator);
-    virtual ~ChunkSorter();
-
-    bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
-
-private:
-    ChunkPtr _swap_chunk;
-    size_t _max_allocated_rows{0};
-};
-
 // TODO: optimize it with vertical sort
 class ChunkMerger {
 public:
@@ -99,7 +100,7 @@ private:
     std::unique_ptr<ChunkAggregator> _aggregator;
 };
 
-ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) : _swap_chunk(nullptr) {}
+ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) {}
 
 ChunkSorter::~ChunkSorter() = default;
 
@@ -116,14 +117,23 @@ bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
 
     _swap_chunk->reset();
 
+    std::vector<ColumnId> sort_key_idxes;
+    if (new_schema.sort_key_idxes().empty()) {
+        int num_key_columns = chunk->schema()->num_key_fields();
+        for (ColumnId i = 0; i < num_key_columns; ++i) {
+            sort_key_idxes.push_back(i);
+        }
+    } else {
+        sort_key_idxes = new_schema.sort_key_idxes();
+    }
     Columns key_columns;
-    int num_key_columns = chunk->schema()->num_key_fields();
-    for (int i = 0; i < num_key_columns; i++) {
-        key_columns.push_back(chunk->get_column_by_index(i));
+    for (const auto sort_key_idx : sort_key_idxes) {
+        key_columns.push_back(chunk->get_column_by_index(sort_key_idx));
     }
 
     SmallPermutation perm = create_small_permutation(chunk->num_rows());
-    Status st = stable_sort_and_tie_columns(false, key_columns, SortDescs::asc_null_first(num_key_columns), &perm);
+    Status st =
+            stable_sort_and_tie_columns(false, key_columns, SortDescs::asc_null_first(sort_key_idxes.size()), &perm);
     CHECK(st.ok());
     std::vector<uint32_t> selective;
     permutate_to_selective(perm, &selective);
@@ -762,12 +772,17 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+        const auto& base_sort_key_idxes = base_tablet->tablet_schema().sort_key_idxes();
+        const auto& new_sort_key_idxes = new_tablet->tablet_schema().sort_key_idxes();
+        if (std::mismatch(new_sort_key_idxes.begin(), new_sort_key_idxes.end(), base_sort_key_idxes.begin()).first !=
+            new_sort_key_idxes.end()) {
+            sc_params.sc_directly = !(sc_params.sc_sorting = true);
+        }
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
-            LOG(WARNING) << "schema change of primary key model do not support sorting.";
-            status = Status::NotSupported("schema change of primary key model do not support sorting.");
+            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version);
         } else {
             status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version);
         }

@@ -1,16 +1,16 @@
 # ST_Polygon,ST_PolyFromText,ST_PolygonFromText
 
-## description
+## Description
 
-### Syntax
+Converts a WKT (Well Known Text) to a corresponding polygon memory form.
+
+## Syntax
 
 ```Haskell
 GEOMETRY ST_Polygon(VARCHAR wkt)
 ```
 
-Convert a WKT (Well Known Text) to a corresponding polygon memory form.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"));

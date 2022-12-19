@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -60,7 +72,8 @@ namespace starrocks {
     M(TYPE_JSON)                        \
     M(TYPE_DECIMAL32)                   \
     M(TYPE_DECIMAL64)                   \
-    M(TYPE_DECIMAL128)
+    M(TYPE_DECIMAL128)                  \
+    M(TYPE_VARBINARY)
 
 #define APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M) \
     M(TYPE_UNSIGNED_INT)                   \
@@ -133,6 +146,7 @@ auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args... args) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_METRIC_FIELD_TYPE(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_ARRAY)
+        _TYPE_DISPATCH_CASE(TYPE_MAP)
     default:
         CHECK(false) << "unknown type " << ftype;
         __builtin_unreachable();

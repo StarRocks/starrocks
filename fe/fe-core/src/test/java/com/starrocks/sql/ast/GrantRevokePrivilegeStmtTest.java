@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.ast;
 
@@ -8,7 +21,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -58,22 +71,22 @@ public class GrantRevokePrivilegeStmtTest {
         // grant IMPERSONATE
         GrantPrivilegeStmt stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "grant IMPERSONATE on test_user to me", ctx);
-        Assert.assertEquals("GRANT IMPERSONATE ON 'test_user'@'%' TO 'me'@'%'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT IMPERSONATE ON 'test_user'@'%' TO 'me'@'%'", AstToStringBuilder.toString(stmt));
 
         stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "grant IMPERSONATE on test_user to ROLE test_role", ctx);
-        Assert.assertEquals("GRANT IMPERSONATE ON 'test_user'@'%' TO ROLE 'test_role'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT IMPERSONATE ON 'test_user'@'%' TO ROLE 'test_role'", AstToStringBuilder.toString(stmt));
 
         // revoke
         RevokePrivilegeStmt stmt2 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke IMPERSONATE on test_user from me", ctx);
         Assert.assertEquals("REVOKE IMPERSONATE ON 'test_user'@'%' FROM 'me'@'%'",
-                AST2SQL.toString(stmt2));
+                AstToStringBuilder.toString(stmt2));
 
         stmt2 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke IMPERSONATE on test_user from ROLE test_role", ctx);
         Assert.assertEquals("REVOKE IMPERSONATE ON 'test_user'@'%' FROM ROLE 'test_role'",
-                AST2SQL.toString(stmt2));
+                AstToStringBuilder.toString(stmt2));
 
         // not exists user
         Assert.assertThrows(AnalysisException.class,
@@ -94,13 +107,13 @@ public class GrantRevokePrivilegeStmtTest {
     public void testGlobal() throws Exception {
         GrantPrivilegeStmt stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT select_priv on *.* to me", ctx);
-        Assert.assertEquals("GRANT SELECT ON *.* TO 'me'@'%'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT SELECT ON *.* TO 'me'@'%'", AstToStringBuilder.toString(stmt));
         stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
         "GRANT usage on resource * to role test_role", ctx);
-        Assert.assertEquals("GRANT USAGE ON RESOURCE * TO ROLE 'test_role'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT USAGE ON RESOURCE * TO ROLE 'test_role'", AstToStringBuilder.toString(stmt));
         stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT usage on *.* to role test_role", ctx);
-        Assert.assertEquals("GRANT USAGE ON *.* TO ROLE 'test_role'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT USAGE ON *.* TO ROLE 'test_role'", AstToStringBuilder.toString(stmt));
 
         // many privileges
         stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -125,36 +138,36 @@ public class GrantRevokePrivilegeStmtTest {
     public void testDatabase() throws Exception {
         GrantPrivilegeStmt stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT select_priv on db.* to me", ctx);
-        Assert.assertEquals("GRANT SELECT ON db.* TO 'me'@'%'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT SELECT ON db.* TO 'me'@'%'", AstToStringBuilder.toString(stmt));
 
         stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT usage on db.* to role test_role", ctx);
-        Assert.assertEquals("GRANT USAGE ON db.* TO ROLE 'test_role'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT USAGE ON db.* TO ROLE 'test_role'", AstToStringBuilder.toString(stmt));
 
         RevokePrivilegeStmt stmt1 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke select on db.* from me", ctx);
-        Assert.assertEquals("REVOKE SELECT ON db.* FROM 'me'@'%'", AST2SQL.toString(stmt1));
+        Assert.assertEquals("REVOKE SELECT ON db.* FROM 'me'@'%'", AstToStringBuilder.toString(stmt1));
         stmt1 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke usage on db.* from role test_role", ctx);
-        Assert.assertEquals("REVOKE USAGE ON db.* FROM ROLE 'test_role'", AST2SQL.toString(stmt1));
+        Assert.assertEquals("REVOKE USAGE ON db.* FROM ROLE 'test_role'", AstToStringBuilder.toString(stmt1));
     }
 
     @Test
     public void testTable() throws Exception {
         GrantPrivilegeStmt stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT select_priv on db.tbl to me", ctx);
-        Assert.assertEquals("GRANT SELECT ON db.tbl TO 'me'@'%'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT SELECT ON db.tbl TO 'me'@'%'", AstToStringBuilder.toString(stmt));
 
         stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT usage on db.tbl to role 'test_role'", ctx);
-        Assert.assertEquals("GRANT USAGE ON db.tbl TO ROLE 'test_role'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT USAGE ON db.tbl TO ROLE 'test_role'", AstToStringBuilder.toString(stmt));
 
         RevokePrivilegeStmt stmt1 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke select on db.tbl from me", ctx);
-        Assert.assertEquals("REVOKE SELECT ON db.tbl FROM 'me'@'%'", AST2SQL.toString(stmt1));
+        Assert.assertEquals("REVOKE SELECT ON db.tbl FROM 'me'@'%'", AstToStringBuilder.toString(stmt1));
         stmt1 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke usage on db.tbl from role test_role", ctx);
-        Assert.assertEquals("REVOKE USAGE ON db.tbl FROM ROLE 'test_role'", AST2SQL.toString(stmt1));
+        Assert.assertEquals("REVOKE USAGE ON db.tbl FROM ROLE 'test_role'", AstToStringBuilder.toString(stmt1));
 
         // invalide table name
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(
@@ -168,18 +181,18 @@ public class GrantRevokePrivilegeStmtTest {
     public void testResources() throws Exception {
         GrantPrivilegeStmt stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT usage_priv on resource spark0 to me", ctx);
-        Assert.assertEquals("GRANT USAGE ON RESOURCE spark0 TO 'me'@'%'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT USAGE ON RESOURCE spark0 TO 'me'@'%'", AstToStringBuilder.toString(stmt));
 
         stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT USAGE ON RESOURCE 'spark0' TO ROLE test_role", ctx);
-        Assert.assertEquals("GRANT USAGE ON RESOURCE spark0 TO ROLE 'test_role'", AST2SQL.toString(stmt));
+        Assert.assertEquals("GRANT USAGE ON RESOURCE spark0 TO ROLE 'test_role'", AstToStringBuilder.toString(stmt));
 
         RevokePrivilegeStmt stmt1 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke usage on RESOURCE 'spark0' from me", ctx);
-        Assert.assertEquals("REVOKE USAGE ON RESOURCE spark0 FROM 'me'@'%'", AST2SQL.toString(stmt1));
+        Assert.assertEquals("REVOKE USAGE ON RESOURCE spark0 FROM 'me'@'%'", AstToStringBuilder.toString(stmt1));
         stmt1 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke usage on resource spark0 from role test_role", ctx);
-        Assert.assertEquals("REVOKE USAGE ON RESOURCE spark0 FROM ROLE 'test_role'", AST2SQL.toString(stmt1));
+        Assert.assertEquals("REVOKE USAGE ON RESOURCE spark0 FROM ROLE 'test_role'", AstToStringBuilder.toString(stmt1));
 
         // invalide resource name
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(

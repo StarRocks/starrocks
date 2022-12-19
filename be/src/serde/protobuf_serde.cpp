@@ -1,9 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "serde/protobuf_serde.h"
 
 #include <utility>
 
+#include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -120,6 +133,21 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
     }
 
     DCHECK_EQ(columns.size(), tuple_id_to_index.size() + slot_id_to_index.size());
+
+    // serialize extra meta
+    auto* chunk_extra_data = chunk.get_extra_data()
+                                     ? dynamic_cast<vectorized::ChunkExtraColumnsData*>(chunk.get_extra_data().get())
+                                     : nullptr;
+    if (chunk_extra_data) {
+        auto extra_data_metas = chunk_extra_data->chunk_data_metas();
+        res->mutable_extra_data_metas()->Reserve(extra_data_metas.size());
+        for (auto& data_meta : extra_data_metas) {
+            auto* extra_data_meta_pb = res->add_extra_data_metas();
+            *(extra_data_meta_pb->mutable_type_desc()) = data_meta.type.to_protobuf();
+            extra_data_meta_pb->set_is_const(data_meta.is_const);
+            extra_data_meta_pb->set_is_null(data_meta.is_null);
+        }
+    }
     return res;
 }
 
@@ -129,7 +157,14 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     chunk_pb.set_compress_type(CompressionTypePB::NO_COMPRESSION);
 
     std::string* serialized_data = chunk_pb.mutable_data();
-    raw::stl_string_resize_uninitialized(serialized_data, ProtobufChunkSerde::max_serialized_size(chunk, context));
+    auto max_serialized_size = ProtobufChunkSerde::max_serialized_size(chunk, context);
+    auto* chunk_extra_data = chunk.get_extra_data()
+                                     ? dynamic_cast<vectorized::ChunkExtraColumnsData*>(chunk.get_extra_data().get())
+                                     : nullptr;
+    if (chunk_extra_data) {
+        max_serialized_size += chunk_extra_data->max_serialized_size(0);
+    }
+    raw::stl_string_resize_uninitialized(serialized_data, max_serialized_size);
     auto* buff = reinterpret_cast<uint8_t*>(serialized_data->data());
     encode_fixed32_le(buff + 0, 1);
     encode_fixed32_le(buff + 4, chunk.num_rows());
@@ -151,6 +186,11 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
                 padding_size = context->STREAMVBYTE_PADDING_SIZE;
             }
         }
+    }
+
+    // do serialize extra data
+    if (chunk_extra_data) {
+        buff = chunk_extra_data->serialize(buff);
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
     serialized_data->resize(chunk_pb.serialized_size() + padding_size);
@@ -239,8 +279,31 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
             return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
         }
     }
+
+    // deserialize extra data
+    vectorized::ChunkExtraDataPtr chunk_extra_data;
+    if (!_meta.extra_data_metas.empty()) {
+        std::vector<vectorized::ColumnPtr> extra_columns;
+        extra_columns.resize(_meta.extra_data_metas.size());
+        for (size_t i = 0, sz = _meta.extra_data_metas.size(); i < sz; ++i) {
+            auto extra_meta = _meta.extra_data_metas[i];
+            extra_columns[i] =
+                    ColumnHelper::create_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const, rows);
+        }
+        for (auto& column : extra_columns) {
+            cur = ColumnArraySerde::deserialize(cur, column.get());
+        }
+        for (auto& col : extra_columns) {
+            if (col->size() != rows) {
+                return Status::Corruption(fmt::format("mismatched row count: {} vs {}", col->size(), rows));
+            }
+        }
+        chunk_extra_data =
+                std::make_shared<vectorized::ChunkExtraColumnsData>(_meta.extra_data_metas, std::move(extra_columns));
+    }
+
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());
-    return Chunk(std::move(columns), _meta.slot_id_to_index, _meta.tuple_id_to_index);
+    return Chunk(std::move(columns), _meta.slot_id_to_index, _meta.tuple_id_to_index, std::move(chunk_extra_data));
 }
 
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb) {

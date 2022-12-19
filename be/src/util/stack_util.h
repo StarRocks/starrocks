@@ -18,6 +18,7 @@
 #pragma once
 
 #include <string>
+#include <typeinfo>
 
 namespace starrocks {
 
@@ -26,13 +27,17 @@ namespace starrocks {
 // for recursive calls.
 std::string get_stack_trace();
 
-#if defined(__GNUC__)
 // wrap libc's _cxa_throw to print stack trace of exceptions
 extern "C" {
+#ifdef __clang__
+void __real___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
+__attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exception, std::type_info* info,
+                                                                void (*dest)(void*));
+#elif defined(__GNUC__)
 void __real___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
-
-void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
-}
+__attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exception, void* infov,
+                                                                void (*dest)(void*));
 #endif
+}
 
 } // namespace starrocks

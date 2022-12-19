@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -728,5 +741,36 @@ public class CTEPlanTest extends PlanTestBase {
                 "  23:SORT\n" +
                 "  |  order by: <slot 14> 14: v3 ASC, <slot 13> 13: v2 ASC\n" +
                 "  |  offset: 0");
+    }
+
+    @Test
+    public void testNullTypeHack() throws Exception {
+        String sql = "WITH cte_1 AS (\n" +
+                "  SELECT null v1\n" +
+                ")\n" +
+                "SELECT  \n" +
+                "  CASE \n" +
+                "    WHEN a.v1 = b.v1 THEN 1 \n" +
+                "    ELSE -1 \n" +
+                "  END IS_OK\n" +
+                "FROM cte_1 a, cte_1 b";
+
+        String plan = getThriftPlan(sql);
+        assertNotContains(plan, "NULL_TYPE");
+    }
+
+    @Test
+    public void testMergePushdownPredicate() throws Exception {
+        String sql = "with with_t_0 as (select v1, v2, v4 from t0 join t1),\n" +
+                "with_t_1 as (select v1, v2, v5 from t0 join t1)\n" +
+                "select v5, 1 from with_t_1 join with_t_0 left semi join\n" +
+                "(select v2 from with_t_0 where v4 = 123) subwith_t_0\n" +
+                "on with_t_0.v1 = subwith_t_0.v2 and with_t_0.v1 > 0\n" +
+                "where with_t_0.v4 < 100;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:SELECT\n" +
+                "  |  predicates: 19: v1 > 0, 22: v4 < 100");
+        assertContains(plan, "9:SELECT\n" +
+                "  |  predicates: 26: v2 > 0, 28: v4 = 123");
     }
 }

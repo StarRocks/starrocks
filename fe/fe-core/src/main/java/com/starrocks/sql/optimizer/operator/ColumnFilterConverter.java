@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.operator;
 
@@ -88,11 +101,14 @@ public class ColumnFilterConverter {
             return;
         }
 
-        if (predicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+        // rewrite invalid date cast expr to NullLiteral
+        ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
+
+        if (rewritePredicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
             return;
         }
 
-        predicate.accept(COLUMN_FILTER_VISITOR, result);
+        rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
     }
 
     private static boolean checkColumnRefCanPartition(ScalarOperator right, Table table) {
@@ -177,6 +193,31 @@ public class ColumnFilterConverter {
                 (Objects.equals(exprTimeArg, callTimeArg) ||
                         (TIME_MAP.containsKey(exprTimeArg) && TIME_MAP.containsKey(callTimeArg) &&
                                 TIME_MAP.get(exprTimeArg) > TIME_MAP.get(callTimeArg)));
+    }
+
+    // only rewrite cast invalid date value to null like cast('abc' as date)
+    private static ScalarOperator rewriteInvalidDateCast(ScalarOperator scalarOperator) {
+        ScalarOperator copy = scalarOperator.clone();
+        List<ScalarOperator> children = copy.getChildren();
+
+        for (int i = 1; i < children.size(); i++) {
+            ScalarOperator child = children.get(i);
+            if (child instanceof CastOperator) {
+                CastOperator cast = (CastOperator) child;
+                Type toType = cast.getType();
+                if (cast.getChildren().size() == 1
+                        && cast.getChildren().get(0).isConstantRef()
+                        && toType.isDateType()) {
+                    ConstantOperator value = (ConstantOperator) cast.getChildren().get(0);
+                    try {
+                        value.castTo(toType);
+                    } catch (Exception e) {
+                        children.set(i, ConstantOperator.createNull(toType));
+                    }
+                }
+            }
+        }
+        return copy;
     }
 
     private static class ColumnFilterVisitor
@@ -337,7 +378,7 @@ public class ColumnFilterConverter {
             case DATETIME:
                 LocalDateTime datetime = operator.getDate();
                 literalExpr = new DateLiteral(datetime.getYear(), datetime.getMonthValue(), datetime.getDayOfMonth(),
-                        datetime.getHour(), datetime.getMinute(), datetime.getSecond());
+                        datetime.getHour(), datetime.getMinute(), datetime.getSecond(), datetime.getNano() / 1000);
                 break;
             default:
                 throw new AnalysisException("Type[" + operator.getType().toSql() + "] not supported.");

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.QueryRelation;
@@ -153,38 +166,38 @@ public class AnalyzeAggregateTest {
         QueryRelation query = ((QueryStatement) analyzeSuccess("select grouping_id(t0.v1, t0.v3), " +
                 "grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(v1, v3), grouping(v2)",
+        Assert.assertEquals("grouping(t0.v1, t0.v3), grouping(t0.v2)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select grouping_id(test.t0.v1, test.t0.v3), grouping(test.t0.v2) from t0 " +
                 "group by cube(test.t0.v1, test.t0.v2, test.t0.v3);"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(v1, v3), grouping(v2)",
+        Assert.assertEquals("grouping(test.t0.v1, test.t0.v3), grouping(test.t0.v2)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select grouping(t0.v1), grouping(t0.v2), grouping_id(t0.v1,t0.v2), " +
                 "v1,v2 from t0 group by grouping sets((t0.v1,t0.v2),(t0.v1),(t0.v2))"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+        Assert.assertEquals("grouping(t0.v1), grouping(t0.v2), grouping(t0.v1, t0.v2), v1, v2",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select grouping(test.t0.v1), grouping(test.t0.v2), " +
                 "grouping_id(test.t0.v1,test.t0.v2), v1,v2 from t0 " +
                 "group by grouping sets((test.t0.v1,test.t0.v2),(test.t0.v1),(test.t0.v2))"))
                 .getQueryRelation();
-        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+        Assert.assertEquals("grouping(test.t0.v1), grouping(test.t0.v2), grouping(test.t0.v1, test.t0.v2), v1, v2",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select t0.v1, t0.v2, grouping_id(t0.v1, t0.v2), " +
                 "SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)"))
                 .getQueryRelation();
-        Assert.assertEquals("v1, v2, grouping(v1, v2), sum(v3)",
+        Assert.assertEquals("v1, v2, grouping(t0.v1, t0.v2), sum(t0.v3)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
                 "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)"))
                 .getQueryRelation();
-        Assert.assertEquals("v1, v2, grouping(v1, v2), sum(v3)",
+        Assert.assertEquals("v1, v2, grouping(test.t0.v1, test.t0.v2), sum(test.t0.v3)",
                 String.join(", ", query.getColumnOutputNames()));
 
         query = ((QueryStatement) analyzeSuccess("select grouping(v1), grouping(v2), grouping_id(v1,v2), " +

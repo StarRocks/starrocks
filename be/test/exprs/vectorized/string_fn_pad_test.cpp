@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
@@ -201,17 +214,18 @@ TEST_F(StringFunctionPadTest, padNotConstUTF8Test) {
             {"博学笃志", 14, "甲乙丙丁戊", false, "甲乙丙丁戊甲乙丙丁戊博学笃志", "博学笃志甲乙丙丁戊甲乙丙丁戊"},
             {"博学笃志", 15, "甲乙丙丁戊", false, "甲乙丙丁戊甲乙丙丁戊甲博学笃志", "博学笃志甲乙丙丁戊甲乙丙丁戊甲"},
     };
-    auto nulls_7_3 = create_null_column(4096, 7, 3);
-    auto nulls_11_1 = create_null_column(4096, 11, 1);
-    auto nulls_17_13 = create_null_column(4096, 17, 13);
-    test_pad(4096, cases, {nullptr, nullptr, nullptr}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nullptr, nullptr}, nullptr);
-    test_pad(4096, cases, {nullptr, nulls_11_1, nullptr}, nullptr);
-    test_pad(4096, cases, {nullptr, nullptr, nulls_17_13}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nulls_11_1, nullptr}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nullptr, nulls_17_13}, nullptr);
-    test_pad(4096, cases, {nullptr, nulls_11_1, nulls_17_13}, nullptr);
-    test_pad(4096, cases, {nulls_7_3, nulls_11_1, nulls_17_13}, nullptr);
+    const auto num_rows = 40;
+    auto nulls_7_3 = create_null_column(num_rows, 7, 3);
+    auto nulls_11_1 = create_null_column(num_rows, 11, 1);
+    auto nulls_17_13 = create_null_column(num_rows, 17, 13);
+    test_pad(num_rows, cases, {nullptr, nullptr, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nullptr, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nullptr, nulls_11_1, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nullptr, nullptr, nulls_17_13}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nulls_11_1, nullptr}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nullptr, nulls_17_13}, nullptr);
+    test_pad(num_rows, cases, {nullptr, nulls_11_1, nulls_17_13}, nullptr);
+    test_pad(num_rows, cases, {nulls_7_3, nulls_11_1, nulls_17_13}, nullptr);
 }
 
 void test_const_pad(size_t num_rows, TestCaseType& c) {
@@ -227,7 +241,7 @@ void test_const_pad(size_t num_rows, TestCaseType& c) {
     auto state = std::make_unique<PadState>();
     std::shared_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto const_pad_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice{fill.data(), fill.size()}, 1);
-    ctx->impl()->set_constant_columns({nullptr, nullptr, const_pad_col});
+    ctx->set_constant_columns({nullptr, nullptr, const_pad_col});
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
@@ -308,7 +322,7 @@ void test_const_len_and_pad(size_t num_rows, TestCaseType& c) {
     std::shared_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto const_len_col = ColumnHelper::create_const_column<TYPE_INT>(len, 1);
     auto const_pad_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice{fill.data(), fill.size()}, 1);
-    ctx->impl()->set_constant_columns({nullptr, const_len_col, const_pad_col});
+    ctx->set_constant_columns({nullptr, const_len_col, const_pad_col});
     columns[1] = const_len_col;
     columns[2] = const_pad_col;
     StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);

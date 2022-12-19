@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector;
 
@@ -311,7 +324,7 @@ public class ColumnTypeConverterTest {
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultString()));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultExternalTableString()));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
@@ -328,7 +341,7 @@ public class ColumnTypeConverterTest {
         Schema structSchema = Schema.createRecord(fields);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
@@ -348,13 +361,13 @@ public class ColumnTypeConverterTest {
         Schema mapSchema = Schema.createMap(structSchema);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
 
-        MapType mapType = new MapType(ScalarType.createDefaultString(), structType);
+        MapType mapType = new MapType(ScalarType.createDefaultExternalTableString(), structType);
 
         Assert.assertEquals(mapType, fromHudiType(mapSchema));
     }

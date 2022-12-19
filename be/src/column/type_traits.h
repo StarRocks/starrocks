@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -22,20 +34,6 @@ struct cond {
     using type = T;
 };
 
-template <typename Condition, typename... OtherConditions>
-struct type_select {
-    using type = std::conditional_t<Condition::value, typename Condition::type,
-                                    typename type_select<OtherConditions...>::type>;
-};
-
-template <typename Condition>
-struct type_select<Condition> {
-    using type = std::conditional_t<Condition::value, typename Condition::type, void>;
-};
-
-template <typename Condition, typename... OtherConditions>
-using type_select_t = typename type_select<Condition, OtherConditions...>::type;
-
 template <typename T>
 constexpr bool IsInt128 = false;
 template <>
@@ -54,21 +52,7 @@ template <>
 inline constexpr bool IsDateTime<DateValue> = true;
 
 template <typename T>
-constexpr bool IsObject = false;
-template <>
-inline constexpr bool IsObject<HyperLogLog> = true;
-template <>
-inline constexpr bool IsObject<BitmapValue> = true;
-template <>
-inline constexpr bool IsObject<PercentileValue> = true;
-template <>
-inline constexpr bool IsObject<JsonValue> = true;
-
-template <typename T>
 using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
-
-template <typename T>
-using is_sum_bigint = std::integral_constant<bool, std::is_integral_v<T> && !IsInt128<T>>;
 
 // If isArithmeticPT is true, means this type support +,-,*,/
 template <LogicalType primitive_type>
@@ -255,6 +239,11 @@ using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 // Movable: rvalue reference type
 template <LogicalType Type>
 using RunTimeCppMovableType = std::add_rvalue_reference_t<std::remove_pointer_t<RunTimeCppType<Type>>>;
+
+template <LogicalType Type>
+using RunTimeCppValueType = std::remove_pointer_t<RunTimeCppType<Type>>;
+
+// Value type instead of pointer type
 
 template <typename T>
 struct ColumnTraits {};

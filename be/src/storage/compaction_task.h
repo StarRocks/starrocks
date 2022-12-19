@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <mutex>
@@ -14,8 +27,6 @@
 #include "util/time.h"
 
 namespace starrocks {
-
-class CompactionScheduler;
 
 enum CompactionTaskState { COMPACTION_INIT, COMPACTION_RUNNING, COMPACTION_FAILED, COMPACTION_SUCCESS };
 
@@ -196,8 +207,6 @@ public:
         return _task_info.to_string();
     }
 
-    void set_compaction_scheduler(CompactionScheduler* scheduler) { _scheduler = scheduler; }
-
 protected:
     virtual Status run_impl() = 0;
 
@@ -212,9 +221,9 @@ protected:
     Status _validate_compaction(const Statistics& stats) {
         // check row number
         DCHECK(_output_rowset) << "_output_rowset is null";
-        LOG(INFO) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
-                  << ", output rowset rows:" << _output_rowset->num_rows() << ", merged_rows:" << stats.merged_rows
-                  << ", filtered_rows:" << stats.filtered_rows;
+        VLOG(1) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
+                << ", output rowset rows:" << _output_rowset->num_rows() << ", merged_rows:" << stats.merged_rows
+                << ", filtered_rows:" << stats.filtered_rows;
         if (_task_info.input_rows_num != _output_rowset->num_rows() + stats.merged_rows + stats.filtered_rows) {
             LOG(WARNING) << "row_num does not match between cumulative input and output! "
                          << "input_row_num=" << _task_info.input_rows_num << ", merged_row_num=" << stats.merged_rows
@@ -238,9 +247,9 @@ protected:
         _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
         _tablet->save_meta();
         Rowset::close_rowsets(_input_rowsets);
-        LOG(INFO) << "commit compaction. output version:" << _task_info.output_version
-                  << ", output rowset version:" << _output_rowset->version()
-                  << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();
+        VLOG(1) << "commit compaction. output version:" << _task_info.output_version
+                << ", output rowset version:" << _output_rowset->version()
+                << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size();
     }
 
     void _success_callback();
@@ -256,7 +265,6 @@ protected:
     std::unique_lock<std::mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
-    CompactionScheduler* _scheduler = nullptr;
 };
 
 } // namespace starrocks

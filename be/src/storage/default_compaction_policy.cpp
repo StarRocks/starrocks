@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/default_compaction_policy.h"
 
@@ -11,7 +23,7 @@
 
 namespace starrocks::vectorized {
 
-bool DefaultCumulativeBaseCompactionPolicy::need_compaction(int64_t* score, CompactionType* type) {
+bool DefaultCumulativeBaseCompactionPolicy::need_compaction(double* score, CompactionType* type) {
     _tablet->calculate_cumulative_point();
     auto cumu_st = _pick_rowsets_to_cumulative_compact(&_cumulative_rowsets, &_cumulative_score);
     auto base_st = _pick_rowsets_to_base_compact(&_base_rowsets, &_base_score);
@@ -65,7 +77,7 @@ std::shared_ptr<CompactionTask> DefaultCumulativeBaseCompactionPolicy::create_co
 }
 
 bool DefaultCumulativeBaseCompactionPolicy::_fit_compaction_condition(const std::vector<RowsetSharedPtr>& rowsets,
-                                                                      int64_t compaction_score) {
+                                                                      double compaction_score) {
     if (!rowsets.empty()) {
         if (compaction_score >= config::min_cumulative_compaction_num_singleton_deltas) {
             return true;
@@ -79,7 +91,7 @@ bool DefaultCumulativeBaseCompactionPolicy::_fit_compaction_condition(const std:
 }
 
 Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_cumulative_compact(
-        std::vector<RowsetSharedPtr>* input_rowsets, int64_t* score) {
+        std::vector<RowsetSharedPtr>* input_rowsets, double* score) {
     input_rowsets->clear();
     *score = 0;
     std::vector<RowsetSharedPtr> candidate_rowsets;
@@ -254,7 +266,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_check_version_continuity_with_cum
 }
 
 Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_base_compact(std::vector<RowsetSharedPtr>* input_rowsets,
-                                                                            int64_t* score) {
+                                                                            double* score) {
     std::vector<RowsetSharedPtr> candidate_rowsets;
     input_rowsets->clear();
     *score = 0;
@@ -274,7 +286,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_base_compact(std:
     }
 
     std::vector<RowsetSharedPtr> transient_rowsets;
-    size_t compaction_score = 0;
+    double compaction_score = 0;
 
     for (auto& rowset : candidate_rowsets) {
         if (compaction_score <= config::max_base_compaction_num_singleton_deltas) {
@@ -309,8 +321,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_base_compact(std:
 
     if (cumulative_base_ratio > base_cumulative_delta_ratio) {
         // expand compaction score when cumulative_base_ratio reach limit
-        compaction_score =
-                static_cast<int64_t>((1 + cumulative_base_ratio / base_cumulative_delta_ratio) * compaction_score);
+        compaction_score = (1 + cumulative_base_ratio / base_cumulative_delta_ratio) * compaction_score;
     }
 
     // 3. the interval since last base compaction reachs the threshold

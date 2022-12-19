@@ -67,5 +67,6 @@ template class BinaryPlainPageDecoder<TYPE_HLL>;
 template class BinaryPlainPageDecoder<TYPE_OBJECT>;
 template class BinaryPlainPageDecoder<TYPE_PERCENTILE>;
 template class BinaryPlainPageDecoder<TYPE_JSON>;
+template class BinaryPlainPageDecoder<TYPE_VARBINARY>;
 
 } // namespace starrocks

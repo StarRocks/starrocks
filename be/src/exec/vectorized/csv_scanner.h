@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -29,12 +41,14 @@ public:
 
     void close() override;
 
+    // For test
+    void use_v2(bool use_v2) { _use_v2 = use_v2; }
+
 private:
     class ScannerCSVReader : public CSVReader {
     public:
-        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const std::string& record_delimiter,
-                         const std::string& field_delimiter)
-                : CSVReader(record_delimiter, field_delimiter) {
+        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const CSVParseOptions& parse_options)
+                : CSVReader(parse_options) {
             _file = std::move(file);
         }
 
@@ -50,6 +64,8 @@ private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);
 
     Status _parse_csv(Chunk* chunk);
+    Status _parse_csv_v2(Chunk* chunk);
+
     StatusOr<ChunkPtr> _materialize(ChunkPtr& src_chunk);
     void _report_error(const std::string& line, const std::string& err_msg);
 
@@ -58,12 +74,12 @@ private:
 
     const TBrokerScanRange& _scan_range;
     std::vector<Column*> _column_raw_ptrs;
-    std::string _record_delimiter;
-    std::string _field_delimiter;
+    CSVParseOptions _parse_options;
     int _num_fields_in_csv = 0;
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;
     std::vector<ConverterPtr> _converters;
+    bool _use_v2;
 };
 
 } // namespace starrocks::vectorized

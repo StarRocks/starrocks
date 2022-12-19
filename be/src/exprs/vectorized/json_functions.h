@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -10,9 +22,9 @@
 
 #include "column/column_builder.h"
 #include "common/compiler_util.h"
+#include "exprs/function_context.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"
-#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 
@@ -76,10 +88,8 @@ struct SimpleJsonPath {
 
 class JsonFunctions {
 public:
-    static Status json_path_prepare(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status json_path_close(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [json_string, tagged_value]
@@ -191,10 +201,8 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_keys);
 
-    static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
-                                           starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status native_json_path_close(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     // extract_from_object extracts value from object according to the json path.
     // Now, we do not support complete functions of json path.
@@ -214,7 +222,7 @@ public:
 
 private:
     template <LogicalType ResultType>
-    static StatusOr<ColumnPtr> _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
 
     /**
      * Parse string column as json column

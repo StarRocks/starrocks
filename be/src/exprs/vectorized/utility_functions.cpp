@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/utility_functions.h"
 
@@ -21,11 +33,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/version.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
-#include "udf/udf_internal.h"
 #include "util/cidr.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
@@ -64,7 +76,7 @@ StatusOr<ColumnPtr> UtilityFunctions::sleep(FunctionContext* context, const Colu
 }
 
 StatusOr<ColumnPtr> UtilityFunctions::last_query_id(FunctionContext* context, const Columns& columns) {
-    starrocks::RuntimeState* state = context->impl()->state();
+    starrocks::RuntimeState* state = context->state();
     const std::string& id = state->last_query_id();
     if (!id.empty()) {
         return ColumnHelper::create_const_column<TYPE_VARCHAR>(id, 1);
@@ -236,7 +248,7 @@ StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, cons
     return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, size);
 }
 
-StatusOr<ColumnPtr> UtilityFunctions::host_name(starrocks_udf::FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::host_name(FunctionContext* context, const Columns& columns) {
     std::string host_name;
     auto status = get_hostname(&host_name);
     if (status.ok()) {

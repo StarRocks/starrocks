@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.connector.analyzer;
 
@@ -49,8 +62,8 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
@@ -357,7 +370,7 @@ public class SimpleExpressionAnalyzer {
                 if (!type.isBoolean() && !type.isNull()) {
                     throw new SemanticException("Operand '%s' part of predicate " +
                             "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-                            AST2SQL.toString(node), AST2SQL.toString(node.getChild(i)), type.toSql());
+                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)), type.toSql());
                 }
             }
 
@@ -457,6 +470,11 @@ public class SimpleExpressionAnalyzer {
                         if (!commonType.isFixedPointType()) {
                             commonType = Type.BIGINT;
                         }
+                        break;
+                    case BIT_SHIFT_LEFT:
+                    case BIT_SHIFT_RIGHT:
+                    case BIT_SHIFT_RIGHT_LOGICAL:
+                        commonType = t1;
                         break;
                     default:
                         // the programmer forgot to deal with a case
@@ -599,13 +617,13 @@ public class SimpleExpressionAnalyzer {
             if (!type1.isStringType() && !type1.isNull()) {
                 throw new SemanticException(
                         "left operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AST2SQL.toString(node));
+                                AstToStringBuilder.toString(node));
             }
 
             if (!type2.isStringType() && !type2.isNull()) {
                 throw new SemanticException(
                         "right operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AST2SQL.toString(node));
+                                AstToStringBuilder.toString(node));
             }
 
             // check pattern
@@ -613,7 +631,7 @@ public class SimpleExpressionAnalyzer {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
-                    throw new SemanticException("Invalid regular expression in '" + AST2SQL.toString(node) + "'");
+                    throw new SemanticException("Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
                 }
             }
 
@@ -645,7 +663,7 @@ public class SimpleExpressionAnalyzer {
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + castType.toSql() + " in sql `" +
-                        AST2SQL.toString(cast.getChild(0)).replace("%", "%%") + "`");
+                        AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`");
             }
 
             cast.setType(castType);

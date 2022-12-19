@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/orc/orc_chunk_reader.h"
 
@@ -1082,6 +1094,57 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
     }
 }
 
+// the file schema create table dec_orc(id int, arr ARRAY<decimal(9,9>) STORED AS ORC;
+// the file data:
+// 1	[0.999999999]
+// 2	[0.000000001,null]
+// 3	[null,null]
+// 4	[0.123456789]
+// we use this to test that the data is decimal<9, 9> which type should be decimal32 but we use decimal64
+
+TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
+    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 9, 9));
+
+    SlotDesc slot_descs[] = {
+            {"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+            {"arr", type_array},
+            {""},
+    };
+
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/dec_orc.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        for (int i = 0; i < result->num_rows(); ++i) {
+            std::cout << "row" << i << ": " << result->debug_row(i) << std::endl;
+        }
+        EXPECT_EQ(result->debug_row(0), "[1, [0.999999999]]");
+        EXPECT_EQ(result->debug_row(1), "[2, [0.000000001, NULL]]");
+        EXPECT_EQ(result->debug_row(2), "[3, [NULL, NULL]]");
+        EXPECT_EQ(result->debug_row(3), "[4, [0.123456789]]");
+    }
+}
+
 /**
  * File Version: 0.12 with ORC_135
 Rows: 1
@@ -1326,10 +1389,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc1: 'Smith'}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc1: 'Cruise'}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc1: 'hello'}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc1: 'World'}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc0: NULL, cc1: 'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc0: NULL, cc1: 'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc0: NULL, cc1: 'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc0: NULL, cc1: 'World'}]", result->debug_row(3));
     }
 }
 
@@ -1473,10 +1536,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc0: 11}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc0: 22}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc0: 33}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc0: 44}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc1: NULL, cc0: 11}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc1: NULL, cc0: 22}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc1: NULL, cc0: 33}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc1: NULL, cc0: 44}]", result->debug_row(3));
     }
 }
 
@@ -1692,23 +1755,23 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
 
         EXPECT_EQ(
                 "[1, [{c11: 2, c12: ['danny1', 'Smith2', 'Cruise']}, {c11: 4, c12: ['poal', 'alan', 'blossom']}], "
-                "[[1->{c21: 11, c22: 'hi1'}], [5->{c21: 23, c22: 'p4'}], [9->{c21: 25, c22: 'p5'}]]]",
+                "[{1:{c21: 11, c22: 'hi1'}}, {5:{c21: 23, c22: 'p4'}}, {9:{c21: 25, c22: 'p5'}}]]",
                 result->debug_row(0));
         EXPECT_EQ(
-                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c21: 12, c22: "
-                "'hi2'}], [6->{c21: 24, c22: 'p5'}]]]",
+                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [{2:{c21: 12, c22: "
+                "'hi2'}}, {6:{c21: 24, c22: 'p5'}}]]",
                 result->debug_row(1));
         EXPECT_EQ(
-                "[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c21: 13, c22: 'hi3'}], [7->{c21: 25, "
-                "c22: 'p6'}]]]",
+                "[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [{3:{c21: 13, c22: 'hi3'}}, {7:{c21: 25, "
+                "c22: 'p6'}}]]",
                 result->debug_row(2));
         EXPECT_EQ(
-                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c21: 14, c22: "
-                "'hi4'}], [8->{c21: 26, c22: 'p7'}]]]",
+                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [{4:{c21: 14, c22: "
+                "'hi4'}}, {8:{c21: 26, c22: 'p7'}}]]",
                 result->debug_row(3));
         EXPECT_EQ(
-                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c21: 14, c22: 'hi4'}], "
-                "[9->{c21: 26, c22: 'p7'}]]]",
+                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [{5:{c21: 14, c22: 'hi4'}}, "
+                "{9:{c21: 26, c22: 'p7'}}]]",
                 result->debug_row(4));
     }
 
@@ -1762,21 +1825,23 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
 
         EXPECT_EQ(
                 "[1, [{c11: 2, c12: ['danny1', 'Smith2', 'Cruise']}, {c11: 4, c12: ['poal', 'alan', 'blossom']}], "
-                "[[1->{c22: 'hi1'}], [5->{c22: 'p4'}], [9->{c22: 'p5'}]]]",
+                "[{1:{c21: NULL, c22: 'hi1'}}, {5:{c21: NULL, c22: 'p4'}}, {9:{c21: NULL, c22: 'p5'}}]]",
                 result->debug_row(0));
         EXPECT_EQ(
-                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c22: 'hi2'}], "
-                "[6->{c22: 'p5'}]]]",
+                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [{2:{c21: NULL, c22: "
+                "'hi2'}}, {6:{c21: NULL, c22: 'p5'}}]]",
                 result->debug_row(1));
-        EXPECT_EQ("[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c22: 'hi3'}], [7->{c22: 'p6'}]]]",
-                  result->debug_row(2));
         EXPECT_EQ(
-                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c22: 'hi4'}], "
-                "[8->{c22: 'p7'}]]]",
+                "[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [{3:{c21: NULL, c22: 'hi3'}}, {7:{c21: "
+                "NULL, c22: 'p6'}}]]",
+                result->debug_row(2));
+        EXPECT_EQ(
+                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [{4:{c21: NULL, c22: "
+                "'hi4'}}, {8:{c21: NULL, c22: 'p7'}}]]",
                 result->debug_row(3));
         EXPECT_EQ(
-                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c22: 'hi4'}], [9->{c22: "
-                "'p7'}]]]",
+                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [{5:{c21: NULL, c22: 'hi4'}}, "
+                "{9:{c21: NULL, c22: 'p7'}}]]",
                 result->debug_row(4));
     }
 
@@ -1822,11 +1887,11 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         //            std::cout << result->debug_row(i) << std::endl;
         //        }
 
-        EXPECT_EQ("[[[1->NULL], [5->NULL], [9->NULL]]]", result->debug_row(0));
-        EXPECT_EQ("[[[2->NULL], [6->NULL]]]", result->debug_row(1));
-        EXPECT_EQ("[[[3->NULL], [7->NULL]]]", result->debug_row(2));
-        EXPECT_EQ("[[[4->NULL], [8->NULL]]]", result->debug_row(3));
-        EXPECT_EQ("[[[5->NULL], [9->NULL]]]", result->debug_row(4));
+        EXPECT_EQ("[[{1:NULL}, {5:NULL}, {9:NULL}]]", result->debug_row(0));
+        EXPECT_EQ("[[{2:NULL}, {6:NULL}]]", result->debug_row(1));
+        EXPECT_EQ("[[{3:NULL}, {7:NULL}]]", result->debug_row(2));
+        EXPECT_EQ("[[{4:NULL}, {8:NULL}]]", result->debug_row(3));
+        EXPECT_EQ("[[{5:NULL}, {9:NULL}]]", result->debug_row(4));
     }
 }
 

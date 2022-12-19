@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/transaction/TransactionState.java
 
@@ -38,12 +51,15 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,6 +71,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -81,11 +98,12 @@ public class TransactionState implements Writable {
         BATCH_LOAD_JOB(5),              // load job v2 for broker load
         DELETE(6),                     // synchronization delete job use this type
         LAKE_COMPACTION(7),            // compaction of LakeTable
-        FRONTEND_STREAMING(8);               // FE streaming load use this type
+        FRONTEND_STREAMING(8),          // FE streaming load use this type
+        MV_REFRESH(9);                  // Refresh MV
 
         private final int flag;
 
-        private LoadJobSourceType(int flag) {
+        LoadJobSourceType(int flag) {
             this.flag = flag;
         }
 
@@ -111,6 +129,8 @@ public class TransactionState implements Writable {
                     return LAKE_COMPACTION;
                 case 8:
                     return FRONTEND_STREAMING;
+                case 9:
+                    return MV_REFRESH;
                 default:
                     return null;
             }
@@ -158,7 +178,7 @@ public class TransactionState implements Writable {
             return flag;
         }
 
-        private int flag;
+        private final int flag;
 
         TxnSourceType(int flag) {
             this.flag = flag;
@@ -188,6 +208,11 @@ public class TransactionState implements Writable {
             this.ip = ip;
         }
 
+        public static TxnCoordinator fromThisFE() {
+            return new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                    FrontendOptions.getLocalHostAddress());
+        }
+
         @Override
         public String toString() {
             return sourceType.toString() + ": " + ip;
@@ -201,7 +226,7 @@ public class TransactionState implements Writable {
     // requestId is used to judge whether a begin request is an internal retry request.
     // no need to persist it.
     private TUniqueId requestId;
-    private Map<Long, TableCommitInfo> idToTableCommitInfos;
+    private final Map<Long, TableCommitInfo> idToTableCommitInfos;
     // coordinator is show who begin this txn (FE, or one of BE, etc...)
     private TxnCoordinator txnCoordinator;
     private TransactionStatus transactionStatus;
@@ -219,10 +244,10 @@ public class TransactionState implements Writable {
 
     // error replica ids
     private Set<Long> errorReplicas;
-    private CountDownLatch latch;
+    private final CountDownLatch latch;
 
     // these states need not be serialized
-    private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
+    private final Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
@@ -236,7 +261,7 @@ public class TransactionState implements Writable {
     // this map should be set when load execution begin, so that when the txn commit, it will know
     // which tables and rollups it loaded.
     // tbl id -> (index ids)
-    private Map<Long, Set<Long>> loadedTblIndexes = Maps.newHashMap();
+    private final Map<Long, Set<Long>> loadedTblIndexes = Maps.newHashMap();
 
     private String errorLogUrl = null;
 
@@ -250,7 +275,7 @@ public class TransactionState implements Writable {
     // used for PublishDaemon to check whether this txn can be published
     // not persisted, so need to rebuilt if FE restarts
     private volatile TransactionChecker finishChecker = null;
-    private long checkTimes = 0;
+    private long checkerCreationTime = 0;
     private Span txnSpan = null;
     private String traceParent = null;
 
@@ -448,13 +473,10 @@ public class TransactionState implements Writable {
                     break;
             }
         } else if (callbackId > 0) {
-            switch (transactionStatus) {
-                case COMMITTED:
-                    // Maybe listener has been deleted. The txn need to be aborted later.
-                    throw new TransactionException(
-                            "Failed to commit txn when callback " + callbackId + "could not be found");
-                default:
-                    break;
+            if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED) {
+                // Maybe listener has been deleted. The txn need to be aborted later.
+                throw new TransactionException(
+                        "Failed to commit txn when callback " + callbackId + "could not be found");
             }
         }
 
@@ -466,12 +488,8 @@ public class TransactionState implements Writable {
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         if (callback != null) {
-            switch (transactionStatus) {
-                case VISIBLE:
-                    callback.afterVisible(this, txnOperated);
-                    break;
-                default:
-                    break;
+            if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
+                callback.afterVisible(this, txnOperated);
             }
         }
     }
@@ -674,8 +692,9 @@ public class TransactionState implements Writable {
         return publishVersionTasks;
     }
 
-    public void clearPublishVersionTasks() {
+    public void clearAfterPublished() {
         publishVersionTasks.clear();
+        finishChecker = null;
     }
 
     @Override
@@ -695,16 +714,15 @@ public class TransactionState implements Writable {
         out.writeLong(commitTime);
         out.writeLong(finishTime);
         // if txn use new publish mechanism, store state in the space originally used by `reason`
+        // if new publish with TxnFinishState, write json {"normal":[xx],"abnormal":[xxx,xxx]}
+        // else write `reason` field
+        // they are both String, so they are compatible
         if (transactionStatus == TransactionStatus.VISIBLE) {
             if (newFinish) {
                 Preconditions.checkNotNull(finishState);
-                // write 1 as version number
-                byte[] bytes = finishState.toBytes();
-                out.writeInt(bytes.length + 1);
-                out.writeByte(1);
-                out.write(bytes);
+                Text.writeString(out, GsonUtils.GSON.toJson(finishState));
             } else {
-                out.writeInt(0);
+                Text.writeString(out, "");
             }
         } else {
             Text.writeString(out, reason);
@@ -770,14 +788,37 @@ public class TransactionState implements Writable {
             if (len == 0) {
                 newFinish = false;
             } else {
-                in.readByte(); // skip the first byte, which is the version number
-                byte[] bytes = new byte[len - 1];
+                byte[] bytes = new byte[len];
                 in.readFully(bytes);
-                if (finishState == null) {
-                    finishState = new TxnFinishState();
+                try {
+                    // originally, TxnFinishState is serialized using protobuf(baidu jprotobuf),
+                    // but looks like the ser/deser is not compatible with java native serialization
+                    // causing FE error when upgrading, so changed to json serialization, but keep
+                    // the old deserialization code here for compatibility
+                    // see: https://github.com/StarRocks/starrocks/issues/15248
+                    byte version = bytes[0];
+                    if (version == 1) {
+                        if (finishState == null) {
+                            finishState = new TxnFinishState();
+                        }
+                        byte[] pbBytes = new byte[len - 1];
+                        System.arraycopy(bytes, 1, pbBytes, 0, len - 1);
+                        finishState.fromBytes(pbBytes);
+                        newFinish = true;
+                    } else {
+                        String content = Text.decode(bytes);
+                        if (content.length() > 2 && content.charAt(0) == '{') {
+                            finishState = GsonUtils.GSON.fromJson(content, TxnFinishState.class);
+                            newFinish = true;
+                        } else {
+                            // old reason
+                            reason = content;
+                            newFinish = false;
+                        }
+                    }
+                } catch (IOException e) {
+                    LOG.warn("failed to deserialize TxnFinishState data: " + Hex.encodeHexString(bytes));
                 }
-                finishState.fromBytes(bytes);
-                newFinish = true;
             }
         } else {
             reason = Text.readString(in);
@@ -901,18 +942,16 @@ public class TransactionState implements Writable {
 
     // Note: caller should hold db lock
     public void prepareFinishChecker(Database db) {
-        if (finishChecker == null) {
-            synchronized (this) {
-                if (finishChecker == null) {
-                    finishChecker = TransactionChecker.create(this, db);
-                }
-            }
+        synchronized (this) {
+            finishChecker = TransactionChecker.create(this, db);
+            checkerCreationTime = System.nanoTime();
         }
     }
 
     public boolean checkCanFinish() {
-        // this may happen if FE restarts
-        if (finishChecker == null) {
+        // finishChecker may be null if FE restarts
+        // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
+        if (finishChecker == null || System.nanoTime() - checkerCreationTime > 10000000000L) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 // consider txn finished if db is dropped
@@ -928,17 +967,18 @@ public class TransactionState implements Writable {
         if (finishState == null) {
             finishState = new TxnFinishState();
         }
-        checkTimes++;
         boolean ret = finishChecker.finished(finishState);
         if (ret) {
             txnSpan.addEvent("check_ok");
-            txnSpan.setAttribute("check_times", checkTimes);
         }
         return ret;
     }
 
     public String getPublishTimeoutDebugInfo() {
-        if (finishChecker != null) {
+        if (!hasSendTask()) {
+            return "txn has not sent publish tasks yet, maybe waiting previous txns on the same table(s) to finish, tableIds: " +
+                    Joiner.on(",").join(getTableIdList());
+        } else if (finishChecker != null) {
             return finishChecker.debugInfo();
         } else {
             return getErrMsg();

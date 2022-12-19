@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/proc/FrontendsProcNode.java
 
@@ -33,6 +46,7 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -144,14 +158,20 @@ public class FrontendsProcNode implements ProcNodeInterface {
     private static boolean isJoin(List<InetSocketAddress> allFeHosts, Frontend fe) {
         for (InetSocketAddress addr : allFeHosts) {
             String realHost = "";
-            if (InetAddressValidator.getInstance().isValidInet4Address(fe.getHost())) {
-                realHost = addr.getAddress().getHostAddress();
-            } else {
-                try {
-                    realHost = addr.getAddress().getHostName();
-                } catch (Exception e) {
-                    LOG.warn("Fail to get address hostname of fe: {} msg: {}", addr, e);
+            try {
+                InetAddress address = addr.getAddress();
+                if (null == address) {
+                    LOG.warn("Failed to get InetAddress {}", addr);
+                    continue;
                 }
+                if (InetAddressValidator.getInstance().isValidInet4Address(fe.getHost())) {
+                    realHost = address.getHostAddress();
+                } else {
+                    realHost = address.getHostName();
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to get address hostname of fe: {} msg: {}", addr, e);
+                continue;
             }
             if (fe.getHost().equals(realHost) && fe.getEditLogPort() == addr.getPort()) {
                 return true;

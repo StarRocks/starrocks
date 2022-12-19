@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "column/column_helper.h"
 
@@ -189,10 +201,11 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
-// expression trees' return column should align return type when some return columns may be different from
-// the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
-// but required return type is nullable(string), so col need align return type to nullable(string).
-ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows) {
+// expression trees' return column should align return type when some return columns maybe diff from the required
+// return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
+// Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
+ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                          const bool is_nullable) {
     ColumnPtr new_column = old_col;
     if (old_col->only_null()) {
         new_column = ColumnHelper::create_column(type_desc, true);
@@ -204,6 +217,9 @@ ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDe
         auto* const_column = down_cast<ConstColumn*>(old_col.get());
         new_column->append(*const_column->data_column(), 0, 1);
         new_column->assign(num_rows, 0);
+    }
+    if (is_nullable && !new_column->is_nullable()) {
+        new_column = NullableColumn::create(std::move(new_column), NullColumn::create(new_column->size(), 0));
     }
     return new_column;
 }
@@ -260,13 +276,16 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         Columns columns;
         BinaryColumn::Ptr field_names = BinaryColumn::create();
         for (size_t i = 0; i < field_size; i++) {
-            if (!type_desc.selected_fields.at(i)) {
-                continue;
-            }
+            // TODO(SmithCruise): We still create not selected column, but do append_default instead.
+            // We should optimize it in future.
+            // if (!type_desc.selected_fields.at(i)) {
+            //     continue;
+            // }
+
             // Subfield column must be nullable column.
-            ColumnPtr field_column = create_column(type_desc.children.at(i), true, is_const, size);
+            ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
             columns.emplace_back(field_column);
-            field_names->append_string(type_desc.field_names.at(i));
+            field_names->append_string(type_desc.field_names[i]);
         }
         p = StructColumn::create(columns, field_names);
     } else {

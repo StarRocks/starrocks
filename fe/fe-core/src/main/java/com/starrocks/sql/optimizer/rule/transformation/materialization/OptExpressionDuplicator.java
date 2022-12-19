@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
@@ -7,6 +20,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -16,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -36,10 +54,18 @@ public class OptExpressionDuplicator {
     // old ColumnRefOperator -> new ColumnRefOperator
     private final Map<ColumnRefOperator, ScalarOperator> columnMapping;
     private ReplaceColumnRefRewriter rewriter;
-    public OptExpressionDuplicator(ColumnRefFactory columnRefFactory) {
-        this.columnRefFactory = columnRefFactory;
+    private Table partitionByTable;
+    private Column partitionColumn;
+    private boolean partialPartitionRewrite;
+
+    public OptExpressionDuplicator(MaterializationContext materializationContext) {
+        this.columnRefFactory = materializationContext.getQueryRefFactory();
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
+        Pair<Table, Column> partitionInfo = materializationContext.getMv().getPartitionTableAndColumn();
+        this.partitionByTable = partitionInfo == null ? null : partitionInfo.first;
+        this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
+        this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();
     }
     public OptExpression duplicate(OptExpression source) {
         OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
@@ -74,9 +100,7 @@ public class OptExpressionDuplicator {
                         k -> columnRefFactory.getNextRelationId());
                 columnRefFactory.updateColumnToRelationIds(newColumnRef.getId(), newRelationId);
             }
-            ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             LogicalScanOperator.Builder scanBuilder = (LogicalScanOperator.Builder) opBuilder;
-            scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
 
             Map<Column, ColumnRefOperator> columnMetaToColRefMap =
                     ((LogicalScanOperator) optExpression.getOp()).getColumnMetaToColRefMap();
@@ -85,7 +109,6 @@ public class OptExpressionDuplicator {
                 ColumnRefOperator key = entry.getValue();
                 ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key, k -> {
                     ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
-                    columnMapping.put(k, newColumnRef);
                     return newColumnRef;
                 });
                 columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),
@@ -99,6 +122,22 @@ public class OptExpressionDuplicator {
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
             processCommon(opBuilder);
+
+            if (partialPartitionRewrite
+                    && optExpression.getOp() instanceof LogicalOlapScanOperator
+                    && partitionByTable != null) {
+                // maybe partition column is not in the output columns, should add it
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+                OlapTable table = (OlapTable) olapScan.getTable();
+                if (table.getId() == partitionByTable.getId()) {
+                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn)) {
+                        ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
+                        columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+                    }
+                }
+            }
+            ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
+            scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
 
             return OptExpression.create(opBuilder.build());
         }
@@ -213,6 +252,7 @@ public class OptExpressionDuplicator {
         }
 
         private void processCommon(Operator.Builder opBuilder) {
+            // first process predicate, then projection
             ScalarOperator predicate = opBuilder.getPredicate();
             if (predicate != null) {
                 ScalarOperator newPredicate = rewriter.rewrite(predicate);

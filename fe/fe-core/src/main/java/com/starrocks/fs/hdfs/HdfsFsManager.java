@@ -54,58 +54,140 @@ import java.util.concurrent.TimeUnit;
 
 
 class ConfigurationWrap extends Configuration {
+    private static final Logger LOG = LogManager.getLogger(ConfigurationWrap.class);
+
     ConfigurationWrap() {
     }
 
-    ConfigurationWrap(boolean loadDefaults) { 
+    ConfigurationWrap(boolean loadDefaults) {
         super(loadDefaults);
     }
 
+    public String parseRegionFromEndpoint(String endPoint) {
+        if (endPoint.contains("oss")) {
+            String[] hostSplit = endPoint.split("\\.");
+            String regionId = hostSplit[0];
+            if (regionId.contains("-internal")) {
+                return regionId.substring(0, regionId.length() - "-internal".length());
+            } else {
+                return regionId;
+            }
+        } else {
+            String[] hostSplit = endPoint.split("\\.");
+            return hostSplit[1];
+        }
+    }
+
     public void convertObjectStoreConfToProperties(String path, THdfsProperties tProperties, TObjectStoreType tObjectStoreType) {
-        Properties props =  this.getProps();
+        Properties props = this.getProps();
         Enumeration<String> enums = (Enumeration<String>) props.propertyNames();
         tProperties.setObject_store_type(tObjectStoreType);
         tProperties.setObject_store_path(path);
         while (enums.hasMoreElements()) {
             String key = enums.nextElement();
             String value = props.getProperty(key);
-            switch (key) {
-                case HdfsFsManager.FS_S3A_ACCESS_KEY:
-                case HdfsFsManager.FS_KS3_ACCESS_KEY:
-                case HdfsFsManager.FS_OSS_ACCESS_KEY:
-                case HdfsFsManager.FS_COS_ACCESS_KEY:
-                case HdfsFsManager.FS_OBS_ACCESS_KEY:
-                    tProperties.setAccess_key(value);
+            switch (tObjectStoreType) {
+                case S3:
+                    switch (key) {
+                        case HdfsFsManager.FS_S3A_ACCESS_KEY:
+                            tProperties.setAccess_key(value);
+                            break;
+                        case HdfsFsManager.FS_S3A_SECRET_KEY:
+                            tProperties.setSecret_key(value);
+                            break;
+                        case HdfsFsManager.FS_S3A_ENDPOINT:
+                            tProperties.setEnd_point(value);
+                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            break;
+                        case HdfsFsManager.FS_S3A_IMPL_DISABLE_CACHE:
+                            tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                            break;
+                        case HdfsFsManager.FS_S3A_CONNECTION_SSL_ENABLED:
+                            tProperties.setSsl_enable(Boolean.parseBoolean(value));
+                            break;
+                        case HdfsFsManager.FS_S3A_MAX_CONNECTION:
+                            tProperties.setMax_connection(Integer.parseInt(value));
+                    }
                     break;
-                case HdfsFsManager.FS_S3A_SECRET_KEY:
-                case HdfsFsManager.FS_KS3_SECRET_KEY:
-                case HdfsFsManager.FS_OSS_SECRET_KEY:
-                case HdfsFsManager.FS_COS_SECRET_KEY:
-                case HdfsFsManager.FS_OBS_SECRET_KEY:
-                    tProperties.setSecret_key(value);
+                case OSS:
+                    switch (key) {
+                        case HdfsFsManager.FS_OSS_ACCESS_KEY:
+                            tProperties.setAccess_key(value);
+                            break;
+                        case HdfsFsManager.FS_OSS_SECRET_KEY:
+                            tProperties.setSecret_key(value);
+                            break;
+                        case HdfsFsManager.FS_OSS_ENDPOINT:
+                            tProperties.setEnd_point(value);
+                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            break;
+                        case HdfsFsManager.FS_OSS_IMPL_DISABLE_CACHE:
+                            tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                            break;
+                        case HdfsFsManager.FS_OSS_CONNECTION_SSL_ENABLED:
+                            tProperties.setSsl_enable(Boolean.parseBoolean(value));
+                            break;
+                    }
                     break;
-                case HdfsFsManager.FS_S3A_ENDPOINT:
-                case HdfsFsManager.FS_KS3_ENDPOINT:
-                case HdfsFsManager.FS_OSS_ENDPOINT:
-                case HdfsFsManager.FS_COS_ENDPOINT:
-                case HdfsFsManager.FS_OBS_ENDPOINT:
-                    tProperties.setEnd_point(value);
+                case COS:
+                    switch (key) {
+                        case HdfsFsManager.FS_COS_ACCESS_KEY:
+                            tProperties.setAccess_key(value);
+                            break;
+                        case HdfsFsManager.FS_COS_SECRET_KEY:
+                            tProperties.setSecret_key(value);
+                            break;
+                        case HdfsFsManager.FS_COS_ENDPOINT:
+                            tProperties.setEnd_point(value);
+                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            break;
+                        case HdfsFsManager.FS_COS_IMPL_DISABLE_CACHE:
+                            tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                            break;
+                        case HdfsFsManager.FS_COS_CONNECTION_SSL_ENABLED:
+                            tProperties.setSsl_enable(Boolean.parseBoolean(value));
+                            break;
+                    }
                     break;
-                case HdfsFsManager.FS_S3A_IMPL_DISABLE_CACHE:
-                case HdfsFsManager.FS_KS3_IMPL_DISABLE_CACHE:
-                case HdfsFsManager.FS_OSS_IMPL_DISABLE_CACHE:
-                case HdfsFsManager.FS_COS_IMPL_DISABLE_CACHE:
-                case HdfsFsManager.FS_OBS_IMPL_DISABLE_CACHE:
-                    tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                case KS3:
+                    switch (key) {
+                        case HdfsFsManager.FS_KS3_ACCESS_KEY:
+                            tProperties.setAccess_key(value);
+                            break;
+                        case HdfsFsManager.FS_KS3_SECRET_KEY:
+                            tProperties.setSecret_key(value);
+                            break;
+                        case HdfsFsManager.FS_KS3_ENDPOINT:
+                            tProperties.setEnd_point(value);
+                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            break;
+                        case HdfsFsManager.FS_KS3_IMPL_DISABLE_CACHE:
+                            tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                            break;
+                        case HdfsFsManager.FS_KS3_CONNECTION_SSL_ENABLED:
+                            tProperties.setSsl_enable(Boolean.parseBoolean(value));
+                            break;
+                    }
                     break;
-                case HdfsFsManager.FS_S3A_CONNECTION_SSL_ENABLED:
-                case HdfsFsManager.FS_OSS_CONNECTION_SSL_ENABLED:
-                    tProperties.setSsl_enable(Boolean.parseBoolean(value));
-                    break;
-                case HdfsFsManager.FS_COS_BUCKET_REGION:
-                    tProperties.setRegion(value);
-                case HdfsFsManager.FS_S3A_MAX_CONNECTION:
-                    tProperties.setMax_connection(Integer.parseInt(value));
+                case OBS:
+                    switch (key) {
+                        case HdfsFsManager.FS_OBS_ACCESS_KEY:
+                            tProperties.setAccess_key(value);
+                            break;
+                        case HdfsFsManager.FS_OBS_SECRET_KEY:
+                            tProperties.setSecret_key(value);
+                            break;
+                        case HdfsFsManager.FS_OBS_ENDPOINT:
+                            tProperties.setEnd_point(value);
+                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            break;
+                        case HdfsFsManager.FS_OBS_IMPL_DISABLE_CACHE:
+                            tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                            break;
+                        case HdfsFsManager.FS_OBS_CONNECTION_SSL_ENABLED:
+                            tProperties.setSsl_enable(Boolean.parseBoolean(value));
+                            break;
+                    }
             }
         }
         return;
@@ -117,11 +199,11 @@ class HDFSConfigurationWrap extends HdfsConfiguration {
     }
 
     public HDFSConfigurationWrap(boolean loadDefaults) {
-        super(loadDefaults); 
+        super(loadDefaults);
     }
 
     public void convertHDFSConfToProperties(THdfsProperties tProperties) {
-        Properties props =  this.getProps();
+        Properties props = this.getProps();
         Enumeration<String> enums = (Enumeration<String>) props.propertyNames();
         while (enums.hasMoreElements()) {
             String key = enums.nextElement();
@@ -175,6 +257,7 @@ public class HdfsFsManager {
     public static final String FS_KS3_ENDPOINT = "fs.ks3.endpoint";
     public static final String FS_KS3_IMPL = "fs.ks3.impl";
     // This property is used like 'fs.ks3.impl.disable.cache'
+    public static final String FS_KS3_CONNECTION_SSL_ENABLED = "fs.ks3.connection.ssl.enabled";
     public static final String FS_KS3_IMPL_DISABLE_CACHE = "fs.ks3.impl.disable.cache";
 
     // arguments for oss
@@ -191,8 +274,8 @@ public class HdfsFsManager {
     public static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
     public static final String FS_COS_ENDPOINT = "fs.cosn.bucket.endpoint_suffix";
     public static final String FS_COS_IMPL_DISABLE_CACHE = "fs.cosn.impl.disable.cache";
+    public static final String FS_COS_CONNECTION_SSL_ENABLED = "fs.cos.connection.ssl.enabled";
     public static final String FS_COS_IMPL = "fs.cosn.impl";
-    public static final String FS_COS_BUCKET_REGION = "fs.cosn.bucket.region";
 
     // arguments for obs
     public static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
@@ -200,6 +283,7 @@ public class HdfsFsManager {
     public static final String FS_OBS_ENDPOINT = "fs.obs.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     public static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
+    public static final String FS_OBS_CONNECTION_SSL_ENABLED = "fs.obs.connection.ssl.enabled";
     public static final String FS_OBS_IMPL = "fs.obs.impl";
 
     private ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(1);
@@ -217,14 +301,14 @@ public class HdfsFsManager {
         writeBufferSize = Config.hdfs_write_buffer_size_kb << 10;
         handleManagementPool.schedule(new FileSystemExpirationChecker(), 0, TimeUnit.SECONDS);
     }
-    
+
     private static void convertHDFSConfToProperties(Configuration conf, THdfsProperties tProperties) {
-        ((HDFSConfigurationWrap) conf).convertHDFSConfToProperties(tProperties); 
+        ((HDFSConfigurationWrap) conf).convertHDFSConfToProperties(tProperties);
     }
 
-    private static void convertObjectStoreConfToProperties(String path, Configuration conf, THdfsProperties tProperties, 
-            TObjectStoreType tObjectStoreType) {
-        ((ConfigurationWrap) conf).convertObjectStoreConfToProperties(path, tProperties, tObjectStoreType); 
+    private static void convertObjectStoreConfToProperties(String path, Configuration conf, THdfsProperties tProperties,
+                                                           TObjectStoreType tObjectStoreType) {
+        ((ConfigurationWrap) conf).convertObjectStoreConfToProperties(path, tProperties, tObjectStoreType);
     }
 
     /**
@@ -237,8 +321,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String scheme = pathUri.getUri().getScheme();
         if (Strings.isNullOrEmpty(scheme)) {
@@ -283,8 +367,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getDistributedFileSystem(String scheme, String path, Map<String, String> loadProperties, 
-            THdfsProperties tProperties) throws UserException {
+    public HdfsFs getDistributedFileSystem(String scheme, String path, Map<String, String> loadProperties,
+                                           THdfsProperties tProperties) throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String host = scheme + "://" + pathUri.getAuthority();
         if (Strings.isNullOrEmpty(pathUri.getAuthority())) {
@@ -317,7 +401,7 @@ public class HdfsFsManager {
         if (!authentication.equals("")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
-            throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " + 
+            throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
@@ -399,8 +483,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_S3A_SECRET_KEY, "");
@@ -482,14 +566,14 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_KS3_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_KS3_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_KS3_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_KS3_IMPL_DISABLE_CACHE, "true");
-        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_KS3_CONNECTION_SSL_ENABLED, "false");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
@@ -531,7 +615,7 @@ public class HdfsFsManager {
                 conf.set(FS_KS3_ENDPOINT, endpoint);
                 conf.set(FS_KS3_IMPL, "com.ksyun.kmr.hadoop.fs.ks3.Ks3FileSystem");
                 conf.set(FS_KS3_IMPL_DISABLE_CACHE, disableCache);
-                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                conf.set(FS_KS3_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem ks3FileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(ks3FileSystem);
                 fileSystem.setConfiguration(conf);
@@ -565,14 +649,14 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OBS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_OBS_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_OBS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_OBS_IMPL_DISABLE_CACHE, "true");
-        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_OBS_CONNECTION_SSL_ENABLED, "false");
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, OBS must provide access_key");
             throw new UserException("Invalid load_properties, OBS must provide access_key");
@@ -616,7 +700,7 @@ public class HdfsFsManager {
                 conf.set(FS_OBS_ENDPOINT, endpoint);
                 conf.set(FS_OBS_IMPL, "org.apache.hadoop.fs.obs.OBSFileSystem");
                 conf.set(FS_OBS_IMPL_DISABLE_CACHE, disableCache);
-                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                conf.set(FS_OBS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem obsFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(obsFileSystem);
                 fileSystem.setConfiguration(conf);
@@ -650,8 +734,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OSS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_OSS_SECRET_KEY, "");
@@ -700,7 +784,6 @@ public class HdfsFsManager {
                 conf.set(FS_OSS_IMPL, "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem");
                 conf.set(FS_OSS_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_OSS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
-                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem ossFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(ossFileSystem);
                 fileSystem.setConfiguration(conf);
@@ -725,16 +808,17 @@ public class HdfsFsManager {
      * file system handle is cached, the identity is endpoint + bucket +
      * accessKey_secretKey
      * for cos
+     *
      * @throws UserException
      */
-    public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_COS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_COS_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_COS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_COS_IMPL_DISABLE_CACHE, "true");
-        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_COS_CONNECTION_SSL_ENABLED, "false");
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, COS must provide access_key");
             throw new UserException("Invalid load_properties, COS must provide access_key");
@@ -776,7 +860,7 @@ public class HdfsFsManager {
                 conf.set(FS_COS_ENDPOINT, endpoint);
                 conf.set(FS_COS_IMPL, "org.apache.hadoop.fs.CosFileSystem");
                 conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
-                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                conf.set(FS_COS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(cosFileSystem);
                 fileSystem.setConfiguration(conf);
@@ -797,14 +881,14 @@ public class HdfsFsManager {
         }
     }
 
-    public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         getFileSystem(path, loadProperties, tProperties);
         return;
     }
 
-    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties) 
-        throws UserException {
+    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
+            throws UserException {
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -874,7 +958,7 @@ public class HdfsFsManager {
             }
         } catch (IOException e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath);
-            throw new UserException("errors while rename " + srcPath + "to " +  destPath);
+            throw new UserException("errors while rename " + srcPath + "to " + destPath);
         }
     }
 
@@ -883,8 +967,7 @@ public class HdfsFsManager {
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
         try {
-            boolean isPathExist = fileSystem.getDFSFileSystem().exists(filePath);
-            return isPathExist;
+            return fileSystem.getDFSFileSystem().exists(filePath);
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path);
             throw new UserException("errors while check if path " + path + " exist");
@@ -927,7 +1010,7 @@ public class HdfsFsManager {
                     fsDataInputStream.seek(offset);
                 } catch (IOException e) {
                     throw new UserException("current read offset " + currentStreamOffset + " is not equal to "
-                         + offset + ", and could not seek to it");
+                            + offset + ", and could not seek to it");
                 }
             }
             byte[] buf;
@@ -1001,7 +1084,7 @@ public class HdfsFsManager {
             long currentStreamOffset = fsDataOutputStream.getPos();
             if (currentStreamOffset != offset) {
                 throw new UserException("current outputstream offset is " + currentStreamOffset
-                 + " not equal to request " + offset);
+                        + " not equal to request " + offset);
             }
             try {
                 fsDataOutputStream.write(data);

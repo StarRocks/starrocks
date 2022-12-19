@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/service/FrontendServiceImpl.java
 
@@ -76,6 +89,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -84,6 +98,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
+import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAuthenticateParams;
@@ -129,6 +144,8 @@ import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TLoadTxnRollbackRequest;
 import com.starrocks.thrift.TLoadTxnRollbackResult;
+import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
@@ -157,6 +174,7 @@ import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
+import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -181,8 +199,8 @@ import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
-    private LeaderImpl leaderImpl;
-    private ExecuteEnv exeEnv;
+    private final LeaderImpl leaderImpl;
+    private final ExecuteEnv exeEnv;
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
@@ -793,10 +811,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (ctx == null) {
             return result;
         }
-        List<List<String>> rows = VariableMgr.dump(SetType.fromThrift(params.getVarType()), ctx.getSessionVariable(),
+        SetType setType = SetType.fromThrift(params.getVarType());
+        List<List<String>> rows = VariableMgr.dump(setType, ctx.getSessionVariable(),
                 null);
-        for (List<String> row : rows) {
-            map.put(row.get(0), row.get(1));
+        if (setType != SetType.VERBOSE) {
+            for (List<String> row : rows) {
+                map.put(row.get(0), row.get(1));
+            }
+        } else {
+            for (List<String> row : rows) {
+                TVerboseVariableRecord record = new TVerboseVariableRecord();
+                record.setVariable_name(row.get(0));
+                record.setValue(row.get(1));
+                record.setDefault_value(row.get(2));
+                record.setIs_changed(row.get(3).equals("1"));
+                result.addToVerbose_variables(record);
+            }
         }
         return result;
     }
@@ -1023,8 +1053,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
             LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
             return;
@@ -1429,5 +1459,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus status = new TStatus(TStatusCode.OK);
         res.setStatus(status);
         return res;
+    }
+
+    @Override
+    public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
+        if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
+            throw new TException("Only support report_epoch task");
+        }
+        MVManager.getInstance().onReportEpoch(request);
+        return new TMVReportEpochResponse();
     }
 }

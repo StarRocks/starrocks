@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
@@ -12,9 +25,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +55,9 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                                                                            @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                List<TStatisticData> statisticData = queryStatisticsData(cacheKey.tableId, cacheKey.column);
+                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                connectContext.setThreadLocalInfo();
+                List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableId, cacheKey.column);
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
                 if (!statisticData.isEmpty()) {
                     return Optional.of(convert2ColumnStatistics(statisticData.get(0)));
@@ -67,7 +84,10 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     tableId = key.tableId;
                     columns.add(key.column);
                 }
-                List<TStatisticData> statisticData = queryStatisticsData(tableId, columns);
+
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableId, columns);
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
                 // There may be no statistics for the column in BE
                 // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
@@ -96,12 +116,12 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
         return asyncLoad(key, executor);
     }
 
-    private List<TStatisticData> queryStatisticsData(long tableId, String column) throws Exception {
-        return queryStatisticsData(tableId, ImmutableList.of(column));
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, String column) {
+        return queryStatisticsData(context, tableId, ImmutableList.of(column));
     }
 
-    private List<TStatisticData> queryStatisticsData(long tableId, List<String> columns) throws Exception {
-        return statisticExecutor.queryStatisticSync(null, tableId, columns);
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, List<String> columns) {
+        return statisticExecutor.queryStatisticSync(context, null, tableId, columns);
     }
 
     private ColumnStatistic convert2ColumnStatistics(TStatisticData statisticData) throws AnalysisException {

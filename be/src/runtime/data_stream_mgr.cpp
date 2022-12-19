@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/data_stream_mgr.cpp
 
@@ -74,7 +87,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
     VLOG_ROW << "looking up fragment_instance_id=" << fragment_instance_id << ", node=" << node_id;
     uint32_t bucket = get_bucket(fragment_instance_id);
     auto& receiver_map = _receiver_map[bucket];
-    std::lock_guard<Mutex> l(_lock[bucket]);
+    std::shared_lock l(_lock[bucket]);
 
     auto iter = receiver_map.find(fragment_instance_id);
     if (iter != receiver_map.end()) {

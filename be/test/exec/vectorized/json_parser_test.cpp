@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/json_parser.h"
 
@@ -448,7 +460,8 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
 PARALLEL_TEST(JsonParserTest, test_big_value) {
     simdjson::ondemand::parser simdjson_parser;
     // The padded_string would allocate memory with simdjson::SIMDJSON_PADDING bytes padding.
-    simdjson::padded_string input = simdjson::padded_string::load("./be/test/exec/test_data/json_scanner/big_value.json");
+    simdjson::padded_string input =
+            simdjson::padded_string::load("./be/test/exec/test_data/json_scanner/big_value.json");
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
 

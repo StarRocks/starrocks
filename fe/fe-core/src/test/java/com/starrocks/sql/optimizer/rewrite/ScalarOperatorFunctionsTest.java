@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rewrite;
 
@@ -18,9 +31,11 @@ import org.junit.Test;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Locale;
@@ -42,7 +57,10 @@ public class ScalarOperatorFunctionsTest {
     private static ConstantOperator O_DOUBLE_100;
     private static ConstantOperator O_BI_100;
     private static ConstantOperator O_BI_3;
+    private static ConstantOperator O_BI_131;
+    private static ConstantOperator O_BI_NEG_3;
     private static ConstantOperator O_LI_100;
+    private static ConstantOperator O_LI_NEG_100;
     private static ConstantOperator O_DECIMAL_100;
     private static ConstantOperator O_DECIMAL32P7S2_100;
     private static ConstantOperator O_DECIMAL32P9S0_100;
@@ -63,7 +81,10 @@ public class ScalarOperatorFunctionsTest {
         O_DOUBLE_100 = ConstantOperator.createFloat(100);
         O_BI_100 = ConstantOperator.createBigint(100);
         O_BI_3 = ConstantOperator.createBigint(3);
+        O_BI_131 = ConstantOperator.createBigint(131);
+        O_BI_NEG_3 = ConstantOperator.createBigint(-3);
         O_LI_100 = ConstantOperator.createLargeInt(new BigInteger("100"));
+        O_LI_NEG_100 = ConstantOperator.createLargeInt(new BigInteger("-100"));
         O_DECIMAL_100 = ConstantOperator.createDecimal(new BigDecimal(100), Type.DECIMALV2);
         O_DECIMAL32P7S2_100 = ConstantOperator.createDecimal(new BigDecimal(100),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
@@ -315,6 +336,10 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013,05,10"), ConstantOperator.createVarchar("%Y,%m,%d"))
                 .getDatetime().toString());
+        assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("   2013,05,10   "),
+                        ConstantOperator.createVarchar("%Y,%m,%d"))
+                .getDatetime().toString());
         assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDatetime().toString());
@@ -387,6 +412,19 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertThrows(IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2020-02-21"),
                         ConstantOperator.createVarchar("%w")).getVarchar());
+        assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("\t 2013-1-17"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getDate().toString());
+        assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("\n  2013-1-17"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getDate().toString());
+        assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("\r  2013-1-17"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getDate().toString());
+
+        Assert.assertThrows(DateTimeParseException.class,
+                () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("\f 2020-02-21"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getVarchar());
 
         Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
@@ -412,6 +450,9 @@ public class ScalarOperatorFunctionsTest {
     public void str2Date() {
         assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
                 .str2Date(ConstantOperator.createVarchar("2013,05,10"), ConstantOperator.createVarchar("%Y,%m,%d"))
+                .getDate().toString());
+        assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
+                .str2Date(ConstantOperator.createVarchar("   2013,05,10  "), ConstantOperator.createVarchar("%Y,%m,%d"))
                 .getDate().toString());
         assertEquals("2013-05-17T00:00", ScalarOperatorFunctions
                 .str2Date(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
@@ -879,6 +920,85 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void bitShiftLeftTinyInt() {
+        assertEquals(80, ScalarOperatorFunctions.bitShiftLeftTinyInt(O_TI_10, O_BI_3).getTinyInt());
+    }
+
+    @Test
+    public void bitShiftLeftSmallInt() {
+        assertEquals(80, ScalarOperatorFunctions.bitShiftLeftSmallInt(O_SI_10, O_BI_3).getSmallint());
+    }
+
+    @Test
+    public void bitShiftLeftInt() {
+        assertEquals(80, ScalarOperatorFunctions.bitShiftLeftInt(O_INT_10, O_BI_3).getInt());
+    }
+
+    @Test
+    public void bitShiftLeftBigint() {
+        assertEquals(800, ScalarOperatorFunctions.bitShiftLeftBigint(O_BI_100, O_BI_3).getBigint());
+    }
+
+    @Test
+    public void bitShiftLeftLargeInt() {
+        assertEquals("800", ScalarOperatorFunctions.bitShiftLeftLargeInt(O_LI_100, O_BI_3).getLargeInt().toString());
+    }
+
+    @Test
+    public void bitShiftRightTinyInt() {
+        assertEquals(1, ScalarOperatorFunctions.bitShiftRightTinyInt(O_TI_10, O_BI_3).getTinyInt());
+    }
+
+    @Test
+    public void bitShiftRightSmallInt() {
+        assertEquals(1, ScalarOperatorFunctions.bitShiftRightSmallInt(O_SI_10, O_BI_3).getSmallint());
+    }
+
+    @Test
+    public void bitShiftRightInt() {
+        assertEquals(1, ScalarOperatorFunctions.bitShiftRightInt(O_INT_10, O_BI_3).getInt());
+    }
+
+    @Test
+    public void bitShiftRightBigint() {
+        assertEquals(12, ScalarOperatorFunctions.bitShiftRightBigint(O_BI_100, O_BI_3).getBigint());
+    }
+
+    @Test
+    public void bitShiftRightLargeInt() {
+        assertEquals("12", ScalarOperatorFunctions.bitShiftRightLargeInt(O_LI_100, O_BI_3).getLargeInt().toString());
+    }
+
+    @Test
+    public void bitShiftRightLogicalTinyInt() {
+        assertEquals(1, ScalarOperatorFunctions.bitShiftRightLogicalTinyInt(O_TI_10, O_BI_3).getTinyInt());
+    }
+
+    @Test
+    public void bitShiftRightLogicalSmallInt() {
+        assertEquals(1, ScalarOperatorFunctions.bitShiftRightLogicalSmallInt(O_SI_10, O_BI_3).getSmallint());
+    }
+
+    @Test
+    public void bitShiftRightLogicalInt() {
+        assertEquals(1, ScalarOperatorFunctions.bitShiftRightLogicalInt(O_INT_10, O_BI_3).getInt());
+    }
+
+    @Test
+    public void bitShiftRightLogicalBigint() {
+        assertEquals(12, ScalarOperatorFunctions.bitShiftRightLogicalBigint(O_BI_100, O_BI_3).getBigint());
+    }
+
+    @Test
+    public void bitShiftRightLogicalLargeInt() {
+        assertEquals("12", ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_100, O_BI_3).getLargeInt().toString());
+        assertEquals("800", ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_100, O_BI_NEG_3).getLargeInt().toString());
+        assertEquals("12", ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_100, O_BI_131).getLargeInt().toString());
+        assertEquals("42535295865117307932921825928971026419",
+                ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_NEG_100, O_BI_3).getLargeInt().toString());
+    }
+
+    @Test
     public void concat() {
         ConstantOperator[] arg = {ConstantOperator.createVarchar("1"),
                 ConstantOperator.createVarchar("2"),
@@ -933,5 +1053,15 @@ public class ScalarOperatorFunctionsTest {
         CallOperator random = new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList());
         CallOperator randomCopy = (CallOperator) random.clone();
         assertEquals(random, randomCopy);
+    }
+
+    @Test
+    public void testUTCTimestamp() {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
+                .atZone(ZoneOffset.UTC).toLocalDateTime();
+        assertEquals(expected, ScalarOperatorFunctions.utcTimestamp().getDatetime());
     }
 }

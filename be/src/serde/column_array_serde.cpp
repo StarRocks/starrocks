@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "serde/column_array_serde.h"
 
@@ -100,6 +112,10 @@ const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
 }
 
 uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int encode_level) {
+    if (size > LZ4_MAX_INPUT_SIZE) {
+        throw std::runtime_error(
+                fmt::format("The input size for compression should be less than {}", LZ4_MAX_INPUT_SIZE));
+    }
     uint64_t encode_size =
             LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint64_t)),
                               size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
@@ -436,7 +452,6 @@ public:
         for (const auto& field : column.fields()) {
             size += serde::ColumnArraySerde::max_serialized_size(*field, encode_level);
         }
-        size += serde::ColumnArraySerde::max_serialized_size(column.field_names(), encode_level);
         return size;
     }
 
@@ -444,7 +459,6 @@ public:
         for (const auto& field : column.fields()) {
             buff = serde::ColumnArraySerde::serialize(*field, buff, false, encode_level);
         }
-        buff = serde::ColumnArraySerde::serialize(column.field_names(), buff, false, encode_level);
         return buff;
     }
 
@@ -452,7 +466,6 @@ public:
         for (const auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
-        buff = serde::ColumnArraySerde::deserialize(buff, column->field_names_column().get(), false, encode_level);
         return buff;
     }
 };

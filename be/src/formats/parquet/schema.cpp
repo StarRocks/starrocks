@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/schema.h"
 
@@ -194,7 +206,9 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     auto& key_schema = t_schemas[pos + 2];
     // when key type is char or varchar in hive, not string
     // the real type is BYTE_ARRAY which is OPTIONAL
-    if ((!is_required(key_schema)) && (key_schema.type != tparquet::Type::type::BYTE_ARRAY)) {
+    // when key type is decimal, the real type is FIXED_LEN_BYTE_ARRAY which is OPTIONAL
+    if ((!is_required(key_schema)) && (key_schema.type != tparquet::Type::type::BYTE_ARRAY) &&
+        (key_schema.type != tparquet::Type::type::FIXED_LEN_BYTE_ARRAY)) {
         return Status::InvalidArgument("key in map group must be required");
     }
 
@@ -319,7 +333,7 @@ Status SchemaDescriptor::node_to_field(const std::vector<tparquet::SchemaElement
     return Status::OK();
 }
 
-Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>& t_schemas) {
+Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>& t_schemas, bool case_sensitive) {
     if (t_schemas.size() == 0) {
         return Status::InvalidArgument("Empty parquet Schema");
     }
@@ -332,11 +346,15 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
     size_t next_pos = 1;
     for (int i = 0; i < root_schema.num_children; ++i) {
         RETURN_IF_ERROR(node_to_field(t_schemas, next_pos, LevelInfo(), &_fields[i], &next_pos));
-        if (_field_by_name.find(_fields[i].name) != _field_by_name.end()) {
+        if (!case_sensitive) {
+            _fields[i].name = boost::algorithm::to_lower_copy(_fields[i].name);
+        }
+        if (_field_idx_by_name.find(_fields[i].name) != _field_idx_by_name.end()) {
             return Status::InvalidArgument(strings::Substitute("Duplicate field name: $0", _fields[i].name));
         }
-        _field_by_name.emplace(_fields[i].name, &_fields[i]);
+        _field_idx_by_name.emplace(_fields[i].name, i);
     }
+    _case_sensitive = case_sensitive;
 
     if (next_pos != t_schemas.size()) {
         return Status::InvalidArgument(strings::Substitute("Remaining $0 unparsed field", t_schemas.size() - next_pos));
@@ -358,22 +376,27 @@ std::string SchemaDescriptor::debug_string() const {
     return ss.str();
 }
 
-int SchemaDescriptor::get_column_index(const std::string& column, bool case_sensitive) const {
-    for (size_t i = 0; i < _fields.size(); i++) {
-        bool found =
-                case_sensitive ? _fields[i].name == column : strcasecmp(_fields[i].name.c_str(), column.c_str()) == 0;
-        if (found) {
-            return i;
-        }
+int SchemaDescriptor::get_column_index(const std::string& column) const {
+    auto it = _field_idx_by_name.begin();
+    if (_case_sensitive) {
+        it = _field_idx_by_name.find(column);
+    } else {
+        it = _field_idx_by_name.find(boost::algorithm::to_lower_copy(column));
     }
-    return -1;
+    if (it == _field_idx_by_name.end()) return -1;
+    return it->second;
 }
 
-void SchemaDescriptor::get_field_names(std::unordered_set<std::string>* names, bool case_sensitive) const {
+const ParquetField* SchemaDescriptor::resolve_by_name(const std::string& name) const {
+    int idx = get_column_index(name);
+    if (idx == -1) return nullptr;
+    return &(_fields[idx]);
+}
+
+void SchemaDescriptor::get_field_names(std::unordered_set<std::string>* names) const {
     names->clear();
     for (const ParquetField& f : _fields) {
-        std::string name = case_sensitive ? f.name : boost::algorithm::to_lower_copy(f.name);
-        names->emplace(std::move(name));
+        names->emplace(std::move(f.name));
     }
 }
 

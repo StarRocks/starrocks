@@ -1,6 +1,6 @@
 # CANCEL DECOMMISSION
 
-## description
+## Description
 
 This statement is used to undo a node decommission. (Administrator only!)
 
@@ -10,7 +10,7 @@ Syntax:
 CANCEL DECOMMISSION BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
 ```
 
-## example
+## Examples
 
 1. Cancel decommission of two nodes.
 

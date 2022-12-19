@@ -2,16 +2,18 @@
 
 This topic describes the resource group feature of StarRocks.
 
-Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, maintaining the system stability.
+Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, maintaining the system stability. StarRocks v2.5 supports compute resource isolation for loading through resource groups, thereby indirectly controlling the consumption of cluster resources by loading tasks.
 
 With this feature, you can divide the computing resources of each backend (BE) into multiple resource groups and associate each resource group with one or more classifiers. When you run a query, StarRocks compares the conditions of each classifier with the information about the query to identify the classifier that best matches the query. Then, StarRocks allocates computing resources to the query based on the resource quotas of the resource group associated with the identified classifier.
 
 Enhancement plan of Resource Group feature
 
-|  | Internal Table | External Table | Big Query Resources | Short Query Resources | Load Resources | Schema Change Resources |
+|  | Internal Table | External Table | Big Query Resources | Short Query Resources | Load Compute Resources | Schema Change Resources |
 |---|---|---|---|---|---|---|
 | 2.2 | √ | × | × | × | × | × |
 | 2.3 | √ | √ | √ | √ | × | × |
+| 2.4 | √ | √ | √ | √ | × | × |
+| 2.5 | √ | √ | √ | √ | √ | × |
 
 ## Terms
 
@@ -29,24 +31,28 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   In actual business scenarios, CPU cores that are allocated to the resource group proportionally scale based on the availability of CPU cores on the BE.
 
-  > Note:
+  > **NOTE**
+  >
   > For example, you configure three resource groups on a BE that provides 16 CPU cores: rg1, rg2, and rg3. The values of `cpu_core_limit` for the three resource groups are `2`, `6`, and `8`, respectively.
+  >
   > If all CPU cores of the BE are occupied, the number of CPU cores that can be allocated to each of the three resource groups are 2, 6, and 8, respectively, based on the following calculations:
-
-  - > Number of CPU cores for rg1 = Total number of CPU cores on the BE × (2/16) = 2
-  - > Number of CPU cores for rg2 = Total number of CPU cores on the BE × (6/16) = 6
-  - > Number of CPU cores for rg3 = Total number of CPU cores on the BE × (8/16) = 8
-
+  >
+  > - Number of CPU cores for rg1 = Total number of CPU cores on the BE × (2/16) = 2
+  > - Number of CPU cores for rg2 = Total number of CPU cores on the BE × (6/16) = 6
+  > - Number of CPU cores for rg3 = Total number of CPU cores on the BE × (8/16) = 8
+  >
   > If not all CPU cores of the BE are occupied, as when rg1 and rg2 are loaded but rg3 is not, the number of CPU cores that can be allocated to rg1 and rg2 are 4 and 12, respectively, based on the following calculations:
-
-  - > Number of CPU cores for rg1 = Total number of CPU cores on the BE × (2/8) = 4
-  - > Number of CPU cores for rg2 = Total number of CPU cores on the BE × (6/8) = 12
+  >
+  > - Number of CPU cores for rg1 = Total number of CPU cores on the BE × (2/8) = 4
+  > - Number of CPU cores for rg2 = Total number of CPU cores on the BE × (6/8) = 12
 
 - `mem_limit`
 
   This parameter specifies the percentage of memory that can be used for queries in the total memory that is provided by the BE. Unit: %. Valid values: (0, 1).
 
-  > Note: The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
+  > **NOTE**
+  >
+  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
 
 - `concurrency_limit`
   This parameter specifies the upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries.
@@ -54,10 +60,13 @@ On the basis of the above resource consumption restrictions, you can further res
 - `big_query_cpu_second_limit`: This parameter specifies the upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second.
 - `big_query_mem_limit`: This parameter specifies the upper limit of memory usage of a big query. The unit is byte.
 
-> Note: When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
+> **NOTE**
+>
+> When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
 
-You can set the resource group `type` to `short_query` or `normal`.
+You can set the resource group `type` to `short_query`, `insert`, or `normal`.
 
+- When loading tasks hit a `insert` resource group, the BE node reserves the specified CPU resources for the loading tasks.
 - When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
 - When no query hits the `short_query` resource group, no limit is imposed to the resource of `normal` resource group.
 
@@ -73,13 +82,15 @@ Classifiers support the following conditions:
 
 - `user`: the name of the user.
 - `role`: the role of the user.
-- `query_type`: the type of the query. Only `SELECT` queries are supported.
+- `query_type`: the type of the query. `SELECT` and `INSERT` are supported.
 - `source_ip`: the CIDR block from which the query is initiated.
 - `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
 
 A classifier matches a query only when one or all conditions of the classifier match the information about the query. If multiple classifiers match a query, StarRocks calculates the degree of matching between the query and each classifier and identifies the classifier with the highest degree of matching.
 
-> Note: You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log**.
+> **NOTE**
+>
+> You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log**.
 
 StarRocks calculates the degree of matching between a query and a classifier by using the following rules:
 
@@ -201,7 +212,7 @@ SHOW RESOURCE GROUP group_name；
 
 Example:
 
-```SQL
+```plain
 mysql> SHOW RESOURCE GROUPS ALL;
 +------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
 | Name | Id     | CPUCoreLimit | MemLimit | ConcurrencyLimit | Type   | Classifiers                                                                                                            |
@@ -213,7 +224,9 @@ mysql> SHOW RESOURCE GROUPS ALL;
 +------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
 ```
 
-> Note: In the preceding example, `weight` indicates the degree of matching.
+> **NOTE**
+>
+> In the preceding example, `weight` indicates the degree of matching.
 
 ### Manage resource groups and classifiers
 

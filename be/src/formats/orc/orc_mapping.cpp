@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/orc/orc_mapping.h"
 
@@ -10,8 +22,8 @@ static std::string format_column_name(const std::string& col_name, bool case_sen
     return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
 }
 
-const OrcMappingOrOrcColumnId& OrcMapping::get_column_id_or_child_mapping(size_t original_pos_in_table_defination) {
-    auto it = _mapping.find(original_pos_in_table_defination);
+const OrcMappingOrOrcColumnId& OrcMapping::get_column_id_or_child_mapping(size_t original_pos_in_table_definition) {
+    auto it = _mapping.find(original_pos_in_table_definition);
     if (it == _mapping.end()) {
         DCHECK(false);
     }
@@ -22,9 +34,9 @@ void OrcMapping::clear() {
     _mapping.clear();
 }
 
-void OrcMapping::add_mapping(size_t original_pos_in_table_defination, size_t orc_column_id,
+void OrcMapping::add_mapping(size_t original_pos_in_table_definition, size_t orc_column_id,
                              const OrcMappingPtr& child_mapping) {
-    _mapping.emplace(original_pos_in_table_defination, OrcMappingOrOrcColumnId{child_mapping, orc_column_id});
+    _mapping.emplace(original_pos_in_table_definition, OrcMappingOrOrcColumnId{child_mapping, orc_column_id});
 }
 
 Status OrcMapping::set_lazyload_column_id(const uint64_t slot_pos, std::list<uint64_t>* column_id_list) {
@@ -92,7 +104,7 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
 }
 
 StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
-        const std::vector<SlotDescriptor*>& slot_descs, const orc::Type& root_orc_type, const bool case_sensitve,
+        const std::vector<SlotDescriptor*>& slot_descs, const orc::Type& root_orc_type, const bool case_sensitive,
         const bool use_orc_column_names, const std::vector<std::string>* hive_column_names) {
     std::unique_ptr<OrcMapping> orc_mapping = std::make_unique<OrcMapping>();
     Status res;
@@ -102,13 +114,13 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
         // If enable use_orc_column_names[Default is false], in first level, we will use column name to
         // build mapping relation.
         // This function is used for UT and Broker Load now.
-        res = _init_orc_mapping_with_orc_column_names(orc_mapping, slot_descs, root_orc_type, case_sensitve);
+        res = _init_orc_mapping_with_orc_column_names(orc_mapping, slot_descs, root_orc_type, case_sensitive);
     } else {
         // Use the column names in hive_column_names to establish a mapping,
         // the first column name in hive_column_names is mapped to the first column in orc, and so on.
         // NOTICE: The column order in SlotDescriptor[] is different from hive_column_names, so we need build
         // two mapping in below function.
-        res = _init_orc_mapping_with_hive_column_names(orc_mapping, slot_descs, root_orc_type, case_sensitve,
+        res = _init_orc_mapping_with_hive_column_names(orc_mapping, slot_descs, root_orc_type, case_sensitive,
                                                        hive_column_names);
     }
     if (!res.ok()) {
@@ -140,11 +152,11 @@ Status OrcMappingFactory::_check_orc_type_can_converte_2_logical_type(const orc:
 Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                                   const std::vector<SlotDescriptor*>& slot_descs,
                                                                   const orc::Type& orc_root_type,
-                                                                  const bool case_sensitve) {
+                                                                  const bool case_sensitive) {
     // build mapping for orc [orc field name -> pos in orc]
     std::unordered_map<std::string, size_t> orc_fieldname_2_pos;
     for (size_t i = 0; i < orc_root_type.getSubtypeCount(); i++) {
-        std::string col_name = format_column_name(orc_root_type.getFieldName(i), case_sensitve);
+        std::string col_name = format_column_name(orc_root_type.getFieldName(i), case_sensitive);
         orc_fieldname_2_pos.emplace(col_name, i);
     }
 
@@ -152,7 +164,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
         SlotDescriptor* slot_desc = slot_descs[i];
         if (slot_desc == nullptr) continue;
 
-        std::string col_name = format_column_name(slot_desc->col_name(), case_sensitve);
+        std::string col_name = format_column_name(slot_desc->col_name(), case_sensitive);
         auto it = orc_fieldname_2_pos.find(col_name);
         if (it == orc_fieldname_2_pos.end()) {
             auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0", col_name);
@@ -171,7 +183,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
         if (slot_desc->type().is_complex_type()) {
             need_add_child_mapping = std::make_shared<OrcMapping>();
             const TypeDescriptor& origin_type = slot_desc->type();
-            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, *orc_sub_type, case_sensitve));
+            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, *orc_sub_type, case_sensitive));
         }
 
         mapping->add_mapping(i, need_add_column_id, need_add_child_mapping);
@@ -182,7 +194,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
 Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                                    const std::vector<SlotDescriptor*>& slot_descs,
                                                                    const orc::Type& orc_root_type,
-                                                                   const bool case_sensitve,
+                                                                   const bool case_sensitive,
                                                                    const std::vector<std::string>* hive_column_names) {
     DCHECK(hive_column_names != nullptr);
 
@@ -190,8 +202,8 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
     std::unordered_map<std::string, size_t> slot_descriptor_name_2_slot_descriptor_pos;
     for (size_t i = 0; i < slot_descs.size(); i++) {
         if (slot_descs[i] == nullptr) continue;
-        slot_descriptor_name_2_slot_descriptor_pos.emplace(format_column_name(slot_descs[i]->col_name(), case_sensitve),
-                                                           i);
+        slot_descriptor_name_2_slot_descriptor_pos.emplace(
+                format_column_name(slot_descs[i]->col_name(), case_sensitive), i);
     }
 
     // build hive column names index.
@@ -203,11 +215,11 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
         const orc::Type* orc_sub_type = orc_root_type.getSubtype(i);
         size_t need_add_column_id = orc_sub_type->getColumnId();
 
-        const std::string find_column_name = format_column_name((*hive_column_names)[i], case_sensitve);
+        const std::string find_column_name = format_column_name((*hive_column_names)[i], case_sensitive);
         auto it = slot_descriptor_name_2_slot_descriptor_pos.find(find_column_name);
         if (it == slot_descriptor_name_2_slot_descriptor_pos.end()) {
             // The column name in hive_column_names has no corresponding column name in slot_description
-            // TODO(SmithCruise) This situtaion only happended in UT now, I'm not sure this situtaion will happend in production.
+            // TODO(SmithCruise) This situation only happened in UT now, I'm not sure this situation will happened in production.
             // So here we don't report an error but skip it directly, just in case.
             continue;
             //  auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0", find_column_name);
@@ -224,7 +236,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
         if (slot_descs[pos_in_slot_descriptor]->type().is_complex_type()) {
             need_add_child_mapping = std::make_shared<OrcMapping>();
             const TypeDescriptor& origin_type = slot_descs[pos_in_slot_descriptor]->type();
-            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, *orc_sub_type, case_sensitve));
+            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, *orc_sub_type, case_sensitive));
         }
 
         mapping->add_mapping(pos_in_slot_descriptor, need_add_column_id, need_add_child_mapping);
@@ -232,7 +244,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
     return Status::OK();
 }
 
-// origin_type is TypeDescriptor in table defination
+// origin_type is TypeDescriptor in table definition
 // orc_type is orc's type
 Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
                                              const orc::Type& orc_type, const bool case_sensitive) {

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "exprs/vectorized/bitmap_functions.h"
 
 #include <glog/logging.h>
@@ -9,8 +22,8 @@
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
+#include "exprs/function_context.h"
 #include "types/bitmap_value.h"
-#include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
@@ -1942,6 +1955,133 @@ TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
     columns = {nullable_builder(Buffer<int64_t>{1, 2, 3, 4}, {0, 1, 2, 3})};
     res = BitmapFunctions::array_to_bitmap(nullptr, columns).value();
     ASSERT_EQ(res->debug_item(0), "");
+}
+TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
+    { // Empty Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        BitmapValue empty;
+        empty.clear();
+        s->append(&empty);
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
+        Columns columns2;
+        columns2.push_back(sliceCol.value());
+
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(0, bmp->cardinality());
+    }
+
+    { // Single Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        BitmapValue single({1});
+        s->append(&single);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
+
+        Columns columns2;
+        columns2.push_back(sliceCol.value());
+
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(1, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(1));
+    }
+
+    { // Set Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        // Adding values one by one, no more than 32, which makes the bitmap stores value with set
+        BitmapValue set;
+        set.add(1);
+        set.add(2);
+        set.add(3);
+        set.add(4);
+        s->append(&set);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
+
+        Columns columns2;
+        columns2.push_back(sliceCol.value());
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(4, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(1));
+        ASSERT_TRUE(bmp->contains(2));
+        ASSERT_TRUE(bmp->contains(3));
+        ASSERT_TRUE(bmp->contains(4));
+    }
+
+    { // 32bit Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1, 2, 3, 4});
+        s->append(&bmp32bit);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
+
+        Columns columns2;
+        columns2.push_back(sliceCol.value());
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(4, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(1));
+        ASSERT_TRUE(bmp->contains(2));
+        ASSERT_TRUE(bmp->contains(3));
+        ASSERT_TRUE(bmp->contains(4));
+    }
+
+    { // 64bit Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 64bit values makes it a 64bit bitmap
+        BitmapValue bmp64bit({600123456781, 600123456782, 600123456783, 600123456784});
+        s->append(&bmp64bit);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
+
+        Columns columns2;
+        columns2.push_back(sliceCol.value());
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(4, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(600123456781));
+        ASSERT_TRUE(bmp->contains(600123456782));
+        ASSERT_TRUE(bmp->contains(600123456783));
+        ASSERT_TRUE(bmp->contains(600123456784));
+    }
 }
 
 TEST_F(VecBitmapFunctionsTest, sub_bitmap) {

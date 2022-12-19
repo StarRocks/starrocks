@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "column/nullable_column.h"
 
@@ -212,9 +224,13 @@ Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
 
 size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     auto s1 = _data_column->filter_range(filter, from, to);
-    auto s2 = _null_column->filter_range(filter, from, to);
-    update_has_null();
-    DCHECK_EQ(s1, s2);
+    if (!_has_null) {
+        _null_column->resize(s1);
+    } else {
+        auto s2 = _null_column->filter_range(filter, from, to);
+        DCHECK_EQ(s1, s2);
+        update_has_null();
+    }
     return s1;
 }
 

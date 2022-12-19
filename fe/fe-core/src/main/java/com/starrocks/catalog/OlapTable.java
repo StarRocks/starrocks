@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/OlapTable.java
 
@@ -299,14 +312,16 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public void setName(String newName) {
         // change name in indexNameToId
-        long baseIndexId = indexNameToId.remove(this.name);
-        indexNameToId.put(newName, baseIndexId);
+        if (this.name != null) {
+            long baseIndexId = indexNameToId.remove(this.name);
+            indexNameToId.put(newName, baseIndexId);
+        }
 
         // change name
         this.name = newName;
 
         // change single partition name
-        if (this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+        if (this.partitionInfo != null && this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             if (getPartitions().stream().findFirst().isPresent()) {
                 Partition partition = getPartitions().stream().findFirst().get();
                 partition.setName(newName);
@@ -733,12 +748,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public void renamePartition(String partitionName, String newPartitionName) {
         if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             // bug fix
-            for (Partition partition : idToPartition.values()) {
+            Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
+            if (optionalPartition.isPresent()) {
+                Partition partition = optionalPartition.get();
                 partition.setName(newPartitionName);
                 nameToPartition.clear();
                 nameToPartition.put(newPartitionName, partition);
                 LOG.info("rename partition {} in table {}", newPartitionName, name);
-                break;
             }
         } else {
             Partition partition = nameToPartition.remove(partitionName);
@@ -1524,7 +1540,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
     // arbitrarily choose a partition, and get the buckets backends sequence from base index.
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
-        for (Partition partition : idToPartition.values()) {
+        Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
+        if (optionalPartition.isPresent()) {
+            Partition partition = optionalPartition.get();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = partition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
@@ -1537,7 +1555,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 }
                 backendsPerBucketSeq.add(replicaBackendIds.subList(0, replicationNum));
             }
-            break;
         }
         return backendsPerBucketSeq;
     }

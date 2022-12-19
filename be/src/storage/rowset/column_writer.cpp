@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/column_writer.cpp
 
@@ -32,11 +45,13 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
+#include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/map_column_writer.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_builder.h"
@@ -205,16 +220,6 @@ public:
 
     Status append(const vectorized::Column& column) override;
 
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override {
-        // if column is Array<String>, encoding maybe not set
-        // check _is_speculated again to avoid _page_builder is not initialized
-        if (!_is_speculated) {
-            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
-            _is_speculated = true;
-        }
-        return _scalar_column_writer->append(data, null_flags, count, has_null);
-    };
-
     // Speculate char/varchar encoding and reset encoding
     void speculate_column_and_set_encoding(const vectorized::Column& column);
 
@@ -261,59 +266,10 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         return std::make_unique<ScalarColumnWriter>(opts, std::move(type_info), wfile);
     } else {
         switch (column->type()) {
-        case LogicalType::TYPE_ARRAY: {
-            DCHECK(column->subcolumn_count() == 1);
-            const TabletColumn& element_column = column->subcolumn(0);
-            ColumnWriterOptions element_options;
-            element_options.meta = opts.meta->mutable_children_columns(0);
-            element_options.need_zone_map = false;
-            element_options.need_bloom_filter = element_column.is_bf_column();
-            element_options.need_bitmap_index = element_column.has_bitmap_index();
-            if (element_column.type() == LogicalType::TYPE_ARRAY) {
-                if (element_options.need_bloom_filter) {
-                    return Status::NotSupported("Do not support bloom filter for array type");
-                }
-                if (element_options.need_bitmap_index) {
-                    return Status::NotSupported("Do not support bitmap index for array type");
-                }
-            }
-
-            ASSIGN_OR_RETURN(auto element_writer, ColumnWriter::create(element_options, &element_column, wfile));
-
-            std::unique_ptr<ScalarColumnWriter> null_writer = nullptr;
-            if (opts.meta->is_nullable()) {
-                ColumnWriterOptions null_options;
-                null_options.meta = opts.meta->add_children_columns();
-                null_options.meta->set_column_id(opts.meta->column_id());
-                null_options.meta->set_unique_id(opts.meta->unique_id());
-                null_options.meta->set_type(TYPE_BOOLEAN);
-                null_options.meta->set_length(1);
-                null_options.meta->set_encoding(DEFAULT_ENCODING);
-                null_options.meta->set_compression(opts.meta->compression());
-                null_options.meta->set_is_nullable(false);
-
-                TypeInfoPtr bool_type_info = get_type_info(TYPE_BOOLEAN);
-                null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_type_info), wfile);
-            }
-
-            ColumnWriterOptions array_size_options;
-            array_size_options.meta = opts.meta->add_children_columns();
-            array_size_options.meta->set_column_id(opts.meta->column_id());
-            array_size_options.meta->set_unique_id(opts.meta->unique_id());
-            array_size_options.meta->set_type(TYPE_INT);
-            array_size_options.meta->set_length(4);
-            array_size_options.meta->set_encoding(DEFAULT_ENCODING);
-            array_size_options.meta->set_compression(opts.meta->compression());
-            array_size_options.meta->set_is_nullable(false);
-            array_size_options.need_zone_map = false;
-            array_size_options.need_bloom_filter = false;
-            array_size_options.need_bitmap_index = false;
-            TypeInfoPtr int_type_info = get_type_info(TYPE_INT);
-            std::unique_ptr<ScalarColumnWriter> offset_writer =
-                    std::make_unique<ScalarColumnWriter>(array_size_options, std::move(int_type_info), wfile);
-            return std::make_unique<ArrayColumnWriter>(opts, type_info, std::move(null_writer),
-                                                       std::move(offset_writer), std::move(element_writer));
-        }
+        case LogicalType::TYPE_ARRAY:
+            return create_array_column_writer(opts, std::move(type_info), column, wfile);
+        case LogicalType::TYPE_MAP:
+            return create_map_column_writer(opts, std::move(type_info), column, wfile);
         default:
             return Status::NotSupported("unsupported type for ColumnWriter: " + std::to_string(type_info->type()));
         }
@@ -653,32 +609,6 @@ Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count,
-                                                bool has_null) {
-    const size_t field_size = type_info()->size();
-    size_t remaining = count;
-    size_t offset_ordinal = 0;
-    while (remaining > 0) {
-        bool page_full = false;
-        size_t num_written = 0;
-        num_written = _page_builder->add(data, remaining);
-        page_full = num_written < remaining;
-        _next_rowid += num_written;
-        if (page_full) {
-            RETURN_IF_ERROR(finish_current_page());
-            _element_ordinal = _previous_ordinal;
-        }
-        const uint32_t* array_size = reinterpret_cast<const uint32_t*>(data) + offset_ordinal;
-        for (size_t i = 0; i < num_written; ++i) {
-            _previous_ordinal += *(array_size + i);
-        }
-        offset_ordinal += num_written;
-        data += field_size * num_written;
-        remaining -= num_written;
-    }
-    return Status::OK();
-}
-
 Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
     const size_t field_size = type_info()->size();
     size_t remaining = count;
@@ -752,139 +682,6 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
         }
         remaining -= num_written;
     }
-    return Status::OK();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
-                                     std::unique_ptr<ScalarColumnWriter> null_writer,
-                                     std::unique_ptr<ScalarColumnWriter> offset_writer,
-                                     std::unique_ptr<ColumnWriter> element_writer)
-        : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
-          _opts(opts),
-          _null_writer(std::move(null_writer)),
-          _array_size_writer(std::move(offset_writer)),
-          _element_writer(std::move(element_writer)) {}
-
-Status ArrayColumnWriter::init() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->init());
-    }
-    RETURN_IF_ERROR(_array_size_writer->init());
-    RETURN_IF_ERROR(_element_writer->init());
-
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::append(const vectorized::Column& column) {
-    const vectorized::ArrayColumn* array_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
-    if (is_nullable()) {
-        const auto& nullable_column = down_cast<const vectorized::NullableColumn&>(column);
-        array_column = down_cast<vectorized::ArrayColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column.null_column().get());
-    } else {
-        array_column = down_cast<const vectorized::ArrayColumn*>(&column);
-    }
-
-    // 1. Write null column when necessary
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->append(*null_column));
-    }
-
-    // 2. Write offset column
-    RETURN_IF_ERROR(_array_size_writer->append_array_offsets(array_column->offsets()));
-
-    // 3. writer elements column recursively
-    RETURN_IF_ERROR(_element_writer->append(array_column->elements()));
-
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) {
-    const auto* collection = reinterpret_cast<const Collection*>(data);
-    // 1. Write null column when necessary
-    if (is_nullable()) {
-        _null_writer->append(null_map, nullptr, count, false);
-    }
-
-    // 2. Write offset column
-    uint32_t array_size = collection->length;
-    RETURN_IF_ERROR(_array_size_writer->append_array_offsets(reinterpret_cast<const uint8_t*>(&array_size), nullptr,
-                                                             count, false));
-
-    // 3. writer elements column one by one
-    const auto* element_data = reinterpret_cast<const uint8_t*>(collection->data);
-    if (collection->has_null) {
-        for (size_t i = 0; i < collection->length; ++i) {
-            RETURN_IF_ERROR(
-                    _element_writer->append(element_data, &(collection->null_signs[i]), 1, collection->has_null));
-            element_data += _element_writer->type_info()->size();
-        }
-    } else {
-        for (size_t i = 0; i < collection->length; ++i) {
-            RETURN_IF_ERROR(_element_writer->append(element_data, nullptr, 1, false));
-            element_data = element_data + _element_writer->type_info()->size();
-        }
-    }
-    return Status::OK();
-}
-
-uint64_t ArrayColumnWriter::estimate_buffer_size() {
-    size_t estimate_size = _array_size_writer->estimate_buffer_size() + _element_writer->estimate_buffer_size();
-    if (is_nullable()) {
-        estimate_size += _null_writer->estimate_buffer_size();
-    }
-    return estimate_size;
-}
-
-Status ArrayColumnWriter::finish() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->finish());
-    }
-    RETURN_IF_ERROR(_array_size_writer->finish());
-    RETURN_IF_ERROR(_element_writer->finish());
-
-    _opts.meta->set_num_rows(get_next_rowid());
-    _opts.meta->set_total_mem_footprint(total_mem_footprint());
-    return Status::OK();
-}
-
-uint64_t ArrayColumnWriter::total_mem_footprint() const {
-    uint64_t total_mem_footprint = 0;
-    if (is_nullable()) {
-        total_mem_footprint += _null_writer->total_mem_footprint();
-    }
-    total_mem_footprint += _array_size_writer->total_mem_footprint();
-    total_mem_footprint += _element_writer->total_mem_footprint();
-    return total_mem_footprint;
-}
-
-Status ArrayColumnWriter::write_data() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->write_data());
-    }
-    RETURN_IF_ERROR(_array_size_writer->write_data());
-    RETURN_IF_ERROR(_element_writer->write_data());
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::write_ordinal_index() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->write_ordinal_index());
-    }
-    RETURN_IF_ERROR(_array_size_writer->write_ordinal_index());
-    RETURN_IF_ERROR(_element_writer->write_ordinal_index());
-    return Status::OK();
-}
-
-Status ArrayColumnWriter::finish_current_page() {
-    if (is_nullable()) {
-        RETURN_IF_ERROR(_null_writer->finish_current_page());
-    }
-    RETURN_IF_ERROR(_array_size_writer->finish_current_page());
-    RETURN_IF_ERROR(_element_writer->finish_current_page());
     return Status::OK();
 }
 

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/column_aggregate_func.h"
 
@@ -544,9 +556,9 @@ public:
 #define CASE_REPLACE(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
     CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, ReplaceAggregator)
 
-ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregationMethod method) {
+ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggregateType method) {
     switch (method) {
-    case OLAP_FIELD_AGGREGATION_SUM: {
+    case STORAGE_AGGREGATE_SUM: {
         switch (type) {
             CASE_SUM(TYPE_TINYINT, Int8Column, int8_t)
             CASE_SUM(TYPE_SMALLINT, Int16Column, int16_t)
@@ -564,7 +576,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case OLAP_FIELD_AGGREGATION_MAX: {
+    case STORAGE_AGGREGATE_MAX: {
         switch (type) {
             CASE_MAX(TYPE_TINYINT, Int8Column, int8_t)
             CASE_MAX(TYPE_SMALLINT, Int16Column, int16_t)
@@ -588,7 +600,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case OLAP_FIELD_AGGREGATION_MIN: {
+    case STORAGE_AGGREGATE_MIN: {
         switch (type) {
             CASE_MIN(TYPE_TINYINT, Int8Column, int8_t)
             CASE_MIN(TYPE_SMALLINT, Int16Column, int16_t)
@@ -612,8 +624,8 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case OLAP_FIELD_AGGREGATION_REPLACE:
-    case OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL: {
+    case STORAGE_AGGREGATE_REPLACE:
+    case STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL: {
         switch (type) {
             CASE_REPLACE(TYPE_TINYINT, Int8Column, int8_t)
             CASE_REPLACE(TYPE_SMALLINT, Int16Column, int16_t)
@@ -633,6 +645,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_REPLACE(TYPE_DATETIME, TimestampColumn, TimestampValue)
             CASE_REPLACE(TYPE_CHAR, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_VARCHAR, BinaryColumn, SliceState)
+            CASE_REPLACE(TYPE_VARBINARY, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_BOOLEAN, BooleanColumn, uint8_t)
             CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ArrayState)
             CASE_REPLACE(TYPE_HLL, HyperLogLogColumn, HyperLogLog)
@@ -642,7 +655,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case OLAP_FIELD_AGGREGATION_HLL_UNION: {
+    case STORAGE_AGGREGATE_HLL_UNION: {
         switch (type) {
         case TYPE_HLL: {
             return std::make_unique<HllUnionAggregator>();
@@ -650,7 +663,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case OLAP_FIELD_AGGREGATION_BITMAP_UNION: {
+    case STORAGE_AGGREGATE_BITMAP_UNION: {
         switch (type) {
         case TYPE_OBJECT: {
             return std::make_unique<BitmapUnionAggregator>();
@@ -658,7 +671,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case OLAP_FIELD_AGGREGATION_PERCENTILE_UNION: {
+    case STORAGE_AGGREGATE_PERCENTILE_UNION: {
         switch (type) {
         case TYPE_PERCENTILE: {
             return std::make_unique<PercentileUnionAggregator>();
@@ -666,10 +679,10 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_DEFAULT_WARNING(type)
         }
     }
-    case OLAP_FIELD_AGGREGATION_NONE:
-        CHECK(false) << "invalid aggregate method: OLAP_FIELD_AGGREGATION_NONE";
-    case OLAP_FIELD_AGGREGATION_UNKNOWN:
-        CHECK(false) << "invalid aggregate method: OLAP_FIELD_AGGREGATION_UNKNOWN";
+    case STORAGE_AGGREGATE_NONE:
+        CHECK(false) << "invalid aggregate method: STORAGE_AGGREGATE_NONE";
+    case STORAGE_AGGREGATE_UNKNOWN:
+        CHECK(false) << "invalid aggregate method: STORAGE_AGGREGATE_UNKNOWN";
     }
     return nullptr;
 }
@@ -677,8 +690,8 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
 ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
         const starrocks::vectorized::VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
-    starrocks::FieldAggregationMethod method = field->aggregate_method();
-    if (method != OLAP_FIELD_AGGREGATION_NONE) {
+    starrocks::StorageAggregateType method = field->aggregate_method();
+    if (method != STORAGE_AGGREGATE_NONE) {
         CHECK(false) << "key column's aggregation method should be NONE";
     }
     switch (type) {
@@ -703,11 +716,11 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
 ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         const starrocks::vectorized::VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
-    starrocks::FieldAggregationMethod method = field->aggregate_method();
-    if (method == OLAP_FIELD_AGGREGATION_NONE) {
+    starrocks::StorageAggregateType method = field->aggregate_method();
+    if (method == STORAGE_AGGREGATE_NONE) {
         CHECK(false) << "bad agg method NONE for column: " << field->name();
         return nullptr;
-    } else if (method == OLAP_FIELD_AGGREGATION_REPLACE) {
+    } else if (method == STORAGE_AGGREGATE_REPLACE) {
         auto p = create_value_aggregator(type, method);
         if (field->is_nullable()) {
             return std::make_unique<ReplaceNullableColumnAggregator>(std::move(p));

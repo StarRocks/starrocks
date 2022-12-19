@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/primary_index.h"
 
@@ -1186,7 +1198,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     std::vector<uint64_t> old_values(n, NullIndexValue);
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
     _build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values);
-    _persistent_index->upsert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()),
+    _persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
                               reinterpret_cast<IndexValue*>(old_values.data()));
     for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {

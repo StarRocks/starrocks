@@ -1,63 +1,72 @@
 # CREATE REPOSITORY
 
-## description
+## Description
 
-This statement is used to create the repository. The repository is used for backup or restore. Only root or superuser users can create repository.
+Creates a repository in an remote storage system that is used to store data snapshots for [data backup and restoration](../../../administration/Backup_and_restore.md).
 
-Syntax:
+> **CAUTION**
+>
+> Only root user and superuser can create a repository.
 
-```sql
-CREATE [READ ONLY] REPOSITORY `repo_name`
-WITH BROKER `broker_name`
-ON LOCATION `repo_location`
-PROPERTIES ("key"="value", ...);
+For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md).
+
+## Syntax
+
+```SQL
+CREATE [READ ONLY] REPOSITORY <repository_name>
+WITH BROKER
+ON LOCATION "<repository_location>"
+PROPERTIES ("key"="value", ...)
 ```
 
-Note:
+## Parameters
 
-1. The creation of repositories depends on existing brokers.
-2. If it is a read-only repository, it can only be restored on the repository. If not, it can be backed up and restored.
-3. PROPERTIES vary depending on broker of different types.
+| **Parameter**       | **Description**                                              |
+| ------------------- | ------------------------------------------------------------ |
+| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. |
+| repository_name     | Repository name.                                             |
+| repository_location | Location of the repository in the remote storage system.     |
+| PROPERTIES          | Username/password or access key/endpoint to the remote storage system. See [Examples](#examples) for more instructions. |
 
-## example
+## Examples
 
-1. Create a repository named bos_repo based on BOS broker "bos_broker", and the data root directory is: bos://palo_backup.
+Example 1: creates a repository named `oss_repo` using the remote storage directory `oss://starRocks_backup`.
 
-    ```sql
-    CREATE REPOSITORY `bos_repo`
-    WITH BROKER `bos_broker`
-    ON LOCATION "bos://starRocks_backup"
-    PROPERTIES
-    (
-        "bos_endpoint" = "http://gz.bcebos.com",
-        "bos_accesskey" = "069fc2786e664e63a5f111111114ddbs22",
-        "bos_secret_accesskey"="70999999999999de274d59eaa980a"
-    );
-    ```
+```SQL
+CREATE REPOSITORY `oss_repo`
+WITH BROKER
+ON LOCATION "oss://starRocks_backup"
+PROPERTIES
+(
+    "fs.oss.accessKeyId" = "xxx",
+    "fs.oss.accessKeySecret" = "yyy",
+    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+);
+```
 
-2. Create a same repository as in example 1, but with read-only attribute:
+Example 2: creates a read-only repository named `oss_repo` using the remote storage directory `oss://starRocks_backup`.
 
-    ```sql
-    CREATE READ ONLY REPOSITORY `bos_repo`
-    WITH BROKER `bos_broker`
-    ON LOCATION "bos://starRocks_backup"
-    PROPERTIES
-    (
-        "bos_endpoint" = "http://gz.bcebos.com",
-        "bos_accesskey" = "069fc2786e664e63a5f111111114ddbs22",
-        "bos_secret_accesskey"="70999999999999de274d59eaa980a"
-    );
-    ```
+```SQL
+CREATE READ ONLY REPOSITORY `oss_repo`
+WITH BROKER
+ON LOCATION "oss://starRocks_backup"
+PROPERTIES
+(
+    "fs.oss.accessKeyId" = "xxx",
+    "fs.oss.accessKeySecret" = "yyy",
+    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+);
+```
 
-3. Create a repository named hdfs_repo based on Baidu HDFS broker "hdfs_broker", and the data root directory is: hdfs://hadoop-name-node:54310/path/to/repo./
+Example 3: creates a repository named `hdfs_repo` using the remote storage directory `hdfs://hadoop-name-node:xxxxx/path/to/repo/`.
 
-    ```sql
-    CREATE REPOSITORY `hdfs_repo`
-    WITH BROKER `hdfs_broker`
-    ON LOCATION "hdfs://hadoop-name-node:54310/path/to/repo/"
-    PROPERTIES
-    (
-        "username" = "user",
-        "password" = "password"
-    );
-    ```
+```SQL
+CREATE REPOSITORY `hdfs_repo`
+WITH BROKER
+ON LOCATION "hdfs://hadoop-name-node:xxxxx/path/to/repo/"
+PROPERTIES
+(
+    "username" = "xxxx",
+    "password" = "yyyy"
+);
+```

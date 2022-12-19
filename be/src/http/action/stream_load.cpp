@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/http/action/stream_load.cpp
 
@@ -411,6 +424,28 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     }
     if (!http_req->header(HTTP_ROW_DELIMITER).empty()) {
         request.__set_rowDelimiter(http_req->header(HTTP_ROW_DELIMITER));
+    }
+    if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
+        auto skip_header = std::stoll(http_req->header(HTTP_SKIP_HEADER));
+        if (skip_header < 0) {
+            return Status::InvalidArgument("skip_header must be equal or greater than 0");
+        }
+        request.__set_skipHeader(skip_header);
+    }
+    if (!http_req->header(HTTP_TRIM_SPACE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
+            request.__set_trimSpace(false);
+        } else if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "true")) {
+            request.__set_trimSpace(true);
+        } else {
+            return Status::InvalidArgument("Invalid trim space format. Must be bool type");
+        }
+    }
+    if (!http_req->header(HTTP_ENCLOSE).empty() && http_req->header(HTTP_ENCLOSE).size() > 0) {
+        request.__set_enclose(http_req->header(HTTP_ENCLOSE)[0]);
+    }
+    if (!http_req->header(HTTP_ESCAPE).empty() && http_req->header(HTTP_ESCAPE).size() > 0) {
+        request.__set_escape(http_req->header(HTTP_ESCAPE)[0]);
     }
     if (!http_req->header(HTTP_PARTITIONS).empty()) {
         request.__set_partitions(http_req->header(HTTP_PARTITIONS));

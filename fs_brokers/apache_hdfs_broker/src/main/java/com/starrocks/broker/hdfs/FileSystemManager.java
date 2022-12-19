@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master
 //                     /fs_brokers/apache_hdfs_broker/src/main/java
@@ -104,6 +117,7 @@ public class FileSystemManager {
     private static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
     private static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
     private static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
+    private static final String FS_S3A_PATH_STYLE_ACCESS = "fs.s3a.path.style.access";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
     private static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
@@ -450,6 +464,7 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_S3A_ENDPOINT, "");
+        String pathStyleAccess = properties.getOrDefault(FS_S3A_PATH_STYLE_ACCESS, "false");
         String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = properties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
         String awsCredProvider = properties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
@@ -479,6 +494,7 @@ public class FileSystemManager {
                 conf.set(FS_S3A_ACCESS_KEY, accessKey);
                 conf.set(FS_S3A_SECRET_KEY, secretKey);
                 conf.set(FS_S3A_ENDPOINT, endpoint);
+                conf.set(FS_S3A_PATH_STYLE_ACCESS, pathStyleAccess);
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 if (awsCredProvider != null) {

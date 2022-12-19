@@ -1,16 +1,16 @@
 # MAX
 
-## description
+## Description
 
-### Syntax
+Returns the maximum value of the expr expression.
+
+## Syntax
 
 ```Haskell
 MAX(expr)
 ```
 
-It returns the maximum value of the expr expression.
-
-## example
+## Examples
 
 ```plain text
 MySQL > select max(scan_rows)

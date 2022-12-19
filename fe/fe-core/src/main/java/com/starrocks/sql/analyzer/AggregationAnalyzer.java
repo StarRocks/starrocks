@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -34,6 +47,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
@@ -153,6 +167,12 @@ public class AggregationAnalyzer {
             return node.getChildren().stream().allMatch(this::visit);
         }
 
+        // only check lambda body here.
+        @Override
+        public Boolean visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
+            return visit(node.getChild(0));
+        }
+
         @Override
         public Boolean visitCollectionElementExpr(CollectionElementExpr node, Void context) {
             return visit(node.getChild(0));
@@ -265,6 +285,9 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitSlot(SlotRef node, Void context) {
+            if (node.isFromLambda()) {
+                return true;
+            }
             return isGroupingKey(node);
         }
 

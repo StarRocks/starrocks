@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/vectorized/project_node.h"
 
@@ -144,12 +156,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         for (size_t i = 0; i < _slot_ids.size(); ++i) {
             ASSIGN_OR_RETURN(result_columns[i], _expr_ctxs[i]->evaluate((*chunk).get()));
             result_columns[i] = ColumnHelper::align_return_type(result_columns[i], _expr_ctxs[i]->root()->type(),
-                                                                (*chunk)->num_rows());
-            // follow SlotDescriptor is_null flag
-            if (_type_is_nullable[i] && !result_columns[i]->is_nullable()) {
-                result_columns[i] =
-                        NullableColumn::create(result_columns[i], NullColumn::create(result_columns[i]->size(), 0));
-            }
+                                                                (*chunk)->num_rows(), _type_is_nullable[i]);
         }
         RETURN_IF_HAS_ERROR(_expr_ctxs);
     }

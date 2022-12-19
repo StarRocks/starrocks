@@ -1,6 +1,18 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#include "exprs/agg/aggregate_factory.h"
+#include "column/type_traits.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -18,6 +30,22 @@ struct SumDispatcher {
             using SumState = SumAggregateState<RunTimeCppType<SumResultPT<pt>>>;
             resolver->add_aggregate_mapping<pt, SumResultPT<pt>, SumState>(
                     "sum", true, AggregateFactory::MakeSumAggregateFunction<pt>());
+        }
+    }
+};
+
+VALUE_GUARD(LogicalType, StorageSumPTGuard, pt_is_sum_in_storage, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
+            TYPE_BIGINT, TYPE_LARGEINT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32,
+            TYPE_DECIMAL64, TYPE_DECIMAL128);
+
+struct StorageSumDispatcher {
+    template <LogicalType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_sum_in_storage<pt>) {
+            using SumState = SumAggregateState<RunTimeCppType<pt>>;
+            resolver->add_aggregate_mapping<pt, pt, SumState>(
+                    "sum", true,
+                    std::make_shared<SumAggregateFunction<pt, RunTimeCppType<pt>, pt, RunTimeCppType<pt>>>());
         }
     }
 };
@@ -44,6 +72,13 @@ struct DistinctDispatcher {
 void AggregateFuncResolver::register_sumcount() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, SumDispatcher(), this);
+    }
+
+    // In storage layer, sum result type is the same as input type.
+    // So we need to add these functions here to support it.
+    // Some of the following functions will be the same as the above ones.
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, StorageSumDispatcher(), this);
     }
 
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, false),

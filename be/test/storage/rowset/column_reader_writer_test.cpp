@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/column_reader_writer_test.cpp
 
@@ -33,6 +46,7 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
+#include "storage/aggregate_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/decimal12.h"
 #include "storage/olap_common.h"
@@ -124,7 +138,7 @@ protected:
             writer_opts.meta->set_is_nullable(true);
             writer_opts.need_zone_map = true;
 
-            TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, type);
+            TabletColumn column(STORAGE_AGGREGATE_NONE, type);
             if (type == TYPE_VARCHAR) {
                 column = create_varchar_key(1, true, 128);
             } else if (type == TYPE_CHAR) {
@@ -316,7 +330,7 @@ protected:
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
         TabletColumn array_column = create_array(0, true, sizeof(Collection));
-        TabletColumn int_column = create_int_value(0, OLAP_FIELD_AGGREGATION_NONE, true);
+        TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
         array_column.add_sub_column(int_column);
 
         auto src_offsets = vectorized::UInt32Column::create();
@@ -688,7 +702,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         writer_opts.meta->set_is_nullable(true);
         writer_opts.need_zone_map = true;
 
-        TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, TYPE_INT);
+        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_INT);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
         ASSERT_OK(writer->init());
 

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/ShowExecutor.java
 
@@ -37,8 +50,11 @@ import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -624,7 +640,11 @@ public class ShowExecutor {
                     }
 
                     // check tbl privs
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), table.getName())) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                             db.getFullName(), table.getName(),
                             PrivPredicate.SHOW)) {
                         continue;
@@ -681,13 +701,13 @@ public class ShowExecutor {
             catalogName = ctx.getCurrentCatalog();
         }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            showCreateInternalTbl(showStmt);
+            showCreateInternalCatalogTable(showStmt);
         } else {
-            showCreateExternalTbl(tbl, catalogName);
+            showCreateExternalCatalogTable(tbl, catalogName);
         }
     }
 
-    private void showCreateExternalTbl(TableName tbl, String catalogName) {
+    private void showCreateExternalCatalogTable(TableName tbl, String catalogName) {
         String dbName = tbl.getDb();
         String tableName = tbl.getTbl();
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -722,6 +742,20 @@ public class ShowExecutor {
             createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
         }
 
+        // Location
+        String location = null;
+        if (table.isHiveTable() || table.isHudiTable()) {
+            location = ((HiveMetaStoreTable) table).getTableLocation();
+        } else if (table.isIcebergTable()) {
+            location = ((IcebergTable) table).getTableLocation();
+        } else if (table.isDeltalakeTable()) {
+            location = ((DeltaLakeTable) table).getTableLocation();
+        }
+
+        if (!Strings.isNullOrEmpty(location)) {
+            createTableSql.append("\nLOCATION ").append("'").append(location).append("'");
+        }
+
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
@@ -731,7 +765,7 @@ public class ShowExecutor {
         return "`" + column.getName() + "` " + column.getType();
     }
 
-    private void showCreateInternalTbl(ShowCreateTableStmt showStmt) throws AnalysisException {
+    private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
         Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
         List<List<String>> rows = Lists.newArrayList();

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/predicate_parser.h"
 
@@ -18,7 +30,7 @@ bool PredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
     RETURN_IF(predicate->column_id() >= _schema.num_columns(), false);
     const TabletColumn& column = _schema.column(predicate->column_id());
     return _schema.keys_type() == KeysType::PRIMARY_KEYS ||
-           column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
+           column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
 }
 
 bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
@@ -26,7 +38,7 @@ bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
     CHECK(index <= _schema.num_columns());
     const TabletColumn& column = _schema.column(index);
     return _schema.keys_type() == KeysType::PRIMARY_KEYS ||
-           column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
+           column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
 }
 
 ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition) const {

@@ -1,5 +1,3 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 set(EXEC_FILES
         ./test_main.cpp
         ./column/array_column_test.cpp
@@ -58,6 +56,7 @@ set(EXEC_FILES
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -188,6 +187,7 @@ set(EXEC_FILES
         ./storage/rowset/column_reader_writer_test.cpp
         ./storage/rowset/encoding_info_test.cpp
         ./storage/rowset/frame_of_reference_page_test.cpp
+        ./storage/rowset/map_column_rw_test.cpp
         ./storage/rowset/ordinal_page_index_test.cpp
         ./storage/rowset/plain_page_test.cpp
         ./storage/rowset/rle_page_test.cpp
@@ -209,7 +209,8 @@ set(EXEC_FILES
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
         ./storage/compaction_manager_test.cpp
-	./storage/default_compaction_policy_test.cpp
+        ./storage/default_compaction_policy_test.cpp
+        ./storage/size_tiered_compaction_policy_test.cpp
         ./storage/aggregate_iterator_test.cpp
         ./storage/chunk_aggregator_test.cpp
         ./storage/chunk_helper_test.cpp
@@ -218,7 +219,7 @@ set(EXEC_FILES
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
         ./storage/merge_iterator_test.cpp
-	    ./storage/memtable_flush_executor_test.cpp
+        ./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
@@ -346,6 +347,14 @@ add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/que
 
 TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
+add_executable(stream_mv_test
+        exec/stream/stream_mv_test.cpp
+        exec/stream/mem_state_table_test.cpp
+        )
+TARGET_LINK_LIBRARIES(stream_mv_test ${TEST_LINK_LIBS})
+SET_TARGET_PROPERTIES(stream_mv_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/tablet_schema_helper.h
 
@@ -87,7 +100,7 @@ inline ColumnPB create_int_value_pb(int32_t id, const std::string& agg_method = 
     return col;
 }
 
-inline TabletColumn create_int_value(int32_t id, FieldAggregationMethod agg_method = OLAP_FIELD_AGGREGATION_SUM,
+inline TabletColumn create_int_value(int32_t id, StorageAggregateType agg_method = STORAGE_AGGREGATE_SUM,
                                      bool is_nullable = true, const std::string default_value = "",
                                      bool is_bf_column = false, bool has_bitmap_index = false) {
     TabletColumn column;
@@ -143,6 +156,18 @@ inline TabletColumn create_array(int32_t id, bool is_nullable = true, int length
     return column;
 }
 
+inline TabletColumn create_map(int32_t id, bool is_nullable = true) {
+    TabletColumn column;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(TYPE_MAP);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(16);
+    column.set_index_length(16);
+    return column;
+}
+
 inline ColumnPB create_with_default_value_pb(const std::string& col_type, std::string default_value) {
     ColumnPB column;
     column.set_type(col_type);
@@ -158,7 +183,7 @@ inline TabletColumn create_with_default_value(std::string default_value) {
     TabletColumn column;
     column.set_type(type);
     column.set_is_nullable(true);
-    column.set_aggregation(OLAP_FIELD_AGGREGATION_NONE);
+    column.set_aggregation(STORAGE_AGGREGATE_NONE);
     column.set_default_value(default_value);
     column.set_length(4);
     return column;

@@ -110,11 +110,22 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
     > $ ./bin/start-cluster.sh
     > ```
 
-5. Download and decompress the [SMT package](https://www.starrocks.com/zh-CN/download/community) and place it in the `flink-1.14.5` directory.
+5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory. StarRocks provides SMT packages for Linux x86 and macos ARM64. You can choose one based on your operating system and CPU. You can also run the following command to obtain the SMT package.
 
-   ```Bash
-   wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
-   ```
+    For x86:
+
+    ```Bash
+    ## for Linux x86
+    wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
+    ## for macOS ARM64
+    wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
+    ```
+
+    For M1:
+
+    ```Bash
+    wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
+    ```
 
 ### Enable MySQL binary log
 
@@ -283,7 +294,7 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
     > 'sink.properties.row_delimiter' = '\\x02'  
     > ```
 
-    **Process data during synchronization**
+    **Process data during synchronization**:
 
     If you need to process data during synchronization, such as performing GROUP BY or JOIN on the data, you can modify the `flink-create.all.sql` file. The following example calculates real-time ranking of commodity sales by executing COUNT (*) and GROUP BY.
 
@@ -343,16 +354,16 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
         [INFO] Submitting SQL update statement to the cluster...
         [INFO] SQL update statement has been successfully submitted to the cluster:
         Job ID: 5ae005c4b3425d8bb13fe660260a35da
-        ```
+    ```
 
-        If you only need to synchronize only a portion of the data, such as data whose payment time is later than December 21, 2021, you can use the `WHERE` clause in `INSERT INTO SELECT` to set a filter condition, such as `WHERE pay_dt > '2021-12-21'`. Data that does not meet this condition will not be synchronized to StarRocks.
+    If you only need to synchronize only a portion of the data, such as data whose payment time is later than December 21, 2021, you can use the `WHERE` clause in `INSERT INTO SELECT` to set a filter condition, such as `WHERE pay_dt > '2021-12-21'`. Data that does not meet this condition will not be synchronized to StarRocks.
 
-        If the following result is returned, the Flink job has been submitted for full and incremental synchronization.
+    If the following result is returned, the Flink job has been submitted for full and incremental synchronization.
 
-        ```SQL
-        [INFO] Submitting SQL update statement to the cluster...
-        [INFO] SQL update statement has been successfully submitted to the cluster:
-        Job ID: 5ae005c4b3425d8bb13fe660260a35da
+    ```SQL
+    [INFO] Submitting SQL update statement to the cluster...
+    [INFO] SQL update statement has been successfully submitted to the cluster:
+    Job ID: 5ae005c4b3425d8bb13fe660260a35da
     ```
 
 2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.

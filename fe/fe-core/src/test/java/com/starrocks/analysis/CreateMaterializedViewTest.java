@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.analysis;
 
@@ -2040,18 +2053,6 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void createViewBadName() {
-        String longLongName = "view___123456789012345678901234567890123456789012345678901234567890";
-        String sql = "create view db1." + longLongName + " as select 1,2,3";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail(); // should raise Exception
-        } catch (Exception e) {
-            Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
-        }
-    }
-
-    @Test
     public void testPartitionByNotFirstColumn() throws Exception {
         starRocksAssert.withNewMaterializedView("create materialized view mv_with_partition_by_not_first_column" +
                 " partition by k1" +
@@ -2163,15 +2164,11 @@ public class CreateMaterializedViewTest {
     @Test
     public void testCreateRealtimeMV() throws Exception {
         String sql = "create materialized view rtmv \n" +
-                "refresh incremental as " +
-                "select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
+                "refresh incremental " +
+                "distributed by hash(l_shipdate) " +
+                " as select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
-        try {
-            UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            Assert.fail();
-        } catch (IllegalArgumentException e) {
-            Assert.assertEquals("Realtime materialized view is not supported", e.getMessage());
-        }
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test
@@ -2183,6 +2180,29 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.assertTrue(
                     e.getMessage().contains("Materialized view query statement only support direct query from table"));
+        }
+    }
+
+    @Test
+    public void testCreateAsyncMv() {
+        Config.enable_experimental_mv = true;
+        String sql = "create materialized view async_mv_1 distributed by hash(c_1_9) as" +
+                " select c_1_9, c_1_4 from t1";
+        try {
+            starRocksAssert.withNewMaterializedView(sql);
+            MaterializedView mv = (MaterializedView) testDb.getTable("async_mv_1");
+            Assert.assertTrue(mv.getFullSchema().get(0).isKey());
+            Assert.assertFalse(mv.getFullSchema().get(1).isKey());
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+
+        String sql2 = "create materialized view async_mv_1 distributed by hash(c_1_4) as" +
+                " select c_1_4 from t1";
+        try {
+            starRocksAssert.withNewMaterializedView(sql2);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
         }
     }
 }

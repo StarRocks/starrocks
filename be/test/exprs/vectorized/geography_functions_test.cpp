@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -151,7 +163,7 @@ TEST_F(geographyFunctionsTest, st_from_wktGeneralTest) {
 
     columns.emplace_back(wkt_column);
 
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
 
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 
@@ -177,7 +189,7 @@ TEST_F(geographyFunctionsTest, st_from_wktConstTest) {
 
     columns.emplace_back(wkt_column);
 
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
 
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 
@@ -203,7 +215,7 @@ TEST_F(geographyFunctionsTest, st_lineGeneralTest) {
     line_string->append(line);
 
     columns.emplace_back(line_string);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
 
     GeoFunctions::st_line_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result = GeoFunctions::st_line(ctx.get(), columns).value();
@@ -220,7 +232,7 @@ TEST_F(geographyFunctionsTest, st_lineConstTest) {
     auto line_string = ColumnHelper::create_const_column<TYPE_VARCHAR>("LINESTRING (10.1 20.2, 21.1 30.1)", 1);
 
     columns.emplace_back(line_string);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
 
     GeoFunctions::st_line_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result = GeoFunctions::st_line(ctx.get(), columns).value();
@@ -240,7 +252,7 @@ TEST_F(geographyFunctionsTest, st_polygonGeneralTest) {
     polygon_str->append(wkt);
     columns.emplace_back(polygon_str);
 
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_polygon_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -262,7 +274,7 @@ TEST_F(geographyFunctionsTest, st_polygonConstTest) {
             ColumnHelper::create_const_column<TYPE_VARCHAR>("POLYGON ((10 10, 50 10, 50 50, 10 50, 10 10))", 1);
     columns.emplace_back(const_polygon);
 
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_polygon_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -290,7 +302,7 @@ TEST_F(geographyFunctionsTest, st_circleGeneralTest) {
     columns.emplace_back(lat_column);
     columns.emplace_back(radius_column);
 
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_circle_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -317,7 +329,7 @@ TEST_F(geographyFunctionsTest, st_circleConstTest) {
     columns.emplace_back(lat_column);
     columns.emplace_back(radius_column);
 
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_circle_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -343,7 +355,7 @@ TEST_F(geographyFunctionsTest, st_containsGeneralTest) {
     auto polygon_column = BinaryColumn::create();
     polygon_column->append(polygon_wkt);
     columns.emplace_back(polygon_column);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result1 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
@@ -352,14 +364,14 @@ TEST_F(geographyFunctionsTest, st_containsGeneralTest) {
     auto point_column = BinaryColumn::create();
     point_column->append(point_wkt);
     columns.emplace_back(point_column);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result2 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
     columns.clear();
     columns.emplace_back(result1);
     columns.emplace_back(result2);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_contains_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 
     ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -381,7 +393,7 @@ TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
     auto polygon_column = BinaryColumn::create();
     polygon_column->append(polygon_wkt);
     columns.emplace_back(polygon_column);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result1 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
@@ -390,7 +402,7 @@ TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
     auto point_column = BinaryColumn::create();
     point_column->append(point_wkt);
     columns.emplace_back(point_column);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result2 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
@@ -405,7 +417,7 @@ TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
 
     columns.emplace_back(input_column);
     columns.emplace_back(result2);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_contains_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto res = GeoFunctions::st_contains(ctx.get(), columns).value();
     ASSERT_FALSE(res->only_null());
@@ -422,7 +434,7 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     auto polygon_column = BinaryColumn::create();
     polygon_column->append(polygon_wkt);
     columns.emplace_back(polygon_column);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result1 = ConstColumn::create(GeoFunctions::st_from_wkt(ctx.get(), columns).value(), 1);
 
@@ -431,14 +443,14 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     auto point_column = BinaryColumn::create();
     point_column->append(point_wkt);
     columns.emplace_back(point_column);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto result2 = ConstColumn::create(GeoFunctions::st_from_wkt(ctx.get(), columns).value(), 1);
 
     columns.clear();
     columns.emplace_back(result1);
     columns.emplace_back(result2);
-    ctx->impl()->set_constant_columns(columns);
+    ctx->set_constant_columns(columns);
     GeoFunctions::st_contains_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 
     ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet.cpp
 
@@ -43,6 +56,7 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
+#include "storage/size_tiered_compaction_policy.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -82,7 +96,11 @@ Status Tablet::_init_once_action() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
     _compaction_context = std::make_unique<CompactionContext>();
-    _compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(this);
+    if (config::enable_size_tiered_compaction_strategy) {
+        _compaction_context->policy = std::make_unique<vectorized::SizeTieredCompactionPolicy>(this);
+    } else {
+        _compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(this);
+    }
 
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
     if (keys_type() == PRIMARY_KEYS) {
@@ -1166,7 +1184,11 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
                     std::static_pointer_cast<Tablet>(shared_from_this()));
         }
     }
-    return _compaction_task;
+    if (_compaction_task && _compaction_task.use_count() == 1) {
+        return _compaction_task;
+    } else {
+        return nullptr;
+    }
 }
 
 bool Tablet::has_compaction_task() {
@@ -1177,10 +1199,23 @@ bool Tablet::has_compaction_task() {
 bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task == nullptr && _enable_compaction) {
+        _compaction_context->type = INVALID_COMPACTION;
         if (_compaction_context != nullptr &&
             _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             // if there is running task, return false
             // else, return true
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Tablet::force_base_compaction() {
+    std::lock_guard lock(_compaction_task_lock);
+    if (_compaction_task == nullptr && _enable_compaction) {
+        _compaction_context->type = BASE_COMPACTION;
+        if (_compaction_context != nullptr &&
+            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             return true;
         }
     }
@@ -1192,7 +1227,7 @@ CompactionType Tablet::compaction_type() {
     return _compaction_context ? _compaction_context->type : INVALID_COMPACTION;
 }
 
-int64_t Tablet::compaction_score() {
+double Tablet::compaction_score() {
     std::lock_guard lock(_compaction_task_lock);
     return _compaction_context ? _compaction_context->score : 0;
 }
@@ -1201,14 +1236,14 @@ void Tablet::stop_compaction() {
     std::lock_guard lock(_compaction_task_lock);
     if (_compaction_task) {
         _compaction_task->stop();
-        _compaction_task.reset();
+        _compaction_task = nullptr;
     }
     _enable_compaction = false;
 }
 
 void Tablet::reset_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    _compaction_task.reset();
+    _compaction_task = nullptr;
 }
 
 bool Tablet::enable_compaction() {

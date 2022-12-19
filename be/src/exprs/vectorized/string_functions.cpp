@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exprs/vectorized/string_functions.h"
 
@@ -246,8 +258,7 @@ static inline void utf8_substr_from_right(BinaryColumn* src, Bytes* bytes, Offse
     }
 }
 
-Status StringFunctions::sub_str_prepare(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::sub_str_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -283,8 +294,7 @@ Status StringFunctions::sub_str_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status unregister_substr_state(starrocks_udf::FunctionContext* context,
-                               starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status unregister_substr_state(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<SubstrState*>(context->get_function_state(scope));
         delete state;
@@ -292,13 +302,11 @@ Status unregister_substr_state(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status StringFunctions::sub_str_close(starrocks_udf::FunctionContext* context,
-                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::sub_str_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     return unregister_substr_state(context, scope);
 }
 
-Status StringFunctions::left_or_right_prepare(starrocks_udf::FunctionContext* context,
-                                              starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::left_or_right_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -318,13 +326,11 @@ Status StringFunctions::left_or_right_prepare(starrocks_udf::FunctionContext* co
     return Status::OK();
 }
 
-Status StringFunctions::left_or_right_close(starrocks_udf::FunctionContext* context,
-                                            starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::left_or_right_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     return unregister_substr_state(context, scope);
 }
 
-Status StringFunctions::concat_prepare(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::concat_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -370,8 +376,7 @@ Status StringFunctions::concat_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status StringFunctions::concat_close(starrocks_udf::FunctionContext* context,
-                                     starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::concat_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<ConcatState*>(context->get_function_state(scope));
         delete state;
@@ -1035,8 +1040,7 @@ StatusOr<ColumnPtr> StringFunctions::repeat(FunctionContext* context, const Colu
     }
 }
 
-Status StringFunctions::pad_prepare(starrocks_udf::FunctionContext* context,
-                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::pad_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -1065,8 +1069,7 @@ Status StringFunctions::pad_prepare(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-Status StringFunctions::pad_close(starrocks_udf::FunctionContext* context,
-                                  starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::pad_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto state = (PadState*)(context->get_function_state(scope));
         delete state;
@@ -2566,7 +2569,7 @@ struct StringFunctionsState {
 };
 
 Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern, StringFunctionsState* state,
-                                                     starrocks_udf::FunctionContext* context, const Slice& slice) {
+                                                     FunctionContext* context, const Slice& slice) {
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
@@ -2587,8 +2590,7 @@ Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern,
     return Status::OK();
 }
 
-Status StringFunctions::regexp_extract_prepare(starrocks_udf::FunctionContext* context,
-                                               starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
@@ -2622,8 +2624,7 @@ Status StringFunctions::regexp_extract_prepare(starrocks_udf::FunctionContext* c
     return Status::OK();
 }
 
-Status StringFunctions::regexp_replace_prepare(starrocks_udf::FunctionContext* context,
-                                               starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
@@ -3004,8 +3005,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimalv2val(FunctionContext* 
 }
 
 // regex method
-Status StringFunctions::parse_url_prepare(starrocks_udf::FunctionContext* context,
-                                          starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::parse_url_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -3035,8 +3035,7 @@ Status StringFunctions::parse_url_prepare(starrocks_udf::FunctionContext* contex
     return Status::OK();
 }
 
-Status StringFunctions::parse_url_close(starrocks_udf::FunctionContext* context,
-                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::parse_url_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state = reinterpret_cast<ParseUrlState*>(context->get_function_state(scope));
         delete state;

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.sql.analyzer;
 
@@ -31,7 +43,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -70,6 +81,8 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.util.Strings;
 
@@ -156,8 +169,8 @@ public class MaterializedViewAnalyzer {
             Analyzer.analyze(queryStatement, context);
 
             // convert queryStatement to sql and set
-            statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
-            statement.setSimpleViewDef(ViewDefBuilder.buildSimple(queryStatement));
+            statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));
+            statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndView(queryStatement);
             List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
@@ -221,32 +234,32 @@ public class MaterializedViewAnalyzer {
         // TODO(murphy) implement
         // Plan the query statement and store in memory
         private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
-            if (!ctx.getSessionVariable().isEnableRealtimeRefreshMV()) {
+            if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
                 return;
             }
             if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 return;
             }
-            QueryRelation queryRelation = query.getQueryRelation();
 
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
-            Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-            List<ColumnRefOperator> outputColumns = new ArrayList<>();
-            for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
-                ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
-                outputColumns.add(ref);
-                columnRefMap.put(ref, ref);
-            }
-
-            // Build logical plan for view query
-            OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
-            logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
-            Optimizer optimizer = new Optimizer();
-            PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
-            ExecPlan execPlan;
             try {
                 ctx.getSessionVariable().setMVPlanner(true);
+
+                QueryRelation queryRelation = query.getQueryRelation();
+                ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+                LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
+                Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+                List<ColumnRefOperator> outputColumns = new ArrayList<>();
+                for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
+                    ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
+                    outputColumns.add(ref);
+                    columnRefMap.put(ref, ref);
+                }
+
+                // Build logical plan for view query
+                OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
+                logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+                Optimizer optimizer = new Optimizer();
+                PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
                 OptExpression optimizedPlan = optimizer.optimize(
                         ctx,
                         logicalPlan.getRoot(),
@@ -257,7 +270,14 @@ public class MaterializedViewAnalyzer {
 
                 // TODO: refine rules for mv plan
                 // TODO: infer state
+                // TODO: infer sink table information
                 // TODO: store the plan in create-mv statement and persist it at executor
+                // TODO: refine the output fragment
+                boolean hasOutputFragment = false;
+                ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
+                        optimizedPlan, ctx, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                createStmt.setMaintenancePlan(execPlan, columnRefFactory);
             } finally {
                 ctx.getSessionVariable().setMVPlanner(false);
             }
@@ -282,7 +302,7 @@ public class MaterializedViewAnalyzer {
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
-                Type type = AnalyzerUtils.transformType(outputExpression.get(i).getType());
+                Type type = AnalyzerUtils.transformTypeForMv(outputExpression.get(i).getType());
                 Column column = new Column(columnOutputNames.get(i), type,
                         outputExpression.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
@@ -524,7 +544,7 @@ public class MaterializedViewAnalyzer {
             }
             if (distributionDesc == null) {
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
-                    distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
+                    distributionDesc = new HashDistributionDesc(0,
                             Lists.newArrayList(mvColumnItems.get(0).getName()));
                     statement.setDistributionDesc(distributionDesc);
                 } else {
@@ -644,7 +664,8 @@ public class MaterializedViewAnalyzer {
             } else if (partitionColumn.getType().isIntegerType()) {
                 validateNumberTypePartition(statement.getPartitionRangeDesc());
             } else {
-                throw new SemanticException("Unsupported batch partition build type:" + partitionColumn.getType() + ".");
+                throw new SemanticException(
+                        "Unsupported batch partition build type:" + partitionColumn.getType() + ".");
             }
             return null;
         }

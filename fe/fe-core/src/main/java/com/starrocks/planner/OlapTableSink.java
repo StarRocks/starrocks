@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/planner/OlapTableSink.java
 
@@ -78,7 +91,7 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.TransactionState;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,7 +100,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collector;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -103,9 +116,9 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
-    private boolean enablePipelineLoad;
-    private TWriteQuorumType writeQuorum;
-    private boolean enableReplicatedStorage;
+    private final boolean enablePipelineLoad;
+    private final TWriteQuorumType writeQuorum;
+    private final boolean enableReplicatedStorage;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
             TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
@@ -159,7 +172,9 @@ public class OlapTableSink extends DataSink {
 
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
-        tSink.setMerge_condition(mergeCondition);
+        if (mergeCondition != null && !mergeCondition.isEmpty()) {
+            tSink.setMerge_condition(mergeCondition);
+        }
         complete();
     }
 
@@ -171,9 +186,10 @@ public class OlapTableSink extends DataSink {
         tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
         int numReplicas = 1;
-        for (Partition partition : dstTable.getPartitions()) {
-            numReplicas = dstTable.getPartitionInfo().getReplicationNum(partition.getId());
-            break;
+        Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
+        if (optionalPartition.isPresent()) {
+            long partitionId = optionalPartition.get().getId();
+            numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());

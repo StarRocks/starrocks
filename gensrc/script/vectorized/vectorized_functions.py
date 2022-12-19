@@ -1,7 +1,20 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 # The format is:
 #   <function id> <name>, <return_type>, [<args>], <backend fn>,
@@ -193,6 +206,24 @@ vectorized_functions = [
     [20042, 'bitnot', 'INT', ['INT'], "BitFunctions::bitNot<TYPE_INT>"],
     [20043, 'bitnot', 'BIGINT', ['BIGINT'], "BitFunctions::bitNot<TYPE_BIGINT>"],
     [20044, 'bitnot', 'LARGEINT', ['LARGEINT'], "BitFunctions::bitNot<TYPE_LARGEINT>"],
+
+    [20050, 'bit_shift_left', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_TINYINT>"],
+    [20051, 'bit_shift_left', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_SMALLINT>"],
+    [20052, 'bit_shift_left', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_INT>"],
+    [20053, 'bit_shift_left', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_BIGINT>"],
+    [20054, 'bit_shift_left', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_LARGEINT>"],
+
+    [20060, 'bit_shift_right', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_TINYINT>"],
+    [20061, 'bit_shift_right', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_SMALLINT>"],
+    [20062, 'bit_shift_right', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_INT>"],
+    [20063, 'bit_shift_right', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_BIGINT>"],
+    [20064, 'bit_shift_right', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_LARGEINT>"],
+
+    [20070, 'bit_shift_right_logical', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_TINYINT>"],
+    [20071, 'bit_shift_right_logical', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_SMALLINT>"],
+    [20072, 'bit_shift_right_logical', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_INT>"],
+    [20073, 'bit_shift_right_logical', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_BIGINT>"],
+    [20074, 'bit_shift_right_logical', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_LARGEINT>"],
 
     # 30xxx: string functions
     [30010, 'substr', 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
@@ -485,6 +516,7 @@ vectorized_functions = [
     [90600, 'bitmap_max', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
     [90700, 'bitmap_min', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
     [90800, 'base64_to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap', False],
+    [90801, 'bitmap_to_base64', 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64', False],
     [90900, 'array_to_bitmap', 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap', False],
     [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
 
@@ -532,10 +564,10 @@ vectorized_functions = [
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
     [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
-    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
+    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
-    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
+    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
@@ -773,6 +805,20 @@ vectorized_functions = [
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 
     [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
+
+    [150311, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_sortby_boolean'],
+    [150312, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_TINYINT'],   'ArrayFunctions::array_sortby_tinyint'],
+    [150313, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_SMALLINT'],  'ArrayFunctions::array_sortby_smallint'],
+    [150314, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_INT'],       'ArrayFunctions::array_sortby_int'],
+    [150315, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BIGINT'],    'ArrayFunctions::array_sortby_bigint'],
+    [150316, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_LARGEINT'],  'ArrayFunctions::array_sortby_largeint'],
+    [150317, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_FLOAT'],     'ArrayFunctions::array_sortby_float'],
+    [150318, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DOUBLE'],    'ArrayFunctions::array_sortby_double'],
+    [150319, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_VARCHAR'],   'ArrayFunctions::array_sortby_varchar'],
+    [150320, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DECIMALV2'], 'ArrayFunctions::array_sortby_decimalv2'],
+    [150321, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATETIME'],  'ArrayFunctions::array_sortby_datetime'],
+    [150322, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATE'],      'ArrayFunctions::array_sortby_date'],
+    [150323, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_JSON'],      'ArrayFunctions::array_sortby_json'],
 
     # high-order functions related to lambda functions.
     [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],

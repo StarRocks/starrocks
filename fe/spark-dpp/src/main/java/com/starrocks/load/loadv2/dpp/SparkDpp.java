@@ -217,6 +217,7 @@ public final class SparkDpp implements java.io.Serializable {
         // data type may affect sorting logic
         StructType dstSchema = DppUtils.createDstTableSchema(indexMeta.columns, false, true);
         ExpressionEncoder encoder = RowEncoder.apply(dstSchema);
+        ExpressionEncoderHelper encoderHelper = new ExpressionEncoderHelper(encoder);
 
         resultRDD.repartitionAndSortWithinPartitions(new BucketPartitioner(bucketKeyMap), new BucketComparator())
                 .foreachPartition(new VoidFunction<Iterator<Tuple2<List<Object>, Object[]>>>() {
@@ -247,7 +248,7 @@ public final class SparkDpp implements java.io.Serializable {
                                 columnObjects.add(keyColumns.get(i));
                             }
                             for (int i = 0; i < valueColumns.length; ++i) {
-                                columnObjects.add(sparkRDDAggregators[i].finalize(valueColumns[i]));
+                                columnObjects.add(sparkRDDAggregators[i].finish(valueColumns[i]));
                             }
 
                             Row rowWithoutBucketKey = RowFactory.create(columnObjects.toArray());
@@ -294,7 +295,7 @@ public final class SparkDpp implements java.io.Serializable {
                                 }
                                 lastBucketKey = curBucketKey;
                             }
-                            InternalRow internalRow = encoder.toRow(rowWithoutBucketKey);
+                            InternalRow internalRow = encoderHelper.toRow(rowWithoutBucketKey);
                             parquetWriter.write(internalRow);
                         }
                         if (parquetWriter != null) {

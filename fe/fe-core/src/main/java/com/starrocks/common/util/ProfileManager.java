@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/common/util/ProfileManager.java
 
@@ -118,7 +131,20 @@ public class ProfileManager {
             return "";
         }
 
-        String profileString = profile.toString();
+        String profileString;
+        switch (Config.profile_info_format) {
+            case "default":
+                profileString = profile.toString();
+                break;
+            case "json":
+                RuntimeProfile.ProfileFormater formater = new RuntimeProfile.JsonProfileFormater();
+                profileString = formater.format(profile, "");
+                break;
+            default:
+                profileString = profile.toString();
+                LOG.warn("unknown profile format '{}',  use default format instead.", Config.profile_info_format);
+        }
+
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,

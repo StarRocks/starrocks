@@ -1,16 +1,16 @@
 # ST_AsText,ST_AsWKT
 
-## description
+## Description
 
-### Syntax
+Converts a geometric figure to WKT (Well Known Text) format.
+
+## Syntax
 
 ```Haskell
 VARCHAR ST_AsText(GEOMETRY geo)
 ```
 
-Convert a geometric figure to WKT (Well Known Text) format.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));

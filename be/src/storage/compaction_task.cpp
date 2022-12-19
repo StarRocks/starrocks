@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "storage/compaction_task.h"
 
 #include <sstream>
@@ -6,7 +19,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_scheduler.h"
 #include "storage/storage_engine.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -73,10 +85,7 @@ void CompactionTask::run() {
         // compaction context has been updated when commit
         // so do not update context here
         StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
-        // must be put after unregister_task
-        if (_scheduler) {
-            _scheduler->notify();
-        }
+
         TRACE("[Compaction] $0", _task_info.to_string());
     });
     if (should_stop()) {
@@ -125,8 +134,7 @@ void CompactionTask::run() {
 }
 
 bool CompactionTask::should_stop() const {
-    return StorageEngine::instance()->bg_worker_stopped() || config::max_compaction_concurrency == 0 ||
-           BackgroundTask::should_stop();
+    return StorageEngine::instance()->bg_worker_stopped() || BackgroundTask::should_stop();
 }
 
 void CompactionTask::_success_callback() {

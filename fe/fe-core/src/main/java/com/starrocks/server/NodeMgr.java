@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/ConnectProcessor.java
 
@@ -276,7 +289,7 @@ public class NodeMgr {
                         Thread.sleep(5000);
                         continue;
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        LOG.warn(e);
                         System.exit(-1);
                     }
                 }
@@ -722,6 +735,18 @@ public class NodeMgr {
             if (preUpdateFe == null) {
                 throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
             }
+
+            Frontend existFe = null;
+            for (Frontend fe : frontends.values()) {
+                if (fe.getHost().equals(fqdn)) {
+                    existFe = fe;
+                }
+            }
+
+            if (null != existFe) {
+                throw new DdlException("frontend with host [" + fqdn + "] already exists ");
+            }
+
             // step 1 update the fe information stored in bdb
             BDBHA bdbha = (BDBHA) stateMgr.getHaProtocol();
             bdbha.updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());

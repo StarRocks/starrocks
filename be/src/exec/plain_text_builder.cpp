@@ -1,5 +1,3 @@
-// This file_builder is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 #include "plain_text_builder.h"
 
 #include "column/chunk.h"

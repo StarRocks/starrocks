@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/CreateMaterializedViewStmt.java
 
@@ -63,6 +76,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 
 /**
  * Materialized view is performed to materialize the results of query.
@@ -346,6 +360,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         boolean meetAggregate = false;
         Set<String> mvColumnNameSet = Sets.newHashSet();
         int beginIndexOfAggregation = -1;
+        StringJoiner joiner = new StringJoiner(", ", "[", "]");
 
         List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
         for (int i = 0; i < selectListItems.size(); ++i) {
@@ -360,12 +375,14 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         + "Error column: " + selectListItemExpr.toSql());
             }
             if (selectListItemExpr instanceof SlotRef) {
-                if (meetAggregate) {
-                    throw new SemanticException("The aggregate column should be after the single column");
-                }
                 SlotRef slotRef = (SlotRef) selectListItemExpr;
-                // check duplicate column
                 String columnName = slotRef.getColumnName().toLowerCase();
+                joiner.add(columnName);
+                if (meetAggregate) {
+                    throw new SemanticException("Any single column should be before agg column. " +
+                            "Column %s at wrong location", columnName);
+                }
+                // check duplicate column
                 if (!mvColumnNameSet.add(columnName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnName);
                 }
@@ -409,10 +426,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 }
                 meetAggregate = true;
                 mvColumnItemList.add(buildMVColumnItem(functionCallExpr, statement.isReplay()));
+                joiner.add(functionCallExpr.toSqlImpl());
             }
         }
         if (beginIndexOfAggregation == 0) {
-            throw new SemanticException("The materialized view must contain at least one key column");
+            throw new SemanticException("Only %s found in the select list. " +
+                    "Please add group by clause and at least one group by column in the select list", joiner);
         }
         statement.setMvColumnItemList(mvColumnItemList);
         return beginIndexOfAggregation;

@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.plan;
 
@@ -151,7 +164,6 @@ public class ExpressionTest extends PlanTestBase {
     public void testExpression6() throws Exception {
         String sql = "select cast(v1 as decimal64(7,2)) + cast(v2 as decimal64(9,3)) from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println("planFragment = " + planFragment);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(10,2)) + " +
                 "CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(10,3))\n"));
@@ -415,7 +427,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testDateTypeReduceCast() throws Exception {
         String sql = "select * from test_all_type_distributed_by_datetime " +
                 "where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
-                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
+                "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(
                 plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-03 00:00:00'"));
@@ -499,14 +511,102 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testLambdaReduce() throws Exception {
+        starRocksAssert.withTable("create table test_lambda" +
+                "(c0 INT, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "select * from test_lambda where array_map(x -> x, c2) is not null";
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("array_map"));
+
+        sql = "select array_map(x -> x, c2) from test_lambda";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("array_map"));
+    }
+
+    @Test
     public void testLambdaPredicateOnScan() throws Exception {
         starRocksAssert.withTable("create table test_lambda_on_scan" +
                 "(c0 INT, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
-        String sql = "select * from test_lambda_on_scan where array_map(x -> x, c2) is not null";
+        String sql = "select * from test_lambda_on_scan where array_map(x -> x + 1, c2) is not null";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("array_map"));
+    }
+
+    @Test
+    public void testLambdaReuseSubExpressionWithoutLambdaArguments() throws Exception {
+        starRocksAssert.withTable("create table if not exists test_array" +
+                "(c0 INT,c1 int, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "select b, array_map(x->x+b, arr) from (select array_map(x->x+1, [1,2]) as arr, 3*c1 as b " +
+                "from test_array)T";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_map(<slot 7> -> CAST(<slot 7> AS BIGINT) + 10: multiply"));
+
+        sql = "select b, array_map(x->x+ 3 *c1, arr) from (select array_map(x->x+1, [1,2]) as arr, 3*c1 as b,c1 " +
+                "from test_array)T";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_map(<slot 7> -> CAST(<slot 7> AS BIGINT) + 10: multiply"));
+
+        sql = "select 3*c1, array_map(x->x+ 3 *c1, c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_map(<slot 5> -> CAST(<slot 5> AS BIGINT) + 8: multiply"));
+
+        sql = "select arr,array_length(arr) from (select array_map(x->x+1, [1,2]) as arr)T";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_length(6: array_map)"));
+
+        sql = "select  array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains(
+                "array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) + 7: multiply + 7: multiply"));
+    }
+
+    @Test
+    public void testLambdaWithAggAndWindowFunctions() throws Exception {
+        starRocksAssert.withTable("create table if not exists test_array " +
+                "(c0 INT,c1 int, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        // aggregations
+        String sql = "select array_agg(array_length(array_map(x->x*2, c2))) from test_array";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: array_agg(5: array_length)"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 5> : array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2))"));
+
+        sql = "select array_map(x->x > count(c1), c2) from test_array group by c2";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 6> : array_map(<slot 5> -> CAST(<slot 5> AS BIGINT) > 4: count, 3: c2)\n"));
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: c1)\n" +
+                "  |  group by: 3: c2"));
+
+        // window functions
+        sql = "select count(c1) over (partition by array_sum(array_map(x->x+1, [1]))) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:ANALYTIC\n" +
+                "  |  functions: [, count(6: c1), ]\n" +
+                "  |  partition by: 8: array_sum"));
+        Assert.assertTrue(plan.contains("  3:SORT\n" +
+                "  |  order by: <slot 8> 8: array_sum ASC\n" +
+                "  |  offset:"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 6> : 2: c1\n" +
+                "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +
+                "CAST(<slot 4> AS SMALLINT) + 1, ARRAY<tinyint(4)>[1]))"));
     }
 
     @Test
@@ -615,12 +715,19 @@ public class ExpressionTest extends PlanTestBase {
     public void testEmptyProjectCountStar() throws Exception {
         String sql = "select count(*) from test_all_type a, test_all_type b where a.t1a is not null";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
+        Assert.assertTrue(plan, plan.contains("5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  4:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * t1a-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"));
+                "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 
     @Test
@@ -1154,6 +1261,40 @@ public class ExpressionTest extends PlanTestBase {
             String sql = "select assert_true(false)";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "<slot 2> : assert_true(FALSE)");
+        }
+    }
+
+    @Test
+    public void testBitShift() throws Exception {
+        {
+            String sql = "select BIT_SHIFT_LEFT(cast(-100 as largeint), 3)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : -100 BITSHIFTLEFT 3");
+        }
+        {
+            String sql = "select BIT_SHIFT_RIGHT(cast(-100 as largeint), 3)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : -100 BITSHIFTRIGHT 3");
+        }
+        {
+            String sql = "select BIT_SHIFT_RIGHT_LOGICAL(cast(-100 as largeint), 3)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : -100 BITSHIFTRIGHTLOGICAL 3");
+        }
+        {
+            String sql = "select cast(-11 as smallint) BITSHIFTLEFT 3";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : -88");
+        }
+        {
+            String sql = "select cast(-11 as smallint) BITSHIFTRIGHT 3";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : -2");
+        }
+        {
+            String sql = "select cast(-11 as smallint) BITSHIFTRIGHTLOGICAL 3";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : 8190");
         }
     }
 }

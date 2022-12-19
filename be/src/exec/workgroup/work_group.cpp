@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "exec/workgroup/work_group.h"
 
@@ -473,14 +485,21 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (version_it == _workgroup_versions.end()) {
         return;
     }
-    auto version_id = version_it->second;
-    DCHECK(version_id < wg->version());
-    auto unique_id = WorkGroup::create_unique_id(id, version_id);
+
+    auto curr_version = version_it->second;
+    if (wg->version() <= curr_version) {
+        LOG(WARNING) << "try to delete workgroup with fresher version: "
+                     << "[delete_version=" << wg->version() << "] "
+                     << "[curr_version=" << curr_version << "]";
+        return;
+    }
+
+    auto unique_id = WorkGroup::create_unique_id(id, curr_version);
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
         _workgroup_expired_versions.push_back(unique_id);
-        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << version_id << ")";
+        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
     }
     LOG(INFO) << "delete workgroup " << wg->name();
 }

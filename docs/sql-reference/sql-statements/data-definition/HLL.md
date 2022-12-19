@@ -1,6 +1,6 @@
 # HLL
 
-## description
+## Description
 
 HLL enables the development of programmes based on the HyperLogLog algorithm. It is used to store intermediate results of the HyperLogLog calculation process. It can only be used as the value column type of the table. It reduces the amount of data through aggregation so as to speed up the query process. There may be around 1% deviation in the estimated results.
 
@@ -18,7 +18,7 @@ HLL_HASH(column_name): This generates HLL column type and is used for inserts or
 
 EMPTY_HLL(): This generates empty HLL column and is used to fill in default values during inserts or imports. See the instructions for the use of imports.
 
-## example
+## Examples
 
 1. First, create a table with hll column.
 

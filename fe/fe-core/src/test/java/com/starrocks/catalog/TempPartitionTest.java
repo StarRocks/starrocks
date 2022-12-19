@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/catalog/TempPartitionTest.java
 
@@ -239,10 +252,10 @@ public class TempPartitionTest {
         stmtStr = "alter table db2.tbl2 add temporary partition tp2 values less than('20');";
         alterTableWithNewAnalyzer(stmtStr, false);
 
-        stmtStr = "alter table db2.tbl2 add temporary partition tp3 values [('18'), ('30'));";
+        stmtStr = "alter table db2.tbl2 add temporary partition tp3 values [('18'), ('30')) distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, true);
 
-        stmtStr = "alter table db2.tbl2 add temporary partition tp3 values [('20'), ('30'));";
+        stmtStr = "alter table db2.tbl2 add temporary partition tp3 values [('20'), ('30')) distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, false);
 
         Map<String, Long> tempPartitionTabletIds = Maps.newHashMap();
@@ -276,7 +289,7 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", true, 2);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
-        stmtStr = "alter table db2.tbl2 add temporary partition tp3 values less than('30');";
+        stmtStr = "alter table db2.tbl2 add temporary partition tp3 values less than('30') distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, false);
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
 
@@ -343,9 +356,9 @@ public class TempPartitionTest {
 
         stmtStr = "alter table db2.tbl2 drop partition p3;";
         alterTableWithNewAnalyzer(stmtStr, false);
-        stmtStr = "alter table db2.tbl2 add partition p31 values less than('25');";
+        stmtStr = "alter table db2.tbl2 add partition p31 values less than('25') distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, false);
-        stmtStr = "alter table db2.tbl2 add partition p32 values less than('35');";
+        stmtStr = "alter table db2.tbl2 add partition p32 values less than('35') distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, false);
 
         // for now, we have 4 partitions: tp1, tp2, p31, p32, 1 temp partition: tp3
@@ -365,11 +378,11 @@ public class TempPartitionTest {
         checkPartitionExist(tbl2, "tp2", false, true);
         checkPartitionExist(tbl2, "tp3", false, true);
 
-        stmtStr = "alter table db2.tbl2 add temporary partition p1 values less than('10');";
+        stmtStr = "alter table db2.tbl2 add temporary partition p1 values less than('10') distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, false);
-        stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20');";
+        stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20') distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, false);
-        stmtStr = "alter table db2.tbl2 add temporary partition p3 values less than('30');";
+        stmtStr = "alter table db2.tbl2 add temporary partition p3 values less than('30') distributed by hash(k2) buckets 1;";
         alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db2.tbl2 replace partition(tp1, tp2) with temporary partition(p1, p2);";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -392,7 +405,7 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
 
-        stmtStr = "alter table db2.tbl2 add temporary partition tp1 values less than('10');"; // name conflict
+        stmtStr = "alter table db2.tbl2 add temporary partition tp1 values less than('10') distributed by hash(k2) buckets 1"; // name conflict
         alterTableWithNewAnalyzer(stmtStr, true);
         stmtStr = "alter table db2.tbl2 rename partition p3 tp3;";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -448,7 +461,7 @@ public class TempPartitionTest {
             retryTimes--;
         }
 
-        stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20');";
+        stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20') distributed by hash(k2) buckets 1";
         alterTableWithNewAnalyzer(stmtStr, false);
 
         TempPartitions tempPartitions = Deencapsulation.getField(tbl2, "tempPartitions");
