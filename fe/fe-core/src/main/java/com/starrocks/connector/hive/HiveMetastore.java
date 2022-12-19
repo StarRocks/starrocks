@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -70,6 +71,11 @@ public class HiveMetastore implements IHiveMetastore {
         StorageDescriptor sd = table.getSd();
         if (sd == null) {
             throw new StarRocksConnectorException("Table is missing storage descriptor");
+        }
+
+        if (HiveMetastoreApiConverter.isIcebergTable(table.getParameters()) ||
+                HiveMetastoreApiConverter.isDeltaLakeTable(table.getParameters())) {
+            throw  new StarRocksConnectorException("Table is not hms table, not supported, pls use correct catalog to query.");
         }
 
         if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
