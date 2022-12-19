@@ -425,10 +425,14 @@
       + [log2](./sql-reference/sql-functions/math-functions/log2.md)
       + [log10](./sql-reference/sql-functions/math-functions/log10.md)
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
       + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
       + [pow](./sql-reference/sql-functions/math-functions/pow.md)
 >>>>>>> a94fe5b48 (add math and string function docs (#15522))
+=======
+      + [pow](./sql-reference/sql-functions/math-functions/pow.md)
+>>>>>>> 7aa270814 ([Doc] Add doc for pow/power (#15411))
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
       + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
