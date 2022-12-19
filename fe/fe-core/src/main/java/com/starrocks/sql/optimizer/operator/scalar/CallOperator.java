@@ -68,9 +68,13 @@ public class CallOperator extends ScalarOperator {
         this.isDistinct = isDistinct;
     }
 
-    public void setIgnoreNulls(boolean ignoreNulls) { this.ignoreNulls = ignoreNulls; }
+    public void setIgnoreNulls(boolean ignoreNulls) {
+        this.ignoreNulls = ignoreNulls;
+    }
 
-    public boolean getIgnoreNulls() { return ignoreNulls; }
+    public boolean getIgnoreNulls() {
+        return ignoreNulls;
+    }
 
     public String getFnName() {
         return fnName;
