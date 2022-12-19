@@ -148,25 +148,6 @@ public class DDLStmtExecutor {
             throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
         }
 
-
-        @Override
-        public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
-            String fullWhName = stmt.getFullWhName();
-            boolean isSetIfNotExists = stmt.isSetIfNotExists();
-            ErrorReport.wrapWithRuntimeException(() -> {
-                try {
-                    context.getGlobalStateMgr().getWarehouseManager().createWarehouse(fullWhName);
-                } catch (AlreadyExistsException e) {
-                    if (isSetIfNotExists) {
-                        LOG.info("create warehouse[{}] which already exists", fullWhName);
-                    } else {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_WH_CREATE_EXISTS, fullWhName);
-                    }
-                }
-            });
-            return null;
-        }
-
         @Override
         public ShowResultSet visitCreateDbStatement(CreateDbStmt stmt, ConnectContext context) {
             String fullDbName = stmt.getFullDbName();
@@ -831,6 +812,27 @@ public class DDLStmtExecutor {
             });
             return null;
         }
+
+        // warehouse
+
+        @Override
+        public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
+            String fullWhName = stmt.getFullWhName();
+            boolean isSetIfNotExists = stmt.isSetIfNotExists();
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getWarehouseManager().createWarehouse(fullWhName);
+                } catch (AlreadyExistsException e) {
+                    if (isSetIfNotExists) {
+                        LOG.info("create warehouse[{}] which already exists", fullWhName);
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_WH_CREATE_EXISTS, fullWhName);
+                    }
+                }
+            });
+            return null;
+        }
+
 
         @Override
         public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {

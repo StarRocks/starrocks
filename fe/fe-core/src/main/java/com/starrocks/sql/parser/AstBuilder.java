@@ -406,39 +406,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new EmptyStmt();
     }
 
-    // ---------------------------------------- Warehouse Statement -----------------------------------------------------
-
-    @Override
-    public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
-        String pattern = null;
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            pattern = stringLiteral.getValue();
-        }
-
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
-        }
-
-        return new ShowWhStmt(pattern, where);
-    }
-
-    @Override
-    public ParseNode visitCreateWarehouseStatement(StarRocksParser.CreateWarehouseStatementContext context) {
-        String whName = ((Identifier) visit(context.identifier())).getValue();
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        return new CreateWarehouseStmt(context.IF() != null, whName, properties);
-    }
-
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     @Override
@@ -1382,6 +1349,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowCatalogsStatement(StarRocksParser.ShowCatalogsStatementContext context) {
         return new ShowCatalogsStmt();
     }
+
+    // ---------------------------------------- Warehouse Statement -----------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateWarehouseStatement(StarRocksParser.CreateWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String whName = identifier.getValue();
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateWarehouseStmt(context.IF() != null, whName, properties);
+    }
+
+    @Override
+    public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowWhStmt(pattern, where);
+    }
+
+
+
+
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override

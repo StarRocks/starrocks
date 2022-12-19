@@ -640,9 +640,9 @@ public class GlobalStateMgr {
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
-        this.warehouseMgr = new WarehouseManager(this);
+        this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, warehouseMgr);
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
@@ -825,6 +825,7 @@ public class GlobalStateMgr {
         return catalogMgr;
     }
 
+
     public ConnectorMgr getConnectorMgr() {
         return connectorMgr;
     }
@@ -992,7 +993,6 @@ public class GlobalStateMgr {
         this.globalTransactionMgr.setEditLog(editLog);
         this.idGenerator.setEditLog(editLog);
         this.localMetastore.setEditLog(editLog);
-        this.warehouseMgr.setEditLog(editLog);
     }
 
     // wait until FE is ready.

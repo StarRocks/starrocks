@@ -131,13 +131,6 @@ public class Analyzer {
             visit(statement, session);
         }
 
-        // ---------------------------------------- Warehouse Statement -----------------------------------------------------
-        @Override
-        public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
-            CreateWarehouseAnalyzer.analyze(statement, context);
-            return null;
-        }
-
         // ---------------------------------------- Database Statement -----------------------------------------------------
 
         @Override
@@ -482,6 +475,14 @@ public class Analyzer {
             CatalogAnalyzer.analyze(statement, context);
             return null;
         }
+
+        // ---------------------------------------- Warehouse Statement -----------------------------------------------------
+        @Override
+        public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {

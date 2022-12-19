@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.common.util.PrintableMap;
+
 import java.util.Map;
 
 public class CreateWarehouseStmt  extends DdlStmt {
@@ -48,6 +50,15 @@ public class CreateWarehouseStmt  extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateWarehouseStatement(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE WAREHOUSE '");
+        sb.append(warehouseName).append("' ");
+        sb.append("WITH PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
+        return sb.toString();
     }
 }
 

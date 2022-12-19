@@ -46,16 +46,13 @@ public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
 
     private final LocalMetastore localMetastore;
-    private final WarehouseManager warehouseMgr;
     private final ConnectorMgr connectorMgr;
     private final Map<String, QueryMetadatas> metadataByQueryId = new ConcurrentHashMap<>();
 
-    public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
-                       WarehouseManager warehouseMgr) {
+    public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
         Preconditions.checkNotNull(localMetastore, "localMetastore is null");
         this.localMetastore = localMetastore;
         this.connectorMgr = connectorMgr;
-        this.warehouseMgr = warehouseMgr;
     }
 
     protected Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
@@ -79,10 +76,6 @@ public class MetadataMgr {
         }
     }
 
-    protected Optional<ConnectorMetadata> getWarehouseMetaData() {
-        return Optional.of(warehouseMgr);
-    }
-
     public void removeQueryMetadata() {
         String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
                 ConnectContext.get().getQueryId().toString() : null;
@@ -94,19 +87,6 @@ public class MetadataMgr {
                 LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
             }
         }
-    }
-
-    public List<String> listWhNames() {
-        Optional<ConnectorMetadata> connectorMetadata = getWarehouseMetaData();
-        ImmutableSet.Builder<String> whNames = ImmutableSet.builder();
-
-        try {
-            connectorMetadata.get().listWhNames().forEach(whNames::add);
-        } catch (StarRocksConnectorException e) {
-            LOG.error("Failed to listDbNames", e);
-            throw e;
-        }
-        return ImmutableList.copyOf(whNames.build());
     }
 
     public List<String> listDbNames(String catalogName) {

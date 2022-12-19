@@ -14,15 +14,14 @@
 
 package com.starrocks.server;
 
-import com.google.common.collect.Lists;
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,16 +30,14 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class WarehouseManager implements Writable, ConnectorMetadata {
-    private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
-    private final GlobalStateMgr stateMgr;
-    private EditLog editLog;
+public class WarehouseManager implements Writable {
+    private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
     @SerializedName(value = "idToWh")
     private final ConcurrentHashMap<Long, Warehouse> idToWh = new ConcurrentHashMap<>();
@@ -49,60 +46,50 @@ public class WarehouseManager implements Writable, ConnectorMetadata {
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
-    public WarehouseManager(GlobalStateMgr globalStateMgr) {
-        this.stateMgr = globalStateMgr;
+    private void readLock() {
+        this.rwLock.readLock().lock();
+    }
+    private void readUnlock() {
+        this.rwLock.readLock().unlock();
     }
 
-    private boolean tryLock(boolean mustLock) {
-        return stateMgr.tryLock(mustLock);
+    private void writeLock() {
+        this.rwLock.writeLock().lock();
     }
 
-    private void unlock() {
-        stateMgr.unlock();
+    private void writeUnLock() {
+        this.rwLock.writeLock().unlock();
     }
 
-    private long getNextId() {
-        return stateMgr.getNextId();
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.editLog = editLog;
-    }
-
-    @Override
-    public List<String> listWhNames() {
-        return Lists.newArrayList(fullNameToWh.keySet());
+    public WarehouseManager() {
     }
 
     // these apis need lock protection
-    @Override
-    public void createWarehouse(String whName) throws DdlException, AlreadyExistsException {
-        long id = 0L;
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-
-        try {
-            if (fullNameToWh.containsKey(whName)) {
-                throw new AlreadyExistsException("Warehouse Already Exists");
-            } else {
-                id = getNextId();
-                Warehouse wh = new Warehouse(id, whName);
-                unprotectCreateWarehouse(wh);
-                editLog.logCreateWh(wh);
-            }
-        } finally {
-            unlock();
-        }
-        LOG.info("createWarehouse whName = " + whName + ", id = " + id);
+    public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
+        createWarehouse(stmt.getFullWhName(), stmt.getProperties());
     }
 
-    public void unprotectCreateWarehouse(Warehouse wh) {
-        idToWh.put(wh.getId(), wh);
-        fullNameToWh.put(wh.getFullName(), wh);
-        wh.writeLock();
-        wh.setExist(true);
-        wh.writeUnlock();
+    public void createWarehouse(String whName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
+        readLock();
+        try {
+            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
+        } finally {
+            readUnlock();
+        }
+
+        writeLock();
+        try {
+            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
+            long id = GlobalStateMgr.getCurrentState().getNextId();
+            Warehouse wh = new Warehouse(id, whName);
+            idToWh.put(wh.getId(), wh);
+            fullNameToWh.put(wh.getFullName(), wh);
+            wh.setExist(true);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateWh(wh);
+            LOG.info("createWarehouse whName = " + whName + ", id = " + id);
+        } finally {
+            writeUnLock();
+        }
     }
 
 
@@ -116,13 +103,7 @@ public class WarehouseManager implements Writable, ConnectorMetadata {
     }
 
     public void replayCreateWarehouse(Warehouse wh) {
-        tryLock(true);
-        try {
-            unprotectCreateWarehouse(wh);
-            LOG.info("finish replay create warehouse, name: {}, id: {}", wh.getFullName(), wh.getId());
-        } finally {
-            unlock();
-        }
+
     }
 
     public void replayDropWarehouse() {}

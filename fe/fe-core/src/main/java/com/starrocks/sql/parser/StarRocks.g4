@@ -250,28 +250,6 @@ statement
     | unsupportedStatement
     ;
 
-// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
-useWarehouseStatement
-    : USE qualifiedName
-    ;
-
-showWarehousesStatement
-    : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-createWarehouseStatement
-    : CREATE (WAREHOUSE) (IF NOT EXISTS)? identifier
-            properties?
-    ;
-
-dropWarehouseStatement
-    : DROP (WAREHOUSE) (IF EXISTS)? identifier FORCE?
-    ;
-
-alterWarehouseStatement
-    : ALTER TABLE identifier alterClause (',' alterClause)*
-    ;
-
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 
 useDatabaseStatement
@@ -620,6 +598,29 @@ dropExternalCatalogStatement
 
 showCatalogsStatement
     : SHOW CATALOGS
+    ;
+
+
+// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
+
+createWarehouseStatement
+    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString properties?
+    ;
+
+showWarehousesStatement
+    : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+useWarehouseStatement
+    : USE qualifiedName
+    ;
+
+dropWarehouseStatement
+    : DROP (WAREHOUSE) (IF EXISTS)? warehouseName=identifierOrString
+    ;
+
+alterWarehouseStatement
+    : ALTER TABLE identifier alterClause (',' alterClause)*
     ;
 
 
