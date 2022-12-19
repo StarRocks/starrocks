@@ -80,6 +80,7 @@
     + [认证方式](/administration/Authentication.md)
   + 性能调优
     + [查询分析](/administration/Query_planning.md)
+    + [查看分析 Query Profile](/administration/query_profile.md)
     + [性能优化](/administration/Profiling.md)
 + 参考手册
   + SQL参考
