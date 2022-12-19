@@ -698,7 +698,7 @@ CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // The number of scan threads pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
-CONF_Int64(pipeline_hdfs_scan_thread_pool_thread_num, "48");
+CONF_Int64(pipeline_connector_scan_thread_num_per_cpu, "8");
 // Queue size of scan thread pool for pipeline engine.
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
