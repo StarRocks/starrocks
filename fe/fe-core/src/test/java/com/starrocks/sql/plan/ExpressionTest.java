@@ -538,7 +538,7 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testLambdaReuseSubExpression() throws Exception {
-        starRocksAssert.withTable("create table test_array" +
+        starRocksAssert.withTable("create table test_array if not exists" +
                 "(c0 INT,c1 int, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
