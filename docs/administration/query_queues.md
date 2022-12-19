@@ -10,7 +10,7 @@ You can set thresholds on CPU usage, memory usage, and query concurrency to trig
 
 Query queues are disabled by default. You can enable query queues for INSERT loading, SELECT queries, and statistics queries by setting corresponding global session variables.
 
-- Enable query queues for INSERT loading:
+- Enable query queues for loading tasks:
 
 ```SQL
 SET GLOBAL enable_query_queue_load = true;
