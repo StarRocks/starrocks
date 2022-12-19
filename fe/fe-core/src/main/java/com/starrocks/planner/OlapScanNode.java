@@ -69,7 +69,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -147,8 +146,8 @@ public class OlapScanNode extends ScanNode {
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
     public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
 
-    private List<Expr> partitionExprs = Lists.newArrayList();
-    private List<ColumnRefOperator> partitionColumns = Lists.newArrayList();
+    private List<Expr> bucketExprs = Lists.newArrayList();
+    private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
 
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -199,16 +198,16 @@ public class OlapScanNode extends ScanNode {
         return actualRows;
     }
 
-    public List<ColumnRefOperator> getPartitionColumns() {
-        return partitionColumns;
+    public List<ColumnRefOperator> getBucketColumns() {
+        return bucketColumns;
     }
 
-    public void setPartitionColumns(List<ColumnRefOperator> partitionColumns) {
-        this.partitionColumns = partitionColumns;
+    public void setBucketColumns(List<ColumnRefOperator> bucketColumns) {
+        this.bucketColumns = bucketColumns;
     }
 
-    public void setPartitionExprs(List<Expr> partitionExprs) {
-        this.partitionExprs = partitionExprs;
+    public void setBucketExprs(List<Expr> bucketExprs) {
+        this.bucketExprs = bucketExprs;
     }
 
     // The column names applied dict optimization
@@ -686,8 +685,8 @@ public class OlapScanNode extends ScanNode {
             }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
 
-            if (!partitionExprs.isEmpty()) {
-                msg.olap_scan_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+            if (!bucketExprs.isEmpty()) {
+                msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
         }
     }

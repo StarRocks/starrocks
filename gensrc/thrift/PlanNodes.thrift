@@ -419,7 +419,7 @@ struct TOlapScanNode {
   24: optional list<string> unused_output_column_name
   25: optional bool sorted_by_keys_per_tablet = false
 
-  26: optional list<Exprs.TExpr> partition_exprs
+  26: optional list<Exprs.TExpr> bucket_exprs
 }
 
 struct TJDBCScanNode {

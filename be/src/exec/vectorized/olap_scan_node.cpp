@@ -63,11 +63,11 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
     }
 
-    if (_olap_scan_node.__isset.partition_exprs) {
-        const auto& part_exprs = _olap_scan_node.partition_exprs;
-        _partition_exprs.resize(part_exprs.size());
-        for (int i = 0; i < part_exprs.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, part_exprs[i], &_partition_exprs[i], state));
+    if (_olap_scan_node.__isset.bucket_exprs) {
+        const auto& bucket_exprs = _olap_scan_node.bucket_exprs;
+        _bucket_exprs.resize(bucket_exprs.size());
+        for (int i = 0; i < bucket_exprs.size(); ++i) {
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, bucket_exprs[i], &_bucket_exprs[i], state));
         }
     }
 

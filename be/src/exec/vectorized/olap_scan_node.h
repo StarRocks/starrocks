@@ -96,7 +96,7 @@ public:
         return starrocks::ScanNode::io_tasks_per_scan_operator();
     }
 
-    const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+    const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 
 private:
     friend class TabletScanner;
@@ -200,7 +200,7 @@ private:
 
     bool _sorted_by_keys_per_tablet = false;
 
-    std::vector<ExprContext*> _partition_exprs;
+    std::vector<ExprContext*> _bucket_exprs;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

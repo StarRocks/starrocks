@@ -639,6 +639,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public PlanNode getLeftMostLeafNode() {
         PlanNode node = planRoot;
         while (!node.getChildren().isEmpty()) {
+            if (node instanceof ExchangeNode) {
+                break;
+            }
             node = node.getChild(0);
         }
         return node;
