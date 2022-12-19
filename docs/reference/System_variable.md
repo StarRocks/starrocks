@@ -213,7 +213,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_query_queue_load
 
-  Boolean value to enable query queues for INSERT loading. Default: `false`.
+  Boolean value to enable query queues for loading tasks. Default: `false`.
 
 * enable_query_queue_select
 
