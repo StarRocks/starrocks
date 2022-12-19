@@ -99,7 +99,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
         RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& self_partition_exprs) {
     return maybe_interpolate_local_shuffle_exchange(state, pred_operators,
-                                                    [&self_partition_exprs]() { return self_partition_exprs });
+                                                    [&self_partition_exprs]() { return self_partition_exprs; });
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
