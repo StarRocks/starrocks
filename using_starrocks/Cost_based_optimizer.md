@@ -68,9 +68,8 @@ PROPERTIES(
 CREATE ANALYZE FULL DATABASE tpch;
 ```
 
-<<<<<<< HEAD
 ### 抽样采集
-=======
+
 参数说明：
 
 - `col_name`: 要采集统计信息的列，多列使用逗号分隔。该参数必填。
