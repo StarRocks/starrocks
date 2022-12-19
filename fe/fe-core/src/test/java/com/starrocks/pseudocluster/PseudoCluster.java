@@ -88,6 +88,10 @@ public class PseudoCluster {
 
     private BasicDataSource dataSource;
 
+    private static long backendIdStart = 10001;
+    private static int backendPortStart = 12100;
+    private static int backendHostStart = 10;
+
     static {
         try {
             Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
@@ -401,19 +405,18 @@ public class PseudoCluster {
 
         LOG.info("start create and start backends");
         cluster.backends = Maps.newConcurrentMap();
-        long backendIdStart = 10001;
-        int port = 12100;
         for (int i = 0; i < numBackends; i++) {
-            String host = String.format("127.0.0.%d", i + 10);
-            long beId = backendIdStart + i;
+            String host = genBackendHost();
+            long beId = backendIdStart++;
             String beRunPath = runDir + "/be" + beId;
-            PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host, port++, port++, port++, port++,
+            PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host,
+                    backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
             GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .addWorker(beId, String.format("%s:%d", backend.getHost(), port - 1));
+                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
@@ -423,6 +426,44 @@ public class PseudoCluster {
         }
         Thread.sleep(2000);
         return cluster;
+    }
+
+    public List<Long> addBackends(int numBackends) {
+        List<Long> beIds = new ArrayList<>();
+        for (int i = 0; i < numBackends; i++) {
+            String host = genBackendHost();
+            long beId = backendIdStart++;
+            String beRunPath = runDir + "/be" + beId;
+            PseudoBackend backend = new PseudoBackend(this, beRunPath, beId, host,
+                    backendPortStart++, backendPortStart++, backendPortStart++, backendPortStart++,
+                    this.frontend.getFrontendService());
+            this.backends.put(backend.getHost(), backend);
+            this.backendIdToHost.put(beId, backend.getHost());
+            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
+            LOG.info("add PseudoBackend {} {}", beId, host);
+            beIds.add(beId);
+        }
+        int retry = 0;
+        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+                retry++ < 600) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        return beIds;
+    }
+
+    private static String genBackendHost() {
+        int i = backendHostStart % 128;
+        int j = (backendHostStart >> 7) % 128;
+        int k = (backendHostStart >> 14) % 128;
+        backendHostStart++;
+        return String.format("127.%d.%d.%d", k, j, i);
     }
 
     private static void logAddConsoleAppender() {

@@ -19,7 +19,7 @@ import com.starrocks.analysis.ParseNode;
 
 public class ColumnAssignment implements ParseNode {
     private final String column;
-    private final Expr expr;
+    private Expr expr;
 
     public ColumnAssignment(String column, Expr expr) {
         this.column = column;
@@ -32,5 +32,9 @@ public class ColumnAssignment implements ParseNode {
 
     public Expr getExpr() {
         return expr;
+    }
+
+    public void setExpr(Expr expr) {
+        this.expr = expr;
     }
 }

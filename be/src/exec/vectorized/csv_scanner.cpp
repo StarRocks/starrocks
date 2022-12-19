@@ -43,15 +43,21 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     _buff.add_limit(s.size);
     auto n = _buff.available();
     if (s.size == 0) {
-        if (n == 0) {
-            // Has reached the end of file and the buffer is empty.
-            return Status::EndOfFile(_file->filename());
-        } else if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        if (n < _row_delimiter_length ||
+            _buff.find(_parse_options.row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
             // is valid, according the RFC, add the record delimiter ourself.
-            for (char ch : _row_delimiter) {
+            if (_buff.free_space() < _row_delimiter_length) {
+                return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()));
+            }
+            for (char ch : _parse_options.row_delimiter) {
                 _buff.append(ch);
             }
+        }
+        if (n == 0) {
+            _buff.skip(_row_delimiter_length);
+            // Has reached the end of file and the buffer is empty.
+            return Status::EndOfFile(_file->filename());
         }
     }
     return Status::OK();
@@ -61,14 +67,39 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
                        ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {
     if (scan_range.params.__isset.multi_column_separator) {
-        _field_delimiter = scan_range.params.multi_column_separator;
+        _parse_options.column_delimiter = scan_range.params.multi_column_separator;
     } else {
-        _field_delimiter = scan_range.params.column_separator;
+        _parse_options.column_delimiter = scan_range.params.column_separator;
     }
     if (scan_range.params.__isset.multi_row_delimiter) {
-        _record_delimiter = scan_range.params.multi_row_delimiter;
+        _parse_options.row_delimiter = scan_range.params.multi_row_delimiter;
     } else {
-        _record_delimiter = scan_range.params.row_delimiter;
+        _parse_options.row_delimiter = scan_range.params.row_delimiter;
+    }
+    if (scan_range.params.__isset.skip_header) {
+        _parse_options.skip_header = scan_range.params.skip_header;
+    } else {
+        _parse_options.skip_header = 0;
+    }
+    if (scan_range.params.__isset.trim_space) {
+        _parse_options.trim_space = scan_range.params.trim_space;
+    } else {
+        _parse_options.trim_space = false;
+    }
+    if (scan_range.params.__isset.enclose) {
+        _parse_options.enclose = scan_range.params.enclose;
+    } else {
+        _parse_options.enclose = 0;
+    }
+    if (scan_range.params.__isset.escape) {
+        _parse_options.escape = scan_range.params.escape;
+    } else {
+        _parse_options.escape = 0;
+    }
+    if (_parse_options.enclose == 0 && _parse_options.escape == 0) {
+        _use_v2 = false;
+    } else {
+        _use_v2 = true;
     }
 }
 
@@ -150,7 +181,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 return st;
             }
 
-            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter);
+            _curr_reader = std::make_unique<ScannerCSVReader>(file, _parse_options);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
                 _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
@@ -169,12 +200,24 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 CSVReader::Record dummy;
                 RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
             }
+
+            if (_parse_options.skip_header) {
+                for (int64_t i = 0; i < _parse_options.skip_header; i++) {
+                    CSVReader::Record dummy;
+                    RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+                }
+            }
         } else if (_curr_reader == nullptr) {
             return Status::EndOfFile("CSVScanner");
         }
 
         src_chunk->set_num_rows(0);
-        Status status = _parse_csv(src_chunk.get());
+        Status status = Status::OK();
+        if (!_use_v2) {
+            status = _parse_csv(src_chunk.get());
+        } else {
+            status = _parse_csv_v2(src_chunk.get());
+        }
 
         if (!status.ok()) {
             if (status.is_end_of_file()) {
@@ -196,6 +239,93 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
         ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
     } while ((chunk)->num_rows() == 0);
     return std::move(chunk);
+}
+
+Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
+    const int capacity = _state->chunk_size();
+    DCHECK_EQ(0, chunk->num_rows());
+    Status status;
+    CSVRow row;
+
+    int num_columns = chunk->num_columns();
+    _column_raw_ptrs.resize(num_columns);
+    for (int i = 0; i < num_columns; i++) {
+        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+    }
+
+    csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
+    for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+        status = _curr_reader->next_record(row);
+        if (!status.ok() && !status.is_end_of_file()) {
+            return status;
+        }
+
+        // skip empty row
+        if (row.columns.size() == 0) {
+            if (status.is_end_of_file()) {
+                break;
+            }
+            continue;
+        }
+
+        const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
+        CSVReader::Record record(data, row.parsed_end - row.parsed_start);
+        if (row.columns.size() != _num_fields_in_csv) {
+            if (status.is_end_of_file()) {
+                break;
+            }
+            if (_counter->num_rows_filtered++ < 50) {
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size();
+
+                _report_error(record.to_string(), error_msg.str());
+            }
+            continue;
+        }
+        if (!validate_utf8(record.data, record.size)) {
+            if (_counter->num_rows_filtered++ < 50) {
+                _report_error(record.to_string(), "Invalid UTF-8 row");
+            }
+            continue;
+        }
+
+        SCOPED_RAW_TIMER(&_counter->fill_ns);
+        bool has_error = false;
+        for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
+            auto slot = _src_slot_descriptors[j];
+            if (slot == nullptr) {
+                continue;
+            }
+            const CSVColumn& column = row.columns[j];
+            char* basePtr = nullptr;
+            if (column.is_escaped_column) {
+                basePtr = _curr_reader->escapeDataPtr();
+            } else {
+                basePtr = _curr_reader->buffBasePtr();
+            }
+
+            const Slice data(basePtr + column.start_pos, column.length);
+            options.type_desc = &(slot->type());
+            if (!_converters[k]->read_string(_column_raw_ptrs[k], data, options)) {
+                chunk->set_num_rows(num_rows);
+                if (_counter->num_rows_filtered++ < 50) {
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << data.to_string() << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _report_error(record.to_string(), error_msg.str());
+                }
+                has_error = true;
+                break;
+            }
+            k++;
+        }
+        num_rows += !has_error;
+        if (status.is_end_of_file()) {
+            break;
+        }
+    }
+    return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
 Status CSVScanner::_parse_csv(Chunk* chunk) {
@@ -220,7 +350,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         } else if (!status.ok()) {
             return status;
         } else if (record.empty()) {
-            // always skip blank lines.
+            // always skip blank rows.
             continue;
         }
 

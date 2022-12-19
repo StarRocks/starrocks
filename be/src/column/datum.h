@@ -64,6 +64,10 @@ public:
         set(value);
     }
 
+    Datum(const DatumKey& datum_key) {
+        std::visit(overloaded{[this](auto& arg) { set<decltype(arg)>(arg); }}, datum_key);
+    }
+
     int8_t get_int8() const { return get<int8_t>(); }
     uint8_t get_uint8() const { return get<uint8_t>(); }
     int16_t get_int16() const { return get<int16_t>(); }
@@ -173,6 +177,15 @@ public:
                            [](const float& arg) { return DatumKey(arg); },
                            [](const double& arg) { return DatumKey(arg); }, [](auto& arg) { return DatumKey(); }},
                 _value);
+    }
+
+    template <typename T>
+    bool is_equal(const T& val) const {
+        return get<T>() == val;
+    }
+
+    bool equal_datum_key(const DatumKey& key) const {
+        return std::visit([&](const auto& arg) { return is_equal(arg); }, key);
     }
 
 private:

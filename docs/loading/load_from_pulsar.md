@@ -1,4 +1,4 @@
-# Continuously load data from Apache® Pulsar™
+# [Preview] Continuously load data from Apache® Pulsar™
 
 As of StarRocks version 2.5, Routine Load supports continuously loading data from Apache® Pulsar™. Pulsar is distributed, open source pub-sub messaging and streaming platform with a store-compute separation architecture. Loading data from Pulsar via Routine Load is similar to loading data from Apache Kafka. This topic uses CSV-formatted data as an example to introduce how to load data from Apache Pulsar via Routine Load.
 
@@ -12,37 +12,35 @@ Routine Load supports consuming CSV and JSON formatted data from a Pulsar cluste
 
 ## Pulsar-related concepts
 
-Compared to other message queue systems, Pulsar introduces some specific concepts.
+**[Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#topics)**
+  
+Topics in Pulsar are named channels for transmitting messages from producers to consumers. Topics in Pulsar are divided into partitioned topics and non-partitioned topics.
 
-> **Note**
->
-> For more detailed descriptions, see [Pulsar's official documentation](https://pulsar.apache.org/docs/2.10.x/).
+- **[Partitioned topics](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#partitioned-topics)** are a special type of topic that are handled by multiple brokers, thus allowing for higher throughput. A partitioned topic is actually implemented as N internal topics, where N is the number of partitions.
+- **Non-partitioned topics** are a normal type of topic that are served only by a single broker, which limits the maximum throughput of the topic.
 
-- **[Topic](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#topics)**
-  - Topics in Pulsar are named channels for transmitting messages from producers to consumers. Topics in Pulsar are divided into partitioned topics and non-partitioned topics.
+**[Message ID](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#messages)**
 
-  - [Partitioned topics](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#partitioned-topics) are a special type of topic that are handled by multiple brokers, thus allowing for higher throughput. A partitioned topic is actually implemented as N internal topics, where N is the number of partitions.
-  - **Non-partitioned topics** are a normal type of topic that are served only by a single broker, which limits the maximum throughput of the topic.
-- **Message ID**
-  - The message ID of a message is assigned by [BookKeeper instances](https://pulsar.apache.org/docs/2.10.x/concepts-architecture-overview/#apache-bookkeeper) as soon as the message is persistently stored. Message ID indicates a message' s specific position in a ledger and is unique within a Pulsar cluster.
+The message ID of a message is assigned by [BookKeeper instances](https://pulsar.apache.org/docs/2.10.x/concepts-architecture-overview/#apache-bookkeeper) as soon as the message is persistently stored. Message ID indicates a message' s specific position in a ledger and is unique within a Pulsar cluster.
 
-  - Pulsar supports consumers specifying the initial position through consumer.*seek*(*messageId*). But compared to the Kafka consumer offset which is a long integer value, the message ID consists of four parts: `ledgerId:entryID:partition-index:batch-index`.
+Pulsar supports consumers specifying the initial position through consumer.*seek*(*messageId*). But compared to the Kafka consumer offset which is a long integer value, the message ID consists of four parts: `ledgerId:entryID:partition-index:batch-index`.
 
-  - Therefore, you can't get the Message ID directly from the message. As a result, at present, **Routine Load does not support specifying initial position when loading data from Pulsar, but only supports consuming data from the beginning or end of a partition.**
-- **[Subscription](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#subscriptions)**
+Therefore, you can't get the Message ID directly from the message. As a result, at present, **Routine Load does not support specifying initial position when loading data from Pulsar, but only supports consuming data from the beginning or end of a partition.**
+
+**[Subscription](https://pulsar.apache.org/docs/2.10.x/concepts-messaging/#subscriptions)**
 
 A subscription is a named configuration rule that determines how messages are delivered to consumers. Pulsar also supports consumers simultaneously subscribing to multiple topics. A topic can have multiple subscriptions.
 
-- The type of a subscription is defined when a consumer connects to it, and the type can be changed by restarting all consumers with a different configuration. Four subscription types are available in Pulsar:
+The type of a subscription is defined when a consumer connects to it, and the type can be changed by restarting all consumers with a different configuration. Four subscription types are available in Pulsar:
 
-  - `exclusive` (default)*:* Only a single consumer is allowed to attach to the subscription. Only one customer is allowed to consume messages.
-  - `shared`: Multiple consumers can attach to the same subscription. Messages are delivered in a round robin distribution across consumers, and any given message is delivered to only one consumer.
-  - `failover`: Multiple consumers can attach to the same subscription. A master consumer is picked for a non-partitioned topic or each partition of a partitioned topic and receives messages. When the master consumer disconnects, all (non-acknowledged and subsequent) messages are delivered to the next consumer in line.
-  - `key_shared`: Multiple consumers can attach to the same subscription. Messages are delivered in a distribution across consumers and message with same key or same ordering key are delivered to only one consumer.
+- `exclusive` (default)*:* Only a single consumer is allowed to attach to the subscription. Only one customer is allowed to consume messages.
+- `shared`: Multiple consumers can attach to the same subscription. Messages are delivered in a round robin distribution across consumers, and any given message is delivered to only one consumer.
+- `failover`: Multiple consumers can attach to the same subscription. A master consumer is picked for a non-partitioned topic or each partition of a partitioned topic and receives messages. When the master consumer disconnects, all (non-acknowledged and subsequent) messages are delivered to the next consumer in line.
+- `key_shared`: Multiple consumers can attach to the same subscription. Messages are delivered in a distribution across consumers and message with same key or same ordering key are delivered to only one consumer.
 
 > Note:
 >
-> Currently Routine Load uses exclusive type .
+> Currently Routine Load uses exclusive type.
 
 ## Create a Routine Load job
 

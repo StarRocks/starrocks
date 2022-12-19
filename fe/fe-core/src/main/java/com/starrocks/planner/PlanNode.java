@@ -53,8 +53,8 @@ import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
 import org.apache.commons.collections.CollectionUtils;
@@ -216,7 +216,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public PlanFragmentId getFragmentId() {
-        return fragment_.getFragmentId();
+        return fragmentId;
     }
 
     public void setFragmentId(PlanFragmentId id) {
@@ -228,6 +228,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public void setFragment(PlanFragment fragment) {
+        fragmentId = fragment.getFragmentId();
         fragment_ = fragment;
     }
 

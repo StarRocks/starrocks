@@ -19,7 +19,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import org.jetbrains.annotations.TestOnly;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -111,5 +113,18 @@ public class CreateTableTest {
             db.readUnlock();
         }
         Assert.assertEquals(bucketNum, 12);
+    }
+
+
+    @Test
+    public void createBadDbName() {
+        String longDbName = new String(new char[1026]).replace('\0', 'a');
+        String sql = "create database " + longDbName;
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, UtFrameUtils.createDefaultCtx());
+            Assert.fail(); // should raise Exception
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect database name '" + longDbName + "'", e.getMessage());
+        }
     }
 }

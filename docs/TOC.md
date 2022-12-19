@@ -418,6 +418,7 @@
       + [array_contains_all](./sql-reference/sql-functions/array-functions/array_contains_all.md)
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
+      + [array_filter](./sql-reference/sql-functions/array-functions/array_filter.md)
       + [array_intersect](./sql-reference/sql-functions/array-functions/array_intersect.md)
       + [array_join](./sql-reference/sql-functions/array-functions/array_join.md)
       + [array_length](./sql-reference/sql-functions/array-functions/array_length.md)

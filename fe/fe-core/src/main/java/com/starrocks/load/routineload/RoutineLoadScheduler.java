@@ -80,7 +80,9 @@ public class RoutineLoadScheduler extends LeaderDaemon {
         // get need schedule routine jobs
         List<RoutineLoadJob> routineLoadJobList = getNeedScheduleRoutineJobs();
 
-        LOG.info("there are {} job need schedule", routineLoadJobList.size());
+        if (!routineLoadJobList.isEmpty()) {
+            LOG.info("there are {} job(s) need to be scheduled", routineLoadJobList.size());
+        }
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
             RoutineLoadJob.JobState errorJobState = null;
             UserException userException = null;

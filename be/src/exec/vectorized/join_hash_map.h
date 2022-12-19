@@ -14,6 +14,8 @@
 
 #pragma once
 
+#define JOIN_HASH_MAP_H
+
 #include <gen_cpp/PlanNodes_types.h>
 #include <runtime/descriptors.h>
 #include <runtime/runtime_state.h>
@@ -747,4 +749,8 @@ private:
 };
 } // namespace starrocks::vectorized
 
+#ifndef JOIN_HASH_MAP_TPP
 #include "exec/vectorized/join_hash_map.tpp"
+#endif
+
+#undef JOIN_HASH_MAP_H

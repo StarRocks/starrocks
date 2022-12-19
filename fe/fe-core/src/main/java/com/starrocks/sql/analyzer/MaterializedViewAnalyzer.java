@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -243,24 +242,25 @@ public class MaterializedViewAnalyzer {
                 return;
             }
 
-            QueryRelation queryRelation = query.getQueryRelation();
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
-            Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-            List<ColumnRefOperator> outputColumns = new ArrayList<>();
-            for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
-                ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
-                outputColumns.add(ref);
-                columnRefMap.put(ref, ref);
-            }
-
-            // Build logical plan for view query
-            OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
-            logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
-            Optimizer optimizer = new Optimizer();
-            PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
             try {
                 ctx.getSessionVariable().setMVPlanner(true);
+
+                QueryRelation queryRelation = query.getQueryRelation();
+                ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+                LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
+                Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+                List<ColumnRefOperator> outputColumns = new ArrayList<>();
+                for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
+                    ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
+                    outputColumns.add(ref);
+                    columnRefMap.put(ref, ref);
+                }
+
+                // Build logical plan for view query
+                OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
+                logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+                Optimizer optimizer = new Optimizer();
+                PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
                 OptExpression optimizedPlan = optimizer.optimize(
                         ctx,
                         logicalPlan.getRoot(),
@@ -275,7 +275,7 @@ public class MaterializedViewAnalyzer {
                 // TODO: store the plan in create-mv statement and persist it at executor
                 // TODO: refine the output fragment
                 boolean hasOutputFragment = false;
-                ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, ctx, logicalPlan.getOutputColumn(), columnRefFactory,
                         queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
                 createStmt.setMaintenancePlan(execPlan, columnRefFactory);
@@ -665,7 +665,8 @@ public class MaterializedViewAnalyzer {
             } else if (partitionColumn.getType().isIntegerType()) {
                 validateNumberTypePartition(statement.getPartitionRangeDesc());
             } else {
-                throw new SemanticException("Unsupported batch partition build type:" + partitionColumn.getType() + ".");
+                throw new SemanticException(
+                        "Unsupported batch partition build type:" + partitionColumn.getType() + ".");
             }
             return null;
         }

@@ -1,5 +1,31 @@
 # StarRocks version 2.4
 
+## 2.4.2
+
+Release date: December 14, 2022
+
+### Improvement
+
+- Optimized the performance of Bucket Hint when a multitude of buckets exist. [#13142](https://github.com/StarRocks/starrocks/pull/13142)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Flushing the Primary Key index may cause BE to crash. [#14857](https://github.com/StarRocks/starrocks/pull/14857) [#14819](https://github.com/StarRocks/starrocks/pull/14819)
+- Materialized view types cannot be correctly identified by `SHOW FULL TABLES`. [#13954](https://github.com/StarRocks/starrocks/pull/13954)
+- Upgrading StarRocks v2.2 to v2.4 may cause BE to crash. [#13795](https://github.com/StarRocks/starrocks/pull/13795)
+- Broker Load may cause BE to crash. [#13973](https://github.com/StarRocks/starrocks/pull/13973)
+- The session variable `statistic_collect_parallel` does not take effect. [#14352](https://github.com/StarRocks/starrocks/pull/14352)
+- INSERT INTO may cause BE to crash. [#14818](https://github.com/StarRocks/starrocks/pull/14818)
+- JAVA UDF may cause BE to crash. [#13947](https://github.com/StarRocks/starrocks/pull/13947)
+- Cloning replicas during partial updates may cause BE to crash and fail to restart. [#13683](https://github.com/StarRocks/starrocks/pull/13683)
+- Colocated Join may not take effect. [#13561](https://github.com/StarRocks/starrocks/pull/13561)
+
+### Behavior Change
+
+- Constrained the session variable `query_timeout` with an upper limit of `259200` and a lower limit of `1`.
+
 ## 2.4.1
 
 Release date: November 14, 2022

@@ -164,7 +164,6 @@ public class ExpressionTest extends PlanTestBase {
     public void testExpression6() throws Exception {
         String sql = "select cast(v1 as decimal64(7,2)) + cast(v2 as decimal64(9,3)) from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println("planFragment = " + planFragment);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(10,2)) + " +
                 "CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(10,3))\n"));
@@ -428,7 +427,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testDateTypeReduceCast() throws Exception {
         String sql = "select * from test_all_type_distributed_by_datetime " +
                 "where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
-                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
+                "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(
                 plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-03 00:00:00'"));
@@ -525,6 +524,7 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("array_map"));
     }
+
     @Test
     public void testLambdaPredicateOnScan() throws Exception {
         starRocksAssert.withTable("create table test_lambda_on_scan" +
@@ -596,6 +596,44 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS BIGINT)}{<slot 9> " +
                 "<-> <slot 8> * 2}{<slot 10> <-> <slot 9> + 6: abs}"));
+    }
+
+    @Test
+    public void testLambdaWithAggAndWindowFunctions() throws Exception {
+        starRocksAssert.withTable("create table if not exists test_array " +
+                "(c0 INT,c1 int, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        // aggregations
+        String sql = "select array_agg(array_length(array_map(x->x*2, c2))) from test_array";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: array_agg(5: array_length)"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 5> : array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2))"));
+
+        sql = "select array_map(x->x > count(c1), c2) from test_array group by c2";
+        plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  2:Project\n" +
+                "  |  <slot 6> : array_map(<slot 5> -> CAST(<slot 5> AS BIGINT) > 4: count, 3: c2)\n"));
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: c1)\n" +
+                "  |  group by: 3: c2"));
+
+        // window functions
+        sql = "select count(c1) over (partition by array_sum(array_map(x->x+1, [1]))) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:ANALYTIC\n" +
+                "  |  functions: [, count(6: c1), ]\n" +
+                "  |  partition by: 8: array_sum"));
+        Assert.assertTrue(plan.contains("  3:SORT\n" +
+                "  |  order by: <slot 8> 8: array_sum ASC\n" +
+                "  |  offset:"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 6> : 2: c1\n" +
+                "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +
+                "CAST(<slot 4> AS SMALLINT) + 1, ARRAY<tinyint(4)>[1]))"));
     }
 
     @Test
