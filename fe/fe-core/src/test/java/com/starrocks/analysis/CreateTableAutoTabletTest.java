@@ -28,7 +28,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class CreateTableTest {
+public class CreateTableAutoTabletTest {
     @BeforeClass
     public static void setUp() throws Exception {
         // set some parameters to speedup test
