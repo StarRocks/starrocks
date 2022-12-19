@@ -126,12 +126,12 @@ public class GlobalPrivEntry extends PrivEntry {
         }
 
         GlobalPrivEntry otherEntry = (GlobalPrivEntry) other;
-        int res = origHost.compareTo(otherEntry.origHost);
+        int res = otherEntry.origHost.compareTo(origHost);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        return -realOrigUser.compareTo(otherEntry.realOrigUser);
+        return otherEntry.realOrigUser.compareTo(realOrigUser);
     }
 
     @Override

@@ -147,6 +147,9 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
         try {
             return new ArrayList<>(clients.run(IMetaStoreClient::getAllDatabases));
         } catch (TException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             throw new RuntimeException(e);
         }
     }
@@ -167,6 +170,9 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
             List<String> tableNames = clients.run(client -> client.getAllTables(database));
             return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName)).collect(Collectors.toList());
         } catch (TException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             throw new RuntimeException(e);
         }
     }

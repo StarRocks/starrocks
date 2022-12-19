@@ -275,7 +275,8 @@ public class ScalarOperatorsReuse {
             }
 
             return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
-                    argument.accept(this, context)).reduce(Math::max).get() + 1, scalarOperator, context.isWithinLambda());
+                            argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator,
+                    context.isWithinLambda());
         }
 
         // get rid of the expressions with lambda arguments, for example, select a+b, array_map(x-> 2*x+2*x > a+b, [1])

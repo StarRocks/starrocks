@@ -735,11 +735,11 @@ public class ColocateTableIndex implements Writable {
                     if (tblId.equals(groupId.grpId)) {
                         // this is a parent table, use its name as group name
                         groupName2Id.put(groupId.dbId + "_" + tbl.getName(), groupId);
-
+                        Optional<Short> optReplicaNum = tbl.getPartitionInfo().idToReplicationNum.values().stream().findFirst();
+                        Preconditions.checkState(optReplicaNum.isPresent());
                         ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                                 ((HashDistributionInfo) tbl.getDefaultDistributionInfo()).getDistributionColumns(),
-                                tbl.getDefaultDistributionInfo().getBucketNum(),
-                                tbl.getPartitionInfo().idToReplicationNum.values().stream().findFirst().get());
+                                tbl.getDefaultDistributionInfo().getBucketNum(), optReplicaNum.get());
                         group2Schema.put(groupId, groupSchema);
                         group2BackendsPerBucketSeq.put(groupId, tmpGroup2BackendsPerBucketSeq.get(groupId.grpId));
                     }
@@ -859,7 +859,10 @@ public class ColocateTableIndex implements Writable {
             } else {
                 // change the table's group from oldGroup to a new colocat group
                 // which is named by dbName + ":" + mvName
-                String groupName = db.getFullName() + ":" + table.getColocateMaterializedViewNames().stream().findAny().get();
+
+                Optional<String> anyMvName = table.getColocateMaterializedViewNames().stream().findAny();
+                Preconditions.checkState(anyMvName.isPresent());
+                String groupName = db.getFullName() + ":" + anyMvName.get();
                 groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId);
                 table.setColocateGroup(groupName);
                 table.setInColocateMvGroup(true);
