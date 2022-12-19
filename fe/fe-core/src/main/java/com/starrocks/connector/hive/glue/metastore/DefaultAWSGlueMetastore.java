@@ -475,7 +475,7 @@ public class DefaultAWSGlueMetastore implements AWSGlueMetastore {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        return colNames.stream().map(columnStatisticsMap::get).collect(Collectors.toList());
+        return new ArrayList<>(columnStatisticsMap.values());
     }
 
     @Override
