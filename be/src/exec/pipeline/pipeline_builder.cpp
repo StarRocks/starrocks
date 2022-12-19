@@ -97,23 +97,14 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
-        RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& v1_partition_expr_ctxs) {
-    auto* source_op = source_operator(pred_operators);
-    if (!source_op->could_local_shuffle()) {
-        return pred_operators;
-    }
-
-    if (!source_op->partition_exprs().empty()) {
-        return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, source_op->partition_exprs(),
-                                                            source_op->partition_type());
-    }
-
-    return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, v1_partition_expr_ctxs,
-                                                        source_op->partition_type());
+        RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& self_partition_exprs) {
+    return maybe_interpolate_local_shuffle_exchange(state, pred_operators,
+                                                    [&self_partition_exprs]() { return self_partition_exprs });
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
-        RuntimeState* state, OpFactories& pred_operators, const PartitionExprsGenerator& v1_partition_exprs_generator) {
+        RuntimeState* state, OpFactories& pred_operators,
+        const PartitionExprsGenerator& self_partition_exprs_generator) {
     auto* source_op = source_operator(pred_operators);
     if (!source_op->could_local_shuffle()) {
         return pred_operators;
@@ -124,7 +115,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
                                                             source_op->partition_type());
     }
 
-    return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, v1_partition_exprs_generator(),
+    return _do_maybe_interpolate_local_shuffle_exchange(state, pred_operators, self_partition_exprs_generator(),
                                                         source_op->partition_type());
 }
 

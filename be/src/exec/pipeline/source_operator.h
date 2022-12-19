@@ -65,6 +65,7 @@ protected:
     bool _could_local_shuffle = true;
     TPartitionType::type _partition_type = TPartitionType::type::HASH_PARTITIONED;
     MorselQueueFactory* _morsel_queue_factory = nullptr;
+    // Because partition_exprs() returns const reference, we need a non-temporal empty vector here.
     const std::vector<ExprContext*> _empty_partition_exprs;
 };
 
