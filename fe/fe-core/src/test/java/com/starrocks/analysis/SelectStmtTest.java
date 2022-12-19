@@ -122,4 +122,12 @@ public class SelectStmtTest {
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
+
+    @Test
+    public void testCurrentUserFunSupport() throws Exception {
+        String sql = "select current_user()";
+        starRocksAssert.query(sql).explainQuery();
+        sql = "select current_user";
+        starRocksAssert.query(sql).explainQuery();
+    }
 }
