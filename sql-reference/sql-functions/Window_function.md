@@ -644,7 +644,7 @@ from int_t;
 +---+---+------+
 ~~~
 
-### 使用 QUALIFY 窗口函数
+## 使用 QUALIFY 窗口函数
 
 QUALIFY 子句用于过滤窗口函数的结果。在 SELECT 语句中，可以使用 QUALIFY 来设置过滤条件，从多条记录中筛选符合条件的记录。QUALIFY 与聚合函数中的 HAVING 子句功能类似。
 
