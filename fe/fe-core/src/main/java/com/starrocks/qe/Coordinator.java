@@ -488,6 +488,8 @@ public class Coordinator {
                     DebugUtil.printId(queryId), descTable);
         }
 
+        resetFragmentState();
+
         // prepare information
         prepare();
 
@@ -507,6 +509,20 @@ public class Coordinator {
         computeBeInstanceNumbers();
 
         prepareProfile();
+    }
+
+    /**
+     * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
+     */
+    private void resetFragmentState() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment instanceof MultiCastPlanFragment) {
+                MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+                for (List<TPlanFragmentDestination> destination : multiSink.getDestinations()) {
+                    destination.clear();
+                }
+            }
+        }
     }
 
     public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
