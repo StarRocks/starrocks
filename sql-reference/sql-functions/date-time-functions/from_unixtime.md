@@ -20,7 +20,7 @@
 ## 语法
 
 ```Haskell
-DATETIME|DATE FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
+VARCHAR FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
 ```
 
 ## 参数说明
@@ -33,7 +33,7 @@ DATETIME|DATE FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
 
 ## 返回值说明
 
-返回 DATETIME 或 DATE 类型的值。如果 `string_format` 指定的是 DATE 格式，则返回 DATE 类型的值。
+返回 VARCHAR 类型的 DATETIME 或 DATE 值。如果 `string_format` 指定的是 DATE 格式，则返回 VARCHAR 类型的 DATE 值。
 
 如果输入的时间戳超过范围，返回 NULL。如果 `string_format` 指定的格式非法，则返回 NULL。
 
