@@ -463,6 +463,7 @@
       + [log](./sql-reference/sql-functions/math-functions/log.md)
       + [log2](./sql-reference/sql-functions/math-functions/log2.md)
       + [log10](./sql-reference/sql-functions/math-functions/log10.md)
+      + [pow](./sql-reference/sql-functions/math-functions/pow.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
       + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
