@@ -14,12 +14,12 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
-import com.starrocks.common.util.Util;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,7 +28,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Warehouse implements Writable {
@@ -88,37 +87,6 @@ public class Warehouse implements Writable {
         return name;
     }
 
-    private String getOwnerInfo(Thread owner) {
-        if (owner == null) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append("owner id: ").append(owner.getId()).append(", owner name: ")
-                .append(owner.getName()).append(", owner stack: ").append(Util.dumpThread(owner, 50));
-        return sb.toString();
-    }
-
-    private void logSlowLockEventIfNeeded(long startMs, String type, Thread formerOwner) {
-        long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        if (endMs - startMs > Config.slow_lock_threshold_ms &&
-                endMs > lastSlowLockLogTime + Config.slow_lock_log_every_ms) {
-            lastSlowLockLogTime = endMs;
-            LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
-                            "former {}, current stack trace: ", type, id, name, endMs - startMs,
-                    getOwnerInfo(formerOwner), new Exception());
-        }
-    }
-
-    public void writeLock() {
-        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        Thread formerOwner = rwLock.getOwner();
-        this.rwLock.writeLock().lock();
-        logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
-    }
-
-    public void writeUnlock() {
-        this.rwLock.writeLock().unlock();
-    }
 
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
@@ -151,6 +119,10 @@ public class Warehouse implements Writable {
 
     public int addAndGetPendingSqls(int delta) {
         return 1;
+    }
+
+    public void getProcNodeData(BaseProcResult result) {
+        result.addRow(Lists.newArrayList(this.getFullName()));
     }
 
     @Override

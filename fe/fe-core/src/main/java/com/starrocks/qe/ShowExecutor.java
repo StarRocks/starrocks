@@ -108,6 +108,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -217,7 +218,7 @@ public class ShowExecutor {
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
         } else if (stmt instanceof ShowWhStmt) {
-            handleShowWh();
+            handleShowWarehouses();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -548,34 +549,6 @@ public class ShowExecutor {
         List<List<String>> finalRows = procNode.fetchResult().getRows();
 
         resultSet = new ShowResultSet(metaData, finalRows);
-    }
-
-    // show warehouse statement
-    private void handleShowWh() throws AnalysisException, DdlException {
-        ShowWhStmt showStmt = (ShowWhStmt) stmt;
-        List<List<String>> rows = Lists.newArrayList();
-        List<String> whNames = metadataMgr.listWhNames();
-
-        PatternMatcher matcher = null;
-        if (showStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
-                    CaseSensibility.DATABASE.getCaseSensibility());
-        }
-        Set<String> whNameSet = Sets.newTreeSet();
-        for (String whName : whNames) {
-            // Filter dbname
-            if (matcher != null && !matcher.match(whName)) {
-                continue;
-            }
-
-            whNameSet.add(whName);
-        }
-
-        for (String whName : whNameSet) {
-            rows.add(Lists.newArrayList(whName));
-        }
-
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
     // Show databases statement
@@ -1887,6 +1860,37 @@ public class ShowExecutor {
                 .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
+
+    // show warehouse statement
+    private void handleShowWarehouses() throws AnalysisException, DdlException {
+        ShowWhStmt showStmt = (ShowWhStmt) stmt;
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+        List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
+                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
+        /*
+        PatternMatcher matcher = null;
+        if (showStmt.getPattern() != null) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.DATABASE.getCaseSensibility());
+        }
+        Set<String> whNameSet = Sets.newTreeSet();
+        for (String whName : whNames) {
+            // Filter whName
+            if (matcher != null && !matcher.match(whName)) {
+                continue;
+            }
+
+            whNameSet.add(whName);
+        }
+
+        for (String whName : whNameSet) {
+            rows.add(Lists.newArrayList(whName));
+        } */
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
+    }
+
 
     private List<List<String>> doPredicate(ShowStmt showStmt,
                                            ShowResultSetMetaData showResultSetMetaData,

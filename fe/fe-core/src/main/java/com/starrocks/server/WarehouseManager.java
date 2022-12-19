@@ -15,11 +15,18 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.DbsProcDir;
+import com.starrocks.common.proc.ExternalDbsProcDir;
+import com.starrocks.common.proc.ProcDirInterface;
+import com.starrocks.common.proc.ProcNodeInterface;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.warehouse.Warehouse;
@@ -27,14 +34,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -45,6 +54,10 @@ public class WarehouseManager implements Writable {
     private final ConcurrentHashMap<String, Warehouse> fullNameToWh = new ConcurrentHashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final WarehouseProcNode procNode = new WarehouseProcNode();
+    public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
+            .add("Warehouse")
+            .build();
 
     private void readLock() {
         this.rwLock.readLock().lock();
@@ -69,7 +82,7 @@ public class WarehouseManager implements Writable {
         createWarehouse(stmt.getFullWhName(), stmt.getProperties());
     }
 
-    public void createWarehouse(String whName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
+    public void createWarehouse(String whName, Map<String, String> properties) {
         readLock();
         try {
             Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
@@ -82,8 +95,8 @@ public class WarehouseManager implements Writable {
             Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
             long id = GlobalStateMgr.getCurrentState().getNextId();
             Warehouse wh = new Warehouse(id, whName);
-            idToWh.put(wh.getId(), wh);
             fullNameToWh.put(wh.getFullName(), wh);
+            idToWh.put(wh.getId(), wh);
             wh.setExist(true);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateWh(wh);
             LOG.info("createWarehouse whName = " + whName + ", id = " + id);
@@ -98,16 +111,57 @@ public class WarehouseManager implements Writable {
 
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
+        checksum ^= fullNameToWh.size();
         write(out);
         return checksum;
     }
 
-    public void replayCreateWarehouse(Warehouse wh) {
+    public long loadWarehouses(DataInputStream dis, long checksum) throws IOException, DdlException {
+        int warehouseCount = 0;
+        try {
+            String s = Text.readString(dis);
+            WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
+            if (data != null) {
+                if (data.fullNameToWh != null) {
+                    for (Warehouse warehouse : data.fullNameToWh.values()) {
+                        replayCreateWarehouse(warehouse);
+                    }
+                }
+                warehouseCount = data.fullNameToWh.size();
+            }
+            checksum ^= warehouseCount;
+            LOG.info("finished replaying WarehouseMgr from image");
+        } catch (EOFException e) {
+            LOG.info("no WarehouseMgr to replay.");
+        }
+        return checksum;
+    }
 
+    public void replayCreateWarehouse(Warehouse warehouse) {
+        String whName = warehouse.getFullName();
+        readLock();
+        try {
+            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
+        } finally {
+            readUnlock();
+        }
+
+        writeLock();
+        try {
+            fullNameToWh.put(whName, warehouse);
+            idToWh.put(warehouse.getId(), warehouse);
+            warehouse.setExist(true);
+        } finally {
+            writeUnLock();
+        }
     }
 
     public void replayDropWarehouse() {}
     public void replayAlterWarehouse() {}
+
+    public List<List<String>> getWarehousesInfo() {
+        return procNode.fetchResult().getRows();
+    }
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -118,6 +172,41 @@ public class WarehouseManager implements Writable {
     public static WarehouseManager read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, WarehouseManager.class);
+    }
+
+    public class WarehouseProcNode implements ProcDirInterface {
+
+        @Override
+        public boolean register(String name, ProcNodeInterface node) {
+            return false;
+        }
+
+        @Override
+        public ProcNodeInterface lookup(String catalogName) throws AnalysisException {
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return new DbsProcDir(GlobalStateMgr.getCurrentState());
+            }
+            return new ExternalDbsProcDir(catalogName);
+        }
+
+        @Override
+        public ProcResult fetchResult() {
+            BaseProcResult result = new BaseProcResult();
+            result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
+            readLock();
+            try {
+                for (Map.Entry<String, Warehouse> entry : fullNameToWh.entrySet()) {
+                    Warehouse warehouse = entry.getValue();
+                    if (warehouse == null) {
+                        continue;
+                    }
+                    warehouse.getProcNodeData(result);
+                }
+            } finally {
+                readUnlock();
+            }
+            return result;
+        }
     }
 
 }

@@ -817,18 +817,8 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
-            String fullWhName = stmt.getFullWhName();
-            boolean isSetIfNotExists = stmt.isSetIfNotExists();
             ErrorReport.wrapWithRuntimeException(() -> {
-                try {
-                    context.getGlobalStateMgr().getWarehouseManager().createWarehouse(fullWhName);
-                } catch (AlreadyExistsException e) {
-                    if (isSetIfNotExists) {
-                        LOG.info("create warehouse[{}] which already exists", fullWhName);
-                    } else {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_WH_CREATE_EXISTS, fullWhName);
-                    }
-                }
+                context.getGlobalStateMgr().getWarehouseMgr().createWarehouse(stmt);
             });
             return null;
         }

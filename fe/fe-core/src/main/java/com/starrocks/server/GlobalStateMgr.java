@@ -856,7 +856,7 @@ public class GlobalStateMgr {
         return insertOverwriteJobManager;
     }
 
-    public WarehouseManager getWarehouseManager() {
+    public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
     }
 
@@ -1296,7 +1296,6 @@ public class GlobalStateMgr {
             checksum = nodeMgr.loadFrontends(dis, checksum);
             checksum = nodeMgr.loadBackends(dis, checksum);
             checksum = localMetastore.loadDb(dis, checksum);
-            checksum = loadWarehouseManager(dis, checksum);
             // ATTN: this should be done after load Db, and before loadAlterJob
             localMetastore.recreateTabletInvertIndex();
             // rebuild es state state
@@ -1343,6 +1342,7 @@ public class GlobalStateMgr {
             checksum = loadStreamLoadManager(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = MVManager.getInstance().reload(dis, checksum);
+            checksum = warehouseMgr.loadWarehouses(dis, checksum);
             remoteChecksum = dis.readLong();
             globalFunctionMgr.loadGlobalFunctions(dis, checksum);
             // TODO put this at the end of the image before 3.0 release
@@ -1530,12 +1530,6 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    public long loadWarehouseManager(DataInputStream in, long checksum)  throws IOException {
-        warehouseMgr = WarehouseManager.read(in);
-        LOG.info("finished replay warehouseMgr from image");
-        return checksum;
-    }
-
     public long loadCompactionManager(DataInputStream in, long checksum) throws IOException {
         compactionManager = CompactionManager.loadCompactionManager(in);
         checksum ^= compactionManager.getChecksum();
@@ -1621,9 +1615,9 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
-            checksum = warehouseMgr.saveWarehouses(dos, checksum);
             saveRBACPrivilege(dos);
             checksum = MVManager.getInstance().store(dos, checksum);
+            checksum = warehouseMgr.saveWarehouses(dos, checksum);
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release

@@ -150,7 +150,7 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_WH:
                     Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseManager();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayCreateWarehouse(wh);
                     break;
                 case OperationType.OP_CREATE_DB: {
