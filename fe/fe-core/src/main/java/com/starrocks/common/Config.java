@@ -1697,11 +1697,26 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+<<<<<<< HEAD
     /**
      * default bucket number when create OLAP table without buckets info
      */
     @ConfField(mutable = true)
     public static int default_bucket_num = 10;
+=======
+    @ConfField
+    public static String hdfs_url = "";
+
+    /* default file store type used */
+    @ConfField
+    public static String default_fs_type = "S3";
+
+    /**
+     * default storage cache ttl of lake table
+     */
+    @ConfField(mutable = true)
+    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
+>>>>>>> ef5e6953b ([BugFix] Fix AUTO TABLET bug of CTAS (#15079))
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
