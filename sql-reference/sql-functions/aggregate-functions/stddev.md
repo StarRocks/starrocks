@@ -1,9 +1,11 @@
 
-# STDDEV, STDDEV_POP
+# stddev, stddev_pop
 
 ## 功能
 
-返回 expr 表达式的标准差。
+返回 `expr` 表达式的总体标准差。
+
+> 这两个函数返回的是估计值，两次执行的结果可能不相同。
 
 ### 语法
 
