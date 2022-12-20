@@ -545,15 +545,15 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitMultiInPredicate(MultiInPredicate node, Context context) throws SemanticException {
-            if (!(node.getChild(node.getTupleSize()) instanceof Subquery)) {
+            if (!(node.getChild(node.getNumberOfColumns()) instanceof Subquery)) {
                 throw new SemanticException("multi-column IN predicate is only supported for subquery expressions");
 
             }
-            QueryStatement queryStatement = ((Subquery) node.getChild(node.getTupleSize())).getQueryStatement();
+            QueryStatement queryStatement = ((Subquery) node.getChild(node.getNumberOfColumns())).getQueryStatement();
             LogicalPlan subqueryPlan = getSubqueryPlan(queryStatement);
             List<ColumnRefOperator> leftCorrelationColumns = Lists.newArrayList();
             List<ScalarOperator> leftExprs = Lists.newArrayList();
-            for (int i = 0; i < node.getTupleSize(); ++i) {
+            for (int i = 0; i < node.getNumberOfColumns(); ++i) {
                 ScalarOperator leftColRef = SqlToScalarOperatorTranslator.translate(node.getChild(i),
                         builder.getExpressionMapping(), leftCorrelationColumns, columnRefFactory);
                 if (leftCorrelationColumns.size() > 0) {
@@ -568,13 +568,16 @@ public final class SqlToScalarOperatorTranslator {
             ScalarOperator inPredicateOperator = new MultiInPredicateOperator(node.isNotIn(), leftExprs, rightColRefs);
             ColumnRefOperator outputPredicateRef = columnRefFactory.create(inPredicateOperator,
                     inPredicateOperator.getType(), inPredicateOperator.isNullable());
-            ((Subquery) node.getChild(node.getTupleSize())).setUseSemiAnti(context.useSemiAnti);
+            ((Subquery) node.getChild(node.getNumberOfColumns())).setUseSemiAnti(context.useSemiAnti);
 
             LogicalApplyOperator applyOperator = LogicalApplyOperator.builder().setOutput(outputPredicateRef)
                     .setSubqueryOperator(inPredicateOperator)
                     .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
                     .setUseSemiAnti(context.useSemiAnti).build();
 
+            // Note that the type is accurate, but we should never use it: MultiInPredicate should be replaced by a
+            // semi-join earlier in logical planning. In particular, ImplicitCast rule throws an unhandled exception for
+            // this operator.
             SubqueryOperator subqueryOperator = new SubqueryOperator(rightColRefs.get(0).getType(), queryStatement,
                     applyOperator, subqueryPlan.getRootBuilder());
 

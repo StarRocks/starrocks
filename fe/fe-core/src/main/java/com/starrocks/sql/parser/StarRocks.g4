@@ -1676,7 +1676,7 @@ predicate
     ;
 
 tupleInSubquery
-    : '(' (expression (',' expression)*)? ')' NOT? IN '(' queryRelation ')'
+    : '(' expression (',' expression)+ ')' NOT? IN '(' queryRelation ')'
     ;
 
 predicateOperations [ParserRuleContext value]

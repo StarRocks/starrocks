@@ -53,16 +53,6 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
                 && !SubqueryUtils.containsCorrelationSubquery(input);
     }
 
-    private static ScalarOperator normalizeBinaryOperator(BinaryPredicateOperator input) {
-        if (input.getUsedColumns().isEmpty()) {
-            return new FoldConstantsRule().visitBinaryPredicate(input, null);
-        } else if (input.getChild(0).getUsedColumns().isEmpty()) {
-            // normalize binaryPredicateOperator, e.g. 1 = tbl.v1 to tbl.v1 = 1
-            input.swap();
-        }
-        return input;
-    }
-
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
@@ -76,12 +66,10 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
             for (int i = 0; i < multiIn.getTupleSize(); ++i) {
                 ScalarOperator left = multiIn.getChild(i);
                 ScalarOperator right = multiIn.getChild(multiIn.getTupleSize() + i);
-                ScalarOperator conjunct =
-                        normalizeBinaryOperator(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                                left, right));
-                ScalarOperator conjunctWithCast =
-                        rewriter.rewrite(conjunct, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
-                conjuncts.add(conjunctWithCast);
+                ScalarOperator normalizedConjunct =
+                        rewriter.rewrite(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                left, right), ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+                conjuncts.add(normalizedConjunct);
             }
             simplifiedPredicate = Utils.compoundAnd(conjuncts);
         } else {
@@ -91,7 +79,10 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
                     new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ipo.getChildren());
             isNotIn = ipo.isNotIn();
 
-            simplifiedPredicate = normalizeBinaryOperator(bpo);
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            simplifiedPredicate =
+                    rewriter.rewrite(bpo, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+
         }
 
         // IN to SEMI-JOIN
