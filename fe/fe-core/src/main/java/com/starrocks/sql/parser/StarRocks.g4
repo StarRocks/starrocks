@@ -1464,7 +1464,7 @@ unsupportedStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : (explainDesc | optimizerTrace) ? queryRelation outfile?;
+    : (explainDesc | optimizerTrace) ? queryRelation (BINLOG)? outfile?;
 
 queryRelation
     : withClause? queryNoWith
@@ -1519,8 +1519,8 @@ querySpecification
     ;
 
 fromClause
-    : (FROM relations)?                                                                 #from
-    | FROM DUAL                                                                         #dual
+    : (FROM relations)?                                                                  #from
+    | FROM DUAL                                                                          #dual
     ;
 
 groupingElement

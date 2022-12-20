@@ -366,7 +366,7 @@ WITH: 'WITH';
 WORK: 'WORK';
 WRITE: 'WRITE';
 YEAR: 'YEAR';
-
+BINLOG: 'BINLOG';
 EQ  : '=';
 NEQ : '<>' | '!=';
 LT  : '<';

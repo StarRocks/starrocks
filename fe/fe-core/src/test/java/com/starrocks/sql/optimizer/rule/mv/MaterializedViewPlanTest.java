@@ -17,7 +17,11 @@ package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -64,5 +68,20 @@ public class MaterializedViewPlanTest extends PlanTestBase {
                 "            - StreamScan [t1] => [4:v4]\n" +
                 "                    Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 0.0}\n" +
                 "                    predicate: 4:v4 IS NOT NULL\n");
+    }
+
+    @Test
+    public void testSelectFromBinlog() throws Exception {
+        String createTableStmtStr = "CREATE TABLE test.binlog_test(k1 int, v1 int) " +
+                "duplicate key(k1) distributed by hash(k1) buckets 2 properties('replication_num' = '1', " +
+                "'binlog_enable' = 'false', 'binlog_ttl' = '100', 'binlog_max_size' = '100');";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.
+                parseStmtWithNewParser(createTableStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createTable(createTableStmt);
+
+        String sql = "select * from binlog_test binlog";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        //System.out.println(pair.first);
+        System.out.println(pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL));
     }
 }

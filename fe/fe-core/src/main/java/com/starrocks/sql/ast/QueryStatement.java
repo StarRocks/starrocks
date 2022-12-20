@@ -24,6 +24,8 @@ public class QueryStatement extends StatementBase {
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
 
+    protected boolean binlog;
+
     public QueryStatement(QueryRelation queryRelation) {
         this.queryRelation = queryRelation;
     }
@@ -42,6 +44,14 @@ public class QueryStatement extends StatementBase {
 
     public boolean hasOutFileClause() {
         return outFileClause != null;
+    }
+
+    public boolean getBinlog() {
+        return binlog;
+    }
+
+    public void setBinlog(boolean binlog) {
+        this.binlog = binlog;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

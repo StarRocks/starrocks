@@ -3124,6 +3124,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             queryStatement.setIsExplain(true, StatementBase.ExplainLevel.OPTIMIZER);
         }
 
+        if (context.BINLOG() != null) {
+            queryStatement.setBinlog(true);
+        }
+
+
         return queryStatement;
     }
 

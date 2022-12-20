@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -524,8 +525,15 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, Integer step) {
-            // TODO
-            return new OperatorStr("PhysicalStreamScan", step, Collections.emptyList());
+            PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("PhysicalStreamScan (");
+            sb.append("columns").append(scan.getColRefToColumnMetaMap().keySet());
+            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(")");
+            if (scan.getLimit() >= 0) {
+                sb.append(" Limit ").append(scan.getLimit());
+            }
+            return new OperatorStr(sb.toString(), step, Collections.emptyList());
         }
 
         @Override

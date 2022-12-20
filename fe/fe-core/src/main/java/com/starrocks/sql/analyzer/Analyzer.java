@@ -337,6 +337,9 @@ public class Analyzer {
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
             new QueryAnalyzer(session).analyze(stmt);
 
+            if (stmt.getBinlog()) {
+                session.getSessionVariable().setMVPlanner(true);
+            }
             QueryRelation queryRelation = stmt.getQueryRelation();
             long selectLimit = session.getSessionVariable().getSqlSelectLimit();
             if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
