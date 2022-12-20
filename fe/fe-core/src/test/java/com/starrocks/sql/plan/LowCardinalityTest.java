@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.AfterClass;
@@ -942,15 +941,16 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  6:Project\n" +
+        assertContains(plan, "6:Project\n" +
                 "  |  output columns:\n" +
-                "  |  10 <-> upper[([9, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  10 <-> upper[([9, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
+                "args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  5:Decode\n" +
                 "  |  <dict id 12> : <string id 9>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 12> : DictExpr(11: S_ADDRESS,[lower(<place-holder>)])"));
+                "  |  <function id 12> : DictExpr(11: S_ADDRESS,[lower(<place-holder>)])");
         Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
                 "  |  group by: [12: lower, INT, true]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
@@ -1058,14 +1058,12 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testHavingAggFunctionOnConstant() throws Exception {
         String sql = "select S_ADDRESS from supplier GROUP BY S_ADDRESS HAVING (cast(count(null) as string)) IN (\"\")";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
-                "  |  group by: [10: S_ADDRESS, INT, false]\n" +
-                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH +
-                ")) = ''"));
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  group by: [10: S_ADDRESS, INT, false]");
+        assertContains(plan, "  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
-                "  |  cardinality: 1"));
+                "  |  cardinality: 1");
     }
 
     @Test

@@ -140,24 +140,22 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
                         "and NOT EXISTS (select * from join1 as a where join1.dt = 2 and a.id = join1.id);";
-        String explainString = getFragmentPlan(sql);
+        String plan = getFragmentPlan(sql);
 
-        Assert.assertTrue(explainString.contains("  5:HASH JOIN\n" +
-                "  |  join op: RIGHT ANTI JOIN (COLOCATE)\n" +
-                "  |  hash predicates:\n" +
+        assertContains(plan, "5:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 9: id = 2: id\n" +
-                "  |  other join predicates: 1: dt = 2"));
-        Assert.assertTrue(explainString.contains("  |    3:HASH JOIN\n" +
-                "  |    |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
-                "  |    |  hash predicates:\n" +
-                "  |    |  colocate: true\n" +
-                "  |    |  equal join conjunct: 2: id = 5: id\n" +
-                "  |    |  other join predicates: 1: dt = 1"));
-        Assert.assertTrue(explainString.contains("  |    1:OlapScanNode\n" +
-                "  |       TABLE: join1\n" +
-                "  |       PREAGGREGATION: ON\n" +
-                "  |       PREDICATES: 1: dt > 1"));
+                "  |  equal join conjunct: 2: id = 9: id\n" +
+                "  |  other join predicates: 1: dt = 2");
+        assertContains(plan, "2:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 2: id = 5: id\n" +
+                "  |  other join predicates: 1: dt = 1");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: dt > 1");
         FeConstants.runningUnitTest = false;
     }
 
