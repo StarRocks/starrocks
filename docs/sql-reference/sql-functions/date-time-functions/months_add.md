@@ -14,13 +14,11 @@ DATETIME months_add(DATETIME expr1, INT expr2);
 
 - `expr1`: the start time. It must be of the DATETIME or DATE type.
 
-- `expr2`: the added month. It must be INT type, it could be greater or less than zero.
+- `expr2`: the added month. It must be INT type, it could be greater, equal or less than zero.
 
 ## Return value
 
 Returns a DATETIME value.
-
-NULL is returned if the date does not exist, for example, 2022-02-29.
 
 ## Examples
 
