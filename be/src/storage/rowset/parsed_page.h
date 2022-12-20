@@ -102,6 +102,10 @@ public:
         return Status::NotSupported("Read by range Not Support");
     }
 
+    virtual Status read_by_rowds(vectorized::Column* column, const rowid_t* rowids, size_t* count) {
+        return Status::NotSupported("Read by rowids Not Support");
+    }
+
     // prerequisite: encoding_type() is `DICT_ENCODING`.
     // Attempts to read up to |*count| dictionary codes from this page into the |column|.
     // On success, `Status::OK` is returned, and the number of codes read will be updated to

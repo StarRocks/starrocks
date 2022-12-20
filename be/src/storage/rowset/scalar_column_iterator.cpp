@@ -504,9 +504,27 @@ Status ScalarColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size,
     return Status::OK();
 }
 
+Status ScalarColumnIterator::_fetch_by_rowid_v2(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+    DCHECK(std::is_sorted(rowids, rowids + size));
+    RETURN_IF(size == 0, Status::OK());
+    size_t prev_bytes = values->byte_size();
+    bool contain_deleted_row = (values->delete_state() != DEL_NOT_SATISFIED);
+    size_t read_count = 0;
+    while (read_count < size) {
+        RETURN_IF_ERROR(seek_to_ordinal(*rowids));
+        contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
+        size_t nread = size - read_count;
+        RETURN_IF_ERROR(_page->read_by_rowds(values, rowids, &nread));
+        read_count += nread;
+        rowids += nread;
+    }
+    values->set_delete_state(contain_deleted_row ? DEL_PARTIAL_SATISFIED: DEL_NOT_SATISFIED);
+    _opts.stats->bytes_read += static_cast<int64_t>(values->byte_size() - prev_bytes);
+    return Status::OK();
+}
+
 Status ScalarColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
-    auto page_parse = [&](vectorized::Column* column, size_t* count) { return _page->read(column, count); };
-    return _fetch_by_rowid(rowids, size, values, page_parse);
+    return _fetch_by_rowid_v2(rowids, size, values);
 }
 
 Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {

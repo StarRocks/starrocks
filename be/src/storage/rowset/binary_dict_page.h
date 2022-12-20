@@ -135,6 +135,8 @@ public:
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
+    Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count, vectorized::Column* column) override;
+
     uint32_t count() const override { return _data_page_decoder->count(); }
 
     uint32_t current_index() const override { return _data_page_decoder->current_index(); }
@@ -156,7 +158,7 @@ private:
     EncodingTypePB _encoding_type;
     std::shared_ptr<vectorized::Column> _vec_code_buf;
 
-    uint32_t _max_value_legth = 0;
+    uint32_t _max_value_length = 0;
 };
 
 } // namespace starrocks
