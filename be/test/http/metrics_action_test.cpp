@@ -96,8 +96,3 @@ TEST_F(MetricsActionTest, prometheus_no_name) {
 }
 
 } // namespace starrocks
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

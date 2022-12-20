@@ -68,6 +68,7 @@ protected:
         config::txn_shard_size = 1;
 
         static int i = 0;
+        _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_" + std::to_string(i);
 
         ASSERT_OK(fs::remove_all(config::storage_root_path));
@@ -96,6 +97,7 @@ protected:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         StoragePageCache::release_global_cache();
+        config::storage_root_path = _default_storage_root_path;
     }
 
     std::shared_ptr<TabletSchema> create_primary_tablet_schema() {
@@ -223,6 +225,7 @@ protected:
 
 private:
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
+    std::string _default_storage_root_path;
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
