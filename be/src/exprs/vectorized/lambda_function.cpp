@@ -81,17 +81,12 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     return Status::OK();
 }
 
-<<<<<<< HEAD
 ColumnPtr LambdaFunction::evaluate(ExprContext* context, Chunk* ptr) {
-    return get_child(0)->evaluate(context, ptr);
-=======
-StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
-        auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], chunk);
+        auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], ptr);
         chunk->append_column(sub_col, _common_sub_expr_ids[i]);
     }
-    return get_child(0)->evaluate_checked(context, chunk);
->>>>>>> 8f296b89f ([Enhancement] reuse lambda argument related sub expressions within a lambda function in projection (#15148))
+    return get_child(0)->evaluate(context, ptr);
 }
 
 void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
