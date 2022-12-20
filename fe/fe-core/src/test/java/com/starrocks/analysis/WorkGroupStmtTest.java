@@ -1,7 +1,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -9,6 +8,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -409,7 +409,7 @@ public class WorkGroupStmtTest {
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
-        WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+        TWorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                 starRocksAssert.getCtx(),
                 WorkGroupClassifier.QueryType.SELECT,
                 null);
@@ -428,7 +428,7 @@ public class WorkGroupStmtTest {
         {
             long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
-            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            TWorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
                     dbIds);
@@ -437,7 +437,7 @@ public class WorkGroupStmtTest {
         {
             long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
-            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            TWorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
                     dbIds);
@@ -448,7 +448,7 @@ public class WorkGroupStmtTest {
             Set<Long> dbIds = ImmutableSet.of(
                     GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId(),
                     GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId());
-            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            TWorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
                     WorkGroupClassifier.QueryType.SELECT,
                     dbIds);

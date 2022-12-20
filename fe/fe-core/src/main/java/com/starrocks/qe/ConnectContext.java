@@ -25,7 +25,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.WorkGroup;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
@@ -38,6 +37,7 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -152,7 +152,7 @@ public class ConnectContext {
 
     protected PlannerProfile plannerProfile;
 
-    protected WorkGroup workGroup;
+    protected TWorkGroup workGroup;
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -485,11 +485,11 @@ public class ConnectContext {
         return plannerProfile;
     }
 
-    public WorkGroup getWorkGroup() {
+    public TWorkGroup getWorkGroup() {
         return workGroup;
     }
 
-    public void setWorkGroup(WorkGroup workGroup) {
+    public void setWorkGroup(TWorkGroup workGroup) {
         this.workGroup = workGroup;
     }
 
