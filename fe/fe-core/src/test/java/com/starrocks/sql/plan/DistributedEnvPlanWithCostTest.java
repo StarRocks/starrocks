@@ -250,15 +250,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE not in ('1998-04-10', '1994-04-11', '1994-04-12');";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(39: count)\n" +
-                "  |  group by: ");
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(*)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 3> : 3: LO_LINENUMBER");
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
+        assertContains(plan, "1:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -268,15 +261,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(39: count)\n" +
-                "  |  group by: ");
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(*)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 3> : 3: LO_LINENUMBE");
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
+        assertContains(plan, "1:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
