@@ -93,6 +93,7 @@
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
+    + [Analyze query profile](./administration/query_profile.md)
     + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference

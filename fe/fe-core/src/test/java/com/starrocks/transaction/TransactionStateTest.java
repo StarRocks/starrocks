@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -96,6 +97,18 @@ public class TransactionStateTest {
             TxnFinishStatePB txn2 = finishStatePBCodec.decode(bytes);
             Assert.assertEquals(txnFinishStatePB.normalReplicas.size(), txn2.normalReplicas.size());
             Assert.assertEquals(txnFinishStatePB.abnormalReplicasWithVersion.size(), txn2.abnormalReplicasWithVersion.size());
+        }
+    }
+
+    @Test
+    public void testSerDeTxnFinishStateJSON() throws IOException {
+        for (int i = 1; i <= 100000; i *= 10) {
+            TxnFinishState s1 = buildTxnFinishState(i);
+            String json = GsonUtils.GSON.toJson(s1);
+            System.out.printf("json: %s\n", json);
+            TxnFinishState s2 = GsonUtils.GSON.fromJson(json, TxnFinishState.class);
+            Assert.assertEquals(s1.normalReplicas.size(), s2.normalReplicas.size());
+            Assert.assertEquals(s1.abnormalReplicasWithVersion.size(), s2.abnormalReplicasWithVersion.size());
         }
     }
 
