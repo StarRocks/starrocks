@@ -1933,6 +1933,7 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
     } else {
         idx_file_path = path;
     }
+    LOG(INFO) << "idx_file_path is " << idx_file_path;
     RETURN_IF_ERROR(writer->init(idx_file_path, version));
     DCHECK(_fixed_key_size != -1);
     for (const auto& [key_size, shard_info] : _shard_info_by_key_size) {
@@ -2839,18 +2840,22 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     const auto l0_mem_size = _l0->memory_usage();
     uint64_t l1_file_size = _has_l1 ? _l1_vec[0]->file_size() : 0;
     // if l1 is not empty,
-    if (l1_file_size != 0) {
-        // and l0 memory usage is large enough,
-        if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
-            // do l0 l1 merge compaction
+    if (_flushed) {
+        RETURN_IF_ERROR(_merge_compaction());
+    } else {
+        if (l1_file_size != 0) {
+            // and l0 memory usage is large enough,
+            if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
+                // do l0 l1 merge compaction
+                _flushed = true;
+                RETURN_IF_ERROR(_merge_compaction());
+            }
+            // if l1 is empty, and l0 memory usage is large enough
+        } else if (l0_mem_size > kL0SnapshotSizeMax) {
+            // do flush l0
             _flushed = true;
-            RETURN_IF_ERROR(_merge_compaction());
+            RETURN_IF_ERROR(_flush_l0());
         }
-        // if l1 is empty, and l0 memory usage is large enough
-    } else if (l0_mem_size > kL0SnapshotSizeMax) {
-        // do flush l0
-        _flushed = true;
-        RETURN_IF_ERROR(_flush_l0());
     }
     _dump_snapshot |= !_flushed && _l0->file_size() > config::l0_max_file_size;
     // for case1 and case2
@@ -3121,6 +3126,7 @@ Status PersistentIndex::flush_tmp_l1() {
             strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), idx);
     RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true));
 
+    LOG(INFO) << "flush tmp l1: " << l1_tmp_file << " success";
     // load _l1_vec
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_tmp_file));
@@ -3700,12 +3706,12 @@ Status PersistentIndex::_merge_compaction() {
                 if (l1_shard_info[l1_idx].second == 0) {
                     continue;
                 }
-                int32_t shard_idx_start = l1_idx * l1_shard_info[shard_idx].second / nshard;
-                int32_t shard_idx_end = (l1_idx + 1) * l1_shard_info[shard_idx].second / nshard;
+                int32_t shard_idx_start = shard_idx * l1_shard_info[l1_idx].second / nshard;
+                int32_t shard_idx_end = (shard_idx + 1) * l1_shard_info[l1_idx].second / nshard;
                 do {
                     if (finished_l1_idx[l1_idx] < shard_idx_start) {
                         //get kv for l1
-                        RETURN_IF_ERROR(_l1_vec[shard_idx]->_get_kvs_for_shard(
+                        RETURN_IF_ERROR(_l1_vec[l1_idx]->_get_kvs_for_shard(
                                 l1_kvs_by_shard[l1_idx], l1_shard_info[l1_idx].first + shard_idx_start, shard_bits,
                                 &index_shards[index_shard_idx]));
                         finished_l1_idx[l1_idx] = shard_idx_start;
