@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 8ebfc0c5c ([Enhancement] allow set operation in materialized view (#15439))
 
 package com.starrocks.analysis;
 
@@ -16,6 +32,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -50,6 +67,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -1327,20 +1345,43 @@ public class CreateMaterializedViewTest {
 
     // ========== as test ==========
     @Test
-    public void testAsNoSelectRelation() {
-        String sql = "create materialized view mv1 " +
-                "partition by ss " +
-                "distributed by hash(k2) buckets 10 " +
-                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ")" +
-                "as select t1.k1 ss, t1.k2 from tbl1 t1 union select * from tbl2 t2;";
-        try {
+    public void testSetOperation() throws Exception {
+        for (String setOp : Arrays.asList("UNION", "UNION ALL", "INTERSECT", "EXCEPT")) {
+            String sql = String.format("create materialized view mv1 " +
+                    "partition by ss " +
+                    "distributed by hash(k2) buckets 10 " +
+                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")" +
+                    "as select t1.k1 ss, t1.k2 from tbl1 t1 %s select k1, k2 from tbl2 t2;", setOp);
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertEquals("Materialized view query statement only support select", e.getMessage());
         }
+
+        // All select list must be validated
+        Assert.assertThrows("hehe", AnalysisException.class, () -> {
+            String sql1 = "create materialized view mv1 " +
+                    "partition by ss " +
+                    "distributed by hash(k2) buckets 10 " +
+                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")" +
+                    "as select t1.k1 ss, t1.k2 from tbl1 t1 union select * from tbl2 t2;";
+            UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+        });
+
+        Assert.assertThrows("hehe", AnalysisException.class, () -> {
+            String sql1 = "create materialized view mv1 " +
+                    "partition by ss " +
+                    "distributed by hash(k2) buckets 10 " +
+                    "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")" +
+                    "as select t1.k1 ss, t1.k2 from tbl1 t1 union select k1, k2 from tbl2 t2 union select * from tbl2 t3";
+            UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+        });
     }
 
     @Test
