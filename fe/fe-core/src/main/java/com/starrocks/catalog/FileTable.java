@@ -106,9 +106,9 @@ public class FileTable extends Table {
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
         Configuration configuration = new Configuration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
-        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), false, Optional.empty());
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), true, Optional.empty());
         try {
-            Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFiles(pathKey);
+            Map<RemotePathKey, List<RemoteFileDesc>> result = remoteFileIO.getRemoteFilesWithSubDir(pathKey);
             if (result.isEmpty()) {
                 throw new DdlException("No file exists for FileTable: " + this.getName());
             }

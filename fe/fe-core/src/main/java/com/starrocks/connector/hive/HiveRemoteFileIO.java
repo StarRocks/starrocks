@@ -100,6 +100,46 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         return resultPartitions.put(pathKey, fileDescs).build();
     }
 
+    public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFilesWithSubDir(RemotePathKey pathKey) {
+        ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
+        String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
+        List<RemoteFileDesc> fileDescs = Lists.newArrayList();
+        try {
+            URI uri = new URI(path.replace(" ", "%20"));
+            FileSystem fileSystem;
+
+            if (!FeConstants.runningUnitTest) {
+                fileSystem = FileSystem.get(uri, configuration);
+            } else {
+                fileSystem = this.fileSystem;
+            }
+
+            RemoteIterator<LocatedFileStatus> blockIterator;
+            if (!pathKey.isRecursive()) {
+                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            } else {
+                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
+            }
+            while (blockIterator.hasNext()) {
+                LocatedFileStatus locatedFileStatus = blockIterator.next();
+                if (!isValidDataFile(locatedFileStatus)) {
+                    continue;
+                }
+                String fileName = locatedFileStatus.getPath().toString();
+
+                BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
+                List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
+                fileDescs.add(new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
+                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of()));
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to get hive remote file's metadata on path: {}", path, e);
+            throw new StarRocksConnectorException("Failed to get hive remote file's metadata on path: %s", pathKey);
+        }
+
+        return resultPartitions.put(pathKey, fileDescs).build();
+    }
+
     private boolean isValidDataFile(FileStatus fileStatus) {
         if (fileStatus.isDirectory()) {
             return false;
