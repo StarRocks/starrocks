@@ -373,6 +373,7 @@
       + [bitmap_min](./sql-reference/sql-functions/bitmap-functions/bitmap_min.md)
       + [bitmap_union](./sql-reference/sql-functions/bitmap-functions/bitmap_union.md)
       + [bitmap_union_count](./sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)
+      + [bitmap_union_int](./sql-reference/sql-functions/bitmap-functions/bitmap_union_int.md)
       + [bitmap_remove](./sql-reference/sql-functions/bitmap-functions/bitmap_remove.md)
       + [bitmap_to_array](./sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
       + [bitmap_from_string](./sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md)
