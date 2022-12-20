@@ -25,6 +25,8 @@ class Column;
 
 class ArrayColumnIterator final : public ColumnIterator {
 public:
+    ArrayColumnIterator(std::unique_ptr<ColumnIterator> null_iterator, std::unique_ptr<ColumnIterator> array_size_iterator,
+                        std::unique_ptr<ColumnIterator> element_iterator);
     ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
                         ColumnIterator* element_iterator);
 

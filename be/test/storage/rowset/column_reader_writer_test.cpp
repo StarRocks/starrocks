@@ -168,19 +168,16 @@ protected:
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
-            ColumnIterator* iter = nullptr;
-            auto st = reader->new_iterator(&iter);
-            ASSERT_TRUE(st.ok());
-            std::unique_ptr<ColumnIterator> guard(iter);
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
-            ASSERT_TRUE(st.ok());
             ColumnIteratorOptions iter_opts;
             OlapReaderStatistics stats;
             iter_opts.stats = &stats;
             iter_opts.read_file = read_file.get();
             iter_opts.use_page_cache = true;
-            st = iter->init(iter_opts);
+            auto st = iter->init(iter_opts);
             ASSERT_TRUE(st.ok());
 
             // first read get data from disk
@@ -399,9 +396,7 @@ protected:
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
-            ColumnIterator* iter = nullptr;
-            ASSERT_TRUE(reader->new_iterator(&iter).ok());
-            std::unique_ptr<ColumnIterator> guard(iter);
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;

@@ -35,10 +35,10 @@ class ColumnExprPredicate;
 // column predicate rewrite in SegmentIter->init-> rewrite stage
 class ColumnPredicateRewriter {
 public:
-    using ColumnIterators = std::vector<ColumnIterator*>;
+    using ColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
-    ColumnPredicateRewriter(ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
+    ColumnPredicateRewriter(const ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
                             const VectorizedSchema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
                             SparseRange& scan_range)
             : _column_iterators(column_iterators),
@@ -58,7 +58,7 @@ private:
     void _get_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
                                bool field_nullable);
 
-    ColumnIterators& _column_iterators;
+    const ColumnIterators& _column_iterators;
     PushDownPredicates& _predicates;
     const VectorizedSchema& _schema;
     std::vector<uint8_t>& _need_rewrite;

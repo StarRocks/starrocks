@@ -118,11 +118,10 @@ private:
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, LogicalType type);
     SegmentSharedPtr _segment;
-    std::vector<ColumnIterator*> _column_iterators;
+    std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
     std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
-    ObjectPool _obj_pool;
 };
 
 } // namespace starrocks::vectorized

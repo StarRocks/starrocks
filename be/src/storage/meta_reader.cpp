@@ -101,13 +101,12 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
     ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
 
-    _column_iterators.resize(_params->max_cid + 1, nullptr);
+    _column_iterators.resize(_params->max_cid + 1);
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
-                RETURN_IF_ERROR(_segment->new_column_iterator(cid, &_column_iterators[cid]));
-                _obj_pool.add(_column_iterators[cid]);
+                ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
 
                 ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;

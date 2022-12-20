@@ -245,8 +245,6 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    ColumnIterator* scalar_iter = nullptr;
-    DeferOp defer([&]() { delete scalar_iter; });
     ColumnIteratorOptions iter_opts;
     ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(segment->file_name()));
     iter_opts.stats = &stats;
@@ -254,7 +252,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
-    ASSERT_OK(segment->new_column_iterator(1, &scalar_iter));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
