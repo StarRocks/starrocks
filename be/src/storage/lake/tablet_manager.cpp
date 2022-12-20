@@ -16,6 +16,7 @@
 
 #include <bthread/bthread.h>
 
+#include <chrono>
 #include <variant>
 
 #include "agent/agent_server.h"
@@ -814,8 +815,17 @@ void* metadata_gc_trigger(void* arg) {
         for (const auto& root : roots) {
             // TODO: limit GC concurrency
             st = thread_pool->submit_func([=]() {
+                auto t1 = std::chrono::steady_clock::now();
                 auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_id);
-                LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
+                auto t2 = std::chrono::steady_clock::now();
+                auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+                if (r.ok()) {
+                    LOG(INFO) << "Finished garbage collection of metadata for directory " << root << ". cost:" << cost
+                              << "ms";
+                } else {
+                    LOG(WARNING) << "Fail to do garbage collection of metadata for directory " << root
+                                 << ". cost:" << cost << "ms error:" << r;
+                }
             });
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to submit task to threadpool: " << st;
@@ -847,8 +857,17 @@ void* segment_gc_trigger(void* arg) {
         for (const auto& root : roots) {
             // TODO: limit GC concurrency
             st = thread_pool->submit_func([=]() {
+                auto t1 = std::chrono::steady_clock::now();
                 auto r = segment_gc(root, tablet_mgr);
-                LOG_IF(WARNING, !r.ok()) << "Fail to do segment gc in " << root << ": " << r;
+                auto t2 = std::chrono::steady_clock::now();
+                auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+                if (r.ok()) {
+                    LOG(INFO) << "Finished garbage collection of data for directory " << root << ". cost:" << cost
+                              << "ms";
+                } else {
+                    LOG(WARNING) << "Fail to do garbage collection of data for directory " << root << ". cost:" << cost
+                                 << "ms error:" << r;
+                }
             });
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to submit task to threadpool: " << st;
