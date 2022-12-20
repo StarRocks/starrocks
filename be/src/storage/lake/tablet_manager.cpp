@@ -78,6 +78,10 @@ std::string TabletManager::tablet_root_location(int64_t tablet_id) const {
     return _location_provider->root_location(tablet_id);
 }
 
+std::string TabletManager::tablet_metadata_root_location(int64_t tablet_id) const {
+    return _location_provider->metadata_root_location(tablet_id);
+}
+
 std::string TabletManager::tablet_metadata_location(int64_t tablet_id, int64_t version) const {
     return _location_provider->tablet_metadata_location(tablet_id, version);
 }

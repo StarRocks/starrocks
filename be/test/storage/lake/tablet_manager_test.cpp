@@ -48,7 +48,7 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
-        _update_manager = std::make_unique<lake::UpdateManager>();
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider);
         _tablet_manager = new starrocks::lake::TabletManager(_location_provider, _update_manager.get(), 16384);
     }
 

@@ -105,6 +105,8 @@ public:
 
     [[nodiscard]] std::string metadata_location(int64_t version) const;
 
+    [[nodiscard]] std::string metadata_root_location() const;
+
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
 
     [[nodiscard]] std::string txn_vlog_location(int64_t version) const;

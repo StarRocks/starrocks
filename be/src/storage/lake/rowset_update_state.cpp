@@ -72,7 +72,7 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetad
         CHECK(false) << "create column for primary key encoder failed";
     }
 
-    auto root_path = ExecEnv::GetInstance()->lake_location_provider()->metadata_root_location(tablet->id());
+    auto root_path = tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     // always one file for now.
     for (const std::string& path : op_write.dels()) {
@@ -285,7 +285,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletMetadata* metadata) {
     // const_cast for paritial update to rewrite segment file in op_write
     RowsetMetadata* rowset_meta = const_cast<TxnLogPB_OpWrite*>(&op_write)->mutable_rowset();
-    auto root_path = ExecEnv::GetInstance()->lake_location_provider()->metadata_root_location(tablet->id());
+    auto root_path = tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
     // get rowset schema

@@ -196,7 +196,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
     std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         if (fs == nullptr) {
-            auto root_path = ExecEnv::GetInstance()->lake_location_provider()->metadata_root_location(tablet->id());
+            auto root_path = tablet->metadata_root_location();
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
         }
         auto segment = Segment::open(fs, rssid_to_path[rssid], rssid, tablet_schema);
@@ -290,12 +290,10 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec,
                                           int64_t* latest_version) {
-    std::string filepath =
-            ExecEnv::GetInstance()->lake_location_provider()->tablet_metadata_location(tsid.tablet_id, meta_ver);
+    std::string filepath = _location_provider->tablet_metadata_location(tsid.tablet_id, meta_ver);
     MetaFileReader reader(filepath, false);
     RETURN_IF_ERROR(reader.load());
-    RETURN_IF_ERROR(reader.get_del_vec(ExecEnv::GetInstance()->lake_location_provider(), tsid.segment_id, delvec,
-                                       latest_version));
+    RETURN_IF_ERROR(reader.get_del_vec(_location_provider, tsid.segment_id, delvec, latest_version));
     return Status::OK();
 }
 

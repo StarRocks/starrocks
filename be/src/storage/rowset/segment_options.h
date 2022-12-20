@@ -30,6 +30,9 @@ struct OlapReaderStatistics;
 class RuntimeProfile;
 class TabletSchema;
 class KVStore;
+namespace lake {
+class UpdateManager;
+} // namespace lake
 } // namespace starrocks
 
 namespace starrocks {
@@ -62,6 +65,7 @@ public:
 
     // used for lake table
     bool is_lake_table = false;
+    lake::UpdateManager* update_mgr = nullptr;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;

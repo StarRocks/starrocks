@@ -120,6 +120,8 @@ public:
 
     std::string tablet_root_location(int64_t tablet_id) const;
 
+    std::string tablet_metadata_root_location(int64_t tablet_id) const;
+
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;

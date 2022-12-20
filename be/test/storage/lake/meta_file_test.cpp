@@ -51,7 +51,7 @@ public:
 
         s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         s_tablet_manager = std::make_unique<lake::TabletManager>(s_location_provider.get(), nullptr, 16384);
-        s_update_manager = std::make_unique<lake::UpdateManager>();
+        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get());
     }
 
     static void TearDownTestCase() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }

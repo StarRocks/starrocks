@@ -136,6 +136,10 @@ std::string Tablet::metadata_location(int64_t version) const {
     return _mgr->tablet_metadata_location(_id, version);
 }
 
+std::string Tablet::metadata_root_location() const {
+    return _mgr->tablet_metadata_root_location(_id);
+}
+
 std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
 }

@@ -334,7 +334,7 @@ TEST_F(GCTest, test_delvec_gc) {
     auto tablet_id_1 = next_id();
     // LocationProvider and TabletManager of worker A
     auto location_provider_1 = std::make_unique<TestLocationProvider>(kTestDir);
-    auto update_manager_1 = std::make_unique<lake::UpdateManager>();
+    auto update_manager_1 = std::make_unique<lake::UpdateManager>(location_provider_1.get());
     auto tablet_manager_1 =
             std::make_unique<lake::TabletManager>(location_provider_1.get(), update_manager_1.get(), 16384);
     // tablet_id_1 owned by worker A

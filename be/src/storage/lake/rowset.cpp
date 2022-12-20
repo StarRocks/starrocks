@@ -53,6 +53,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.is_lake_table = true;
+        seg_options.update_mgr = _tablet->update_mgr();
         seg_options.version = options.version;
         seg_options.tablet_id = _tablet->id();
         seg_options.rowset_id = _rowset_metadata->id();
@@ -157,6 +158,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.stats = stats;
     seg_options.is_primary_keys = true;
     seg_options.is_lake_table = true;
+    seg_options.update_mgr = _tablet->update_mgr();
     seg_options.version = version;
     seg_options.tablet_id = _tablet->id();
     seg_options.rowset_id = _rowset_metadata->id();

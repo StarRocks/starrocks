@@ -35,9 +35,10 @@ class MetaFileBuilder;
 
 class UpdateManager {
 public:
-    UpdateManager()
+    UpdateManager(LocationProvider* location_provider)
             : _index_cache(std::numeric_limits<size_t>::max()),
-              _update_state_cache(std::numeric_limits<size_t>::max()) {}
+              _update_state_cache(std::numeric_limits<size_t>::max()),
+              _location_provider(location_provider) {}
     ~UpdateManager() {}
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
@@ -94,6 +95,8 @@ private:
     int64_t _del_vec_cache_ver{0};
 
     std::atomic<int64_t> _last_clear_expired_cache_millis{0};
+
+    LocationProvider* _location_provider;
 };
 
 } // namespace lake
