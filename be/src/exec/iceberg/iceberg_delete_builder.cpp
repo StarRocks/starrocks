@@ -36,6 +36,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_input_stream.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 
