@@ -25,18 +25,17 @@
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
-using namespace vectorized;
 
 // ================================
 
-DataSourceProviderPtr HiveConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<HiveDataSourceProvider>(scan_node, plan_node);
 }
 
 // ================================
 
-HiveDataSourceProvider::HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {}
 
 DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -399,7 +398,7 @@ void HiveDataSource::close(RuntimeState* state) {
     }
 }
 
-Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
     }

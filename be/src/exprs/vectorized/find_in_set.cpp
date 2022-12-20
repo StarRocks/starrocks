@@ -22,7 +22,7 @@
 #include "exprs/vectorized/string_functions.h"
 #include "util/memcmp.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // find_in_set
 DEFINE_BINARY_FUNCTION_WITH_IMPL(findInSetImpl, str, strlist) {
@@ -60,4 +60,4 @@ StatusOr<ColumnPtr> StringFunctions::find_in_set(FunctionContext* context, const
     return VectorizedStrictBinaryFunction<findInSetImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

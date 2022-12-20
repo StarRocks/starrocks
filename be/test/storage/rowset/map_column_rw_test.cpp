@@ -62,11 +62,11 @@ protected:
         TabletColumn value_column = create_int_value(2, STORAGE_AGGREGATE_NONE, true);
         map_column.add_sub_column(value_column);
 
-        auto src_offsets = vectorized::UInt32Column::create();
-        auto src_keys = vectorized::Int32Column::create();
-        auto src_values = vectorized::Int32Column::create();
+        auto src_offsets = UInt32Column::create();
+        auto src_keys = Int32Column::create();
+        auto src_values = Int32Column::create();
 
-        vectorized::ColumnPtr src_column = vectorized::MapColumn::create(src_keys, src_values, src_offsets);
+        ColumnPtr src_column = MapColumn::create(src_keys, src_values, src_offsets);
 
         //  {1 = 1}
         src_keys->append(1);
@@ -162,10 +162,10 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_offsets = vectorized::UInt32Column::create();
-                auto dst_keys = vectorized::Int32Column::create();
-                auto dst_values = vectorized::Int32Column::create();
-                auto dst_column = vectorized::MapColumn::create(dst_keys, dst_values, dst_offsets);
+                auto dst_offsets = UInt32Column::create();
+                auto dst_keys = Int32Column::create();
+                auto dst_values = Int32Column::create();
+                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());

@@ -31,7 +31,7 @@
 #include "util/json.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedCastExprTest : public ::testing::Test {
 public:
@@ -2022,4 +2022,4 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,7 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedBinaryPredicateTest : public ::testing::Test {
 public:
@@ -545,4 +545,4 @@ TEST_F(VectorizedBinaryPredicateStringTest, nullEqExpr) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

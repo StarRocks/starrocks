@@ -38,14 +38,12 @@ class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
 class ThreadPoolToken;
 
-namespace vectorized {
 class DeltaWriter;
-}
 
 class SegmentFlushToken {
 public:
     SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token,
-                      std::shared_ptr<starrocks::vectorized::DeltaWriter> delta_writer);
+                      std::shared_ptr<starrocks::DeltaWriter> delta_writer);
 
     Status submit(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
@@ -56,7 +54,7 @@ public:
 
 private:
     std::unique_ptr<ThreadPoolToken> _flush_token;
-    std::shared_ptr<vectorized::DeltaWriter> _writer;
+    std::shared_ptr<DeltaWriter> _writer;
 };
 
 class SegmentFlushExecutor {
@@ -69,7 +67,7 @@ public:
     Status init(const std::vector<DataDir*>& data_dirs);
 
     std::unique_ptr<SegmentFlushToken> create_flush_token(
-            const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer,
+            const std::shared_ptr<starrocks::DeltaWriter>& delta_writer,
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::CONCURRENT);
 
 private:

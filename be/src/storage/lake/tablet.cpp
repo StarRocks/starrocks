@@ -79,7 +79,7 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
     return std::make_unique<GeneralTabletWriter>(*this);
 }
 
-StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, vectorized::VectorizedSchema schema) {
+StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, VectorizedSchema schema) {
     return std::make_shared<TabletReader>(*this, version, std::move(schema));
 }
 

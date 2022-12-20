@@ -163,7 +163,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
 
     // hold compressed page at first, reset to decompressed page later
     // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
-    std::unique_ptr<char[]> page(new char[page_size + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
+    std::unique_ptr<char[]> page(new char[page_size + Column::APPEND_OVERFLOW_MAX_SIZE]);
     Slice page_slice(page.get(), page_size);
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
@@ -196,7 +196,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
         SCOPED_RAW_TIMER(&opts.stats->decompress_ns);
         // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
         std::unique_ptr<char[]> decompressed_page(
-                new char[footer->uncompressed_size() + footer_size + 4 + vectorized::Column::APPEND_OVERFLOW_MAX_SIZE]);
+                new char[footer->uncompressed_size() + footer_size + 4 + Column::APPEND_OVERFLOW_MAX_SIZE]);
 
         // decompress page body
         Slice compressed_body(page_slice.data, body_size);

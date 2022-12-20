@@ -25,7 +25,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ExceptNode::ExceptNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _tuple_id(tnode.except_node.tuple_id), _tuple_desc(nullptr) {}
@@ -274,4 +274,4 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     return ops_with_except_output_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

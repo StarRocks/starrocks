@@ -25,7 +25,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // 1. name
 // 2. arg primitive type
@@ -204,4 +204,4 @@ private:
     std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

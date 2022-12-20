@@ -18,7 +18,7 @@
 #include "column/map_column.h"
 #include "column/type_traits.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
@@ -80,4 +80,4 @@ StatusOr<ColumnPtr> MapFunctions::map_values(FunctionContext* context, const Col
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

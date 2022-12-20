@@ -16,10 +16,10 @@
 
 #include "exprs/expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedCompoundPredicateFactory {
 public:
     static Expr* from_thrift(const TExprNode& node);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

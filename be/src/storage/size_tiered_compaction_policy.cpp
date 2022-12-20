@@ -21,7 +21,7 @@
 #include "util/time.h"
 #include "util/trace.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SizeTieredCompactionPolicy::SizeTieredCompactionPolicy(Tablet* tablet) : _tablet(tablet) {
     _max_level_size =
@@ -291,4 +291,4 @@ Status SizeTieredCompactionPolicy::_check_version_continuity(const std::vector<R
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

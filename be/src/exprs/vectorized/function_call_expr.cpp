@@ -25,7 +25,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node), _fn_desc(nullptr) {}
 
@@ -126,8 +126,7 @@ bool VectorizedFunctionCallExpr::is_constant() const {
     return Expr::is_constant();
 }
 
-StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::ExprContext* context,
-                                                                 vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     Columns args;
@@ -171,4 +170,4 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     return result;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

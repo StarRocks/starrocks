@@ -30,7 +30,7 @@
 #include "util/dispatch.h"
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <bool isConstC0, bool isConst1, LogicalType Type>
 struct SelectIfOP {
@@ -76,7 +76,7 @@ class VectorizedIfNullExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfNullExpr);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
 
         int null_count = ColumnHelper::count_nulls(lhs);
@@ -119,7 +119,7 @@ public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedNullIfExpr);
 
     // NullIF: return null if lhs == rhs else return lhs
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
@@ -164,7 +164,7 @@ class VectorizedIfExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfExpr);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto bhs, _children[0]->evaluate_checked(context, ptr));
         int true_count = ColumnHelper::count_true_with_notnull(bhs);
 
@@ -286,7 +286,7 @@ class VectorizedCoalesceExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         std::vector<ColumnViewer<Type>> viewers;
         std::vector<ColumnPtr> columns;
         for (int i = 0; i < _children.size(); ++i) {
@@ -426,4 +426,4 @@ Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node
 #undef CASE_TYPE
 #undef CASE_ALL_TYPE
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -21,7 +21,7 @@
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _slot_id_set_list(tnode.repeat_node.slot_id_set_list),
@@ -224,4 +224,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_t
     return operators;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

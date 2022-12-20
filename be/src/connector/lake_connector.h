@@ -22,7 +22,7 @@ class LakeConnector final : public Connector {
 public:
     ~LakeConnector() override = default;
 
-    DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
     ConnectorType connector_type() const override { return ConnectorType::LAKE; }

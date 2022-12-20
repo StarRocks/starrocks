@@ -16,7 +16,7 @@
 
 #include <unordered_set>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using Field = Slice;
 
@@ -623,4 +623,4 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

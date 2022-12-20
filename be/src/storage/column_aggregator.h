@@ -23,7 +23,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnAggregatorBase {
 public:
@@ -283,4 +283,4 @@ private:
     uint8_t _row_is_null{0};
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

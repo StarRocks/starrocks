@@ -21,7 +21,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class EncryptionFunctionsTest : public ::testing::Test {
 public:
@@ -873,4 +873,4 @@ INSTANTIATE_TEST_SUITE_P(
                                 "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893"
                                 "d94d86cd8a6f3bb6b1804c22097b337ecc24f6015e")));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

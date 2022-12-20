@@ -21,7 +21,7 @@
 #include "formats/csv/output_stream_string.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_read_string01) {
@@ -483,4 +483,4 @@ TEST(ArrayConverterTest, test_write_string) {
     ASSERT_EQ("[][null][\"1999-09-01\"][\"2000-09-01\",\"2001-09-01\"]", buff2.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

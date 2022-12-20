@@ -25,7 +25,7 @@
 #include "simd/simd.h"
 #include "typeinfo"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ResultNopCheck {
     template <typename Type, typename ResultType>
@@ -625,4 +625,4 @@ using VectorizedLogicPredicateBinaryFunction = LogicPredicateBinaryFunction<
     template <typename LType, typename RType, typename ResultType>                                    \
     uint8_t NAME::apply(const LType& L_VALUE, const uint8_t L_NULL, const RType& R_VALUE, const uint8_t R_NULL)
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

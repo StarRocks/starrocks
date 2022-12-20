@@ -19,7 +19,7 @@
 // Distinct means this node handle distinct or group by no aggregate function query.
 // Streaming means this node will handle input in get_next phase, and maybe directly
 // ouput child chunk.
-namespace starrocks::vectorized {
+namespace starrocks {
 class DistinctStreamingNode final : public AggregateBaseNode {
 public:
     DistinctStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -34,4 +34,4 @@ public:
 private:
     void _output_chunk_from_hash_set(ChunkPtr* chunk);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

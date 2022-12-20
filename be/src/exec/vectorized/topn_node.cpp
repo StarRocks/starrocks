@@ -32,7 +32,7 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _tnode(tnode) {
@@ -299,4 +299,4 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     return operators_source_with_sort;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

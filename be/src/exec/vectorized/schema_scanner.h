@@ -30,7 +30,7 @@ class StarRocksServer;
 class RuntimeState;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // scanner parameter from frontend
 struct SchemaScannerParam {
@@ -74,7 +74,7 @@ public:
     virtual Status init(SchemaScannerParam* param, ObjectPool* pool);
     // Start to work
     virtual Status start(RuntimeState* state);
-    virtual Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
+    virtual Status get_next(ChunkPtr* chunk, bool* eos);
     // factory function
     static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
 
@@ -97,4 +97,4 @@ protected:
     static StarRocksServer* _s_starrocks_server;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -25,7 +25,7 @@
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedCastExprFactory {
 public:
@@ -52,7 +52,7 @@ public:
 
     ~VectorizedCastArrayExpr() override = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCastArrayExpr(*this)); }
 
@@ -69,7 +69,7 @@ public:
               _cast_to_type_desc(std::move(type_desc)),
               _throw_exception_if_err(throw_exception_if_err) {}
     ~CastStringToArray() override = default;
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
 
 private:
@@ -88,7 +88,7 @@ public:
             : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(std::move(type_desc)) {}
     ~CastJsonToArray() override = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToArray(*this)); }
 
 private:
@@ -96,4 +96,4 @@ private:
     TypeDescriptor _cast_to_type_desc;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

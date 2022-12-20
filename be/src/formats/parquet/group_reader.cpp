@@ -44,7 +44,7 @@ Status GroupReader::init() {
     return Status::OK();
 }
 
-Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
+Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");
@@ -56,7 +56,7 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
     bool has_more_filter = !_left_conjunct_ctxs.empty();
     Status status;
 
-    vectorized::ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
+    ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
     {
         size_t rows_to_skip = _column_reader_opts.context->rows_to_skip;
         _column_reader_opts.context->rows_to_skip = 0;
@@ -75,7 +75,7 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     bool has_filter = false;
     int chunk_size = -1;
-    vectorized::Filter chunk_filter(count, 1);
+    Filter chunk_filter(count, 1);
     DCHECK_EQ(active_chunk->num_rows(), count);
 
     // dict filter
@@ -106,7 +106,7 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
-        vectorized::ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+        ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
         RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
 
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
@@ -218,8 +218,8 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     }
 }
 
-vectorized::ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices) {
-    auto chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices) {
+    auto chunk = std::make_shared<Chunk>();
     chunk->columns().reserve(column_indices.size());
     for (auto col_idx : column_indices) {
         SlotId slot_id = _param.read_cols[col_idx].slot_id;
@@ -367,8 +367,8 @@ Status GroupReader::_rewrite_dict_column_predicates() {
     for (int col_idx : _dict_filter_column_indices) {
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
-        vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
-        std::shared_ptr<vectorized::BinaryColumn> dict_value_column = vectorized::BinaryColumn::create();
+        ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
+        std::shared_ptr<BinaryColumn> dict_value_column = BinaryColumn::create();
         dict_value_chunk->append_column(dict_value_column, slot_id);
 
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(dict_value_column.get()));
@@ -388,8 +388,8 @@ Status GroupReader::_rewrite_dict_column_predicates() {
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
         if (dict_codes.size() == 1) {
-            _dict_filter_preds[slot_id] = vectorized::new_column_eq_predicate(get_type_info(kDictCodeFieldType),
-                                                                              slot_id, std::to_string(dict_codes[0]));
+            _dict_filter_preds[slot_id] =
+                    new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0]));
         } else {
             std::vector<std::string> str_codes;
             str_codes.reserve(dict_codes.size());
@@ -397,7 +397,7 @@ Status GroupReader::_rewrite_dict_column_predicates() {
                 str_codes.emplace_back(std::to_string(code));
             }
             _dict_filter_preds[slot_id] =
-                    vectorized::new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
+                    new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
         }
         _obj_pool.add(_dict_filter_preds[slot_id]);
     }
@@ -420,14 +420,14 @@ void GroupReader::_init_read_chunk() {
     for (int col_idx : _dict_filter_column_indices) {
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
-        auto dict_code_column = vectorized::ColumnHelper::create_column(
-                TypeDescriptor::from_primtive_type(kDictCodePrimitiveType), true);
+        auto dict_code_column =
+                ColumnHelper::create_column(TypeDescriptor::from_primtive_type(kDictCodePrimitiveType), true);
         dict_code_column->reserve(chunk_size);
         _read_chunk->update_column(dict_code_column, slot_id);
     }
 }
 
-Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk) {
+Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk) {
     if (read_columns.empty()) {
         *row_count = 0;
         return Status::OK();
@@ -459,15 +459,14 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     return Status::OK();
 }
 
-Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk,
-                                    size_t chunk_size) {
+Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size) {
     auto& ctx = _column_reader_opts.context;
     if (ctx->rows_to_skip == 0) {
         return Status::OK();
     }
 
     size_t rows_to_skip = ctx->rows_to_skip;
-    vectorized::Filter empty_filter(1, 0);
+    Filter empty_filter(1, 0);
     ctx->filter = &empty_filter;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
@@ -493,7 +492,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
     return Status::OK();
 }
 
-void GroupReader::_dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter) {
+void GroupReader::_dict_filter(ChunkPtr* chunk, Filter* filter) {
     DCHECK(!_dict_filter_preds.empty());
 
     auto iter = _dict_filter_preds.begin();
@@ -507,26 +506,26 @@ void GroupReader::_dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* 
     }
 }
 
-Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
+Status GroupReader::_dict_decode(ChunkPtr* chunk) {
     const auto& slots = _param.tuple_desc->slots();
     for (int col_idx : _dict_filter_column_indices) {
         const auto& column = _param.read_cols[col_idx];
         int chunk_index = column.col_idx_in_chunk;
         SlotId slot_id = column.slot_id;
 
-        vectorized::ColumnPtr& dict_codes = _read_chunk->get_column_by_slot_id(slot_id);
-        vectorized::ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
+        ColumnPtr& dict_codes = _read_chunk->get_column_by_slot_id(slot_id);
+        ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
         dict_values->resize(0);
 
-        auto* codes_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(dict_codes);
-        auto* codes_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
-                codes_nullable_column->data_column());
+        auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
+        auto* codes_column =
+                ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
 
         DCHECK_EQ(dict_codes->size(), dict_values->size());
         if (slots[chunk_index]->is_nullable()) {
-            auto* nullable_codes = down_cast<vectorized::NullableColumn*>(dict_codes.get());
-            auto* nullable_values = down_cast<vectorized::NullableColumn*>(dict_values.get());
+            auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
+            auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
             nullable_values->null_column_data().swap(nullable_codes->null_column_data());
             nullable_values->set_has_null(nullable_codes->has_null());
         }

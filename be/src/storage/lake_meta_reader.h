@@ -25,7 +25,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // Params for MetaReader
 // mainly include tablet
 struct LakeMetaReaderParams : MetaReaderParams {
@@ -66,4 +66,4 @@ private:
     Status _fill_result_chunk(Chunk* chunk) override;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

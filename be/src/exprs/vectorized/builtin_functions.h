@@ -21,7 +21,7 @@
 #include "common/status.h"
 #include "exprs/function_context.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using PrepareFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
@@ -75,4 +75,4 @@ private:
     static FunctionTables _fn_tables;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

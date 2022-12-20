@@ -17,7 +17,7 @@
 #include "exprs/vectorized/decimal_cast_expr_test_helper.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDecimal32p9s0ToFloatNormal) {
     CastTestCaseArray test_cases = {{9, 0, "3", -1, -1, "3.0", "false"},
                                     {9, 0, "0", -1, -1, "0.0", "false"},
@@ -1452,4 +1452,4 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal128
             {-1, -1, "0.28365040966259847", 35, 30, "0.283650409662598470000000000000", "false"}};
     test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL128>(test_cases);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -26,7 +26,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct SegDataGenerator {
     inline static int sequence = 0;
     static int next_value() { return sequence++; }
@@ -82,4 +82,4 @@ TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     ASSERT_EQ(sz, 3096);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -24,7 +24,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // DictMappingExpr.
 // The original expression will be rewritten as a dictionary mapping function in the global field optimization.
 // child(0) was input lowcardinality dictionary column (input was ID type).
@@ -73,4 +73,4 @@ private:
     // the input columns are dictionary columns
     Expr* dict_func_expr = nullptr;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

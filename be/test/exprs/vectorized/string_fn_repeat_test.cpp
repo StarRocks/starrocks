@@ -16,7 +16,7 @@
 
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class StringFunctionRepeatTest : public ::testing::Test {};
 TEST_F(StringFunctionRepeatTest, repeatTest) {
@@ -97,4 +97,4 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

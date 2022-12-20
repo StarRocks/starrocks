@@ -22,7 +22,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 namespace detail {
 struct RuntimeColumnPredicateBuilder {
     template <LogicalType ptype>
@@ -60,7 +60,7 @@ struct RuntimeColumnPredicateBuilder {
 
             const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
 
-            using ValueType = typename vectorized::RunTimeTypeTraits<mapping_type>::CppType;
+            using ValueType = typename RunTimeTypeTraits<mapping_type>::CppType;
             SQLFilterOp min_op = to_olap_filter_type(TExprOpcode::GE, false);
             ValueType min_value = filter->min_value();
             range.add_range(min_op, static_cast<value_type>(min_value));
@@ -142,4 +142,4 @@ inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& 
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

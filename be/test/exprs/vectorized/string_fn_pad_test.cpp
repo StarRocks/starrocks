@@ -22,7 +22,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 typedef std::tuple<std::string, int32_t, std::string, bool, std::string, std::string> TestCaseType;
 typedef std::vector<TestCaseType> TestCaseArray;
@@ -654,4 +654,4 @@ INSTANTIATE_TEST_SUITE_P(StringFunctionPadTest, PadNullableStrConstLenFillTestFi
                                                    // lpad expected results.
                                                    false, {"1231abc", "1231edf", "1abcdef"}, {false, false, false})));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

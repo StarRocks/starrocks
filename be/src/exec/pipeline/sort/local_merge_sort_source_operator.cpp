@@ -25,7 +25,7 @@ void LocalMergeSortSourceOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     return _sort_context->pull_chunk();
 }
 

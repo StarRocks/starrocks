@@ -14,12 +14,11 @@
 
 #include "storage/empty_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class EmptyIterator final : public ChunkIterator {
 public:
-    explicit EmptyIterator(vectorized::VectorizedSchema schema, int chunk_size)
-            : ChunkIterator(std::move(schema), chunk_size) {}
+    explicit EmptyIterator(VectorizedSchema schema, int chunk_size) : ChunkIterator(std::move(schema), chunk_size) {}
 
     void close() override {}
 
@@ -33,12 +32,12 @@ protected:
     }
 };
 
-ChunkIteratorPtr new_empty_iterator(vectorized::VectorizedSchema&& schema, int chunk_size) {
+ChunkIteratorPtr new_empty_iterator(VectorizedSchema&& schema, int chunk_size) {
     return std::make_shared<EmptyIterator>(std::move(schema), chunk_size);
 }
 
-ChunkIteratorPtr new_empty_iterator(const vectorized::VectorizedSchema& schema, int chunk_size) {
+ChunkIteratorPtr new_empty_iterator(const VectorizedSchema& schema, int chunk_size) {
     return std::make_shared<EmptyIterator>(schema, chunk_size);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

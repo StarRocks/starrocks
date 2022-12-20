@@ -27,7 +27,7 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 DictDecodeNode::DictDecodeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs) {}
@@ -177,4 +177,4 @@ pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBu
     return operators;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

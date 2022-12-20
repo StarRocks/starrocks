@@ -19,7 +19,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const int32_t DEF_NULL_NUM = -1;
 
@@ -371,4 +371,4 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

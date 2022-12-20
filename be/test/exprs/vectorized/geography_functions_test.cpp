@@ -20,7 +20,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class geographyFunctionsTest : public ::testing::Test {
 public:
@@ -460,4 +460,4 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

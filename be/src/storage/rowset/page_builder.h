@@ -84,7 +84,7 @@ public:
     virtual faststring* get_dictionary_page() { return nullptr; }
 
     // check global dict valid for dictionary encoding mode column.
-    virtual bool is_valid_global_dict(const vectorized::GlobalDictMap* global_dict) const { return true; }
+    virtual bool is_valid_global_dict(const GlobalDictMap* global_dict) const { return true; }
 
     // Reset the internal state of the page builder.
     //

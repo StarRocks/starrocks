@@ -62,11 +62,9 @@ namespace starrocks {
 class BlockCompressionCodec;
 class MemTracker;
 
-namespace vectorized {
 class ColumnPredicate;
 class Column;
 class ZoneMapDetail;
-} // namespace vectorized
 
 class BitmapIndexIterator;
 class BitmapIndexReader;
@@ -138,19 +136,17 @@ public:
     int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
     // page-level zone map filter.
-    Status zone_map_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
-                           const ::starrocks::vectorized::ColumnPredicate* del_predicate,
-                           std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                           vectorized::SparseRange* row_ranges);
+    Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
+                           const ::starrocks::ColumnPredicate* del_predicate,
+                           std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges);
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
     // same as `match_condition`, used by vector engine.
-    bool segment_zone_map_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& predicates) const;
+    bool segment_zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& predicates) const;
 
     // prerequisite: at least one predicate in |predicates| support bloom filter.
-    Status bloom_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
-                        vectorized::SparseRange* ranges);
+    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange* ranges);
 
     Status load_ordinal_index();
 
@@ -178,12 +174,11 @@ private:
     Status _load_bitmap_index();
     Status _load_bloom_filter_index();
 
-    Status _parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const;
+    Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 
-    Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, vectorized::SparseRange* row_ranges);
+    Status _calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange* row_ranges);
 
-    Status _zone_map_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                            const vectorized::ColumnPredicate* del_predicate,
+    Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
     // ColumnReader will be resident in memory. When there are many columns in the table,

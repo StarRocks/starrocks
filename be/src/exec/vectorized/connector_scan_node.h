@@ -22,7 +22,7 @@
 #include "exec/scan_node.h"
 #include "fs/fs.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ConnectorScanner;
 
@@ -120,4 +120,4 @@ private:
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
     Profile _profile;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

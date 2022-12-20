@@ -19,7 +19,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class PercentileUnionAggregateFunction final
         : public AggregateFunctionBatchHelper<PercentileValue, PercentileUnionAggregateFunction> {
 public:
@@ -65,4 +65,4 @@ public:
 
     std::string get_name() const override { return "percentile_union"; }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

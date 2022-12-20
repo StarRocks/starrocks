@@ -405,7 +405,7 @@ private:
     mutable std::vector<RuntimeFilterHolder*> _local_rf_holders;
     bool _all_local_rf_ready = false;
 
-    std::vector<vectorized::RuntimeFilterProbeDescriptor*> _global_rf_descriptors;
+    std::vector<RuntimeFilterProbeDescriptor*> _global_rf_descriptors;
     bool _wait_global_rf_ready = false;
     bool _all_global_rf_ready_or_timeout = false;
     int64_t _global_rf_wait_timeout_ns = -1;

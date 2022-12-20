@@ -38,7 +38,7 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     OlapScanContextPtr _ctx;
@@ -46,7 +46,7 @@ private:
 
 class OlapScanPrepareOperatorFactory final : public SourceOperatorFactory {
 public:
-    OlapScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, vectorized::OlapScanNode* const scan_node,
+    OlapScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, OlapScanNode* const scan_node,
                                    OlapScanContextFactoryPtr ctx_factory);
     ~OlapScanPrepareOperatorFactory() override = default;
 
@@ -58,7 +58,7 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    vectorized::OlapScanNode* const _scan_node;
+    OlapScanNode* const _scan_node;
     OlapScanContextFactoryPtr _ctx_factory;
 };
 

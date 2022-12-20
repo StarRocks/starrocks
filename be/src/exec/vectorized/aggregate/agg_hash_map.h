@@ -34,7 +34,7 @@
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const constexpr int32_t prefetch_threhold = 8192;
 
@@ -848,4 +848,4 @@ struct AggHashMapWithSerializedKeyFixedSize
     int32_t _chunk_size;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

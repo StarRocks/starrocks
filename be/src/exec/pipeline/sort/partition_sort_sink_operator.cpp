@@ -23,7 +23,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
-using namespace starrocks::vectorized;
+using namespace starrocks;
 
 namespace starrocks::pipeline {
 Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
@@ -38,11 +38,11 @@ void PartitionSortSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from partition sort sink operator");
 }
 
-Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
                                                                          _sort_exec_exprs, _order_by_types);
     RETURN_IF_ERROR(materialize_chunk);
@@ -88,9 +88,9 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
                     _sort_keys, 0, _limit + _offset, _topn_type, max_buffered_chunks);
         }
     } else {
-        chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(runtime_state(),
-                                                                           &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                           &_is_asc_order, &_is_null_first, _sort_keys);
+        chunks_sorter =
+                std::make_unique<ChunksSorterFullSort>(runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
+                                                       &_is_asc_order, &_is_null_first, _sort_keys);
     }
     auto sort_context = _sort_context_factory->create(driver_sequence);
 

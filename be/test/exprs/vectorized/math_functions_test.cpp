@@ -23,7 +23,7 @@
 
 #define PI acos(-1)
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class VecMathFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {}
@@ -1460,4 +1460,4 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

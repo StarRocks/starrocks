@@ -230,7 +230,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 // pull chunk from current operator and push the chunk onto next
                 // operator
-                StatusOr<vectorized::ChunkPtr> maybe_chunk;
+                StatusOr<ChunkPtr> maybe_chunk;
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");

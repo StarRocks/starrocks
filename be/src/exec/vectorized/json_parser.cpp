@@ -18,7 +18,7 @@
 
 #include "gutil/strings/substitute.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const size_t MAX_RAW_JSON_LEN = 64;
 
@@ -448,4 +448,4 @@ Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

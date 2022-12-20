@@ -30,7 +30,7 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
@@ -352,4 +352,4 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
     return ops_with_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -42,22 +42,22 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     return Status::OK();
 }
 
-Status MapColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
-    vectorized::MapColumn* map_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
+    MapColumn* map_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        map_column = down_cast<vectorized::MapColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column->null_column().get());
+        map_column = down_cast<MapColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     } else {
-        map_column = down_cast<vectorized::MapColumn*>(dst);
+        map_column = down_cast<MapColumn*>(dst);
     }
 
     // 1. Read null column
     if (_nulls != nullptr) {
         RETURN_IF_ERROR(_nulls->next_batch(n, null_column));
-        down_cast<vectorized::NullableColumn*>(dst)->update_has_null();
+        down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
     // 2. Read offset column
@@ -86,16 +86,16 @@ Status MapColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
-Status MapColumnIterator::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
-    vectorized::MapColumn* map_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+    MapColumn* map_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        map_column = down_cast<vectorized::MapColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column->null_column().get());
+        map_column = down_cast<MapColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     } else {
-        map_column = down_cast<vectorized::MapColumn*>(dst);
+        map_column = down_cast<MapColumn*>(dst);
     }
 
     CHECK((_nulls == nullptr && null_column == nullptr) || (_nulls != nullptr && null_column != nullptr));
@@ -103,17 +103,17 @@ Status MapColumnIterator::next_batch(const vectorized::SparseRange& range, vecto
     // 1. Read null column
     if (_nulls != nullptr) {
         RETURN_IF_ERROR(_nulls->next_batch(range, null_column));
-        down_cast<vectorized::NullableColumn*>(dst)->update_has_null();
+        down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    vectorized::SparseRangeIterator iter = range.new_iterator();
+    SparseRangeIterator iter = range.new_iterator();
     size_t to_read = range.span_size();
 
     // array column can be nested, range may be empty
     DCHECK(range.empty() || (range.begin() == _offsets->get_current_ordinal()));
-    vectorized::SparseRange element_read_range;
+    SparseRange element_read_range;
     while (iter.has_more()) {
-        vectorized::Range r = iter.next(to_read);
+        Range r = iter.next(to_read);
 
         RETURN_IF_ERROR(_offsets->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _offsets->element_ordinal();
@@ -132,7 +132,7 @@ Status MapColumnIterator::next_batch(const vectorized::SparseRange& range, vecto
         size_t end_offset = data.back();
 
         size_t prev_array_size = offsets->size();
-        vectorized::SparseRange size_read_range(r);
+        SparseRange size_read_range(r);
         RETURN_IF_ERROR(_offsets->next_batch(size_read_range, offsets));
         size_t curr_array_size = offsets->size();
 
@@ -143,7 +143,7 @@ Status MapColumnIterator::next_batch(const vectorized::SparseRange& range, vecto
         }
         num_to_read = end_offset - num_to_read;
 
-        element_read_range.add(vectorized::Range(element_ordinal, element_ordinal + num_to_read));
+        element_read_range.add(Range(element_ordinal, element_ordinal + num_to_read));
     }
 
     // if array column is nullable, element_read_range may be empty
@@ -154,22 +154,22 @@ Status MapColumnIterator::next_batch(const vectorized::SparseRange& range, vecto
     return Status::OK();
 }
 
-Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
-    vectorized::MapColumn* map_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    MapColumn* map_column = nullptr;
+    NullColumn* null_column = nullptr;
     // 1. Read null column
     if (_nulls != nullptr) {
-        auto* nullable_column = down_cast<vectorized::NullableColumn*>(values);
-        map_column = down_cast<vectorized::MapColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column->null_column().get());
+        auto* nullable_column = down_cast<NullableColumn*>(values);
+        map_column = down_cast<MapColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
         RETURN_IF_ERROR(_nulls->fetch_values_by_rowid(rowids, size, null_column));
         nullable_column->update_has_null();
     } else {
-        map_column = down_cast<vectorized::MapColumn*>(values);
+        map_column = down_cast<MapColumn*>(values);
     }
 
     // 2. Read offset column
-    vectorized::UInt32Column array_size;
+    UInt32Column array_size;
     array_size.reserve(size);
     RETURN_IF_ERROR(_offsets->fetch_values_by_rowid(rowids, size, &array_size));
 

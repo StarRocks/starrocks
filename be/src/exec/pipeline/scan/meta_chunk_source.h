@@ -40,7 +40,7 @@ private:
 
     MetaScanContextPtr _scan_ctx;
 
-    std::shared_ptr<vectorized::MetaScanner> _scanner;
+    std::shared_ptr<MetaScanner> _scanner;
 };
 
 } // namespace starrocks::pipeline

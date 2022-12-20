@@ -30,7 +30,7 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
@@ -533,4 +533,4 @@ const char* DeltaWriter::_replica_state_name(ReplicaState state) const {
     return "";
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

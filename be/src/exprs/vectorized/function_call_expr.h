@@ -18,7 +18,7 @@
 #include "exprs/expr.h"
 #include "exprs/vectorized/builtin_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedFunctionCallExpr final : public Expr {
 public:
@@ -37,7 +37,7 @@ protected:
 
     bool is_constant() const override;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
     const FunctionDescriptor* _fn_desc;
@@ -45,4 +45,4 @@ private:
     bool _is_returning_random_value = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

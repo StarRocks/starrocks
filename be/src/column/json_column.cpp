@@ -18,13 +18,13 @@
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void JsonColumn::append_datum(const Datum& datum) {
     append(datum.get<JsonValue*>());
 }
 
-int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::vectorized::Column& rhs,
+int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::Column& rhs,
                            int nan_direction_hint) const {
     JsonValue* x = get_object(left_idx);
     const JsonValue* y = rhs.get(right_idx).get_json();
@@ -70,4 +70,4 @@ ColumnPtr JsonColumn::clone_shared() const {
     return BaseClass::clone_shared();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

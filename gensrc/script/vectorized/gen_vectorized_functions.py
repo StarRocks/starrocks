@@ -88,13 +88,11 @@ ${license}
 #include "exprs/vectorized/utility_functions.h"
 
 namespace starrocks {
-namespace vectorized {
 
 BuiltinFunctions::FunctionTables BuiltinFunctions::_fn_tables = {
         ${functions}
 };
 
-}
 }
 """)
 

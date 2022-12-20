@@ -16,7 +16,7 @@
 
 #include "formats/csv/converter.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class DatetimeConverter final : public Converter {
 public:
@@ -27,4 +27,4 @@ public:
     bool read_quoted_string(Column* column, Slice s, const Options& options) const override;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

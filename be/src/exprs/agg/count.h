@@ -18,7 +18,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct AggregateCountWindowFunctionState {
     // The following field are only used in "update_state_removable_cumulatively"
@@ -343,4 +343,4 @@ public:
     std::string get_name() const override { return "count_nullable"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

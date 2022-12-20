@@ -29,7 +29,7 @@
 #include "storage/tablet_manager.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TabletScanner::TabletScanner(OlapScanNode* parent) : _parent(parent) {}
 
@@ -388,4 +388,4 @@ void TabletScanner::update_counter() {
     _has_update_counter = true;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

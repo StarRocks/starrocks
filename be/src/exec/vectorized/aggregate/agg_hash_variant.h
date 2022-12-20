@@ -27,7 +27,7 @@
 #include "exec/vectorized/aggregate/agg_profile.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define APPLY_FOR_AGG_VARIANT_ALL(M) \
     M(phase1_uint8)                  \
@@ -582,4 +582,4 @@ private:
     Type type = Type::phase1_slice;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
