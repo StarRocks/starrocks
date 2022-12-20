@@ -279,6 +279,7 @@
       + [minute](./sql-reference/sql-functions/date-time-functions/minute.md)
       + [minutes_diff](./sql-reference/sql-functions/date-time-functions/minutes_diff.md)
       + [month](./sql-reference/sql-functions/date-time-functions/month.md)
+      + [months_add](./sql-reference/sql-functions/date-time-functions/months_add.md)
       + [months_diff](./sql-reference/sql-functions/date-time-functions/months_diff.md)
       + [monthname](./sql-reference/sql-functions/date-time-functions/monthname.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
