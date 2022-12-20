@@ -58,12 +58,12 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  34 <-> [34: id_char, CHAR, false]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
                 "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
-                "  |  cardinality: 0");
+                "  |  cardinality: 1");
 
         // RIGHT ANTI JOIN + AGGREGATE count(column)
         sql = "select count(a.id_char) " +
@@ -74,12 +74,12 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "  4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  34 <-> [34: id_char, CHAR, false]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
                 "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
-                "  |  cardinality: 0");
+                "  |  cardinality: 1");
 
         // LEFT ANTI JOIN + AGGREGATE
         sql = "select count(*) from (" +
@@ -90,12 +90,12 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "  4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  8 <-> [8: id_char, CHAR, false]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN\n" +
                 "  |  other join predicates: [8: id_char, CHAR, false] = '0'\n" +
-                "  |  cardinality: 0");
+                "  |  cardinality: 1");
     }
 
     @Test
