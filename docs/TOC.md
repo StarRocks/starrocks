@@ -274,6 +274,7 @@
       + [date_trunc](./sql-reference/sql-functions/date-time-functions/date_trunc.md)
       + [datediff](./sql-reference/sql-functions/date-time-functions/datediff.md)
       + [day](./sql-reference/sql-functions/date-time-functions/day.md)
+      + [days_sub](./sql-reference/sql-functions/date-time-functions/days_sub.md)
       + [dayname](./sql-reference/sql-functions/date-time-functions/dayname.md)
       + [dayofmonth](./sql-reference/sql-functions/date-time-functions/dayofmonth.md)
       + [dayofweek](./sql-reference/sql-functions/date-time-functions/dayofweek.md)
