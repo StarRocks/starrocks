@@ -179,6 +179,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -1999,6 +2000,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
                 listPartitionDesc.findAllPartitionNames()
                         .forEach(partitionName -> partitionNameToId.put(partitionName, getNextId()));
+            } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                for (SingleRangePartitionDesc desc : expressionPartitionDesc.getRangePartitionDesc()
+                        .getSingleRangePartitionDescs()) {
+                    long partitionId = getNextId();
+                    partitionNameToId.put(desc.getPartitionName(), partitionId);
+                }
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
