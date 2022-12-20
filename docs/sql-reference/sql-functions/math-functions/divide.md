@@ -11,9 +11,10 @@ divide(x, y)
 ```
 
 ### Parameters
-`x`: The supported types are DOUBLE、FLOAT、LARGEINT、BIGINT、INT、SMALLINT、TINYINT、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128.
 
-`y`: The supported types are DOUBLE、FLOAT、LARGEINT、BIGINT、INT、SMALLINT、TINYINT、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128.
+- `x`: The supported types are DOUBLE, FLOAT, LARGEINT, BIGINT, INT, SMALLINT, TINYINT, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128.
+
+- `y`: The supported types are the same as `x`.
 
 ## Return value
 
