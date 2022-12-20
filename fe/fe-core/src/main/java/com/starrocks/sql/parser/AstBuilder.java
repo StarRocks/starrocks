@@ -438,6 +438,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(listPartitionDesc);
             }
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            throw new ParsingException("List partition is not supported.");
         }
         return partitionDesc;
     }

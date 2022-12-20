@@ -2,6 +2,13 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+>>>>>>> d77ac68c7 ([Enhancement] Forbid List partition syntax (#15401))
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
