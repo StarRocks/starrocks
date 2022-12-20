@@ -81,6 +81,8 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.mysql.privilege.TablePrivEntry;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.planner.StreamLoadPlanner;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
@@ -1379,7 +1381,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!PrivilegeManager.checkTableAction(ConnectContext.get(), dbName,
+                            tableName, PrivilegeType.TableAction.INSERT)) {
+                        throw new UnauthorizedException(String.format(
+                                "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
+                                userIdentity.getQualifiedUser(), userIdentity.getHost(), dbName, tableName));
+                    }
+                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
                         userIdentity, dbName, tableName, PrivPredicate.LOAD)) {
                     String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the " +
                                     "privilege(s) in [%s] for table '%s' in database '%s'", userIdentity.getQualifiedUser(),
