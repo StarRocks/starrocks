@@ -783,7 +783,7 @@ void TabletManager::start_gc() {
     PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
 }
 
-static int64_t metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
+static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
     auto num_running = std::atomic<int>(roots.size());
     for (const auto& root : roots) {
@@ -810,11 +810,9 @@ static int64_t metadata_gc(TabletManager* tablet_mgr, const std::set<std::string
         LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
         bthread_usleep(/*100ms=*/100 * 1000);
     }
-
-    return butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
 }
 
-static int64_t data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
+static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
     auto num_running = std::atomic<int>(roots.size());
     for (const auto& root : roots) {
@@ -840,8 +838,6 @@ static int64_t data_gc(TabletManager* tablet_mgr, const std::set<std::string>& r
         LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
         bthread_usleep(/*100ms=*/100 * 1000);
     }
-
-    return butil::gettimeofday_s() + config::lake_gc_segment_check_interval;
 }
 
 void* gc_checker(void* arg) {
@@ -865,9 +861,11 @@ void* gc_checker(void* arg) {
 
         if (min_gc_time == gc_time[0]) {
             auto master_info = get_master_info();
-            gc_time[0] = metadata_gc(tablet_mgr, roots, master_info.min_active_txn_id);
+            metadata_gc(tablet_mgr, roots, master_info.min_active_txn_id);
+            gc_time[0] = butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
         } else {
-            gc_time[1] = data_gc(tablet_mgr, roots);
+            data_gc(tablet_mgr, roots);
+            gc_time[1] = butil::gettimeofday_s() + config::lake_gc_segment_check_interval;
         }
     }
     return nullptr;
