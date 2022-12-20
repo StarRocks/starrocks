@@ -256,6 +256,7 @@
       + [monthname](./sql-reference/sql-functions/date-time-functions/monthname.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
+      + [seconds_add](./sql-reference/sql-functions/date-time-functions/seconds_add.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
       + [seconds_diff](./sql-reference/sql-functions/date-time-functions/seconds_diff.md)
       + [str_to_date](./sql-reference/sql-functions/date-time-functions/str_to_date.md)
@@ -273,6 +274,7 @@
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [weeks_diff](./sql-reference/sql-functions/date-time-functions/weeks_diff.md)
+      + [years_add](./sql-reference/sql-functions/date-time-functions/years_add.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
       + [years_diff](./sql-reference/sql-functions/date-time-functions/years_diff.md)
     + Aggregate Functions
