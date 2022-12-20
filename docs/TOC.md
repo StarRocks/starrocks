@@ -310,6 +310,7 @@
       + [weeks_diff](./sql-reference/sql-functions/date-time-functions/weeks_diff.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
       + [years_diff](./sql-reference/sql-functions/date-time-functions/years_diff.md)
+      + [years_sub](./sql-reference/sql-functions/date-time-functions/years_sub.md)
     + Aggregate Functions
       + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
