@@ -251,6 +251,12 @@ void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_
     buf->push_null();
 }
 
+template <>
+void ObjectColumn<BitmapValue>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const {
+    std::string str = _pool[idx].to_string();
+    buf->push_string(str);
+}
+
 template <typename T>
 void ObjectColumn<T>::_build_slices() const {
     // TODO(kks): improve this
