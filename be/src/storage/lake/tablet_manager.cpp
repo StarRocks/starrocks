@@ -814,7 +814,7 @@ static int64_t metadata_gc(TabletManager* tablet_mgr, const std::set<std::string
     return butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
 }
 
-int64_t data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
+static int64_t data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
     auto num_running = std::atomic<int>(roots.size());
     for (const auto& root : roots) {
