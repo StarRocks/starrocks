@@ -461,7 +461,6 @@ public class Coordinator {
     }
 
     public static TWorkGroup prepareWorkGroup(ConnectContext connect) {
-        WorkGroup workgroup = null;
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
             return null;
         }
