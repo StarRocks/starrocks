@@ -34,7 +34,7 @@
 #include "storage/tablet_meta.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CumulativeCompactionTest : public testing::Test {
 public:
@@ -180,10 +180,10 @@ public:
             for (size_t i = 0; i < 128; ++i) {
                 test_data.push_back("well" + std::to_string(i));
                 auto& cols = chunk->columns();
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
                 Slice field_1(test_data[i]);
-                cols[1]->append_datum(vectorized::Datum(field_1));
-                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+                cols[1]->append_datum(Datum(field_1));
+                cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
             }
             CHECK_OK(writer->add_chunk(*chunk));
         }
@@ -896,4 +896,4 @@ TEST_F(CumulativeCompactionTest, test_multi_segment_cumulative_compaction) {
     ASSERT_EQ(0, versions[0].second);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

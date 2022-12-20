@@ -26,7 +26,7 @@
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static void get_compare_results_colwise(size_t rows_to_sort, Columns& order_by_columns,
                                         std::vector<CompareVector>& compare_results_array,
@@ -172,10 +172,10 @@ bool ChunksSorter::sink_complete() {
     return _is_sink_complete;
 }
 
-StatusOr<vectorized::ChunkPtr> ChunksSorter::materialize_chunk_before_sort(
-        vectorized::Chunk* chunk, TupleDescriptor* materialized_tuple_desc, const SortExecExprs& sort_exec_exprs,
-        const std::vector<OrderByType>& order_by_types) {
-    vectorized::ChunkPtr materialize_chunk = std::make_shared<vectorized::Chunk>();
+StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
+                                                               const SortExecExprs& sort_exec_exprs,
+                                                               const std::vector<OrderByType>& order_by_types) {
+    ChunkPtr materialize_chunk = std::make_shared<Chunk>();
 
     // materialize all sorting columns: replace old columns with evaluated columns
     const size_t row_num = chunk->num_rows();
@@ -226,4 +226,4 @@ StatusOr<vectorized::ChunkPtr> ChunksSorter::materialize_chunk_before_sort(
     return materialize_chunk;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

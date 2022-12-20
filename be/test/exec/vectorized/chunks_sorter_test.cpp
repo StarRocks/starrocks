@@ -36,7 +36,7 @@
 #include "testutil/assert.h"
 #include "util/json.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunksSorterTest : public ::testing::Test {
 public:
@@ -1085,4 +1085,4 @@ TEST_F(ChunksSorterTest, test_tie) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -17,7 +17,7 @@
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using Int8ColumnPtr = Int8Column::Ptr;
 
@@ -108,4 +108,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

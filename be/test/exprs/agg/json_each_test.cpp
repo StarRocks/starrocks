@@ -21,7 +21,7 @@
 #include "testutil/assert.h"
 #include "testutil/function_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JsonEachTest : public testing::Test {
 public:
@@ -126,4 +126,4 @@ TEST_F(JsonEachTest, json_each_hybrid) {
     test_impl(std::vector<std::string>{R"( 3.14 )", R"( [1] )", R"( [] )", R"( {} )"}, expect);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

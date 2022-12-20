@@ -19,7 +19,7 @@
 // Aggregate means this node handle query with aggregate functions.
 // Streaming means this node will handle input in get_next phase, and maybe directly
 // ouput child chunk.
-namespace starrocks::vectorized {
+namespace starrocks {
 class AggregateStreamingNode final : public AggregateBaseNode {
 public:
     AggregateStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -34,4 +34,4 @@ public:
 private:
     Status _output_chunk_from_hash_map(ChunkPtr* chunk);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

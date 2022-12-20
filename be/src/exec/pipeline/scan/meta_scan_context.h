@@ -22,15 +22,13 @@
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
-namespace vectorized {
 class MetaScanner;
 class MetaScanNode;
-} // namespace vectorized
 
 namespace pipeline {
 class MetaScanContext;
 using MetaScanContextPtr = std::shared_ptr<MetaScanContext>;
-using MetaScannerPtr = std::shared_ptr<vectorized::MetaScanner>;
+using MetaScannerPtr = std::shared_ptr<MetaScanner>;
 
 class MetaScanContext {
 public:
@@ -63,7 +61,7 @@ private:
 
 class MetaScanContextFactory {
 public:
-    MetaScanContextFactory(vectorized::MetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
+    MetaScanContextFactory(MetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
                            ChunkBufferLimiterPtr chunk_buffer_limiter)
             : _dop(dop),
               _shared_morsel_queue(shared_morsel_queue),

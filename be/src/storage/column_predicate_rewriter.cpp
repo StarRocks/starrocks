@@ -38,7 +38,7 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
@@ -441,4 +441,4 @@ Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* po
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -35,8 +35,8 @@ public:
     bool need_input() const override { return true; }
     bool is_finished() const override { return true; }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override { return Status::OK(); }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
 };
 
 Operators _gen_operators() {

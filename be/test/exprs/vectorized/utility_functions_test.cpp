@@ -25,7 +25,7 @@
 #include "util/random.h"
 #include "util/time.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class UtilityFunctionsTest : public ::testing::Test {
 public:
@@ -124,4 +124,4 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

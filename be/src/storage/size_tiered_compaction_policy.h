@@ -18,7 +18,7 @@
 
 #include "storage/compaction_policy.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SizeTieredCompactionPolicy : public CompactionPolicy {
 public:
@@ -47,4 +47,4 @@ protected:
     int64_t _max_level_size;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

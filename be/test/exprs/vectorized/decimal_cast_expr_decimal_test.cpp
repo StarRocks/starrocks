@@ -18,7 +18,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testCastFromDecimal32p9s0ToDecimal32p9s0Normal) {
     CastTestCaseArray test_cases = {{9, 0, "13886024", 9, 0, "13886024", "false"},
                                     {9, 0, "276308692", 9, 0, "276308692", "false"},
@@ -5443,4 +5443,4 @@ PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testCastFromDecimal128p35s30
              "false"}};
     test_cast_all<TYPE_DECIMAL128, TYPE_DECIMAL128>(test_cases);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

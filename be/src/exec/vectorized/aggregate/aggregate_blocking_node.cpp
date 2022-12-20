@@ -33,7 +33,7 @@
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status AggregateBlockingNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
@@ -284,4 +284,4 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     return ops_with_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

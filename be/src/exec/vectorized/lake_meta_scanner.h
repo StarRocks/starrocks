@@ -21,7 +21,7 @@
 #include "exec/vectorized/meta_scanner.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake_meta_reader.h"
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class LakeMetaScanNode;
 
@@ -57,4 +57,4 @@ private:
     std::shared_ptr<LakeMetaReader> _reader;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

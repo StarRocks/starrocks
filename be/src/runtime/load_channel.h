@@ -107,10 +107,9 @@ public:
     Span get_span() { return _span; }
 
 private:
-    void _add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                    PTabletWriterAddBatchResult* response);
+    void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
+    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannelMgr* _load_mgr;
     UniqueId _load_id;

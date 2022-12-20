@@ -359,15 +359,15 @@ int64_t RuntimeState::get_load_mem_limit() const {
     return 0;
 }
 
-const vectorized::GlobalDictMaps& RuntimeState::get_query_global_dict_map() const {
+const GlobalDictMaps& RuntimeState::get_query_global_dict_map() const {
     return _query_global_dicts;
 }
 
-const vectorized::GlobalDictMaps& RuntimeState::get_load_global_dict_map() const {
+const GlobalDictMaps& RuntimeState::get_load_global_dict_map() const {
     return _load_global_dicts;
 }
 
-vectorized::GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
+GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
     return &_query_global_dicts;
 }
 
@@ -379,11 +379,11 @@ Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_li
     return _build_global_dict(global_dict_list, &_load_global_dicts);
 }
 
-Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result) {
+Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list, GlobalDictMaps* result) {
     for (const auto& global_dict : global_dict_list) {
         DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
-        vectorized::GlobalDictMap dict_map;
-        vectorized::RGlobalDictMap rdict_map;
+        GlobalDictMap dict_map;
+        RGlobalDictMap rdict_map;
         int dict_sz = global_dict.ids.size();
         for (int i = 0; i < dict_sz; ++i) {
             const std::string& dict_key = global_dict.strings[i];

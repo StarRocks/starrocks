@@ -36,11 +36,11 @@
 
 namespace starrocks::lake {
 
-using ConjunctivePredicates = starrocks::vectorized::ConjunctivePredicates;
-using Datum = starrocks::vectorized::Datum;
-using VectorizedField = starrocks::vectorized::VectorizedField;
-using PredicateParser = starrocks::vectorized::PredicateParser;
-using ZonemapPredicatesRewriter = starrocks::vectorized::ZonemapPredicatesRewriter;
+using ConjunctivePredicates = starrocks::ConjunctivePredicates;
+using Datum = starrocks::Datum;
+using VectorizedField = starrocks::VectorizedField;
+using PredicateParser = starrocks::PredicateParser;
+using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
 TabletReader::TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema)
         : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {}

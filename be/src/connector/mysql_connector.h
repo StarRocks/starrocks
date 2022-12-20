@@ -25,7 +25,7 @@ class MySQLConnector final : public Connector {
 public:
     ~MySQLConnector() override = default;
 
-    DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
     ConnectorType connector_type() const override { return ConnectorType::MYSQL; }
@@ -38,14 +38,14 @@ class MySQLDataSourceProvider final : public DataSourceProvider {
 public:
     ~MySQLDataSourceProvider() override = default;
     friend class MySQLDataSource;
-    MySQLDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    MySQLDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     bool insert_local_exchange_operator() const override { return true; }
     bool accept_empty_scan_ranges() const override { return false; }
 
 protected:
-    vectorized::ConnectorScanNode* _scan_node;
+    ConnectorScanNode* _scan_node;
     const TMySQLScanNode _mysql_scan_node;
 };
 
@@ -56,7 +56,7 @@ public:
     MySQLDataSource(const MySQLDataSourceProvider* provider, const TScanRange& scan_range);
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -91,13 +91,12 @@ private:
     int64_t _bytes_read = 0;
     int64_t _cpu_time_ns = 0;
 
-    Status fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length);
+    Status fill_chunk(ChunkPtr* chunk, char** data, size_t* length);
 
-    Status append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
-                                 vectorized::Column* column);
+    Status append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc, Column* column);
 
-    template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
-    void append_value_to_column(vectorized::Column* column, CppType& value);
+    template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+    void append_value_to_column(Column* column, CppType& value);
 };
 
 } // namespace starrocks::connector

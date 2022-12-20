@@ -16,7 +16,7 @@
 
 #include "exprs/expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedConditionExprFactory {
 public:
@@ -29,4 +29,4 @@ public:
     static Expr* create_coalesce_expr(const TExprNode& node);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

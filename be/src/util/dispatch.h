@@ -16,7 +16,7 @@
 #include "column/column.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <template <bool, bool, LogicalType Type, typename... Args> typename Function, LogicalType Type,
           typename... Args>
 ColumnPtr dispatch_nonull_template(ColumnPtr& col0, ColumnPtr& col1, Args&&... args) {
@@ -34,4 +34,4 @@ ColumnPtr dispatch_nonull_template(ColumnPtr& col0, ColumnPtr& col1, Args&&... a
     __builtin_unreachable();
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

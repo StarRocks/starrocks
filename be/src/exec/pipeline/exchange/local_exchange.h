@@ -39,7 +39,7 @@ public:
     virtual Status prepare(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
 
-    virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
+    virtual Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
     virtual void finish(RuntimeState* state) {
         if (decrement_sink_number() == 1) {
@@ -92,7 +92,7 @@ class PartitionExchanger final : public LocalExchanger {
         // Sender will arrange the row indexes according to partitions.
         // For example, if there are 3 channels, it will put partition 0's row first,
         // then partition 1's row indexes, then put partition 2's row indexes in the last.
-        Status partition_chunk(const vectorized::ChunkPtr& chunk, std::vector<uint32_t>& partition_row_indexes);
+        Status partition_chunk(const ChunkPtr& chunk, std::vector<uint32_t>& partition_row_indexes);
 
         size_t partition_begin_offset(size_t partition_id) { return _partition_row_indexes_start_points[partition_id]; }
 
@@ -106,7 +106,7 @@ class PartitionExchanger final : public LocalExchanger {
         // Compute per-row partition values.
         const std::vector<ExprContext*> _partition_expr_ctxs;
 
-        vectorized::Columns _partitions_columns;
+        Columns _partitions_columns;
         std::vector<uint32_t> _hash_values;
         std::vector<uint32_t> _shuffle_channel_id;
         // This array record the channel start point in _row_indexes
@@ -125,7 +125,7 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
 private:
     // Used for local shuffle exchanger.
@@ -142,7 +142,7 @@ public:
                        LocalExchangeSourceOperatorFactory* source)
             : LocalExchanger("Broadcast", memory_manager, source) {}
 
-    Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 };
 
 // Exchange the local data for one local source operation
@@ -152,7 +152,7 @@ public:
                          LocalExchangeSourceOperatorFactory* source)
             : LocalExchanger("Passthrough", memory_manager, source) {}
 
-    Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
 private:
     std::atomic<size_t> _next_accept_source = 0;

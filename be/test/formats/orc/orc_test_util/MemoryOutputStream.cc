@@ -35,7 +35,7 @@
 
 #include "MemoryOutputStream.hh"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 MemoryOutputStream::~MemoryOutputStream() {
     delete[] data;
@@ -45,4 +45,4 @@ void MemoryOutputStream::write(const void* buf, size_t size) {
     memcpy(data + length, buf, size);
     length += size;
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

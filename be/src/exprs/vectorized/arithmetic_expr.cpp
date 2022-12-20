@@ -26,7 +26,7 @@
 #include "runtime/decimalv3.h"
 #include "util/pred_guard.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
     CLASS_NAME(const TExprNode& node) : Expr(node) {} \
@@ -58,7 +58,7 @@ class VectorizedArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedArithmeticExpr);
 
-    StatusOr<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, vectorized::Chunk* chunk) {
+    StatusOr<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, Chunk* chunk) {
         auto lhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[0]);
         auto rhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[1]);
         if (lhs_pt_opt.has_value() && rhs_pt_opt.has_value()) {
@@ -92,7 +92,7 @@ public:
         return nullptr;
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
 #if defined(__x86_64__) && defined(__GNUC__)
         if constexpr (is_mul_op<OP> && pt_is_decimal<Type>) {
             ASSIGN_OR_RETURN(auto opt_result, evaluate_decimal_fast_mul(context, ptr));
@@ -126,7 +126,7 @@ template <LogicalType Type, typename Op>
 class VectorizedDivArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         if constexpr (is_intdiv_op<Op> && pt_is_bigint<Type>) {
             using CastFunction = VectorizedUnaryFunction<DecimalTo<true>>;
             switch (_children[0]->type().type) {
@@ -152,7 +152,7 @@ public:
 
 private:
     template <LogicalType LType>
-    StatusOr<ColumnPtr> evaluate_internal(ExprContext* context, vectorized::Chunk* ptr) {
+    StatusOr<ColumnPtr> evaluate_internal(ExprContext* context, Chunk* ptr) {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         if constexpr (pt_is_decimal<LType>) {
@@ -171,7 +171,7 @@ template <LogicalType Type>
 class VectorizedModArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedModArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
@@ -191,7 +191,7 @@ template <LogicalType Type>
 class VectorizedBitNotArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitNotArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
@@ -202,7 +202,7 @@ template <LogicalType Type, typename OP>
 class VectorizedBitShiftArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
 
@@ -323,4 +323,4 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
 #undef SWITCH_NUMBER_TYPE
 #undef SWITCH_ALL_TYPE
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

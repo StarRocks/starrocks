@@ -32,7 +32,7 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class FakeConstExpr : public starrocks::Expr {
 public:
@@ -290,7 +290,7 @@ TypeDescriptor array_type(const LogicalType& child_type) {
 // just consider one level, not nested
 // array_map(lambdaFunction(x<type>, lambdaExpr),array<type>)
 TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
-    auto cur_chunk = std::make_shared<vectorized::Chunk>();
+    auto cur_chunk = std::make_shared<Chunk>();
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 0; i < 1; ++i) {
@@ -365,7 +365,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
 }
 
 TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
-    auto cur_chunk = std::make_shared<vectorized::Chunk>();
+    auto cur_chunk = std::make_shared<Chunk>();
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 1; i < 5; ++i) {
@@ -435,7 +435,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
 }
 
 TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
-    auto cur_chunk = std::make_shared<vectorized::Chunk>();
+    auto cur_chunk = std::make_shared<Chunk>();
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 5; i < _array_expr.size(); ++i) {
@@ -538,4 +538,4 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

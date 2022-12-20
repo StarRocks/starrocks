@@ -30,7 +30,7 @@ public:
 
     bool is_finished() const override { return true; }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override {
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override {
         return Status::InternalError("Shouldn't pull chunk from empty set operator");
     }
 };

@@ -153,11 +153,11 @@ std::string ExprContext::get_error_msg() const {
     return "";
 }
 
-StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk, uint8_t* filter) {
+StatusOr<ColumnPtr> ExprContext::evaluate(Chunk* chunk, uint8_t* filter) {
     return evaluate(_root, chunk, filter);
 }
 
-StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk, uint8_t* filter) {
+StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(!_closed);

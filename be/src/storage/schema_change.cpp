@@ -57,7 +57,7 @@
 #include "util/defer_op.h"
 #include "util/unaligned_access.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using ChunkRow = std::pair<size_t, Chunk*>;
 
@@ -1068,4 +1068,4 @@ Status SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_ta
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

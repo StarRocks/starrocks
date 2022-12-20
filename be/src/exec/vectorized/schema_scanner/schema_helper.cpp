@@ -25,7 +25,7 @@
 #include "util/runtime_profile.h"
 #include "util/thrift_rpc_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status SchemaHelper::get_db_names(const std::string& ip, const int32_t port, const TGetDbsParams& request,
                                   TGetDbsResult* result) {
@@ -122,9 +122,9 @@ Status SchemaHelper::get_task_runs(const std::string& ip, const int32_t port, co
                                                        });
 }
 
-void fill_data_column_with_null(vectorized::Column* data_column) {
-    auto* nullable_column = down_cast<vectorized::NullableColumn*>(data_column);
+void fill_data_column_with_null(Column* data_column) {
+    auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

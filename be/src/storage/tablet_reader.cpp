@@ -36,7 +36,7 @@
 #include "storage/union_iterator.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema)
         : ChunkIterator(std::move(schema)),
@@ -452,4 +452,4 @@ Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

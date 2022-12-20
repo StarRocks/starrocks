@@ -23,7 +23,6 @@
 namespace starrocks {
 class OlapTuple;
 
-namespace vectorized {
 class Chunk;
 class ChunkIterator;
 class ColumnPredicate;
@@ -31,24 +30,23 @@ struct RowSourceMask;
 class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;
-} // namespace vectorized
 
 namespace lake {
 
 class Rowset;
 
-class TabletReader final : public vectorized::ChunkIterator {
-    using Chunk = starrocks::vectorized::Chunk;
-    using ChunkIteratorPtr = starrocks::vectorized::ChunkIteratorPtr;
-    using ColumnPredicate = starrocks::vectorized::ColumnPredicate;
-    using DeletePredicates = starrocks::vectorized::DeletePredicates;
+class TabletReader final : public ChunkIterator {
+    using Chunk = starrocks::Chunk;
+    using ChunkIteratorPtr = starrocks::ChunkIteratorPtr;
+    using ColumnPredicate = starrocks::ColumnPredicate;
+    using DeletePredicates = starrocks::DeletePredicates;
     using RowsetPtr = std::shared_ptr<Rowset>;
-    using RowSourceMask = starrocks::vectorized::RowSourceMask;
-    using RowSourceMaskBuffer = starrocks::vectorized::RowSourceMaskBuffer;
-    using VectorizedSchema = starrocks::vectorized::VectorizedSchema;
-    using SeekRange = starrocks::vectorized::SeekRange;
-    using SeekTuple = starrocks::vectorized::SeekTuple;
-    using TabletReaderParams = starrocks::vectorized::TabletReaderParams;
+    using RowSourceMask = starrocks::RowSourceMask;
+    using RowSourceMaskBuffer = starrocks::RowSourceMaskBuffer;
+    using VectorizedSchema = starrocks::VectorizedSchema;
+    using SeekRange = starrocks::SeekRange;
+    using SeekTuple = starrocks::SeekTuple;
+    using TabletReaderParams = starrocks::TabletReaderParams;
 
 public:
     TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema);

@@ -20,7 +20,7 @@
 #include "column/map_column.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     TypeDescriptor type_map_int_int;
@@ -162,4 +162,4 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     EXPECT_EQ(66, result_values->get(1).get_array()[2].get_int32());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

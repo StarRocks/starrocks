@@ -23,7 +23,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 /**
  * UNNEST can be used to expand an ARRAY into a relation, arrays are expanded into a single column.
  */
@@ -111,4 +111,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

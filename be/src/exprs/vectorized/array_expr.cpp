@@ -20,7 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayExpr final : public Expr {
 public:
@@ -29,7 +29,7 @@ public:
     ArrayExpr(const ArrayExpr&) = default;
     ArrayExpr(ArrayExpr&&) = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         const TypeDescriptor& element_type = _type.children[0];
         const size_t num_elements = _children.size();
 
@@ -79,4 +79,4 @@ Expr* ArrayExprFactory::from_thrift(const TExprNode& node) {
     return new ArrayExpr(node);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

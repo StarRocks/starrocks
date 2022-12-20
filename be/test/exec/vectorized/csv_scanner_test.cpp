@@ -27,7 +27,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using ::testing::TestWithParam;
 using ::testing::Values;
@@ -871,4 +871,4 @@ TEST_P(CSVScannerTest, test_empty) {
 
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -19,7 +19,7 @@
 
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class PercentileFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -78,4 +78,4 @@ TEST_F(PercentileFunctionsTest, percentileNullTest) {
     ASSERT_TRUE(result->is_null(0));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

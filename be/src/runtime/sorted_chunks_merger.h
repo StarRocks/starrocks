@@ -26,8 +26,6 @@ namespace starrocks {
 
 class SortExecExprs;
 
-namespace vectorized {
-
 // Merge a group of sorted Chunks to one Chunk in order.
 class SortedChunksMerger {
 public:
@@ -118,7 +116,5 @@ private:
     std::unique_ptr<MergeCursorsCascade> _merger;
     ChunkSlice _current_chunk;
 };
-
-} // namespace vectorized
 
 } // namespace starrocks

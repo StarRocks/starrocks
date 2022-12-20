@@ -20,7 +20,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 using MapFunc = std::function<double(double)>;
 using ReduceFunc = std::function<double(double, double)>;
 
@@ -43,8 +43,8 @@ class MapOperator final : public pipeline::Operator {
 public:
     MapOperator(pipeline::OperatorFactory* factory, int driver_sequence, MapFunc map_func);
     ~MapOperator() = default;
-    Status push_chunk(starrocks::RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override;
+    Status push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override;
     bool is_finished() const override;
     bool has_output() const override;
     bool need_input() const override;
@@ -120,8 +120,8 @@ public:
     bool has_output() const override { return false; }
     bool need_input() const override;
     bool is_finished() const override;
-    Status push_chunk(starrocks::RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override {
+    Status push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override {
         return Status::NotSupported("Not implement");
     }
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
@@ -147,10 +147,10 @@ public:
     bool has_output() const override;
     bool need_input() const override { return false; }
     bool is_finished() const override;
-    Status push_chunk(starrocks::RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
+    Status push_chunk(starrocks::RuntimeState* state, const ChunkPtr& chunk) override {
         return Status::NotSupported("Not implement");
     }
-    StatusOr<vectorized::ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
     Status set_finishing(starrocks::RuntimeState* state) override;
     Status set_finished(starrocks::RuntimeState* state) override;
@@ -170,4 +170,4 @@ private:
     ReducerFactoryPtr _reducer_factory;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

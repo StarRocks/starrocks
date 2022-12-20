@@ -30,9 +30,6 @@ namespace starrocks::pipeline {
 
 class SortContext;
 using SortContextPtr = std::shared_ptr<SortContext>;
-using vectorized::ChunkPtr;
-using vectorized::ChunksSorter;
-using vectorized::SortDescs;
 
 class SortContext final : public ContextWithDependency {
 public:
@@ -68,15 +65,15 @@ private:
     const int64_t _limit;
     const int32_t _num_partition_sinkers;
     const std::vector<ExprContext*> _sort_exprs;
-    const vectorized::SortDescs _sort_desc;
+    const SortDescs _sort_desc;
 
     std::atomic<int64_t> _total_rows = 0; // size of all chunks from all partitions.
     std::atomic<int32_t> _num_partition_finished = 0;
 
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partitions; // Partial sorters
-    std::vector<std::unique_ptr<vectorized::SimpleChunkSortCursor>> _partial_cursors;
-    vectorized::MergeCursorsCascade _merger;
-    vectorized::ChunkSlice _current_chunk;
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> _partial_cursors;
+    MergeCursorsCascade _merger;
+    ChunkSlice _current_chunk;
     int64_t _required_rows = 0;
     bool _merger_inited = false;
 };

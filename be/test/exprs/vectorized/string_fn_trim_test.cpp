@@ -21,7 +21,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class StringFunctionTrimTest : public ::testing::Test {
 public:
@@ -169,4 +169,4 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
         }
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

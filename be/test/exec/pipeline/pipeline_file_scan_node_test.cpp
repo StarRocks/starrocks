@@ -101,13 +101,13 @@ private:
                                                           const string& multi_row_delimiter = "\n",
                                                           const string& multi_column_separator = "|");
 
-    static vectorized::ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
+    static ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
 
     void prepare_pipeline();
 
     void execute_pipeline();
 
-    void generate_morse_queue(const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
+    void generate_morse_queue(const std::vector<starrocks::ConnectorScanNode*>& scan_nodes,
                               const std::vector<TScanRangeParams>& scan_ranges);
 
     RuntimeState* _runtime_state = nullptr;
@@ -128,10 +128,10 @@ private:
     Pipelines _pipelines;
 };
 
-vectorized::ChunkPtr PipeLineFileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr PipeLineFileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     for (int i = 0; i < types.size(); i++) {
-        chunk->append_column(vectorized::ColumnHelper::create_column(types[i], true), i);
+        chunk->append_column(ColumnHelper::create_column(types[i], true), i);
     }
     return chunk;
 }
@@ -280,9 +280,8 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
     }
 }
 
-void PipeLineFileScanNodeTest::generate_morse_queue(
-        const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
-        const std::vector<TScanRangeParams>& scan_ranges) {
+void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks::ConnectorScanNode*>& scan_nodes,
+                                                    const std::vector<TScanRangeParams>& scan_ranges) {
     std::vector<TScanRangeParams> no_scan_ranges;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
@@ -311,13 +310,13 @@ void PipeLineFileScanNodeTest::generate_morse_queue(
 
 class FileScanCounter {
 public:
-    void process_push(const vectorized::ChunkPtr& chunk) {
+    void process_push(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_push_chunk_num;
         _push_chunk_row_num += chunk->num_rows();
     }
 
-    void process_pull(const vectorized::ChunkPtr& chunk) {
+    void process_pull(const ChunkPtr& chunk) {
         std::lock_guard<std::mutex> l(_mutex);
         ++_pull_chunk_num;
         _pull_chunk_row_num += chunk->num_rows();
@@ -378,9 +377,9 @@ public:
 
     bool is_finished() const override { return _is_finished; }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     CounterPtr _counter;
@@ -388,12 +387,12 @@ private:
     bool _is_finished = false;
 };
 
-Status TestFileScanSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status TestFileScanSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _counter->process_push(chunk);
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> TestFileScanSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> TestFileScanSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk to sink operator");
 }
 
@@ -422,7 +421,7 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     auto tnode = _create_tplan_node();
     auto* descs = _create_table_desc(types);
-    auto file_scan_node = std::make_shared<starrocks::vectorized::ConnectorScanNode>(_pool, *tnode, *descs);
+    auto file_scan_node = std::make_shared<starrocks::ConnectorScanNode>(_pool, *tnode, *descs);
 
     Status status = file_scan_node->init(*tnode, _runtime_state);
     ASSERT_TRUE(status.ok());

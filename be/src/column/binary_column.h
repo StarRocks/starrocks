@@ -20,7 +20,7 @@
 #include "common/statusor.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 class BinaryColumnBase final : public ColumnFactory<Column, BinaryColumnBase<T>> {
@@ -332,4 +332,4 @@ private:
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
 using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -363,8 +363,8 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
 
-#define UPDATE_COLUMN_POOL_METRIC(var, type)                                         \
-    value = vectorized::describe_column_pool<vectorized::type>().central_free_bytes; \
+#define UPDATE_COLUMN_POOL_METRIC(var, type)                 \
+    value = describe_column_pool<type>().central_free_bytes; \
     var.set_value(value);
 
     UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_binary_bytes, BinaryColumn)

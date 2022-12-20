@@ -30,7 +30,7 @@ public:
 
     Status init() override;
 
-    Status append(const vectorized::Column& column) override;
+    Status append(const Column& column) override;
 
     uint64_t estimate_buffer_size() override;
 
@@ -134,15 +134,15 @@ Status ArrayColumnWriter::init() {
     return Status::OK();
 }
 
-Status ArrayColumnWriter::append(const vectorized::Column& column) {
-    const vectorized::ArrayColumn* array_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status ArrayColumnWriter::append(const Column& column) {
+    const ArrayColumn* array_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (is_nullable()) {
-        const auto& nullable_column = down_cast<const vectorized::NullableColumn&>(column);
-        array_column = down_cast<vectorized::ArrayColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column.null_column().get());
+        const auto& nullable_column = down_cast<const NullableColumn&>(column);
+        array_column = down_cast<ArrayColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
     } else {
-        array_column = down_cast<const vectorized::ArrayColumn*>(&column);
+        array_column = down_cast<const ArrayColumn*>(&column);
     }
 
     // 1. Write null column when necessary

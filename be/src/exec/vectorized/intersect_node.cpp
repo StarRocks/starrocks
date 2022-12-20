@@ -27,7 +27,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 IntersectNode::IntersectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _tuple_id(tnode.intersect_node.tuple_id), _tuple_desc(nullptr) {}
@@ -288,4 +288,4 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
     return operators_with_intersect_output_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

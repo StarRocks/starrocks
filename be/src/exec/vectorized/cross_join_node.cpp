@@ -36,7 +36,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs) {}
@@ -688,4 +688,4 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     return left_ops;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

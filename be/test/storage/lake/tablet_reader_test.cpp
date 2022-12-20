@@ -36,10 +36,10 @@
 
 namespace starrocks::lake {
 
-using namespace starrocks::vectorized;
+using namespace starrocks;
 
-using VSchema = starrocks::vectorized::VectorizedSchema;
-using VChunk = starrocks::vectorized::Chunk;
+using VSchema = starrocks::VectorizedSchema;
+using VChunk = starrocks::Chunk;
 
 class DuplicateTabletReaderTest : public testing::Test {
 public:
@@ -161,7 +161,7 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
     ASSERT_OK(reader->prepare());
-    vectorized::TabletReaderParams params;
+    TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
     auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
@@ -332,7 +332,7 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
     ASSERT_OK(reader->prepare());
-    vectorized::TabletReaderParams params;
+    TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
     auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
@@ -495,7 +495,7 @@ TEST_F(DuplicateTabletReaderWithDeleteTest, test_read_success) {
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
     ASSERT_OK(reader->prepare());
-    vectorized::TabletReaderParams params;
+    TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
     auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);

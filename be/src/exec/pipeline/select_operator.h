@@ -40,15 +40,15 @@ public:
         return Status::OK();
     }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     // _curr_chunk used to receive input chunks, and apply predicate filtering.
-    vectorized::ChunkPtr _curr_chunk = nullptr;
+    ChunkPtr _curr_chunk = nullptr;
     // _pre_output_chunk used to merge small _curr_chunk until it's big enough, then return as output.
-    vectorized::ChunkPtr _pre_output_chunk = nullptr;
+    ChunkPtr _pre_output_chunk = nullptr;
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
 

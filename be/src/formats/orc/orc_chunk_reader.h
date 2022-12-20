@@ -36,7 +36,7 @@ namespace starrocks {
 class RandomAccessFile;
 class RuntimeState;
 } // namespace starrocks
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
@@ -202,4 +202,4 @@ private:
     LazyLoadContext* _lazy_load_ctx;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

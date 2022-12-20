@@ -26,8 +26,6 @@ class ExprContext;
 class SlotDescriptor;
 class RuntimeState;
 
-namespace vectorized {
-
 class ColumnPredicate;
 
 class PredicateParser {
@@ -50,5 +48,4 @@ private:
     const TabletSchema& _schema;
 };
 
-} // namespace vectorized
 } // namespace starrocks

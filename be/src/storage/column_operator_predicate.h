@@ -20,7 +20,7 @@
 #include "column/nullable_column.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // Implementing a complete ColumnPredicate is very difficult, most of the ColumnPredicate logic is similar,
 // we just need to implement similar apply operation can be more convenient to implement a new ColumnPredicate.
 
@@ -185,4 +185,4 @@ public:
 private:
     SpecColumnOperator _predicate_operator;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

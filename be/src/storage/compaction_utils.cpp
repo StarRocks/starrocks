@@ -118,7 +118,7 @@ CompactionAlgorithm CompactionUtils::choose_compaction_algorithm(size_t num_colu
     // if source_num is less than or equal to 1, heap merge iterator is not used in compaction,
     // and row source mask is not created.
     // if source_num is more than MAX_SOURCES, mask in RowSourceMask may overflow.
-    if (source_num <= 1 || source_num > vectorized::RowSourceMask::MAX_SOURCES) {
+    if (source_num <= 1 || source_num > RowSourceMask::MAX_SOURCES) {
         return HORIZONTAL_COMPACTION;
     }
 

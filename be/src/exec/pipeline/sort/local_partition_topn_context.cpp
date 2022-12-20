@@ -55,13 +55,11 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
         _has_nullable_key = _has_nullable_key || _partition_types[i].is_nullable;
     }
 
-    _chunks_partitioner =
-            std::make_unique<vectorized::ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
+    _chunks_partitioner = std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
     return _chunks_partitioner->prepare(state);
 }
 
-Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state,
-                                                                const vectorized::ChunkPtr& chunk) {
+Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk) {
     auto st = _chunks_partitioner->offer(chunk);
     if (_chunks_partitioner->is_downgrade()) {
         transfer_all_chunks_from_partitioner_to_sorters(state);
@@ -80,12 +78,12 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     const auto num_partitions = _chunks_partitioner->num_partitions();
     _chunks_sorters.resize(num_partitions);
     for (int i = 0; i < num_partitions; ++i) {
-        _chunks_sorters[i] = std::make_shared<vectorized::ChunksSorterTopn>(
+        _chunks_sorters[i] = std::make_shared<ChunksSorterTopn>(
                 state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit, _topn_type,
-                vectorized::ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
+                ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
     }
-    RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map(
-            [this, state](int32_t partition_idx, const vectorized::ChunkPtr& chunk) {
+    RETURN_IF_ERROR(
+            _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);
                 return true;
             }));
@@ -112,8 +110,8 @@ bool LocalPartitionTopnContext::is_finished() {
     return !has_output();
 }
 
-StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
-    vectorized::ChunkPtr chunk = nullptr;
+StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
+    ChunkPtr chunk = nullptr;
     if (_sorter_index < _chunks_sorters.size()) {
         ASSIGN_OR_RETURN(chunk, pull_one_chunk_from_sorters());
         if (chunk != nullptr) {
@@ -124,9 +122,9 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
     return chunk;
 }
 
-StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
+StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
     auto& chunks_sorter = _chunks_sorters[_sorter_index];
-    vectorized::ChunkPtr chunk = nullptr;
+    ChunkPtr chunk = nullptr;
     bool eos = false;
     RETURN_IF_ERROR(chunks_sorter->get_next(&chunk, &eos));
     if (eos) {

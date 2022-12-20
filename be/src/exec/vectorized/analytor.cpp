@@ -34,10 +34,8 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks {
-namespace vectorized {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context);
-} // namespace vectorized
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc)
@@ -146,8 +144,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank" ||
             fn.name.function_name == "ntile") {
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
-            auto* func = vectorized::get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT,
-                                                         is_input_nullable, fn.binary_type, state->func_version());
+            auto* func = get_window_function(fn.name.function_name, TYPE_BIGINT, TYPE_BIGINT, is_input_nullable,
+                                             fn.binary_type, state->func_version());
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), false, false};
             // count(*) no input column, we manually resize it to 1 to process count(*)
@@ -172,8 +170,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             is_input_nullable = true;
             VLOG_ROW << "try get function " << fn.name.function_name << " arg_type.type " << arg_type.type
                      << " return_type.type " << return_type.type;
-            auto* func = vectorized::get_window_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                         is_input_nullable, fn.binary_type, state->func_version());
+            auto* func = get_window_function(fn.name.function_name, arg_type.type, return_type.type, is_input_nullable,
+                                             fn.binary_type, state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid window function plan: $0", fn.name.function_name));
@@ -187,12 +185,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             // For performance, we do this special handle.
             // In future, if need, we could remove this if else easily.
             if (j == 0) {
-                _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
-                        _agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
+                _agg_intput_columns[i][j] =
+                        ColumnHelper::create_column(_agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
             } else {
-                _agg_intput_columns[i][j] = vectorized::ColumnHelper::create_column(
-                        _agg_expr_ctxs[i][j]->root()->type(), _agg_expr_ctxs[i][j]->root()->is_nullable(),
-                        _agg_expr_ctxs[i][j]->root()->is_constant(), 0);
+                _agg_intput_columns[i][j] = ColumnHelper::create_column(_agg_expr_ctxs[i][j]->root()->type(),
+                                                                        _agg_expr_ctxs[i][j]->root()->is_nullable(),
+                                                                        _agg_expr_ctxs[i][j]->root()->is_constant(), 0);
             }
         }
 
@@ -222,7 +220,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
-        _partition_columns[i] = vectorized::ColumnHelper::create_column(
+        _partition_columns[i] = ColumnHelper::create_column(
                 _partition_ctxs[i]->root()->type(), _partition_ctxs[i]->root()->is_nullable() | has_outer_join_child,
                 _partition_ctxs[i]->root()->is_constant(), 0);
     }
@@ -230,9 +228,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
     _order_columns.resize(_order_ctxs.size());
     for (size_t i = 0; i < _order_ctxs.size(); i++) {
-        _order_columns[i] = vectorized::ColumnHelper::create_column(
-                _order_ctxs[i]->root()->type(), _order_ctxs[i]->root()->is_nullable() | has_outer_join_child,
-                _order_ctxs[i]->root()->is_constant(), 0);
+        _order_columns[i] = ColumnHelper::create_column(_order_ctxs[i]->root()->type(),
+                                                        _order_ctxs[i]->root()->is_nullable() | has_outer_join_child,
+                                                        _order_ctxs[i]->root()->is_constant(), 0);
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
@@ -285,13 +283,12 @@ Status Analytor::open(RuntimeState* state) {
         for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
-                auto st = vectorized::window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum,
-                                                              fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
+                auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                  _agg_fn_ctxs[i]);
                 RETURN_IF_ERROR(st);
             }
         }
-        vectorized::AggDataPtr agg_states =
-                _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
         return Status::OK();
     };
@@ -351,17 +348,17 @@ bool Analytor::is_chunk_buffer_empty() {
     return _buffer.empty();
 }
 
-vectorized::ChunkPtr Analytor::poll_chunk_buffer() {
+ChunkPtr Analytor::poll_chunk_buffer() {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     if (_buffer.empty()) {
         return nullptr;
     }
-    vectorized::ChunkPtr chunk = _buffer.front();
+    ChunkPtr chunk = _buffer.front();
     _buffer.pop();
     return chunk;
 }
 
-void Analytor::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
+void Analytor::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     _buffer.push(chunk);
 }
@@ -399,14 +396,14 @@ void Analytor::get_window_function_result(size_t frame_start, size_t frame_end) 
     // timer will cause a sharp drop in performance
     DCHECK_GT(frame_end, frame_start);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        vectorized::Column* agg_column = _result_window_columns[i].get();
+        Column* agg_column = _result_window_columns[i].get();
         _agg_functions[i]->get_values(_agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i],
                                       agg_column, frame_start, frame_end);
     }
 }
 
-Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
-    vectorized::ChunkPtr output_chunk = std::move(_input_chunks[_output_chunk_index]);
+Status Analytor::output_result_chunk(ChunkPtr* chunk) {
+    ChunkPtr output_chunk = std::move(_input_chunks[_output_chunk_index]);
     for (size_t i = 0; i < _result_window_columns.size(); i++) {
         output_chunk->append_column(_result_window_columns[i], _result_tuple_desc->slots()[i]->id());
     }
@@ -433,8 +430,8 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
     if (_window_result_position == 0) {
         _result_window_columns.resize(_agg_fn_types.size());
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-            _result_window_columns[i] = vectorized::ColumnHelper::create_column(_agg_fn_types[i].result_type,
-                                                                                _agg_fn_types[i].has_nullable_child);
+            _result_window_columns[i] =
+                    ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
             // binary column cound't call resize method like Numeric Column,
             // so we only reserve it.
             if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
@@ -447,7 +444,7 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
     }
 }
 
-Status Analytor::add_chunk(const vectorized::ChunkPtr& chunk) {
+Status Analytor::add_chunk(const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr && !chunk->is_empty());
     const size_t chunk_size = chunk->num_rows();
 
@@ -485,11 +482,11 @@ Status Analytor::add_chunk(const vectorized::ChunkPtr& chunk) {
     return Status::OK();
 }
 
-void Analytor::_append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column) {
+void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant()) {
-        auto* const_column = static_cast<vectorized::ConstColumn*>(src_column.get());
+        auto* const_column = static_cast<ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
     } else {
@@ -707,7 +704,7 @@ Status Analytor::check_has_error() {
 void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                              int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const vectorized::Column* agg_column = _agg_intput_columns[i][0].get();
+        const Column* agg_column = _agg_intput_columns[i][0].get();
         _agg_functions[i]->update_batch_single_state_with_frame(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 peer_group_start, peer_group_end, frame_start, frame_end);
@@ -717,7 +714,7 @@ void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t p
 void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                            int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const vectorized::Column* agg_column = _agg_intput_columns[i][0].get();
+        const Column* agg_column = _agg_intput_columns[i][0].get();
         frame_start = std::max<int64_t>(frame_start, _partition_start);
         // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
         // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
@@ -730,7 +727,7 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
 
 void Analytor::update_window_batch_removable_cumulatively() {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const vectorized::Column* agg_column = _agg_intput_columns[i][0].get();
+        const Column* agg_column = _agg_intput_columns[i][0].get();
         _agg_functions[i]->update_state_removable_cumulatively(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 _current_row_position, _partition_start, _partition_end,
@@ -740,7 +737,7 @@ void Analytor::update_window_batch_removable_cumulatively() {
     }
 }
 
-int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end) {
+int64_t Analytor::_find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end) {
     while (start + 1 < end) {
         int64_t mid = start + (end - start) / 2;
         if (column->compare_at(target, mid, *column, 1) == 0) {

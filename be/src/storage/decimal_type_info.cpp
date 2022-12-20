@@ -33,7 +33,6 @@ public:
     virtual ~DecimalTypeInfo() = default;
 
     using CppType = typename CppTypeTraits<TYPE>::CppType;
-    using Datum = vectorized::Datum;
     DecimalTypeInfo(int precision, int scale)
             : _delegate(get_scalar_type_info(DelegateType<TYPE>)), _precision(precision), _scale(scale) {
         static_assert(!ft_is_invalid<DelegateType<TYPE>>);

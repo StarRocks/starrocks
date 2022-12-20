@@ -26,7 +26,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 PARALLEL_TEST(VecStringFunctionsTest, sliceTest) {
     Slice a("abc");
@@ -140,7 +140,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstASCIITest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
-    starrocks::vectorized::Columns columns;
+    starrocks::Columns columns;
     columns.emplace_back(str);
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
@@ -188,7 +188,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstZhTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
-    starrocks::vectorized::Columns columns;
+    starrocks::Columns columns;
     columns.emplace_back(str);
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
@@ -271,7 +271,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstUtf8Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
-    starrocks::vectorized::Columns columns;
+    starrocks::Columns columns;
     columns.emplace_back(str);
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
@@ -2681,4 +2681,4 @@ PARALLEL_TEST(VecStringFunctionsTest, strcmpTest) {
     ASSERT_EQ(1, v->get_data()[5]);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

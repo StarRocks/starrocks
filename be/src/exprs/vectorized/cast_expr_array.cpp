@@ -28,11 +28,11 @@
 #include "util/slice.h"
 #include "velocypack/Iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static const char* kArrayDelimeter = ",";
 
-StatusOr<ColumnPtr> VectorizedCastArrayExpr::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> VectorizedCastArrayExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(column) == column->size()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -171,7 +171,7 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
 }
 
 // Cast string to array<ANY>
-StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
+StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -272,7 +272,7 @@ Slice CastStringToArray::_unquote(Slice slice) const {
     return slice;
 }
 
-StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
+StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -327,4 +327,4 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, vect
     return res;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

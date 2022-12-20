@@ -17,7 +17,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<ColumnPtr> GroupingSetsFunctions::grouping_id(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
@@ -29,4 +29,4 @@ StatusOr<ColumnPtr> GroupingSetsFunctions::grouping(FunctionContext* context, co
     return columns[0];
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

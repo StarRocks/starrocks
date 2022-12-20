@@ -23,7 +23,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct TabletVars {
     TabletSharedPtr tablet;
@@ -61,4 +61,4 @@ private:
     int64_t _write_bytes = 0;
     int64_t _write_rows = 0;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

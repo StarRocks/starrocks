@@ -56,7 +56,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
@@ -95,8 +95,7 @@ static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Vec
 
 class SegmentIterator final : public ChunkIterator {
 public:
-    SegmentIterator(std::shared_ptr<Segment> segment, vectorized::VectorizedSchema _schema,
-                    vectorized::SegmentReadOptions options);
+    SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSchema _schema, SegmentReadOptions options);
 
     ~SegmentIterator() override = default;
 
@@ -127,7 +126,7 @@ private:
             return Status::OK();
         }
 
-        Status read_columns(Chunk* chunk, const vectorized::SparseRange& range) {
+        Status read_columns(Chunk* chunk, const SparseRange& range) {
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
                 const ColumnPtr& col = chunk->get_column_by_index(i);
@@ -249,7 +248,7 @@ private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
     std::shared_ptr<Segment> _segment;
-    vectorized::SegmentReadOptions _opts;
+    SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     ColumnDecoders _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
@@ -301,8 +300,7 @@ private:
     bool _context_switch_next_time = false;
 };
 
-SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::VectorizedSchema schema,
-                                 vectorized::SegmentReadOptions options)
+SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSchema schema, SegmentReadOptions options)
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
@@ -789,9 +787,9 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 
     if (rowids != nullptr) {
         rowids->reserve(rowids->size() + n);
-        vectorized::SparseRangeIterator iter = range.new_iterator();
+        SparseRangeIterator iter = range.new_iterator();
         while (iter.has_more()) {
-            vectorized::Range r = iter.next(n);
+            Range r = iter.next(n);
             for (uint32_t i = r.begin(); i < r.end(); i++) {
                 rowids->push_back(i);
             }
@@ -1660,9 +1658,8 @@ inline VectorizedSchema reorder_schema(const VectorizedSchema& input,
     return output;
 }
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment,
-                                      const vectorized::VectorizedSchema& schema,
-                                      const vectorized::SegmentReadOptions& options) {
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const VectorizedSchema& schema,
+                                      const SegmentReadOptions& options) {
     if (options.predicates.empty() || options.predicates.size() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {
@@ -1672,4 +1669,4 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment,
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
