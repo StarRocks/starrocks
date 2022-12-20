@@ -329,6 +329,7 @@
       + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
+      + [multi_distinct_sum](./sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
     + Geographic Functions
       + [st_astext](./sql-reference/sql-functions/spatial-functions/st_astext.md)
       + [st_circle](./sql-reference/sql-functions/spatial-functions/st_circle.md)
