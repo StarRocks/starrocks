@@ -18,12 +18,19 @@
 
 #include <iostream>
 
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr_context.h"
+
 namespace starrocks::vectorized {
-LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false) {}
+
+LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
-    int child_num = get_num_children();
+    // common sub expressions include 2 parts in a pair: (slot id, expression)
+    const int child_num = get_num_children() - 2 * _common_sub_expr_num;
     // collect the slot ids of lambda arguments
     for (int i = 1; i < child_num; ++i) {
         get_child(i)->get_slot_ids(&_arguments_ids);
@@ -32,6 +39,25 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
         return Status::InternalError(fmt::format("Lambda arguments get ids failed, just get {} ids from {} arguments.",
                                                  _arguments_ids.size(), child_num - 1));
     }
+    // sorted common sub expressions so that the later expressions can reference the previous ones.
+    for (auto i = child_num; i < child_num + _common_sub_expr_num; ++i) {
+        get_child(i)->get_slot_ids(&_common_sub_expr_ids);
+    }
+    if (_common_sub_expr_ids.size() != _common_sub_expr_num) {
+        return Status::InternalError(
+                fmt::format("Lambda common sub expression id's size {} is not equal to expected {}",
+                            _common_sub_expr_ids.size(), _common_sub_expr_num));
+    }
+
+    for (auto i = child_num + _common_sub_expr_num; i < child_num + 2 * _common_sub_expr_num; ++i) {
+        _common_sub_expr.push_back(get_child(i));
+        get_child(i)->get_slot_ids(&_captured_slot_ids);
+    }
+    if (_common_sub_expr.size() != _common_sub_expr_num) {
+        return Status::InternalError(fmt::format("Lambda common sub expressions' size {} is not equal to expected {}",
+                                                 _common_sub_expr.size(), _common_sub_expr_num));
+    }
+
     // get slot ids from the lambda expression
     get_child(0)->get_slot_ids(&_captured_slot_ids);
 
@@ -40,11 +66,19 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     int valid_id = 0;
     for (int& _captured_slot_id : _captured_slot_ids) {
         if (!captured_mask[_captured_slot_id]) { // not duplicated
-            for (int arg_id = 0; arg_id < child_num - 1; ++arg_id) {
+            for (int arg_id = 0; arg_id < _arguments_ids.size(); ++arg_id) {
                 if (_captured_slot_id == _arguments_ids[arg_id]) {
                     captured_mask[_captured_slot_id] = true;
                 }
             }
+            if (!captured_mask[_captured_slot_id] && _common_sub_expr_num > 0) {
+                for (int arg_id = 0; arg_id < _common_sub_expr_ids.size(); ++arg_id) {
+                    if (_captured_slot_id == _common_sub_expr_ids[arg_id]) {
+                        captured_mask[_captured_slot_id] = true;
+                    }
+                }
+            }
+
             if (!captured_mask[_captured_slot_id]) { // not from arguments
                 _captured_slot_ids[valid_id++] = _captured_slot_id;
             }
@@ -59,13 +93,19 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* ptr) {
-    return get_child(0)->evaluate_checked(context, ptr);
+StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
+    for (auto i = 0; i < _common_sub_expr.size(); ++i) {
+        auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], chunk);
+        chunk->append_column(sub_col, _common_sub_expr_ids[i]);
+    }
+    return get_child(0)->evaluate_checked(context, chunk);
 }
 
 void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
     _arguments_ids.clear();
     _captured_slot_ids.clear();
+    _common_sub_expr_ids.clear();
+    _common_sub_expr.clear();
 }
 
 } // namespace starrocks::vectorized
