@@ -469,6 +469,7 @@
       + [square](./sql-reference/sql-functions/math-functions/square.md)
       + [tan](./sql-reference/sql-functions/math-functions/tan.md)
       + [tanh](./sql-reference/sql-functions/math-functions/tanh.md)
+      + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
