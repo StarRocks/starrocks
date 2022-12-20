@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
@@ -23,6 +24,7 @@ public class AnalyzeStructTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("test").useDatabase("test");
 
+        FeConstants.runningUnitTest = true;
         String createStructTableSql = "CREATE TABLE struct_a(\n" +
                 "a INT, \n" +
                 "b STRUCT<a: INT, c: INT COMMENT 'sub field comment'> COMMENT 'smith',\n" +
@@ -44,6 +46,7 @@ public class AnalyzeStructTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(deeperStructTableSql);
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

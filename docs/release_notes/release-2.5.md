@@ -42,7 +42,7 @@ Release date: December 15, 2022
   - Reduces the memory usage when you load data into tables of the Primary Key Model.
 - Optimizes the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](../administration/information_schema.md). [#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - Optimizes data backup and restore:
-  - Supports backing up and restoring data from multiple tables in a database at a time. For more information, see [Backup and restore](../administration/Backup_and_restore.md).  [#11619](https://github.com/StarRocks/starrocks/issues/11619)
+  - Supports backing up and restoring data from multiple tables in a database at a time. For more information, see [Backup and restore data](../administration/Backup_and_restore.md).  [#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - Supports backing up and restoring data from Primary Key tables. For more information, see Backup and restore.  [#11885](https://github.com/StarRocks/starrocks/pull/11885)
 - Optimizes the following functions:
   - Adds an optional parameter for the [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) function, which is used to determine whether the beginning or end of the time interval is returned. [#11216](https://github.com/StarRocks/starrocks/pull/11216)
