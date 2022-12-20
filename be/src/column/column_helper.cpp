@@ -23,7 +23,6 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "simd/simd.h"
 #include "util/date_func.h"
@@ -274,7 +273,6 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.selected_fields.size());
         Columns columns;
-        BinaryColumn::Ptr field_names = BinaryColumn::create();
         for (size_t i = 0; i < field_size; i++) {
             // TODO(SmithCruise): We still create not selected column, but do append_default instead.
             // We should optimize it in future.
@@ -285,9 +283,8 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
             // Subfield column must be nullable column.
             ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
             columns.emplace_back(field_column);
-            field_names->append_string(type_desc.field_names[i]);
         }
-        p = StructColumn::create(columns, field_names);
+        p = StructColumn::create(columns, type_desc.field_names);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }
