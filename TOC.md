@@ -25,7 +25,6 @@
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
   + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
-  + [从 Apache® Pulsar™ 持续导入](/loading/load_from_pulsar.md)
   + [使用 Apache Spark™ 批量导入](/loading/SparkLoad.md)
   + [使用 INSERT 语句导入](/loading/InsertInto.md)
   + [使用 Stream Load 事务接口导入](/loading/stream_load_transaction_interface.md)
