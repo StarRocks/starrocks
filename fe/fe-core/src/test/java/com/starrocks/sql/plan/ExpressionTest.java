@@ -414,11 +414,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testDateTypeReduceCast() throws Exception {
         String sql = "select * from test_all_type_distributed_by_datetime " +
                 "where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
-<<<<<<< HEAD
-                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
-=======
                 "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
->>>>>>> c4f273e26 ([Enhancement] lambda functions can work with aggregation and window functions without lambda arguments (#15008))
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(
                 plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-02 00:00:00'"));
