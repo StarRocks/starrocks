@@ -89,7 +89,7 @@ StoragePageCache::~StoragePageCache() = default;
 
 void StoragePageCache::set_capacity(size_t capacity) {
 #ifndef BE_TEST
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker)
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
 #endif
     _cache->set_capacity(capacity);
 }
@@ -107,7 +107,9 @@ uint64_t StoragePageCache::get_hit_count() {
 }
 
 bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker)
+#ifndef BE_TEST
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+#endif
     return _cache->adjust_capacity(delta, min_capacity);
 }
 
@@ -124,7 +126,7 @@ void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheH
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data.data);
     tls_thread_status.mem_release(mem_size);
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker)
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
     tls_thread_status.mem_consume(mem_size);
 #endif
 
