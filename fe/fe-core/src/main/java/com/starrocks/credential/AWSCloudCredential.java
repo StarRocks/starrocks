@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider;
 import java.util.UUID;
 
 /**
- * Authenticate process (It's fake code):
+ * Authenticating process (It's a pseudocode code):
  * Credentials credentials = null;
  * if (useAWSSDKDefaultBehavior) {
  *     return new DefaultAWSCredentialsProviderChain();
