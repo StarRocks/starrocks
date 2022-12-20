@@ -95,7 +95,9 @@ import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.ModifyWarehousePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.OpClusterLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -194,10 +196,22 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_WH:
+            case OperationType.OP_CREATE_WH: {
                 data = Warehouse.read(in);
                 isRead = true;
                 break;
+            }
+            case OperationType.OP_ADD_CLUSTER:
+            case OperationType.OP_REMOVE_CLUSTER: {
+                data = OpClusterLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_MODIFY_WAREHOUSE_PROPERTY: {
+                data = ModifyWarehousePropertyOperationLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CREATE_DB: {
                 data = new Database();
                 ((Database) data).readFields(in);

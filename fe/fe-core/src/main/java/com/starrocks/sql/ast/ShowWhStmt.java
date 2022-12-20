@@ -16,21 +16,23 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 // Show warehouse statement.
 public class ShowWhStmt extends ShowStmt {
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "warehouse");
     private static final String WH_COL = "Warehouse";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column(WH_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(WH_COL, ScalarType.createVarchar(256)))
+                    .addColumn(new Column("state", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("size", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("min_cluster", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("max_cluster", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("cluster_count", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("total_pending", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("total_running", ScalarType.createVarchar(20)))
                     .build();
     private final String pattern;
     private Expr where;
@@ -46,22 +48,6 @@ public class ShowWhStmt extends ShowStmt {
 
     public String getPattern() {
         return pattern;
-    }
-
-    @Override
-    public QueryStatement toSelectStmt() {
-        if (where == null) {
-            return null;
-        }
-        // Columns
-        SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "WARE_HOUSE"), WH_COL);
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, WH_COL), item.getExpr().clone(null));
-        where = where.substitute(aliasMap);
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
     }
 
     @Override

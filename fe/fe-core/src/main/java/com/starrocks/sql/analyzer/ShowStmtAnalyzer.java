@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowClusterStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -191,6 +192,11 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowWarehousesStatement(ShowWhStmt node, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitShowClusterStatement(ShowClusterStmt node, ConnectContext context) {
             return null;
         }
 

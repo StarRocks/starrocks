@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -831,6 +832,14 @@ public class DDLStmtExecutor {
             } catch (UserException e) {
                 throw new RuntimeException(e);
             }
+        }
+
+        @Override
+        public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getWarehouseMgr().alterWarehouse(stmt);
+            });
+            return null;
         }
     }
 

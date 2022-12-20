@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
@@ -483,6 +484,11 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {

@@ -427,4 +427,13 @@ public class StarOSAgent {
         }
         return backendIds;
     }
+
+    // Mocked
+    public long createWorkerGroup() {
+        return GlobalStateMgr.getCurrentState().getNextId();
+    }
+
+    public void deleteWorkerGroup(long groupId) {
+
+    }
 }

@@ -57,15 +57,6 @@ public interface ConnectorMetadata {
     }
 
     /**
-     * List all warehouse names of connector
-     *
-     * @return a list of string containing all database names of connector
-     */
-    default List<String> listWhNames() {
-        return Lists.newArrayList();
-    }
-
-    /**
      * List all table names of the database specific by `dbName`
      *
      * @param dbName - the string of which all table names are listed
@@ -128,10 +119,6 @@ public interface ConnectorMetadata {
     }
 
     default void refreshTable(String srDbName, Table table, List<String> partitionNames) {
-    }
-
-    default void createWarehouse(String whName) throws DdlException, AlreadyExistsException {
-
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {

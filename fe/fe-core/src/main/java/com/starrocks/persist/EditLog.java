@@ -148,11 +148,33 @@ public class EditLog {
                             .initTransactionId(id + 1);
                     break;
                 }
-                case OperationType.OP_CREATE_WH:
+                case OperationType.OP_CREATE_WH: {
                     Warehouse wh = (Warehouse) journal.getData();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayCreateWarehouse(wh);
                     break;
+                }
+                case OperationType.OP_ADD_CLUSTER: {
+                    OpClusterLog opClusterLog = (OpClusterLog) journal.getData();
+                    String warehouseName = opClusterLog.getWhName();
+                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouse.replayAddCluster(opClusterLog);
+                    break;
+                }
+                case OperationType.OP_REMOVE_CLUSTER: {
+                    OpClusterLog opClusterLog = (OpClusterLog) journal.getData();
+                    String warehouseName = opClusterLog.getWhName();
+                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouse.replayRemoveCluster(opClusterLog);
+                    break;
+                }
+                case OperationType.OP_MODIFY_WAREHOUSE_PROPERTY: {
+                    ModifyWarehousePropertyOperationLog log = (ModifyWarehousePropertyOperationLog) journal.getData();
+                    String warehouseName = log.getWhName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
+                    break;
+                }
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
@@ -1048,6 +1070,18 @@ public class EditLog {
 
     public void logCreateWh(Warehouse wh) {
         logEdit(OperationType.OP_CREATE_WH, wh);
+    }
+
+    public void logAddCluster(OpClusterLog opClusterLog) {
+        logEdit(OperationType.OP_ADD_CLUSTER, opClusterLog);
+    }
+
+    public void logRemoveCluster(OpClusterLog opClusterLog) {
+        logEdit(OperationType.OP_REMOVE_CLUSTER, opClusterLog);
+    }
+
+    public void logModifyWarehouseProperty(ModifyWarehousePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_WAREHOUSE_PROPERTY, log);
     }
 
     public void logCreateDb(Database db) {

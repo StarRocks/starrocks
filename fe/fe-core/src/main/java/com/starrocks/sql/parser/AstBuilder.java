@@ -128,6 +128,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -283,6 +284,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCharsetStmt;
+import com.starrocks.sql.ast.ShowClusterStmt;
 import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
@@ -1383,8 +1385,38 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowWhStmt(pattern, where);
     }
 
+    @Override
+    public ParseNode visitShowClusterStatement(StarRocksParser.ShowClusterStatementContext context) {
+        String whName = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowClusterStmt(whName);
+    }
 
-
+    @Override
+    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
+        String whName = ((Identifier) visit(context.identifier())).getValue();
+        if (context.CLUSTER() != null) {
+            if (context.ADD() != null) {
+                // add cluster clause
+                return new AlterWarehouseStmt(whName,
+                        AlterWarehouseStmt.OpType.ADD_CLUSTER, null);
+            } else if (context.REMOVE() != null) {
+                // remove cluster clause
+                return new AlterWarehouseStmt(whName,
+                        AlterWarehouseStmt.OpType.REMOVE_CLUSTER, null);
+            }
+        } else {
+            // set property clause
+            Map<String, String> properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new AlterWarehouseStmt(whName,
+                    AlterWarehouseStmt.OpType.SET_PROPERTY,
+                    properties);
+        }
+        return null;
+    }
 
 
     // ------------------------------------------- DML Statement -------------------------------------------------------

@@ -14,19 +14,25 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.gson.GsonUtils;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class Cluster {
+public class Cluster  implements Writable {
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
 
-    // 我们假设 sql 排队功能 和 Cluster 类完全解耦，Cluster 类提供接口,
-    // sql 排队功能根据 sql 执行情况负责调用这些接口更新 counter
-    // Node: we only record running sqls number and pending sqls in Warehouse and Cluster
+    // Note: we only record running sqls number and pending sqls in Warehouse and Cluster
     // We suppose that sql queue tool has nothing to do with  Cluster,
     // Cluster offers related interfaces and sql queue tool will update counter according to the implementation of sqls.
     private AtomicInteger numRunningSqls;
@@ -37,12 +43,22 @@ public class Cluster {
     }
 
     // set the associated worker group id when resizing
-    public void setWorkerGroupId(long id) {}
+    public void setWorkerGroupId(long id) {
+        this.workerGroupId = id;
+    }
+
     public long getWorkerGroupId() {
         return workerGroupId;
     }
 
+    public long getId() {
+        return id;
+    }
+
     public int getRunningSqls() {
+        return 1;
+    }
+    public int getPendingSqls() {
         return 1;
     }
     public int setRunningSqls(int val) {
@@ -51,4 +67,22 @@ public class Cluster {
     public int addAndGetRunningSqls(int delta) {
         return 1;
     }
+
+    public void getProcNodeData(BaseProcResult result) {
+        result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
+                String.valueOf(this.getPendingSqls()),
+                String.valueOf(this.getRunningSqls())));
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
+    }
+
+    public static Cluster read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, Cluster.class);
+    }
+
 }

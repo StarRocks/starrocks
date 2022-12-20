@@ -38,6 +38,7 @@ statement
     | dropWarehouseStatement
     | showWarehousesStatement
     | alterWarehouseStatement
+    | showClusterStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -604,7 +605,8 @@ showCatalogsStatement
 // ---------------------------------------- Warehouse Statement ---------------------------------------------------------
 
 createWarehouseStatement
-    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString properties?
+    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
+    properties?
     ;
 
 showWarehousesStatement
@@ -620,7 +622,13 @@ dropWarehouseStatement
     ;
 
 alterWarehouseStatement
-    : ALTER TABLE identifier alterClause (',' alterClause)*
+    : ALTER WAREHOUSE identifier ADD CLUSTER
+    | ALTER WAREHOUSE identifier REMOVE CLUSTER
+    | ALTER WAREHOUSE identifier SET propertyList
+    ;
+
+showClusterStatement
+    : SHOW CLUSTERS FROM WAREHOUSE identifier
     ;
 
 
@@ -662,11 +670,6 @@ alterClause
     | modifyPartitionClause
     | replacePartitionClause
     | partitionRenameClause
-
-    //Alter warehouse clause
-    | addClusterClause
-    | removeClusterClause
-    | modifyWarehouseClause
     ;
 
 // ---------Alter system clause---------
@@ -2195,7 +2198,7 @@ nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
-    | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
+    | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG | CLUSTER | CLUSTERS
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
@@ -2218,8 +2221,7 @@ nonReserved
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
     | VALUE | VARIABLES | VIEW | VERBOSE
-    | WARNINGS | WEEK | WHITELIST | WORK | WRITE
+    | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT
-    | WAREHOUSE | WAREHOUSES
     ;
