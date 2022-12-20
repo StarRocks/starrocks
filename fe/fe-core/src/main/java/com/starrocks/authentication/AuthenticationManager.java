@@ -224,6 +224,11 @@ public class AuthenticationManager {
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         UserIdentity userIdentity = stmt.getUserIdent();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
+        upgradeUserWithAuthenticationInfoUnlocked(userIdentity, info);
+    }
+
+    public void upgradeUserWithAuthenticationInfoUnlocked(UserIdentity userIdentity,
+                                                          UserAuthenticationInfo info) throws DdlException {
         writeLock();
         try {
             updateUserNoLock(userIdentity, info, true);
@@ -467,12 +472,6 @@ public class AuthenticationManager {
         }
         AuthenticationProvider provider = AuthenticationProviderFactory.create(plugin.toString());
         UserAuthenticationInfo info = provider.upgradedFromPassword(userIdentity, password);
-        userToAuthenticationInfo.put(userIdentity, info);
-        LOG.info("upgrade user {}", userIdentity);
-    }
-
-    public void upgradeUserWithAuthenticationInfoUnlocked(UserIdentity userIdentity,
-                                                          UserAuthenticationInfo info) {
         userToAuthenticationInfo.put(userIdentity, info);
         LOG.info("upgrade user {}", userIdentity);
     }
