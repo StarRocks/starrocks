@@ -337,6 +337,7 @@
     + String Functions
       + [append_trailing_char_if_absent](./sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)
       + [ascii](./sql-reference/sql-functions/string-functions/ascii.md)
+      + [char](./sql-reference/sql-functions/string-functions/char.md)
       + [char_length](./sql-reference/sql-functions/string-functions/char_length.md)
       + [character_length](./sql-reference/sql-functions/string-functions/character_length.md)
       + [concat](./sql-reference/sql-functions/string-functions/concat.md)
