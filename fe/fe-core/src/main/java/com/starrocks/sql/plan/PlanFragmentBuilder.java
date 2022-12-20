@@ -620,6 +620,18 @@ public class PlanFragmentBuilder {
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
+            List<ColumnRefOperator> bucketColumns = getShuffleColumns(node.getDistributionSpec());
+            boolean useAllBucketColumns =
+                    bucketColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
+            if (useAllBucketColumns) {
+                List<Expr> bucketExprs = bucketColumns.stream()
+                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        .collect(Collectors.toList());
+                scanNode.setBucketExprs(bucketExprs);
+                scanNode.setBucketColumns(bucketColumns);
+            }
+
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
@@ -1482,6 +1494,7 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
+                clearOlapScanNodePartitionsIfNotSatisfy(inputFragment, node);
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
@@ -1490,6 +1503,51 @@ public class PlanFragmentBuilder {
             aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
+        }
+
+        /**
+         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE), if they don't satisfy
+         * the required hash property of blocking aggregation.
+         * <p>
+         * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
+         * local shuffle partition exprs.
+         * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
+         * <p>
+         * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
+         * - OlapScanNode only has one tablet after pruned.
+         * - It is executed on the single BE.
+         * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
+         * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
+         * local shuffle partition exprs.
+         *
+         * @param fragment The fragment which need to check whether to clear bucket keys of OlapScanNode.
+         * @param aggOp    The aggregate which need to check whether OlapScanNode satisfies its reuiqred hash property.
+         */
+        private void clearOlapScanNodePartitionsIfNotSatisfy(PlanFragment fragment, PhysicalHashAggregateOperator aggOp) {
+            // Only check ScanNode->BlockingAgg, which must be one-phase agg or
+            // the first phase in three/four-phase agg whose second phase is pruned.
+            if (!aggOp.isOnePhaseAgg() && !aggOp.isMergedLocalAgg()) {
+                return;
+            }
+
+            if (aggOp.getPartitionByColumns().isEmpty()) {
+                return;
+            }
+
+            PlanNode leafNode = fragment.getLeftMostLeafNode();
+            if (!(leafNode instanceof OlapScanNode)) {
+                return;
+            }
+
+            OlapScanNode olapScanNode = (OlapScanNode) leafNode;
+            Set<ColumnRefOperator> requiredPartColumns = new HashSet<>(aggOp.getPartitionByColumns());
+            boolean satisfy = requiredPartColumns.containsAll(olapScanNode.getBucketColumns());
+            if (satisfy) {
+                return;
+            }
+
+            olapScanNode.setBucketExprs(Lists.newArrayList());
+            olapScanNode.setBucketColumns(Lists.newArrayList());
         }
 
         // Check whether colocate Table exists in the same Fragment
@@ -1568,14 +1626,8 @@ public class PlanFragmentBuilder {
                 dataPartition = DataPartition.UNPARTITIONED;
             } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
                 exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
-                List<Integer> columnRefSet =
-                        ((HashDistributionSpec) distribution.getDistributionSpec()).getHashDistributionDesc()
-                                .getColumns();
-                Preconditions.checkState(!columnRefSet.isEmpty());
-                List<ColumnRefOperator> partitionColumns = new ArrayList<>();
-                for (int columnId : columnRefSet) {
-                    partitionColumns.add(columnRefFactory.getColumnRef(columnId));
-                }
+                List<ColumnRefOperator> partitionColumns =
+                        getShuffleColumns((HashDistributionSpec) distribution.getDistributionSpec());
                 List<Expr> distributeExpressions =
                         partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -1795,9 +1847,7 @@ public class PlanFragmentBuilder {
                     optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
             if (leftDistributionSpec instanceof HashDistributionSpec &&
                     rightDistributionSpec instanceof HashDistributionSpec) {
-                probePartitionByExprs =
-                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
-                                context);
+                probePartitionByExprs = getShuffleExprs((HashDistributionSpec) leftDistributionSpec, context);
             }
 
             setNullableForJoin(node.getJoinType(), leftFragment, rightFragment, context);
@@ -1867,15 +1917,20 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private List<Expr> getHashDistributionSpecPartitionByExprs(HashDistributionSpec hashDistributionSpec,
-                                                                   ExecPlan context) {
-            List<Integer> columnRefSet = hashDistributionSpec.getHashDistributionDesc().getColumns();
-            Preconditions.checkState(!columnRefSet.isEmpty());
-            List<ColumnRefOperator> partitionColumns = new ArrayList<>();
-            for (int columnId : columnRefSet) {
-                partitionColumns.add(columnRefFactory.getColumnRef(columnId));
+        private List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec) {
+            List<Integer> columnRefs = spec.getShuffleColumns();
+            Preconditions.checkState(!columnRefs.isEmpty());
+
+            List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
+            for (int columnId : columnRefs) {
+                shuffleColumns.add(columnRefFactory.getColumnRef(columnId));
             }
-            return partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+            return shuffleColumns;
+        }
+
+        private List<Expr> getShuffleExprs(HashDistributionSpec hashDistributionSpec, ExecPlan context) {
+            List<ColumnRefOperator> shuffleColumns = getShuffleColumns(hashDistributionSpec);
+            return shuffleColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
         }
@@ -1921,9 +1976,7 @@ public class PlanFragmentBuilder {
                     optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
             if (leftDistributionSpec instanceof HashDistributionSpec &&
                     rightDistributionSpec instanceof HashDistributionSpec) {
-                probePartitionByExprs =
-                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
-                                context);
+                probePartitionByExprs = getShuffleExprs((HashDistributionSpec) leftDistributionSpec, context);
             }
 
             JoinNode.DistributionMode distributionMode;
