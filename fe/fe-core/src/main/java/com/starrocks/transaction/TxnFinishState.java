@@ -4,6 +4,7 @@ package com.starrocks.transaction;
 import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.proto.TxnFinishStatePB;
 
 import java.io.IOException;
@@ -27,8 +28,10 @@ public class TxnFinishState {
     private static Codec<TxnFinishStatePB> finishStatePBCodec = ProtobufProxy.create(TxnFinishStatePB.class);
 
     // store involved replicas with version that is same as version in commitInfo
+    @SerializedName("normal")
     public Set<Long> normalReplicas = new HashSet<>();
     // store replica,version pairs that version != commit version
+    @SerializedName("abnormal")
     public Map<Long, Long> abnormalReplicasWithVersion = new HashMap<>();
 
     public TxnFinishStatePB toPB() {
