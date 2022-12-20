@@ -20,7 +20,7 @@ rtrim(str);
 
 ## 示例
 
-将字符串 `   ab d   ` 后面的空格去掉。
+将下列字符串从结尾开始的空格去掉。
 
 ```Plain Text
 mysql> SELECT rtrim('   ab d   ');
