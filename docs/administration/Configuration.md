@@ -96,6 +96,7 @@ This section provides an overview of the static parameters that you can configur
 | yarn_config_dir                   | StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"          | The directory that stores the Yarn configuration file.       |
 | export_checker_interval_second    | 5                                                            | The time interval at which load jobs are scheduled.          |
 | export_task_pool_size             | 5                                                            | The size of the unload task thread pool.                     |
+| enable_pipeline_load_for_insert   | FALSE                                                        | Specifies whether to use the pipeline engine to execute `INSERT INTO` statements. |
 
 #### Storage
 
