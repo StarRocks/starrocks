@@ -380,7 +380,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
             request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         }
-
         return Status::OK();
     }
 

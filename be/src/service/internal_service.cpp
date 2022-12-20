@@ -134,8 +134,10 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                                                   const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                   google::protobuf::Closure* done) {
     auto begin_ts = MonotonicNanos();
-    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id() << " begin";
+    auto msg = "transmit data: " + std::to_string((uint64_t)(request)) +
+               " fragment_instance_id=" + print_id(request->finst_id()) +
+               " node = " + std::to_string(request->node_id());
+    VLOG_ROW << msg << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
     // If we don't give response here, stream manager will call done->Run before
     // transmit_data(), which will cause a dirty memory access.
@@ -154,6 +156,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
                 LOG(WARNING) << msg;
                 throw std::runtime_error(msg);
             }
+            // Note the ref memory is freed after closure is called.
             auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
             if (UNLIKELY(size != chunk->data_size())) {
                 auto msg = fmt::format("read {} != expected {}.", size, chunk->data_size());
@@ -170,16 +173,14 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     st.to_protobuf(response->mutable_status());
     TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
     if (!st.ok()) {
-        LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
-                     << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
+        LOG(WARNING) << msg << " failed.";
     }
     if (done != nullptr) {
         // NOTE: only when done is not null, we can set response status
         st.to_protobuf(response->mutable_status());
         done->Run();
     }
-    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id() << " cost time = " << MonotonicNanos() - begin_ts;
+    VLOG_ROW << msg << " cost time = " << MonotonicNanos() - begin_ts;
 }
 
 template <typename T>
