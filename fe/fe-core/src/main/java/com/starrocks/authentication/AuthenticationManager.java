@@ -471,6 +471,16 @@ public class AuthenticationManager {
         LOG.info("upgrade user {}", userIdentity);
     }
 
+    public void upgradeUserWithAuthenticationInfoUnlocked(UserIdentity userIdentity,
+                                                          UserAuthenticationInfo info) {
+        userToAuthenticationInfo.put(userIdentity, info);
+        LOG.info("upgrade user {}", userIdentity);
+    }
+
+    public UserAuthenticationInfo getUserAuthenticationInfoByUserIdentity(UserIdentity userIdentity) {
+        return userToAuthenticationInfo.get(userIdentity);
+    }
+
     public void upgradeUserProperty(String userName, long maxConn) {
         UserProperty userProperty = new UserProperty();
         userProperty.setMaxConn(maxConn);
