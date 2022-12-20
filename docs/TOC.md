@@ -293,7 +293,11 @@
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
+<<<<<<< HEAD
       + [seconds_add](./sql-reference/sql-functions/date-time-functions/seconds_add.md)
+=======
+      + [seconds_sub](./sql-reference/sql-functions/date-time-functions/seconds_sub.md)
+>>>>>>> 2e2265c77 (add doc for seconds_sub function. (#15484))
       + [seconds_diff](./sql-reference/sql-functions/date-time-functions/seconds_diff.md)
       + [str_to_date](./sql-reference/sql-functions/date-time-functions/str_to_date.md)
       + [str2date](./sql-reference/sql-functions/date-time-functions/str2date.md)
