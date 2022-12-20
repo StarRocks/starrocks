@@ -1625,6 +1625,7 @@ void SegmentIterator::close() {
     }
     _context_list[0].close();
     _context_list[1].close();
+    _column_iterators.resize(0);
     _obj_pool.clear();
     _rfile.reset();
     _segment.reset();
