@@ -261,6 +261,7 @@
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + [Lambda expression](./sql-reference/sql-functions/Lambda_expression.md)
     + Date Functions
+      + [add_months](./sql-reference/sql-functions/date-time-functions/add_months.md)
       + [convert_tz](./sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](./sql-reference/sql-functions/date-time-functions/curdate.md)
       + [curtime](./sql-reference/sql-functions/date-time-functions/curtime.md)
