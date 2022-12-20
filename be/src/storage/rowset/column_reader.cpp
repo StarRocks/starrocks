@@ -482,7 +482,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator() {
         }
         ASSIGN_OR_RETURN(auto array_size_iterator, (*_sub_readers)[col++]->new_iterator());
 
-        return std::make_unique<ArrayColumnIterator>(std::move(null_iterator), std::move(array_size_iterator), std::move(element_iterator));
+        return std::make_unique<ArrayColumnIterator>(std::move(null_iterator), std::move(array_size_iterator),
+                                                     std::move(element_iterator));
     } else if (_column_type == LogicalType::TYPE_MAP) {
         size_t col = 0;
         ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
@@ -492,7 +493,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator() {
             ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
         }
         ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
-        return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys), std::move(values));
+        return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys),
+                                                   std::move(values));
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }

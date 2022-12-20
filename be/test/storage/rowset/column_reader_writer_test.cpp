@@ -168,7 +168,6 @@ protected:
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
-
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 

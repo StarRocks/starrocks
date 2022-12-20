@@ -22,11 +22,7 @@ namespace starrocks {
 
 MapColumnIterator::MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
                                      std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values)
-        : _nulls(std::move(nulls)),
-          _offsets(std::move(offsets)),
-          _keys(std::move(keys)),
-          _values(std::move(values)) {
-}
+        : _nulls(std::move(nulls)), _offsets(std::move(offsets)), _keys(std::move(keys)), _values(std::move(values)) {}
 
 MapColumnIterator::MapColumnIterator(ColumnIterator* nulls_iterator, ColumnIterator* offsets_iterator,
                                      ColumnIterator* keys_iterator, ColumnIterator* values_iterator) {

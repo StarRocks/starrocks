@@ -20,12 +20,12 @@
 
 namespace starrocks {
 
-ArrayColumnIterator::ArrayColumnIterator(std::unique_ptr<ColumnIterator> null_iterator, std::unique_ptr<ColumnIterator> array_size_iterator,
+ArrayColumnIterator::ArrayColumnIterator(std::unique_ptr<ColumnIterator> null_iterator,
+                                         std::unique_ptr<ColumnIterator> array_size_iterator,
                                          std::unique_ptr<ColumnIterator> element_iterator)
         : _null_iterator(std::move(null_iterator)),
           _array_size_iterator(std::move(array_size_iterator)),
-          _element_iterator(std::move(element_iterator)) {
-}
+          _element_iterator(std::move(element_iterator)) {}
 
 ArrayColumnIterator::ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
                                          ColumnIterator* element_iterator) {
