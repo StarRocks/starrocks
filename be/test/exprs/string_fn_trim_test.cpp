@@ -59,6 +59,53 @@ TEST_F(StringFunctionTrimTest, trimTest) {
     }
 }
 
+TEST_F(StringFunctionTrimTest, trimCharTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // string column
+    auto str_col = BinaryColumn::create();
+    for (int j = 0; j < 4096; ++j) {
+        std::string spaces(j, ' ');
+        str_col->append(spaces + "abcd" + std::to_string(j) + spaces);
+    }
+
+    // remove character column
+    auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ab", 4096);
+
+    ColumnPtr result = StringFunctions::trim(ctx.get(), {str_col, remove_col}).value();
+    ASSERT_EQ(4096, result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    for (int k = 0; k < 4096; ++k) {
+        ASSERT_EQ("cd" + std::to_string(k), v->get_data()[k].to_string());
+    }
+
+    {
+        // The 2rd parameter must be const
+        auto remove_non_const = BinaryColumn::create();
+        remove_non_const->append("ab");
+        auto st = StringFunctions::trim(ctx.get(), {str_col, remove_non_const});
+        EXPECT_TRUE(st.status().is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter of trim only accept literal value", st.status().to_string());
+    }
+
+    {
+        // The 2rd parameter must not be empty
+        auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 4096);
+        auto st = StringFunctions::trim(ctx.get(), {str_col, remove_col});
+        EXPECT_TRUE(st.status().is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter should not be empty string", st.status().to_string());
+    }
+    {
+        // The 2rd parameter must not be null
+        auto remove_col = ColumnHelper::create_const_null_column(4096);
+        auto st = StringFunctions::trim(ctx.get(), {str_col, remove_col});
+        EXPECT_TRUE(st.status().is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter should not be null", st.status().to_string());
+    }
+}
+
 TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;

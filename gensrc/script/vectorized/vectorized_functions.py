@@ -263,8 +263,11 @@ vectorized_functions = [
 
     [30160, 'reverse', 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
     [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim'],
+    [30171, 'trim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim'],
     [30180, 'ltrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::ltrim'],
+    [30181, 'ltrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim'],
     [30190, 'rtrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::rtrim'],
+    [30191, 'rtrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim'],
     [30200, 'ascii', 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
