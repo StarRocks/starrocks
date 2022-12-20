@@ -208,7 +208,8 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
         private void check() {
             if (!context.getSessionVariable().isEnablePipelineEngine()) {
                 throw new SemanticException("In sub-query depend on pipeline which one not in where-clause, " +
-                        "enable by: set enable_pipeline=true;");
+                        "enable by: set enable_pipeline=true; " +
+                        "and ADMIN SET FRONTEND CONFIG (\"enable_pipeline_load_for_insert\" = \"true\"); (for INSERT INTO)");
             }
         }
 
