@@ -982,7 +982,7 @@ subquery must return the same number of columns as provided by the IN predicate
 [sql]
 select 1 from t0 where (v1, v2) IN (select v_int, v_json from tjson)
 [except]
-InPredicate of JSON is not supported
+InPredicate of JSON, Map, Struct types is not supported
 [end]
 
 [sql]
@@ -993,4 +993,14 @@ RIGHT SEMI JOIN (join-predicate [11: P_NAME = 22: cast AND 17: P_RETAILPRICE = 2
         SCAN (columns[17: P_RETAILPRICE, 11: P_NAME] predicate[null])
     EXCHANGE SHUFFLE[22, 23]
         SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
+[end]
+
+[sql]
+select 1 from customer where (C_NATIONKEY, C_NAME) IN (select "aa", 123.45)
+[result]
+LEFT SEMI JOIN (join-predicate [15: cast = 11: expr AND 2: C_NAME = 16: cast] post-join-predicate [null])
+    SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
+    EXCHANGE BROADCAST
+        PREDICATE true
+            VALUES (null)
 [end]
