@@ -1729,7 +1729,7 @@ StatusOr<ColumnPtr> StringFunctions::reverse(FunctionContext* context, const Col
 
 // strings with little spaces can not benefit from simd optimization,
 // simd_optimization = false, turn off SIMD optimization
-template <bool simd_optimization>
+template <bool simd_optimization, bool trim_single>
 static inline const char* skip_leading_spaces(const char* begin, const char* end, const std::string& remove) {
     auto p = begin;
 #if defined(__SSE2__)
@@ -1747,8 +1747,8 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
         }
     }
 #endif
-    if (remove == " ") {
-        for (; p < end && *p == ' '; ++p) {
+    if constexpr (trim_single) {
+        for (; p < end && *p == remove[0]; ++p) {
         }
     } else {
         for (; p < end && remove.find(*p) != remove.npos; ++p) {
@@ -1759,14 +1759,14 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
 
 // strings with little spaces can not benefit from simd optimization,
 // simd_optimization = false, turn off SIMD optimization
-template <bool simd_optimization>
+template <bool simd_optimization, bool trim_single>
 static const char* skip_trailing_spaces(const char* begin, const char* end, const std::string& remove) {
     if (UNLIKELY(begin == nullptr)) {
         return begin;
     }
     auto p = end;
 #if defined(__SSE2__)
-    if (simd_optimization && remove.size() == 1) {
+    if constexpr (simd_optimization && trim_single) {
         const auto size = end - begin;
         const auto SSE2_BYTES = sizeof(__m128i);
         const auto sse2_begin = end - (size & ~(SSE2_BYTES - 1));
@@ -1781,8 +1781,8 @@ static const char* skip_trailing_spaces(const char* begin, const char* end, cons
         p += SSE2_BYTES;
     }
 #endif
-    if (remove == " ") {
-        for (--p; p >= begin && *p == ' '; --p) {
+    if constexpr (trim_single) {
+        for (--p; p >= begin && *p == remove[0]; --p) {
         }
     } else {
         for (--p; p >= begin && remove.find(*p) != remove.npos; --p) {
@@ -1794,7 +1794,7 @@ static const char* skip_trailing_spaces(const char* begin, const char* end, cons
 enum TrimType { TRIM_LEFT, TRIM_RIGHT, TRIM_BOTH };
 enum TrimSimdOptimization { TRIM_SIMD_NONE, TRIM_SIMD_LEFT, TRIM_SIMD_RIGHT, TRIM_SIMD_BOTH };
 
-template <TrimType trim_type, TrimSimdOptimization trim_simd_optimization, bool compute_spaces_num>
+template <TrimType trim_type, TrimSimdOptimization trim_simd_optimization, bool compute_spaces_num, bool trim_single>
 static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes* bytes, Offsets* offsets,
                                   const std::string& remove, [[maybe_unused]] size_t* leading_spaces_num,
                                   [[maybe_unused]] size_t* trailing_spaces_num) {
@@ -1811,7 +1811,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     if constexpr (trim_type == TRIM_LEFT || trim_type == TRIM_BOTH) {
         constexpr auto simd_enable =
                 trim_simd_optimization == TRIM_SIMD_LEFT || trim_simd_optimization == TRIM_SIMD_BOTH;
-        from_ptr = skip_leading_spaces<simd_enable>(from_ptr, end, remove);
+        from_ptr = skip_leading_spaces<simd_enable, trim_single>(from_ptr, end, remove);
         if constexpr (compute_spaces_num) {
             *leading_spaces_num += from_ptr - begin;
         }
@@ -1821,7 +1821,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     if constexpr (trim_type == TRIM_RIGHT || trim_type == TRIM_BOTH) {
         constexpr auto simd_enable =
                 trim_simd_optimization == TRIM_SIMD_RIGHT || trim_simd_optimization == TRIM_SIMD_BOTH;
-        to_ptr = skip_trailing_spaces<simd_enable>(from_ptr, to_ptr, remove);
+        to_ptr = skip_trailing_spaces<simd_enable, trim_single>(from_ptr, to_ptr, remove);
         if constexpr (compute_spaces_num) {
             *trailing_spaces_num += end - to_ptr;
         }
@@ -1831,7 +1831,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     (*offsets)[i + 1] = bytes->size();
 }
 
-template <TrimType trim_type, size_t simd_threshold>
+template <TrimType trim_type, size_t simd_threshold, bool trim_single>
 struct AdaptiveTrimFunction {
     template <LogicalType Type, LogicalType ResultType, typename Args>
     static ColumnPtr evaluate(const ColumnPtr& column, Args remove) {
@@ -1852,8 +1852,8 @@ struct AdaptiveTrimFunction {
         size_t trailing_spaces_num = 0;
 
         for (; i < sample_num; ++i) {
-            trim_per_slice<trim_type, TRIM_SIMD_NONE, true>(src, i, &dst_bytes, &dst_offsets, remove,
-                                                            &leading_spaces_num, &trailing_spaces_num);
+            trim_per_slice<trim_type, TRIM_SIMD_NONE, true, trim_single>(src, i, &dst_bytes, &dst_offsets, remove,
+                                                                         &leading_spaces_num, &trailing_spaces_num);
         }
         // when the average number of leading/trailing spaces in the sample is greater than
         // simd_threshold, SIMD optimization is enabled.
@@ -1861,23 +1861,23 @@ struct AdaptiveTrimFunction {
         bool trailing_simd = trailing_spaces_num > simd_threshold * sample_num;
         if (leading_simd && trailing_simd) {
             for (; i < num_rows; ++i) {
-                trim_per_slice<trim_type, TRIM_SIMD_BOTH, false>(src, i, &dst_bytes, &dst_offsets, remove,
-                                                                 &leading_spaces_num, &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_BOTH, false, trim_single>(
+                        src, i, &dst_bytes, &dst_offsets, remove, &leading_spaces_num, &trailing_spaces_num);
             }
         } else if (leading_simd) {
             for (; i < num_rows; ++i) {
-                trim_per_slice<trim_type, TRIM_SIMD_LEFT, false>(src, i, &dst_bytes, &dst_offsets, remove,
-                                                                 &leading_spaces_num, &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_LEFT, false, trim_single>(
+                        src, i, &dst_bytes, &dst_offsets, remove, &leading_spaces_num, &trailing_spaces_num);
             }
         } else if (trailing_simd) {
             for (; i < num_rows; ++i) {
-                trim_per_slice<trim_type, TRIM_SIMD_RIGHT, false>(src, i, &dst_bytes, &dst_offsets, remove,
-                                                                  &leading_spaces_num, &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_RIGHT, false, trim_single>(
+                        src, i, &dst_bytes, &dst_offsets, remove, &leading_spaces_num, &trailing_spaces_num);
             }
         } else {
             for (; i < num_rows; ++i) {
-                trim_per_slice<trim_type, TRIM_SIMD_NONE, false>(src, i, &dst_bytes, &dst_offsets, remove,
-                                                                 &leading_spaces_num, &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_NONE, false, trim_single>(
+                        src, i, &dst_bytes, &dst_offsets, remove, &leading_spaces_num, &trailing_spaces_num);
             }
         }
         return dst;
@@ -1888,8 +1888,8 @@ template <TrimType trim_type>
 static StatusOr<ColumnPtr> trim_impl(FunctionContext* context, const starrocks::Columns& columns) {
     if (columns.size() == 1) {
         // trim whitespace
-        return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8>>::template evaluate<TYPE_VARCHAR,
-                                                                                              const std::string&>(
+        return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, true>>::template evaluate<TYPE_VARCHAR,
+                                                                                                    const std::string&>(
                 columns[0], " ");
     } else if (columns.size() == 2 && columns[1]->is_constant()) {
         // trim specififed characters
@@ -1901,9 +1901,13 @@ static StatusOr<ColumnPtr> trim_impl(FunctionContext* context, const starrocks::
         if (remove.empty()) {
             return Status::InvalidArgument("The second parameter should not be empty string");
         }
-        return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8>>::template evaluate<TYPE_VARCHAR,
-                                                                                              const std::string&>(
-                columns[0], remove);
+        if (remove.size() == 1) {
+            return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, true>>::template evaluate<
+                    TYPE_VARCHAR, const std::string&>(columns[0], remove);
+        } else {
+            return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, false>>::template evaluate<
+                    TYPE_VARCHAR, const std::string&>(columns[0], remove);
+        }
     } else {
         return Status::InvalidArgument("The second parameter of trim only accept literal value");
     }
