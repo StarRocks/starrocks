@@ -53,7 +53,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
@@ -304,23 +303,20 @@ public class IcebergUtil {
     private static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, Map<String, String> properties)
             throws DdlException {
         try {
-            Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
-                    .collect(Collectors.toMap(Types.NestedField::name, field -> field));
             List<Column> fullSchema = Lists.newArrayList();
-            for (Map.Entry<String, Types.NestedField> entry : icebergColumns.entrySet()) {
-                Types.NestedField icebergColumn = entry.getValue();
-                Type srType;
-                try {
-                    srType = convertColumnType(icebergColumn.type());
-                } catch (InternalError | Exception e) {
-                    LOG.error("Failed to convert iceberg type {}", icebergColumn.type().toString(), e);
-                    srType = Type.UNKNOWN_TYPE;
-                }
-
-                Column column = new Column(icebergColumn.name(), srType, true);
-                fullSchema.add(column);
-            }
-
+            icebergTable.schema().columns().forEach(
+                    field -> {
+                        Type srType;
+                        try {
+                            srType = convertColumnType(field.type());
+                        } catch (InternalError | Exception e) {
+                            LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
+                            srType = Type.UNKNOWN_TYPE;
+                        }
+                        Column column = new Column(field.name().toLowerCase(), srType, true);
+                        fullSchema.add(column);
+                    }
+            );
             return new IcebergTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), icebergTable,
                     true, icebergTable.name(), fullSchema, properties);
         } catch (NullPointerException e) {
