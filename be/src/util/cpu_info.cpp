@@ -34,8 +34,17 @@
 #include <spe.h>
 #endif
 
+// CGROUP2_SUPER_MAGIC is the indication for cgroup v2
+// It is defined in kernel 4.5+
+// I copy the defintion from linux/magic.h in higher kernel
+#ifndef CGROUP2_SUPER_MAGIC
+#define CGROUP2_SUPER_MAGIC 0x63677270
+#endif
+
+#include <linux/magic.h>
 #include <sched.h>
 #include <sys/sysinfo.h>
+#include <sys/vfs.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -49,8 +58,11 @@
 
 #include "common/config.h"
 #include "common/env_config.h"
+#include "common/logging.h"
+#include "fs/fs_util.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/substitute.h"
+#include "util/errno.h"
 #include "util/pretty_printer.h"
 #include "util/string_parser.hpp"
 
@@ -160,7 +172,9 @@ void CpuInfo::init() {
 
     if (num_cores > 0) {
         num_cores_ = num_cores;
-    } else {
+    }
+    _init_num_cores_with_cgroup();
+    if (num_cores_ <= 0) {
         num_cores_ = 1;
     }
     if (config::num_cores > 0) num_cores_ = config::num_cores;
@@ -225,6 +239,77 @@ void CpuInfo::_init_numa() {
         }
     }
     _init_numa_node_to_cores();
+}
+
+void CpuInfo::_init_num_cores_with_cgroup() {
+    bool running_in_docker = fs::path_exist("/.dockerenv");
+    if (!running_in_docker) {
+        return;
+    }
+    struct statfs fs;
+    int err = statfs("/sys/fs/cgroup", &fs);
+    if (err < 0) {
+        LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(err);
+        return;
+    }
+    std::ifstream ifs;
+    int64_t cfs_period_us = -1;
+    int64_t cfs_quota_us = -1;
+    if (fs.f_type == TMPFS_MAGIC) {
+        // cgroup v1
+        ifs.open("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
+        if (!ifs.good() || !ifs.is_open()) {
+            return;
+        }
+        std::string cfs_period_us_str;
+        ifs >> cfs_period_us_str;
+        ifs.close();
+
+        ifs.open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
+        if (!ifs.good() || !ifs.is_open()) {
+            return;
+        }
+        std::string cfs_quota_us_str;
+        ifs >> cfs_quota_us_str;
+        ifs.close();
+
+        StringParser::ParseResult result;
+        cfs_period_us =
+                StringParser::string_to_int<int64_t>(cfs_period_us_str.data(), cfs_period_us_str.size(), &result);
+        if (result != StringParser::PARSE_SUCCESS) {
+            return;
+        }
+        cfs_quota_us = StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(), cfs_quota_us_str.size(), &result);
+        if (result != StringParser::PARSE_SUCCESS) {
+            return;
+        }
+    } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
+        // cgroup v2
+        ifs.open("/sys/fs/cgroup/cpu.max");
+        if (!ifs.good() || !ifs.is_open()) {
+            return;
+        }
+        std::string cfs_period_us_str;
+        std::string cfs_quota_us_str;
+        ifs >> cfs_quota_us_str;
+        ifs >> cfs_period_us_str;
+        ifs.close();
+
+        StringParser::ParseResult result;
+        cfs_period_us =
+                StringParser::string_to_int<int64_t>(cfs_period_us_str.data(), cfs_period_us_str.size(), &result);
+        if (result != StringParser::PARSE_SUCCESS) {
+            return;
+        }
+        cfs_quota_us = StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(), cfs_quota_us_str.size(), &result);
+        if (result != StringParser::PARSE_SUCCESS) {
+            return;
+        }
+    }
+    if (cfs_quota_us > 0 && cfs_period_us > 0) {
+        num_cores_ = cfs_quota_us / cfs_period_us;
+        LOG(INFO) << "Init docker hardware cores by cgroup's cfs config, num_cores=" << num_cores_;
+    }
 }
 
 void CpuInfo::_init_fake_numa_for_test(int max_num_numa_nodes, const std::vector<int>& core_to_numa_node) {

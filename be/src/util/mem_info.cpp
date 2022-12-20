@@ -84,7 +84,7 @@ void MemInfo::init() {
 
         if (result == StringParser::PARSE_SUCCESS) {
             // Entries in /proc/meminfo are in KB.
-            if (_s_physical_mem == -1 || _s_physical_mem > mem_total_kb * 1024L) {
+            if (_s_physical_mem <= 0 || _s_physical_mem > mem_total_kb * 1024L) {
                 _s_physical_mem = mem_total_kb * 1024L;
             }
         }
@@ -96,7 +96,7 @@ void MemInfo::init() {
         meminfo.close();
     }
 
-    if (_s_physical_mem == -1) {
+    if (_s_physical_mem <= 0) {
         LOG(WARNING) << "Could not determine amount of physical memory on this machine.";
     }
 
@@ -115,43 +115,47 @@ std::string MemInfo::debug_string() {
 void MemInfo::set_memlimit_if_container() {
     // check if application is in docker container or not via /.dockerenv file
     bool running_in_docker = fs::path_exist("/.dockerenv");
-    if (running_in_docker) {
-        struct statfs fs;
-        int err = statfs("/sys/fs/cgroup", &fs);
-        if (err < 0) {
-            LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(err);
+    if (!running_in_docker) {
+        return;
+    }
+    struct statfs fs;
+    int err = statfs("/sys/fs/cgroup", &fs);
+    if (err < 0) {
+        LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(err);
+        return;
+    }
+
+    StringParser::ParseResult result = StringParser::PARSE_FAILURE;
+    if (fs.f_type == TMPFS_MAGIC) {
+        // cgroup v1
+        // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
+        std::ifstream ifs;
+        std::string line;
+        ifs.open("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+        if (!ifs.good() || !ifs.is_open()) {
             return;
         }
-
-        std::ifstream memoryLimit;
+        getline(ifs, line);
+        ifs.close();
+        _s_physical_mem = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
+    } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
+        // cgroup v2
+        // Read from /sys/fs/cgroup/memory/memory.max
+        std::ifstream ifs;
         std::string line;
-        StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
-        if (fs.f_type == TMPFS_MAGIC) {
-            // cgroup v1
-            // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
-            memoryLimit.open("/sys/fs/cgroup/memory/memory.limit_in_bytes");
-            getline(memoryLimit, line);
-            _s_physical_mem = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
-        } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
-            // cgroup v2
-            // Read from /sys/fs/cgroup/memory/memory.max
-            memoryLimit.open("/sys/fs/cgroup/memory.max");
-            getline(memoryLimit, line);
-
-            if (line == "max") {
-                _s_physical_mem = std::numeric_limits<int64_t>::max();
-            } else {
-                _s_physical_mem = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
-            }
+        ifs.open("/sys/fs/cgroup/memory.max");
+        if (!ifs.good() || !ifs.is_open()) {
+            return;
         }
+        getline(ifs, line);
+        ifs.close();
+        _s_physical_mem = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
+    }
 
-        if (result != StringParser::PARSE_SUCCESS) {
-            _s_physical_mem = std::numeric_limits<int64_t>::max();
-        }
-
-        if (memoryLimit.is_open()) {
-            memoryLimit.close();
-        }
+    if (result != StringParser::PARSE_SUCCESS) {
+        _s_physical_mem = std::numeric_limits<int64_t>::max();
+    } else {
+        LOG(INFO) << "Init mem info by container's cgroup config, physical_mem=" << _s_physical_mem;
     }
 }
 
