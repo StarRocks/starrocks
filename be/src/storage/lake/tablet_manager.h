@@ -156,8 +156,7 @@ private:
     LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;
 
-    bthread_t _metadata_gc_tid;
-    bthread_t _segment_gc_tid;
+    bthread_t _gc_checker_tid;
 };
 
 } // namespace starrocks::lake
