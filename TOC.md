@@ -260,8 +260,8 @@
     + [窗口函数](/sql-reference/sql-functions/Window_function.md)
     + 日期函数
       + [convert_tz](/sql-reference/sql-functions/date-time-functions/convert_tz.md)
-      + [curdate](/sql-reference/sql-functions/date-time-functions/curdate.md)
-      + [curtime](/sql-reference/sql-functions/date-time-functions/curtime.md)
+      + [current_date](/sql-reference/sql-functions/date-time-functions/curdate.md)
+      + [current_time](/sql-reference/sql-functions/date-time-functions/curtime.md)
       + [current_timestamp](/sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](/sql-reference/sql-functions/date-time-functions/date.md)
       + [date_format](/sql-reference/sql-functions/date-time-functions/date_format.md)
