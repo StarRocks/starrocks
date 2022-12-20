@@ -353,7 +353,7 @@ void Segment::_prepare_adapter_info() {
     }
 }
 
-Status Segment::new_column_iterator(uint32_t cid, ColumnIterator** iter) {
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid) {
     if (_column_readers[cid] == nullptr) {
         const TabletColumn& tablet_column = _tablet_schema->column(cid);
         if (!tablet_column.has_default_value() && !tablet_column.is_nullable()) {
@@ -366,10 +366,9 @@ Status Segment::new_column_iterator(uint32_t cid, ColumnIterator** iter) {
                 type_info, tablet_column.length(), num_rows()));
         ColumnIteratorOptions iter_opts;
         RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-        *iter = default_value_iter.release();
-        return Status::OK();
+        return default_value_iter;
     }
-    return _column_readers[cid]->new_iterator(iter);
+    return _column_readers[cid]->new_iterator();
 }
 
 Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter) {

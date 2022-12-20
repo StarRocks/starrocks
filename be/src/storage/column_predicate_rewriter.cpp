@@ -153,7 +153,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             i = pool->add(ptr);
         }
         if (PredicateType::kGE == pred->type() || PredicateType::kGT == pred->type()) {
-            _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
+            _get_segment_dict(&sorted_dicts, _column_iterators[cid].get());
             // use non-padding string value.
             auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
@@ -180,7 +180,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             }
         }
         if (PredicateType::kLE == pred->type() || PredicateType::kLT == pred->type()) {
-            _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
+            _get_segment_dict(&sorted_dicts, _column_iterators[cid].get());
             // use non-padding string value.
             auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
@@ -217,7 +217,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
         if (PredicateType::kExpr == pred->type()) {
             if (!load_seg_dict_vec) {
                 load_seg_dict_vec = true;
-                _get_segment_dict_vec(_column_iterators[cid], &dict_column, &code_column, field->is_nullable());
+                _get_segment_dict_vec(_column_iterators[cid].get(), &dict_column, &code_column, field->is_nullable());
             }
 
             ColumnPredicate* ptr;

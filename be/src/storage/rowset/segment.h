@@ -115,7 +115,7 @@ public:
     uint64_t id() const { return _segment_id; }
 
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
-    Status new_column_iterator(uint32_t cid, ColumnIterator** iter);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid);
 
     Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter);
 
