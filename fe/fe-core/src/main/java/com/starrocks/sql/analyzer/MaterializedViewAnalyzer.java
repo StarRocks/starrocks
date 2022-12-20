@@ -73,12 +73,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.plan.PlanFragmentBuilder;
-import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
->>>>>>> 8ebfc0c5c ([Enhancement] allow set operation in materialized view (#15439))
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.util.Strings;
 
