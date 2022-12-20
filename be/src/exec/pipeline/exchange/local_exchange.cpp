@@ -74,11 +74,24 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                                        const std::vector<ExprContext*>& partition_expr_ctxs, const size_t num_sinks)
-        : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source) {
+        : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source),
+          _partition_exprs(partition_expr_ctxs) {
     _partitioners.reserve(num_sinks);
     for (size_t i = 0; i < num_sinks; i++) {
         _partitioners.emplace_back(source, part_type, partition_expr_ctxs);
     }
+}
+
+Status PartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    return Status::OK();
+}
+
+void PartitionExchanger::close(RuntimeState* state) {
+    Expr::close(_partition_exprs, state);
+    LocalExchanger::close(state);
 }
 
 Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32_t sink_driver_sequence) {
