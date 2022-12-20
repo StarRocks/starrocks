@@ -255,6 +255,7 @@
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [seconds_add](./sql-reference/sql-functions/date-time-functions/seconds_add.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
+      + [seconds_sub](./sql-reference/sql-functions/date-time-functions/seconds_sub.md)
       + [seconds_diff](./sql-reference/sql-functions/date-time-functions/seconds_diff.md)
       + [str_to_date](./sql-reference/sql-functions/date-time-functions/str_to_date.md)
       + [str2date](./sql-reference/sql-functions/date-time-functions/str2date.md)
