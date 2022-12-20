@@ -104,8 +104,7 @@ public:
     void operator=(ColumnReader&&) = delete;
 
     // create a new column iterator. Caller should free the returned iterator after unused.
-    // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_iterator()
-    Status new_iterator(ColumnIterator** iterator);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_iterator();
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()

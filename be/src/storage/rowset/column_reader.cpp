@@ -469,43 +469,32 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const vectorized::C
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
-Status ColumnReader::new_iterator(ColumnIterator** iterator) {
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator() {
     if (is_scalar_field_type(delegate_type(_column_type))) {
-        *iterator = new ScalarColumnIterator(this);
-        return Status::OK();
+        return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         size_t col = 0;
-        ColumnIterator* element_iterator = nullptr;
-        RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&element_iterator));
+        ASSIGN_OR_RETURN(auto element_iterator, (*_sub_readers)[col++]->new_iterator());
 
-        ColumnIterator* null_iterator = nullptr;
+        std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
-            RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&null_iterator));
+            ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[col++]->new_iterator());
         }
+        ASSIGN_OR_RETURN(auto array_size_iterator, (*_sub_readers)[col++]->new_iterator());
 
-        ColumnIterator* array_size_iterator;
-        RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&array_size_iterator));
-
-        *iterator = new ArrayColumnIterator(null_iterator, array_size_iterator, element_iterator);
-        return Status::OK();
+        return std::make_unique<ArrayColumnIterator>(std::move(null_iterator), std::move(array_size_iterator),
+                                                     std::move(element_iterator));
     } else if (_column_type == LogicalType::TYPE_MAP) {
         size_t col = 0;
-        ColumnIterator* keys = nullptr;
-        RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&keys));
-
-        ColumnIterator* values = nullptr;
-        RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&values));
-
-        ColumnIterator* nulls = nullptr;
+        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
+        ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator());
+        std::unique_ptr<ColumnIterator> nulls;
         if (is_nullable()) {
-            RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&nulls));
+            ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
         }
-
-        ColumnIterator* offsets = nullptr;
-        RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&offsets));
-
-        *iterator = new MapColumnIterator(nulls, offsets, keys, values);
-        return Status::OK();
+        ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
+        return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys),
+                                                   std::move(values));
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }

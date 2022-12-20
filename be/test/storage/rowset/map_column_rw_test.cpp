@@ -148,9 +148,7 @@ protected:
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
-            ColumnIterator* iter = nullptr;
-            ASSERT_TRUE(reader->new_iterator(&iter).ok());
-            std::unique_ptr<ColumnIterator> guard(iter);
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
