@@ -96,6 +96,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
                                    Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
             throws AnalysisException {
         Table table = operator.getTable();
+        operator.getScanOperatorPredicates().clear();
         if (table instanceof HiveMetaStoreTable) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
             List<Column> partitionColumns = hmsTable.getPartitionColumns();
