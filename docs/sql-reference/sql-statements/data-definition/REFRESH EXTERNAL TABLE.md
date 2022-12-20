@@ -22,19 +22,20 @@ The following describes the syntaxes and parameters based on different cases:
 
     ```SQL
     REFRESH EXTERNAL TABLE table_name 
-    [PARTITION ('partition_name', ...)];
+    [PARTITION ('partition_name=partition_value', ...)];
     ```
 
     | **Parameter**  | **Required** | **Description**                                              |
     | -------------- | ------------ | ------------------------------------------------------------ |
     | table_name     | Yes          | The name of a Hive external table or Hudi external table.    |
     | partition_name | No           | The names of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
+    | partition_value| No           | The value of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
 
 - External catalog
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
-    [PARTITION ('partition_name', ...)];
+    [PARTITION ('partition_name=partition_value', ...)];
     ```
 
     | **Parameter**    | **Required** | **Description**                                              |
@@ -43,6 +44,7 @@ The following describes the syntaxes and parameters based on different cases:
     | db_name          | No           | The name of the database where a Hive table or Hudi table resides. |
     | table_name       | Yes          | The name of a Hive table or a Hudi table.                    |
     | partition_name   | No           | The names of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
+    | partition_value  | No           | The value of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
 
 ## Usage notes
 
@@ -60,11 +62,11 @@ Example 1: Update the cached metadata of the corresponding Hive table in StarRoc
 REFRESH EXTERNAL TABLE hive1;
 ```
 
-Example 2: Update the cached metadata of the partitions of the corresponding Hudi table in StarRocks by specifying the external table `hudi1` and the `p1` and `p2` partitions of the corresponding Hudi table.
+Example 2: Update the cached metadata of the partitions of the corresponding Hudi table in StarRocks by specifying the external table `hudi1` and the partitions of the corresponding Hudi table.
 
 ```SQL
 REFRESH EXTERNAL TABLE hudi1
-PARTITION ('p1', 'p2');
+PARTITION ('date=2022-12-20', 'date=2022-12-21');
 ```
 
 ### External catalog
@@ -82,9 +84,9 @@ USE hive_catalog.hive_db;
 REFRESH EXTERNAL TABLE hive_table;
 ```
 
-Example 2: Update the cached metadata of the `p1` and `p2` partitions of `hudi_table` in StarRocks.
+Example 2: Update the cached metadata of the partitions of `hudi_table` in StarRocks.
 
 ```SQL
 REFRESH EXTERNAL TABLE hudi_catalog.hudi_db.hudi_table
-PARTITION ('p1', 'p2');
+PARTITION ('date=2022-12-20', 'date=2022-12-21');
 ```
