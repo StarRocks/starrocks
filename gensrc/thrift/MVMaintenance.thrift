@@ -34,6 +34,7 @@ enum MVTaskType {
 }
 
 struct TMVMaintenanceStartTask {
+    1: optional Types.TUniqueId query_id;
     3: optional list<InternalService.TExecPlanFragmentParams> fragments;
 }
 
@@ -51,7 +52,8 @@ struct TMVStartEpochTask {
     1: optional TMVEpoch epoch
     
     // Start position of this epoch
-    2: optional list<PlanNodes.TScanRange>  scan_range
+    // map<FragmentInstnaceId, map<PlanNodeId, list<ScanRanges>>>
+    2: optional map<Types.TUniqueId, map<Types.TPlanNodeId, list<PlanNodes.TScanRange>>> per_node_scan_ranges
     
     // Max execution threshold of this epoch
     3: optional i64 max_exec_millis
