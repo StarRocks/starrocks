@@ -283,13 +283,13 @@ public class MVMaintenanceJob implements Writable {
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
-            request.setTask_type(MVTaskType.START_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(taskId);
             request.setStart_maintenance(new TMVMaintenanceStartTask());
             request.setDb_name(dbName);
             request.setMv_name(view.getName());
             request.start_maintenance.setFragments(task.getFragmentInstances());
+            request.start_maintenance.setQuery_id(queryCoordinator.getQueryId());
 
             try {
                 Future<PMVMaintenanceTaskResult> resultFuture =
