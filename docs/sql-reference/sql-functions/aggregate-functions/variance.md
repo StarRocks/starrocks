@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the variance of a expression.
+Returns the variance of an expression.
 
 ## Syntax
 
@@ -10,10 +10,11 @@ Returns the variance of a expression.
 VARIANCE(expr)
 ```
 
-The return type is numerical type:
+## Return value
 
-- If type of `expr` is Decimal type, then return Decimal type
-- or else return Double type.
+Returns a numerical value.
+
+If the type of `expr` is DECIMAL, this function returns a DECIMAL value, or else returns a DOUBLE value.
 
 ## Examples
 
