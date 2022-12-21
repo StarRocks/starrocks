@@ -596,7 +596,7 @@ public class AnalyzerUtils {
                         partitionProperties, false);
                 result.put(partitionName, addPartitionClause);
             } catch (AnalysisException e) {
-                throw new AnalysisException(String.format("failed to analysis partition value:%s", partitionValue));
+                throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
         return result;
