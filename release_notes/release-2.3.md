@@ -94,7 +94,7 @@
 
 ### 行为变更
 
-- 增加 BE 配置项 `max_length_for_bitmap_function` （默认值1000000）和 `max_length_for_to_base64`（默认值200000），以控制 bitmap 函数和 base64 的最大长度。 [#10851](https://github.com/StarRocks/starrocks/pull/10851)
+- 增加 BE 配置项 `max_length_for_bitmap_function` （默认为 1000000 字节）和 `max_length_for_to_base64`（默认为 200000 字节），以控制 bitmap 函数和to_base64() 函数的输入值的最大长度。 [#10851](https://github.com/StarRocks/starrocks/pull/10851)
 
 ## 2.3.1
 
