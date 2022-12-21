@@ -42,7 +42,6 @@ set(UTIL_FILES
   json.cpp
   json_converter.cpp
   starrocks_metrics.cpp
-  cpu_info.cpp
   mem_info.cpp
   metrics.cpp
   murmur_hash3.cpp
