@@ -2,7 +2,7 @@
 
 ## Description
 
-Return the quotient of x divide y. If y is 0, return null.
+Returns the quotient of `x` divided `y`. If `y` is 0, this functions returns null.
 
 ## Syntax
 
