@@ -1,4 +1,4 @@
-# pnTable of content
+# Table of content
 
 ## Index
 
@@ -268,7 +268,7 @@
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
-      + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md) (alias: subdate)
+      + [date_sub, subdate](./sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_slice](./sql-reference/sql-functions/date-time-functions/date_slice.md)
       + [date_trunc](./sql-reference/sql-functions/date-time-functions/date_trunc.md)
@@ -336,7 +336,7 @@
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
       + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
-      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md) (alias: variance_pop / var_pop)
+      + [variance, variance_pop, var_pop](./sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
       + [multi_distinct_sum](./sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
