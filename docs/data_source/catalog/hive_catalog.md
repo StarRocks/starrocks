@@ -7,7 +7,13 @@ A Hive catalog is an external catalog supported in StarRocks 2.3 and later versi
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
+- StarRocks does not support querying data of the following types from Hive: INTERVAL, BINARY, and UNION.
+
+    > **Note**
+    >
+    > - An error occurs if you query Hive data in unsupported data types.
+    > - StarRocks only supports querying data of MAP and STRUCT types in Parquet or ORC data files.
+
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
