@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.ObjectStorageUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
@@ -449,7 +450,10 @@ public class HiveMetaCache {
             ImmutableMap<PartitionKey, Long> partitionKeys = loadPartitionKeys(hivePartitionKeysKey);
             partitionKeysCache.put(hivePartitionKeysKey, partitionKeys);
             tableStatsCache.put(hiveTableKey, loadTableStats(hiveTableKey));
-            tableColumnStatsCache.put(hiveTableColumnsKey, loadTableColumnStats(hiveTableColumnsKey));
+            if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().
+                    enableRefreshHiveColumnStats()) {
+                tableColumnStatsCache.put(hiveTableColumnsKey, loadTableColumnStats(hiveTableColumnsKey));
+            }
 
             // for unpartition table, refresh the partition info, because there is only one partition
             if (partColumns.size() <= 0) {
