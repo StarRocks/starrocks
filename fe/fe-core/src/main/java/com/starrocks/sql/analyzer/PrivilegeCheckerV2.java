@@ -289,12 +289,12 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-    static void checkAnyActionOnOrUnderDb(ConnectContext context, String catalogName, String dbName) {
+    static void checkAnyActionOnOrInDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
 
-        if (!PrivilegeManager.checkAnyActionOnOrUnderDb(context, dbName)) {
+        if (!PrivilegeManager.checkAnyActionOnOrInDb(context, dbName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), dbName);
         }
@@ -650,7 +650,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
-            checkAnyActionOnOrUnderDb(context, statement.getCatalogName(), statement.getDbName());
+            checkAnyActionOnOrInDb(context, statement.getCatalogName(), statement.getDbName());
             return null;
         }
 
@@ -844,7 +844,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
-            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -853,7 +853,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
-            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -862,7 +862,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
-            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrInDb(context, context.getCurrentCatalog(), statement.getDbName());
             return null;
         }
 

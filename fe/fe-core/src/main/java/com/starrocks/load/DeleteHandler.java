@@ -645,10 +645,12 @@ public class DeleteHandler implements Writable {
 
             for (MultiDeleteInfo deleteInfo : deleteInfos) {
 
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
-                        deleteInfo.getTableName(),
-                        PrivPredicate.LOAD)) {
-                    continue;
+                if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                            deleteInfo.getTableName(),
+                            PrivPredicate.LOAD)) {
+                        continue;
+                    }
                 }
 
                 List<Comparable> info = Lists.newArrayList();

@@ -104,12 +104,12 @@ public class PrivilegeManagerTest {
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
         Assert.assertFalse(PrivilegeManager.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertFalse(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         Assert.assertTrue(PrivilegeManager.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         String sql = "grant select on table db.tbl1 to test_user";
@@ -119,8 +119,10 @@ public class PrivilegeManagerTest {
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertTrue(PrivilegeManager.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.SELECT));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
+        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "SELECT"));
+        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "DROP"));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
@@ -130,7 +132,7 @@ public class PrivilegeManagerTest {
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertFalse(PrivilegeManager.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.SELECT));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertFalse(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // grant many priveleges
@@ -147,7 +149,7 @@ public class PrivilegeManagerTest {
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.INSERT));
         Assert.assertTrue(PrivilegeManager.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.DELETE));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // revoke only select
@@ -164,7 +166,7 @@ public class PrivilegeManagerTest {
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.INSERT));
         Assert.assertTrue(PrivilegeManager.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.DELETE));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertTrue(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // revoke all
@@ -180,7 +182,7 @@ public class PrivilegeManagerTest {
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.INSERT));
         Assert.assertFalse(PrivilegeManager.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.DELETE));
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
         Assert.assertFalse(PrivilegeManager.checkAnyActionOnTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // grant view
@@ -190,7 +192,9 @@ public class PrivilegeManagerTest {
         manager.grant(grantStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "ALTER"));
+        Assert.assertFalse(PrivilegeManager.checkActionInDb(ctx, DB_NAME, "SELECT"));
 
         // revoke view
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -199,7 +203,7 @@ public class PrivilegeManagerTest {
         manager.revoke(revokeStmt);
 
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
     }
 
     @Test
@@ -1256,7 +1260,7 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeType.DbAction.DROP));
         Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.DROP));
         Assert.assertTrue(PrivilegeManager.checkViewAction(ctx, DB_NAME, "view1", PrivilegeType.ViewAction.DROP));
-        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionOnOrInDb(ctx, DB_NAME));
 
         // grant to imutable role
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
