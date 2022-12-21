@@ -31,7 +31,7 @@ class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
     LakePrimaryIndex(const vectorized::VectorizedSchema& pk_schema) : PrimaryIndex(pk_schema) {}
-    ~LakePrimaryIndex() { PrimaryIndex::~PrimaryIndex(); }
+    ~LakePrimaryIndex() {}
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
