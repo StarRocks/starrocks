@@ -29,7 +29,7 @@
 #include "simd/simd.h"
 #include "util/time.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // 0x1. initial global runtime filter impl
 // 0x2. change simd-block-filter hash function.
@@ -351,7 +351,7 @@ void RuntimeFilterProbeCollector::close(RuntimeState* state) {
 
 // do_evaluate is reentrant, can be called concurrently by multiple operators that shared the same
 // RuntimeFilterProbeCollector.
-void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
+void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
     if ((eval_context.input_chunk_nums++ & 31) == 0) {
         update_selectivity(chunk, eval_context);
         return;
@@ -402,7 +402,7 @@ void RuntimeFilterProbeCollector::init_counter() {
             ADD_COUNTER(_runtime_profile, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
 }
 
-void RuntimeFilterProbeCollector::evaluate(vectorized::Chunk* chunk) {
+void RuntimeFilterProbeCollector::evaluate(Chunk* chunk) {
     if (_descriptors.empty()) return;
     if (_eval_context.join_runtime_filter_timer == nullptr) {
         init_counter();
@@ -410,7 +410,7 @@ void RuntimeFilterProbeCollector::evaluate(vectorized::Chunk* chunk) {
     evaluate(chunk, _eval_context);
 }
 
-void RuntimeFilterProbeCollector::evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
+void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
     if (_descriptors.empty()) return;
     size_t before = chunk->num_rows();
     if (before == 0) return;
@@ -426,7 +426,7 @@ void RuntimeFilterProbeCollector::evaluate(vectorized::Chunk* chunk, RuntimeBloo
     }
 }
 
-void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, Column* column,
+void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
                                                       RuntimeBloomFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
@@ -448,8 +448,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
     }
 }
 
-void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
-                                                     RuntimeBloomFilterEvalContext& eval_context) {
+void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
     size_t chunk_size = chunk->num_rows();
     auto& merged_selection = eval_context.running_context.merged_selection;
     auto& use_merged_selection = eval_context.running_context.use_merged_selection;
@@ -644,11 +643,11 @@ public:
     bool is_constant() const override { return false; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
 
-    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
-        const vectorized::ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
+    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
+        const ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
         size_t size = col->size();
 
-        std::shared_ptr<vectorized::BooleanColumn> result(new vectorized::BooleanColumn(size, 1));
+        std::shared_ptr<BooleanColumn> result(new BooleanColumn(size, 1));
         uint8_t* res = result->get_data().data();
 
         if (col->only_null()) {
@@ -696,7 +695,7 @@ public:
         return result;
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         return evaluate_with_filter(context, ptr, nullptr);
     }
 
@@ -739,4 +738,4 @@ void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotI
     *min_max_predicate = res;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -20,7 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
     friend class ColumnFactory<Column, ArrayColumn>;
@@ -192,4 +192,4 @@ private:
     UInt32Column::Ptr _offsets;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

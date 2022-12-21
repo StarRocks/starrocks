@@ -17,7 +17,7 @@
 #include "formats/parquet/file_reader.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
@@ -85,4 +85,4 @@ void HdfsParquetScanner::do_close(RuntimeState* runtime_state) noexcept {
     _reader.reset();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

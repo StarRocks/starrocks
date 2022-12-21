@@ -26,12 +26,11 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ORCFileStream : public ORCHdfsFileStream {
 public:
-    ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length,
-                  starrocks::vectorized::ScannerCounter* counter)
+    ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, starrocks::ScannerCounter* counter)
             : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
 
     ~ORCFileStream() override { _file.reset(); }
@@ -47,7 +46,7 @@ private:
 };
 
 ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
-                       const TBrokerScanRange& scan_range, starrocks::vectorized::ScannerCounter* counter)
+                       const TBrokerScanRange& scan_range, starrocks::ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _max_chunk_size(_state->chunk_size() ? _state->chunk_size() : 4096),
@@ -137,7 +136,7 @@ StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
     return Status::InternalError("unreachable path");
 }
 
-StatusOr<ChunkPtr> ORCScanner::_transfer_chunk(starrocks::vectorized::ChunkPtr& src) {
+StatusOr<ChunkPtr> ORCScanner::_transfer_chunk(starrocks::ChunkPtr& src) {
     SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
     ASSIGN_OR_RETURN(ChunkPtr cast_chunk, _orc_reader->cast_chunk_checked(&src));
     auto range = _scan_range.ranges.at(_next_range - 1);
@@ -215,4 +214,4 @@ void ORCScanner::close() {
     _orc_reader.reset(nullptr);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

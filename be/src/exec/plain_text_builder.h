@@ -23,10 +23,10 @@
 
 namespace starrocks {
 
-namespace vectorized::csv {
+namespace csv {
 class Converter;
 class OutputStream;
-} // namespace vectorized::csv
+} // namespace csv
 
 class ExprContext;
 class FileWriter;
@@ -42,7 +42,7 @@ public:
                      const std::vector<ExprContext*>& output_expr_ctxs);
     ~PlainTextBuilder() override = default;
 
-    Status add_chunk(vectorized::Chunk* chunk) override;
+    Status add_chunk(Chunk* chunk) override;
 
     std::size_t file_size() override;
 
@@ -52,8 +52,8 @@ private:
     const static size_t OUTSTREAM_BUFFER_SIZE_BYTES;
     const PlainTextBuilderOptions _options;
     const std::vector<ExprContext*>& _output_expr_ctxs;
-    std::unique_ptr<vectorized::csv::OutputStream> _output_stream;
-    std::vector<std::unique_ptr<vectorized::csv::Converter>> _converters;
+    std::unique_ptr<csv::OutputStream> _output_stream;
+    std::vector<std::unique_ptr<csv::Converter>> _converters;
     bool _init;
 
     Status init();

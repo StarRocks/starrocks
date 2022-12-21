@@ -32,8 +32,6 @@ class MemPool;
 class MysqlRowBuffer;
 class Slice;
 
-namespace vectorized {
-
 // Forward declaration
 class Datum;
 
@@ -452,5 +450,4 @@ public:
     }
 };
 
-} // namespace vectorized
 } // namespace starrocks

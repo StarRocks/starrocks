@@ -27,7 +27,7 @@
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct SlotDesc {
     string name;
@@ -1713,4 +1713,4 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     scanner->close(_runtime_state);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

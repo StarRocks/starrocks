@@ -22,7 +22,7 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AssertNumRowsNode::AssertNumRowsNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
@@ -72,7 +72,7 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
     if (_assertion == TAssertion::LE && _num_rows_returned == 0) {
         _input_chunks.clear();
 
-        chunk = std::make_shared<vectorized::Chunk>();
+        chunk = std::make_shared<Chunk>();
         for (const auto& desc : row_desc().tuple_descriptors()) {
             for (const auto& slot : desc->slots()) {
                 auto column = ColumnHelper::create_column(slot->type(), true);
@@ -183,4 +183,4 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
     return operator_before_assert_num_rows_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

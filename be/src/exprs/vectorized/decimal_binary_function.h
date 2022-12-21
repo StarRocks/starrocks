@@ -19,7 +19,7 @@
 #include "exprs/vectorized/binary_function.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <bool check_overflow, typename Op>
 struct DecimalBinaryFunction {
     // Adjust the scale of lhs operand, then evaluate binary operation, the rules about operand
@@ -238,4 +238,4 @@ using VectorizedUnstrictDecimalBinaryFunction =
         ProduceNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<ArithmeticRightZeroCheck<Type>>,
                                             UnpackConstColumnDecimalBinaryFunction<OP, check_overflow>>;
 
-} //namespace starrocks::vectorized
+} //namespace starrocks

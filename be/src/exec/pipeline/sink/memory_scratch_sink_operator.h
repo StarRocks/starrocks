@@ -61,9 +61,9 @@ public:
 
     Status set_cancelled(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     void try_to_put_sentinel();

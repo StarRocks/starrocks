@@ -29,7 +29,7 @@
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define CHECK_JAVA_EXCEPTION(env, error_message)                                        \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                               \
@@ -314,8 +314,8 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
         _result_chunk->append_column(std::move(result_column), i);
         auto column_ref = _pool.add(new ColumnRef(intermediate, i));
         // TODO: add check cast status
-        Expr* cast_expr = vectorized::VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(),
-                                                                           column_ref, &_pool, true);
+        Expr* cast_expr =
+                VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool, true);
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
     RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
@@ -439,4 +439,4 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

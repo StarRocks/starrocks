@@ -24,7 +24,7 @@
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(ObjectColumnTest, HLL_test_filter) {
@@ -241,4 +241,4 @@ TEST(ObjectColumnTest, Percentile_test_swap_column) {
     delete ctx;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

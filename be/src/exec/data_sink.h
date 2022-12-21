@@ -66,7 +66,7 @@ public:
     // Setup. Call before send() or close().
     virtual Status open(RuntimeState* state) = 0;
 
-    virtual Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk);
+    virtual Status send_chunk(RuntimeState* state, Chunk* chunk);
 
     // Releases all resources that were allocated in prepare()/send().
     // Further send() calls are illegal after calling close().

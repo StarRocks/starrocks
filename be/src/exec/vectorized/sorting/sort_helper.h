@@ -25,7 +25,7 @@
 #include "util/json.h"
 #include "util/orlp/pdqsort.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Comparator for sort
 template <class T>
@@ -281,4 +281,4 @@ static inline int compare_chunk_row(const SortDescs& desc, const Columns& lhs, c
     return 0;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

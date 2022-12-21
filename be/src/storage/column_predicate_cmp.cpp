@@ -39,7 +39,7 @@ class BitmapIndexIterator;
 class BloomFilter;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType field_type>
 using GeEval = std::greater_equal<typename CppTypeTraits<field_type>::CppType>;
@@ -864,4 +864,4 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
 
     return os;
 }
-} //namespace starrocks::vectorized
+} //namespace starrocks

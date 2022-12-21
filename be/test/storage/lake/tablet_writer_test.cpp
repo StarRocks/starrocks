@@ -38,10 +38,10 @@
 
 namespace starrocks::lake {
 
-using namespace starrocks::vectorized;
+using namespace starrocks;
 
-using VSchema = starrocks::vectorized::VectorizedSchema;
-using VChunk = starrocks::vectorized::Chunk;
+using VSchema = starrocks::VectorizedSchema;
+using VChunk = starrocks::Chunk;
 
 class DuplicateTabletWriterTest : public testing::Test {
 public:

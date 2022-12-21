@@ -45,7 +45,7 @@ struct DecoderChecker {
             ASSERT_FALSE(st.ok());
         }
         {
-            auto column = starrocks::vectorized::FixedLengthColumn<T>::create();
+            auto column = starrocks::FixedLengthColumn<T>::create();
 
             decoder->set_data(encoded_data);
             auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
@@ -64,8 +64,8 @@ struct DecoderChecker {
             }
         }
         {
-            auto data_column = starrocks::vectorized::FixedLengthColumn<T>::create();
-            auto column = vectorized::NullableColumn::create(data_column, vectorized::NullColumn::create());
+            auto data_column = starrocks::FixedLengthColumn<T>::create();
+            auto column = NullableColumn::create(data_column, NullColumn::create());
 
             decoder->set_data(encoded_data);
             auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
@@ -103,7 +103,7 @@ struct DecoderChecker<Slice, is_dictionary> {
             ASSERT_FALSE(st.ok());
         }
         {
-            auto column = starrocks::vectorized::BinaryColumn::create();
+            auto column = starrocks::BinaryColumn::create();
 
             decoder->set_data(encoded_data);
             auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
@@ -122,8 +122,8 @@ struct DecoderChecker<Slice, is_dictionary> {
             }
         }
         {
-            auto data_column = starrocks::vectorized::BinaryColumn::create();
-            auto column = vectorized::NullableColumn::create(data_column, vectorized::NullColumn::create());
+            auto data_column = starrocks::BinaryColumn::create();
+            auto column = NullableColumn::create(data_column, NullColumn::create());
 
             decoder->set_data(encoded_data);
             auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());

@@ -22,7 +22,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/olap_meta_reader.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OlapMetaScanNode;
 
@@ -57,4 +57,4 @@ private:
     std::shared_ptr<OlapMetaReader> _reader;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

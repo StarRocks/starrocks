@@ -44,7 +44,7 @@ namespace starrocks {
 
 class MemtableFlushTask final : public Runnable {
 public:
-    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTable> memtable, bool eos,
+    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<MemTable> memtable, bool eos,
                       std::function<void(std::unique_ptr<SegmentPB>, bool)> cb)
             : _flush_token(flush_token), _memtable(std::move(memtable)), _eos(eos), _cb(std::move(cb)) {}
 
@@ -79,7 +79,7 @@ public:
 
 private:
     FlushToken* _flush_token;
-    std::unique_ptr<vectorized::MemTable> _memtable;
+    std::unique_ptr<MemTable> _memtable;
     bool _eos;
     std::function<void(std::unique_ptr<SegmentPB>, bool)> _cb;
 };
@@ -90,7 +90,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     return os;
 }
 
-Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable, bool eos,
+Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
                           std::function<void(std::unique_ptr<SegmentPB>, bool)> cb) {
     RETURN_IF_ERROR(status());
     if (memtable == nullptr && !eos) {
@@ -112,7 +112,7 @@ Status FlushToken::wait() {
     return _status;
 }
 
-void FlushToken::_flush_memtable(vectorized::MemTable* memtable, SegmentPB* segment) {
+void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
     // If previous flush has failed, return directly
     if (!status().ok()) return;
 

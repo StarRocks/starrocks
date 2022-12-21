@@ -21,7 +21,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaColumnsScanner::_s_col_columns[] = {
         //   name,       type,          size,                     is_null
@@ -588,4 +588,4 @@ Status SchemaColumnsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

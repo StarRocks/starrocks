@@ -24,7 +24,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ExprsTestHelper {
 public:
@@ -155,4 +155,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

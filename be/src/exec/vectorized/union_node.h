@@ -18,7 +18,7 @@
 #include "exec/pipeline/set/union_passthrough_operator.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class UnionNode final : public ExecNode {
 public:
@@ -77,4 +77,4 @@ private:
     const TupleDescriptor* _tuple_desc = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

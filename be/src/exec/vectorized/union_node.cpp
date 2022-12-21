@@ -24,7 +24,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _first_materialized_child_idx(tnode.union_node.first_materialized_child_idx),
@@ -423,4 +423,4 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     return final_operators;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

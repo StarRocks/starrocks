@@ -48,7 +48,7 @@ bool MetaScanPrepareOperator::is_finished() const {
     return true;
 }
 
-StatusOr<vectorized::ChunkPtr> MetaScanPrepareOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> MetaScanPrepareOperator::pull_chunk(RuntimeState* state) {
     return nullptr;
 }
 

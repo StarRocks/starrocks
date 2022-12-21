@@ -24,7 +24,7 @@
 #include "runtime/mem_pool.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct PartitionChunks {
     Chunks chunks;
@@ -369,4 +369,4 @@ struct PartitionHashMapWithSerializedKeyFixedSize {
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

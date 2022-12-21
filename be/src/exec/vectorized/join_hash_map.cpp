@@ -21,7 +21,7 @@
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void SerializedJoinBuildFunc::prepare(RuntimeState* state, JoinHashTableItems* table_items) {
     table_items->bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
@@ -756,4 +756,4 @@ void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Column::Filter* 
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

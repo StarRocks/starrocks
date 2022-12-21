@@ -30,7 +30,7 @@
 #if defined(__aarch64__)
 #include "arm_acle.h"
 #endif
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnRef;
 
@@ -747,7 +747,7 @@ private:
     std::shared_ptr<JoinHashTableItems> _table_items;
     std::unique_ptr<HashTableProbeState> _probe_state;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 #ifndef JOIN_HASH_MAP_TPP
 #include "exec/vectorized/join_hash_map.tpp"

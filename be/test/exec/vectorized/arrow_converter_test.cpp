@@ -34,11 +34,11 @@
         ASSERT_TRUE(status.ok()); \
     } while (0)
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrowConverterTest : public ::testing::Test {
 public:
-    void SetUp() override { vectorized::date::init_date_cache(); }
+    void SetUp() override { date::init_date_cache(); }
 };
 
 template <typename ArrowType, bool is_nullable = false, typename CType = typename arrow::TypeTraits<ArrowType>::CType,
@@ -1250,4 +1250,4 @@ PARALLEL_TEST(ArrowConverterTest, test_map_to_json) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

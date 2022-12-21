@@ -17,7 +17,7 @@
 #include "exec/vectorized/partition/partition_hash_map.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define APPLY_FOR_PARTITION_VARIANT_NOT_NULL(M) \
     M(phase1_uint8)                             \
@@ -293,4 +293,4 @@ struct PartitionHashMapVariant {
         return 0;
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

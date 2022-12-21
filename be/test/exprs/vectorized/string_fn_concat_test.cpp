@@ -21,7 +21,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class StringFunctionConcatTest : public ::testing::Test {
 public:
@@ -576,4 +576,4 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
     prepare_concat_ws_data(sep_null_col, null_col, sep, col0, col1, col2, col3);
     concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 30);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

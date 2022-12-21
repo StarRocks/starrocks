@@ -17,7 +17,7 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SchemaEventsScanner : public SchemaScanner {
 public:
@@ -28,4 +28,4 @@ private:
     static SchemaScanner::ColumnDesc _s_cols_events[];
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

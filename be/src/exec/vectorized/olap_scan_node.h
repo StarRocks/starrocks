@@ -37,7 +37,7 @@ class Tablet;
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // OlapScanNode fetch records from storage engine and pass them to the parent node.
 // It will submit many TabletScanner to a global-shared thread pool to execute concurrently.
@@ -70,9 +70,7 @@ public:
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges) override;
 
-    void debug_string(int indentation_level, std::stringstream* out) const override {
-        *out << "vectorized::OlapScanNode";
-    }
+    void debug_string(int indentation_level, std::stringstream* out) const override { *out << "OlapScanNode"; }
     Status collect_query_statistics(QueryStatistics* statistics) override;
 
     Status set_scan_ranges(const std::vector<TInternalScanRange>& ranges);
@@ -242,4 +240,4 @@ private:
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

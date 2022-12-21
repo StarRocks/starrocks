@@ -34,7 +34,7 @@
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class TimeFunctionsTest : public ::testing::Test {
 public:
@@ -3155,4 +3155,4 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

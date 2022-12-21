@@ -22,7 +22,7 @@
 #include "serde/column_array_serde.h"
 #include "storage/olap_define.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 RowSourceMaskBuffer::RowSourceMaskBuffer(int64_t tablet_id, std::string storage_root_path)
         : _mask_column(UInt16Column::create_mutable()),
@@ -173,4 +173,4 @@ Status RowSourceMaskBuffer::_deserialize_masks() {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

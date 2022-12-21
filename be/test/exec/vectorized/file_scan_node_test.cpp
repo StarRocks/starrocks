@@ -28,7 +28,7 @@
 
 //TODO: test multi thread
 //TODO: test runtime filter
-namespace starrocks::vectorized {
+namespace starrocks {
 class FileScanNodeTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -49,7 +49,7 @@ private:
     std::vector<TScanRangeParams> _create_csv_scan_ranges(const std::vector<TypeDescriptor>& types,
                                                           const string& multi_row_delimiter = "\n",
                                                           const string& multi_column_separator = "|");
-    static vectorized::ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
+    static ChunkPtr _create_chunk(const std::vector<TypeDescriptor>& types);
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     OlapTableDescriptor* _table_desc = nullptr;
@@ -59,10 +59,10 @@ private:
     std::string _file = "./be/test/exec/test_data/csv_scanner/csv_file1";
 };
 
-vectorized::ChunkPtr FileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr FileScanNodeTest::_create_chunk(const std::vector<TypeDescriptor>& types) {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     for (int i = 0; i < types.size(); i++) {
-        chunk->append_column(vectorized::ColumnHelper::create_column(types[i], true), i);
+        chunk->append_column(ColumnHelper::create_column(types[i], true), i);
     }
     return chunk;
 }
@@ -197,4 +197,4 @@ TEST_F(FileScanNodeTest, CSVBasic) {
     ASSERT_TRUE(status.ok());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -21,7 +21,7 @@
 #include "util/phmap/phmap_hash.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // slice -> global dict code
 using GlobalDictMap = phmap::flat_hash_map<Slice, DictId, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
@@ -39,4 +39,4 @@ using DictColumnsValidMap = phmap::flat_hash_map<std::string, bool, SliceHashWit
 
 using ColumnIdToGlobalDictMap = phmap::flat_hash_map<uint32_t, GlobalDictMap*>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

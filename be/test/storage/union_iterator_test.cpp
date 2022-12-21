@@ -25,7 +25,7 @@
 #include "column/vectorized_schema.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class UnionIteratorTest : public testing::Test {
 protected:
@@ -131,4 +131,4 @@ TEST_F(UnionIteratorTest, union_one) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

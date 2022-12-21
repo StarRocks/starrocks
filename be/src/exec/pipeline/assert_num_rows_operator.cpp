@@ -17,18 +17,18 @@
 #include "column/chunk.h"
 #include "gutil/strings/substitute.h"
 
-using namespace starrocks::vectorized;
+using namespace starrocks;
 
 namespace starrocks::pipeline {
 Status AssertNumRowsOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
 
     // AssertNumRows should return exactly one row, report error if more than one row, return null if empty input
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
 
     for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
         for (const auto& slot : desc->slots()) {
-            vectorized::ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
             column->append_nulls(1);
             chunk->append_column(column, slot->id());
         }
@@ -43,7 +43,7 @@ void AssertNumRowsOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> AssertNumRowsOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AssertNumRowsOperator::pull_chunk(RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
@@ -55,7 +55,7 @@ bool AssertNumRowsOperator::need_input() const {
     return !_input_finished;
 }
 
-Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _actual_num_rows += chunk->num_rows();
     if (_actual_num_rows > 1) {
         auto iter = _TAssertion_VALUES_TO_NAMES.find(_assertion);

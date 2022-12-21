@@ -18,7 +18,7 @@
 #include "exec/vectorized/aggregate/agg_hash_set.h"
 #include "util/phmap/phmap_dump.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <typename HashSet>
 Status IntersectHashSet<HashSet>::init(RuntimeState* state) {
     _hash_set = std::make_unique<HashSet>();
@@ -145,4 +145,4 @@ void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, con
 template class IntersectHashSet<
         phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

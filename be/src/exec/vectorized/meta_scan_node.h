@@ -23,8 +23,6 @@ namespace starrocks {
 
 class RuntimeState;
 
-namespace vectorized {
-
 class MetaScanNode : public starrocks::ScanNode {
 public:
     MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -59,5 +57,4 @@ private:
     RuntimeProfile::Counter* _tablet_counter = nullptr;
 };
 
-} // namespace vectorized
 } // namespace starrocks

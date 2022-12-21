@@ -17,11 +17,11 @@
 #include "common/object_pool.h"
 #include "exprs/predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedBinaryPredicateFactory {
 public:
     static Expr* from_thrift(const TExprNode& node);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

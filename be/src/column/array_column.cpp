@@ -23,7 +23,7 @@
 #include "gutil/strings/fastmem.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void ArrayColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _elements->size());
@@ -587,4 +587,4 @@ bool ArrayColumn::empty_null_array(const NullColumnPtr& null_map) {
     return need_empty;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

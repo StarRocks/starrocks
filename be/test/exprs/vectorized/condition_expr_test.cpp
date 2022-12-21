@@ -29,7 +29,7 @@
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedConditionExprTest : public ::testing::Test {
 public:
@@ -329,4 +329,4 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

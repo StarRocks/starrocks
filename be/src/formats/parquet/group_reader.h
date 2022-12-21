@@ -27,9 +27,7 @@
 namespace starrocks {
 class RandomAccessFile;
 
-namespace vectorized {
 struct HdfsScanStats;
-}
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -60,7 +58,7 @@ struct GroupReaderParam {
 
     std::string timezone;
 
-    vectorized::HdfsScanStats* stats = nullptr;
+    HdfsScanStats* stats = nullptr;
 
     SharedBufferedInputStream* shared_buffered_stream = nullptr;
 
@@ -79,7 +77,7 @@ public:
     ~GroupReader() = default;
 
     Status init();
-    Status get_next(vectorized::ChunkPtr* chunk, size_t* row_count);
+    Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
     void collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
@@ -89,7 +87,7 @@ private:
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
-    vectorized::ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
+    ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
     bool _can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
@@ -99,10 +97,10 @@ private:
     Status _rewrite_dict_column_predicates();
     void _init_read_chunk();
 
-    Status _read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk);
-    Status _lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk, size_t chunk_size);
-    void _dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter_ptr);
-    Status _dict_decode(vectorized::ChunkPtr* chunk);
+    Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
+    Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
+    void _dict_filter(ChunkPtr* chunk, Filter* filter_ptr);
+    Status _dict_decode(ChunkPtr* chunk);
     void _collect_field_io_range(const ParquetField& field, std::vector<SharedBufferedInputStream::IORange>* ranges,
                                  int64_t* end_offset);
 
@@ -114,7 +112,7 @@ private:
     // conjunct ctxs for each dict filter column
     std::unordered_map<SlotId, std::vector<ExprContext*>> _dict_filter_conjunct_ctxs;
     // preds transformed from conjunct ctxs for each dict filter column
-    std::unordered_map<SlotId, vectorized::ColumnPredicate*> _dict_filter_preds;
+    std::unordered_map<SlotId, ColumnPredicate*> _dict_filter_preds;
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;
 
@@ -131,7 +129,7 @@ private:
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
 
-    vectorized::ChunkPtr _read_chunk;
+    ChunkPtr _read_chunk;
 
     // param for read row group
     const GroupReaderParam& _param;

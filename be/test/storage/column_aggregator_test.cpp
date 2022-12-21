@@ -23,7 +23,7 @@
 #include "storage/array_type_info.h"
 #include "storage/column_aggregate_func.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(ColumnAggregator, testIntSum) {
     VectorizedFieldPtr field = std::make_shared<VectorizedField>(1, "test", LogicalType::TYPE_INT, false);
@@ -799,4 +799,4 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
     ASSERT_EQ("NULL", agg->debug_item(0));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

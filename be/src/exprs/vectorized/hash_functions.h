@@ -19,7 +19,7 @@
 #include "exprs/function_context.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class HashFunctions {
 public:
     /**
@@ -29,8 +29,7 @@ public:
     DEFINE_VECTORIZED_FN(murmur_hash3_32);
 };
 
-inline StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* context,
-                                                          const starrocks::vectorized::Columns& columns) {
+inline StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* context, const starrocks::Columns& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> viewers;
 
     viewers.reserve(columns.size());
@@ -59,4 +58,4 @@ inline StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* conte
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

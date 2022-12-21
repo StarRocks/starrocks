@@ -21,12 +21,11 @@
 #include "io/compressed_input_stream.h"
 #include "util/compression/stream_compression.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
 public:
-    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream,
-                                        vectorized::HdfsScanStats* stats)
+    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream, HdfsScanStats* stats)
             : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
 
     ~CountedSeekableInputStream() override = default;
@@ -57,7 +56,7 @@ public:
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
-    vectorized::HdfsScanStats* _stats;
+    HdfsScanStats* _stats;
 };
 
 bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
@@ -294,7 +293,7 @@ void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::str
     }
 }
 
-void HdfsScannerContext::update_not_existed_columns_of_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::update_not_existed_columns_of_chunk(ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.empty() || row_count <= 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -303,7 +302,7 @@ void HdfsScannerContext::update_not_existed_columns_of_chunk(vectorized::ChunkPt
     }
 }
 
-void HdfsScannerContext::append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -331,14 +330,14 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
     return !(chunk->has_rows());
 }
 
-void HdfsScannerContext::update_partition_column_of_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count) {
     if (partition_columns.empty() || row_count <= 0) return;
 
     ChunkPtr& ck = (*chunk);
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
         DCHECK(partition_values[i]->is_constant());
-        auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_values[i]);
+        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
         ColumnPtr data_column = const_column->data_column();
         auto chunk_part_column = ck->get_column_by_slot_id(slot_desc->id());
 
@@ -351,7 +350,7 @@ void HdfsScannerContext::update_partition_column_of_chunk(vectorized::ChunkPtr* 
     }
 }
 
-void HdfsScannerContext::append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
     if (partition_columns.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -360,7 +359,7 @@ void HdfsScannerContext::append_partition_column_to_chunk(vectorized::ChunkPtr* 
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
         DCHECK(partition_values[i]->is_constant());
-        auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_values[i]);
+        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
         ColumnPtr data_column = const_column->data_column();
         auto chunk_part_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
 
@@ -396,4 +395,4 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
     return true;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -16,7 +16,7 @@
 
 #include "exprs/vectorized/array_functions.tpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayFunctions {
 public:
@@ -216,4 +216,4 @@ private:
     static StatusOr<ColumnPtr> array_max(const Columns& columns);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

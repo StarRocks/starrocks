@@ -19,7 +19,7 @@
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, typename = guard::Guard>
 inline constexpr LogicalType SumResultPT = PT;
@@ -170,4 +170,4 @@ template <LogicalType PT, typename = DecimalPTGuard<PT>>
 using DecimalSumAggregateFunction =
         SumAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
