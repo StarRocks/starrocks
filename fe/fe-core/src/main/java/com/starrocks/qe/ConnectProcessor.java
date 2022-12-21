@@ -48,6 +48,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
@@ -416,7 +417,9 @@ public class ConnectProcessor {
             }
 
         } catch (StarRocksIcebergException e) {
-            LOG.warn("errors happened when getting Iceberg table {}", tableName, e);
+            LOG.error("errors happened when getting Iceberg table {}", tableName, e);
+        } catch (StarRocksConnectorException e) {
+            LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
             db.readUnlock();
         }
