@@ -25,11 +25,16 @@ JSON query functions and processing functions are used to query and process JSON
 | [get_json_string](./json-query-and-processing-functions/get_json_string.md)   | Analyzes and gets the strings from a specified path in a JSON string.  | SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1"); | v1 |
 | [json_query](./json-query-and-processing-functions/json_query.md) | Queries the value of an element that can be located by a path expression in a JSON object. | SELECT JSON_QUERY({"a": 1}, '$.a')                         | 1                                                   |
 | [json_each](./json-query-and-processing-functions/json_each.md) | Expands the top-level elements of a JSON object into key-value pairs. | SELECT * FROM JSON_EACH('{"a": 1, "b":{"c": 3, "d": null}} | key \| value -----+----  a \| 1  b \|  {"c": 3, "d": null} |
+<<<<<<< HEAD
 | [json_exists](./json-query-and-processing-functions/json_exists.md) | Checks whether a JSON object contains an element that can be located by a path expression. If the element exists, this function returns 1. If the element does not exist, the function returns 0. | SELECT JSON_EXISTS({"a": 1}, '$.a')                        | 1                                     |
 | [json_keys](../../sql-functions/json-functions/json-processing-functions/json_keys.md) | Returns the top-level keys from a JSON object as a JSON array, or, if a path is specified, the top-level keys from the path.   | SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}') |  ["a", "b", "c"]|
 | [json_length](../../sql-functions/json-functions/json-processing-functions/json_length.md) | Returns the length of a JSON document.  | select json_length('{"Name": "Alice"}') |{"Name": "Alice"}|
 | [json_query](../../sql-functions/json-functions/json-processing-functions/json_query.md) | Queries the value of an element that can be located by the json_path expression in a JSON object and returns a JSON value.  | SELECT JSON_QUERY({"a": 1}, '$.a')             | 1                                                            |
 | [json_string](./json-query-and-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
+=======
+| [cast](./json-query-and-processing-functions/cast.md) | Converts data between a JSON data type and an SQL data type. | SELECT CAST(PARSE_JSON('1') as INT);                       | 1                                                          |
+| [JSON_STRING](./json-query-and-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
+>>>>>>> f9c220cd1 ([Doc] Add json_string func description (#15582))
 
 ## JSON operators
 
