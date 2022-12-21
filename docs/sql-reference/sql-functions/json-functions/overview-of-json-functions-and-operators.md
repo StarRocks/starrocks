@@ -23,7 +23,7 @@ JSON query functions and processing functions are used to query and process JSON
 | [json_exists](./json-query-and-processing-functions/json_exists.md) | Checks whether a JSON object contains an element that can be located by a path expression. If the element exists, this function returns 1. If the element does not exist, the function returns 0. | SELECT JSON_EXISTS({"a": 1}, '$.a')                        | 1                                                          |
 | [json_each](./json-query-and-processing-functions/json_each.md) | Expands the top-level elements of a JSON object into key-value pairs. | SELECT * FROM JSON_EACH('{"a": 1, "b":{"c": 3, "d": null}} | key \| value -----+----  a \| 1  b \|  {"c": 3, "d": null} |
 | [cast](./json-query-and-processing-functions/cast.md) | Converts data between a JSON data type and an SQL data type. | SELECT CAST(PARSE_JSON('1') as INT);                       | 1                                                          |
-| [JSON_STRING](../../sql-functions/json-functions/json-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
+| [JSON_STRING](./json-query-and-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
 
 ## JSON operators
 
