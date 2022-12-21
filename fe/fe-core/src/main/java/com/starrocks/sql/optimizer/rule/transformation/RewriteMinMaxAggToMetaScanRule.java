@@ -24,7 +24,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -39,7 +38,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -90,7 +88,7 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
     }
 
     @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+    public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         OptExpression optExpression = input.getInputs().get(0);
         LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
@@ -105,14 +103,14 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
         // 7. no expr in arguments to agg functions
         // 8. all agg columns have zonemap index
         if (table.getKeysType() != KeysType.DUP_KEYS) {
-            return new ArrayList<>();
+            return false;
         }
         List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
         if (groupingKeys != null && !groupingKeys.isEmpty()) {
-            return new ArrayList<>();
+            return false;
         }
         if (aggregationOperator.getPredicate() != null) {
-            return new ArrayList<>();
+            return false;
         }
         boolean isOnlySimpleMinMax = aggregationOperator.getAggregations().values().stream().allMatch(
                 aggregator -> {
@@ -134,7 +132,7 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
                 }
         );
         if (!isOnlySimpleMinMax) {
-            return new ArrayList<>();
+            return false;
         }
         boolean allCanUseZonemapIndex = aggregationOperator.getAggregations().values().stream().allMatch(
                 aggregator -> {
@@ -144,17 +142,24 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
         );
         // all agg columns have zonemap index
         if (!allCanUseZonemapIndex) {
-            return new ArrayList<>();
+            return false;
         }
         // no limit
         if (scanOperator.getLimit() != -1) {
-            return new ArrayList<>();
+            return false;
         }
-        Map<String, PartitionColumnFilter> columnFilters = scanOperator.getColumnFilters();
         // no filter
-        if (columnFilters != null && !columnFilters.isEmpty()) {
-            return new ArrayList<>();
+        if (scanOperator.getPredicate() != null) {
+            return false;
         }
+        return true;
+    }
+
+    @Override
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
+        OptExpression optExpression = input.getInputs().get(0);
+        LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
         OptExpression result = buildAggMetaScanOperator(aggregationOperator,
                 (LogicalOlapScanOperator) scanOperator, context);
         return Lists.newArrayList(result);
