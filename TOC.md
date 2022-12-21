@@ -515,6 +515,7 @@
       + [log](/sql-reference/sql-functions/math-functions/log.md)
       + [log2](/sql-reference/sql-functions/math-functions/log2.md)
       + [log10](/sql-reference/sql-functions/math-functions/log10.md)
+      + [multiply](/sql-reference/sql-functions/math-functions/multiply.md)
       + [mod](/sql-reference/sql-functions/math-functions/mod.md)
       + [negative](/sql-reference/sql-functions/math-functions/negative.md)
       + [pi](/sql-reference/sql-functions/math-functions/pi.md)
