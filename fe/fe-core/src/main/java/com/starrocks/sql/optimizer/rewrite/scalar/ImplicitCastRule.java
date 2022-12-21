@@ -185,7 +185,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitMultiInPredicate(MultiInPredicateOperator predicate, ScalarOperatorRewriteContext c) {
-        throw new StarRocksPlannerException("Implicit casting of multi-column IN predicate is not supported.", ErrorType.INTERNAL_ERROR);
+        throw new StarRocksPlannerException("Implicit casting of multi-column IN predicate is not supported.",
+                ErrorType.INTERNAL_ERROR);
     }
 
     @Override

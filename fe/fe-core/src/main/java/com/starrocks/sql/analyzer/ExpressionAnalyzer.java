@@ -634,7 +634,8 @@ public class ExpressionAnalyzer {
 
             Subquery inSubquery = (Subquery) node.getChild(node.getNumberOfColumns());
             List<Type> rightTypes =
-                    inSubquery.getQueryStatement().getQueryRelation().getOutputExpression().stream().map(Expr::getType).collect(Collectors.toList());
+                    inSubquery.getQueryStatement().getQueryRelation().getOutputExpression().stream().map(Expr::getType).
+                            collect(Collectors.toList());
             if (leftTypes.size() != rightTypes.size()) {
                 throw new SemanticException("subquery must return the same number of columns as provided by the IN predicate");
             }
