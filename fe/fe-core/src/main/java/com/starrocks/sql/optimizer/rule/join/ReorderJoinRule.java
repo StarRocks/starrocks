@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -213,7 +214,12 @@ public class ReorderJoinRule extends Rule {
                         newOutputProjections.put(ref, projection.getColumnRefMap().get(ref));
                     }
 
-                    optExpression.getOp().setProjection(new Projection(newOutputProjections));
+                    Operator.Builder builder = OperatorBuilderFactory.build(operator);
+
+                    Operator newOp = builder.withOperator(operator)
+                            .setProjection(new Projection(newOutputProjections))
+                            .build();
+                    optExpression = OptExpression.create(newOp, optExpression.getInputs());
                 }
 
                 for (ScalarOperator value : optExpression.getOp().getProjection().getColumnRefMap().values()) {
