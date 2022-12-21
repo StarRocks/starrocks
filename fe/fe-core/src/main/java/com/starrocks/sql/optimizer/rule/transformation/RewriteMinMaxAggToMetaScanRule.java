@@ -102,7 +102,8 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
         // 4. no limit
         // 5. only contain MIN/MAX agg functions
         // 6. all arguments to agg functions are primitive columns
-        // 7. all agg columns have zonemap index
+        // 7. no expr in arguments to agg functions
+        // 8. all agg columns have zonemap index
         if (table.getKeysType() != KeysType.DUP_KEYS) {
             return new ArrayList<>();
         }
