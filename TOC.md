@@ -478,6 +478,8 @@
       + [percentile_empty](/sql-reference/sql-functions/percentile-functions/percentile_empty.md)
       + [percentile_hash](/sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](/sql-reference/sql-functions/percentile-functions/percentile_union.md)
+    + 标量函数
+      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + 数学函数
       + [abs](/sql-reference/sql-functions/math-functions/abs.md)
       + [acos](/sql-reference/sql-functions/math-functions/acos.md)
