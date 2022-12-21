@@ -247,8 +247,6 @@ Hive catalog 的属性，必选参数。当前支持配置如下属性：
     | aws.hive.metastore.glue.aws-secret-key | 是       | IAM 用户的 secret access key（即秘密访问密钥）。        |
     | aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
 
-创建完 Hive catalog 后即可查询 Hive 集群中的数据。详细信息，请参见[查询外部数据](../catalog/query_external_data.md)。
-
 #### 元数据缓存更新属性配置
 
 StarRocks 当前支持两种更新元数据缓存的策略：异步更新和自动增量更新。有关这两种策略的详细说明，请参见[元数据缓存更新](#元数据缓存更新)。
@@ -286,6 +284,8 @@ StarRocks 当前支持两种更新元数据缓存的策略：异步更新和自�
     | **属性**                           | **必选** | **说明**                                                     |
     | ---------------------------------- | -------- | ------------------------------------------------------------ |
     | enable_hms_events_incremental_sync | 否       | 是否开启元数据缓存自动增量更新，取值包括：<ul><li>`TRUE`：表示开启。</li><li>`FALSE`：表示未开启，为默认值。</li></ul>如要为该 Hive catalog 开启自动增量更新策略，需将该参数值设置为 `TRUE`。 |
+
+创建完 Hive catalog 后即可查询 Hive 集群中的数据。详细信息，请参见[查询外部数据](../catalog/query_external_data.md)。
 
 ## 元数据缓存更新
 
