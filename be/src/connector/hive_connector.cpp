@@ -90,17 +90,13 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
 Status HiveDataSource::_init_partition_values() {
     if (!(_lake_table != nullptr && _has_partition_columns)) return Status::OK();
 
-<<<<<<< HEAD
     auto* partition_desc = _lake_table->get_partition(_scan_range.partition_id);
-=======
-    auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
     if (partition_desc == nullptr) {
         return Status::InternalError(
                 fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
                             _scan_range.partition_id));
     }
 
->>>>>>> 23b245030 ([BugFix] return error when partition id not found (#15486))
     const auto& partition_values = partition_desc->partition_key_value_evals();
     _partition_values = partition_values;
 
