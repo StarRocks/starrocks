@@ -403,6 +403,7 @@
         + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
         + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
+        + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_or](./sql-reference/sql-functions/bitmap-functions/bitmap_or.md)
