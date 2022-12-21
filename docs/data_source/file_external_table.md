@@ -43,7 +43,7 @@ PROPERTIES("<key>" = "<value>");
 | ENGINE           | Yes          | The type of ENGINE. Set the value of this parameter to `file`. |
 | PROPERTIES       | Yes          | The properties of the file external table. For more information, see **PROPERTIES**. |
 
-**PROPERTIES**
+**PROPERTIES**:
 
 You can configure the following key-value pairs for the `PROPERTIES` parameter.
 
