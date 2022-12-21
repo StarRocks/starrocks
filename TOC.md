@@ -240,6 +240,7 @@
       + [dayofmonth](/sql-reference/sql-functions/date-time-functions/dayofmonth.md)
       + [dayofweek](/sql-reference/sql-functions/date-time-functions/dayofweek.md)
       + [dayofyear](/sql-reference/sql-functions/date-time-functions/dayofyear.md)
+      + [days_diff](/sql-reference/sql-functions/date-time-functions/days_diff.md)
       + [from_days](/sql-reference/sql-functions/date-time-functions/from_days.md)
       + [from_unixtime](/sql-reference/sql-functions/date-time-functions/from_unixtime.md)
       + [hour](/sql-reference/sql-functions/date-time-functions/hour.md)
