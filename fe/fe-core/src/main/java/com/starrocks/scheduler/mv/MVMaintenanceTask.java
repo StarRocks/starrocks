@@ -14,11 +14,15 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.MVTaskType;
+import com.starrocks.thrift.TBinlogOffset;
+import com.starrocks.thrift.TBinlogScanRange;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochTask;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TUniqueId;
@@ -27,6 +31,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * TODO(murphy) implement the Coordinator to compute task correctly
@@ -47,7 +52,7 @@ public class MVMaintenanceTask {
     private long taskId;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
     // TODO(murphy) maintain this state during epoch execution
-    private final Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
+    private Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
 
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, long beId, TNetworkAddress beHost,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
@@ -120,8 +125,42 @@ public class MVMaintenanceTask {
         this.fragmentInstances = fragmentInstances;
     }
 
-    public Map<TUniqueId, Map<Integer, List<TScanRange>>> getBinlogConsumeState() {
+    public synchronized Map<TUniqueId, Map<Integer, List<TScanRange>>> getBinlogConsumeState() {
         return binlogConsumeState;
+    }
+
+    public synchronized void updateEpochState(TMVReportEpochTask reportTask) {
+        // Validate state
+        reportTask.getBinlog_consume_state().forEach((k, v) -> {
+            Map<Integer, List<TScanRange>> nodeScanRanges = binlogConsumeState.get(k);
+            Preconditions.checkState(nodeScanRanges != null, "fragment instance not exists: " + k);
+            v.forEach((node, rangeList) -> {
+                List<TScanRange> ranges = nodeScanRanges.get(node);
+                Preconditions.checkState(ranges != null, "plan node not exists: " + node);
+                ranges.forEach((range) -> {
+                    Preconditions.checkState(range.isSetBinlog_scan_range(), "must be binlog scan");
+                    TBinlogScanRange binlogScan = range.getBinlog_scan_range();
+                    TBinlogOffset offset = binlogScan.getOffset();
+                    long tabletId = offset.getTablet_id();
+                    long version = offset.getVersion();
+                    long lsn = offset.getLsn();
+                    Optional<TScanRange> existedState =
+                            ranges.stream()
+                                    .filter(x -> x.getBinlog_scan_range().getTablet_id() == tabletId)
+                                    .findFirst();
+                    Preconditions.checkState(existedState.isPresent(), "no existed state");
+
+                    // Check version is progressive increase
+                    TBinlogOffset existedOffset = existedState.get().getBinlog_scan_range().getOffset();
+                    long existedVersion = existedOffset.getVersion();
+                    long existedLsn = existedOffset.getLsn();
+                    Preconditions.checkState(version >= existedVersion || lsn >= existedLsn,
+                            "offset must be increased");
+                });
+            });
+        });
+
+        this.binlogConsumeState = reportTask.getBinlog_consume_state();
     }
 
     @Override

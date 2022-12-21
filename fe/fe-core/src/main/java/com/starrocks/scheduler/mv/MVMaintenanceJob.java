@@ -399,6 +399,10 @@ public class MVMaintenanceJob implements Writable {
         return taskMap;
     }
 
+    public MVMaintenanceTask getTask(long taskId) {
+        return taskMap.get(taskId);
+    }
+
     private JobState getSerializedState() {
         return serializedState;
     }
