@@ -31,7 +31,7 @@ public:
 
     Status init() override;
 
-    Status append(const vectorized::Column& column) override;
+    Status append(const Column& column) override;
 
     uint64_t estimate_buffer_size() override;
 
@@ -112,15 +112,15 @@ Status StructColumnWriter::init() {
     return Status::OK();
 }
 
-Status StructColumnWriter::append(const vectorized::Column& column) {
-    const vectorized::StructColumn* struct_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status StructColumnWriter::append(const Column& column) {
+    const StructColumn* struct_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (is_nullable()) {
-        const auto& nullable_column = down_cast<const vectorized::NullableColumn&>(column);
-        struct_column = down_cast<vectorized::StructColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column.null_column().get());
+        const auto& nullable_column = down_cast<const NullableColumn&>(column);
+        struct_column = down_cast<StructColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
     } else {
-        struct_column = down_cast<const vectorized::StructColumn*>(&column);
+        struct_column = down_cast<const StructColumn*>(&column);
     }
     // write null column when necessary
     if (is_nullable()) {

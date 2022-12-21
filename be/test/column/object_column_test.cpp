@@ -18,7 +18,7 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "exprs/vectorized/percentile_functions.h"
+#include "exprs/percentile_functions.h"
 #include "runtime/types.h"
 #include "types/hll.h"
 #include "util/percentile_value.h"

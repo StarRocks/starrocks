@@ -17,7 +17,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"

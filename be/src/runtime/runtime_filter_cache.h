@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exprs/vectorized/runtime_filter.h"
+#include "exprs/runtime_filter.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 
 namespace starrocks {

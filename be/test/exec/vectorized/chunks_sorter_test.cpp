@@ -29,7 +29,7 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
-#include "exprs/vectorized/column_ref.h"
+#include "exprs/column_ref.h"
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"

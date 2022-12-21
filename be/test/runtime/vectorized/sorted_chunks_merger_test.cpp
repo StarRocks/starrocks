@@ -19,8 +19,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 

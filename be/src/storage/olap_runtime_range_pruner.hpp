@@ -17,10 +17,10 @@
 #include <memory>
 
 #include "exec/olap_common.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/column_predicate.h"
 
 namespace starrocks {
 namespace detail {
