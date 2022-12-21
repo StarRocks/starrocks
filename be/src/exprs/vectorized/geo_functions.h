@@ -20,7 +20,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "geo/geo_common.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class GeoFunctions {
 public:
@@ -129,4 +129,4 @@ public:
     DEFINE_VECTORIZED_FN(st_contains);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -96,8 +96,8 @@ public:
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
     bool is_chunk_buffer_empty();
-    vectorized::ChunkPtr poll_chunk_buffer();
-    void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
+    ChunkPtr poll_chunk_buffer();
+    void offer_chunk_to_buffer(const ChunkPtr& chunk);
 
     bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
     int64_t first_total_position_of_current_chunk() const {
@@ -129,24 +129,24 @@ public:
 
     const std::vector<FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
-    const std::vector<std::vector<vectorized::ColumnPtr>>& agg_intput_columns() { return _agg_intput_columns; }
+    const std::vector<std::vector<ColumnPtr>>& agg_intput_columns() { return _agg_intput_columns; }
 
     const std::vector<ExprContext*>& partition_ctxs() { return _partition_ctxs; }
-    const vectorized::Columns& partition_columns() { return _partition_columns; }
+    const Columns& partition_columns() { return _partition_columns; }
 
     const std::vector<ExprContext*>& order_ctxs() { return _order_ctxs; }
-    const vectorized::Columns& order_columns() { return _order_columns; }
+    const Columns& order_columns() { return _order_columns; }
 
     FrameRange get_sliding_frame_range();
 
-    Status add_chunk(const vectorized::ChunkPtr& chunk);
+    Status add_chunk(const ChunkPtr& chunk);
 
     void update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start, int64_t frame_end);
     void update_window_batch_removable_cumulatively();
     void reset_window_state();
     void get_window_function_result(size_t frame_start, size_t frame_end);
 
-    Status output_result_chunk(vectorized::ChunkPtr* chunk);
+    Status output_result_chunk(ChunkPtr* chunk);
     void create_agg_result_columns(int64_t chunk_size);
 
     bool is_new_partition();
@@ -187,7 +187,7 @@ private:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    std::queue<vectorized::ChunkPtr> _buffer;
+    std::queue<ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 
     RuntimeProfile* _runtime_profile;
@@ -200,8 +200,8 @@ private:
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
 
-    vectorized::Columns _result_window_columns;
-    std::vector<vectorized::ChunkPtr> _input_chunks;
+    Columns _result_window_columns;
+    std::vector<ChunkPtr> _input_chunks;
     std::vector<int64_t> _input_chunk_first_row_positions;
     int64_t _input_rows = 0;
     int64_t _removed_from_buffer_rows = 0;
@@ -251,17 +251,17 @@ private:
     // The max align size for all window aggregate state
     size_t _max_agg_state_align_size = 1;
     std::vector<FunctionContext*> _agg_fn_ctxs;
-    std::vector<const vectorized::AggregateFunction*> _agg_functions;
+    std::vector<const AggregateFunction*> _agg_functions;
     std::vector<ManagedFunctionStatesPtr> _managed_fn_states;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<vectorized::ColumnPtr>> _agg_intput_columns;
+    std::vector<std::vector<ColumnPtr>> _agg_intput_columns;
     std::vector<FunctionTypes> _agg_fn_types;
 
     std::vector<ExprContext*> _partition_ctxs;
-    vectorized::Columns _partition_columns;
+    Columns _partition_columns;
 
     std::vector<ExprContext*> _order_ctxs;
-    vectorized::Columns _order_columns;
+    Columns _order_columns;
 
     // Tuple id of the buffered tuple (identical to the input child tuple, which is
     // assumed to come from a single SortNode). NULL if both partition_exprs and
@@ -277,7 +277,7 @@ private:
     bool _support_cumulative_algo = false;
 
 private:
-    void _append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);
+    void _append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column);
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);
     // lead and lag function is special, the frame_start and frame_end
@@ -285,7 +285,7 @@ private:
     void _update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                        int64_t frame_end);
 
-    int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
+    int64_t _find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end);
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
 };
@@ -293,8 +293,7 @@ private:
 // Helper class that properly invokes destructor when state goes out of scope.
 class ManagedFunctionStates {
 public:
-    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, vectorized::AggDataPtr __restrict agg_states,
-                          Analytor* agg_node)
+    ManagedFunctionStates(std::vector<FunctionContext*>* ctxs, AggDataPtr __restrict agg_states, Analytor* agg_node)
             : _ctxs(ctxs), _agg_states(agg_states), _agg_node(agg_node) {
         for (int i = 0; i < _agg_node->_agg_functions.size(); i++) {
             _agg_node->_agg_functions[i]->create((*_ctxs)[i], _agg_states + _agg_node->_agg_states_offsets[i]);
@@ -312,7 +311,7 @@ public:
 
 private:
     std::vector<FunctionContext*>* _ctxs;
-    vectorized::AggDataPtr _agg_states;
+    AggDataPtr _agg_states;
     Analytor* _agg_node;
 };
 

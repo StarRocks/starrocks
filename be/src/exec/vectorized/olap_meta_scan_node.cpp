@@ -20,7 +20,7 @@
 #include "exec/pipeline/scan/meta_scan_operator.h"
 #include "exec/pipeline/scan/olap_meta_scan_prepare_operator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : MetaScanNode(pool, tnode, descs) {}
@@ -98,4 +98,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decomp
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

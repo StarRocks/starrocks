@@ -39,7 +39,6 @@ class MemTracker;
 class ExecEnv;
 class RuntimeProfile;
 
-namespace vectorized {
 class HashJoinNode;
 class RuntimeFilterProbeCollector;
 class RuntimeFilterHelper {
@@ -197,10 +196,10 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
 
-    void compute_hash_values(vectorized::Chunk* chunk, Column* column, RuntimeFilterProbeDescriptor* rf_desc,
+    void compute_hash_values(Chunk* chunk, Column* column, RuntimeFilterProbeDescriptor* rf_desc,
                              RuntimeBloomFilterEvalContext& eval_context);
-    void evaluate(vectorized::Chunk* chunk);
-    void evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
+    void evaluate(Chunk* chunk);
+    void evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
@@ -223,11 +222,11 @@ public:
     int plan_node_id() { return _plan_node_id; }
 
 private:
-    void update_selectivity(vectorized::Chunk* chunk);
-    void update_selectivity(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
+    void update_selectivity(Chunk* chunk);
+    void update_selectivity(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     // TODO: return a funcion call status
-    void do_evaluate(vectorized::Chunk* chunk);
-    void do_evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
+    void do_evaluate(Chunk* chunk);
+    void do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;
@@ -238,5 +237,4 @@ private:
     RuntimeState* _runtime_state = nullptr;
 };
 
-} // namespace vectorized
 } // namespace starrocks

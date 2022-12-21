@@ -70,11 +70,9 @@ class CompactionContext;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
-namespace vectorized {
 class ChunkIterator;
-} // namespace vectorized
 
-using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:

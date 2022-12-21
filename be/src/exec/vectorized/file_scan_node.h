@@ -31,8 +31,6 @@ namespace starrocks {
 class RuntimeState;
 struct ScannerCounter;
 
-namespace vectorized {
-
 class FileScanNode final : public ScanNode {
 public:
     FileScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -116,5 +114,4 @@ private:
     RuntimeProfile::Counter* _scanner_file_reader_timer = nullptr;
 };
 
-} // namespace vectorized
 } // namespace starrocks

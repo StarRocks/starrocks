@@ -29,7 +29,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OlapScanNode;
 
@@ -124,4 +124,4 @@ private:
 
     bool _keep_priority = false;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

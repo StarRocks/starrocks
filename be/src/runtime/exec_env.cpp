@@ -410,7 +410,7 @@ Status ExecEnv::init_mem_tracker() {
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
     SetMemTrackerForColumnPool op(column_pool_mem_tracker());
-    vectorized::ForEach<vectorized::ColumnPoolList>(op);
+    ForEach<ColumnPoolList>(op);
     _init_storage_page_cache();
     return Status::OK();
 }

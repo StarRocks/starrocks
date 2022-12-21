@@ -34,7 +34,7 @@ class SlotDescriptor;
 class TupleDescriptor;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class IntersectNode final : public ExecNode {
 public:
     IntersectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -91,4 +91,4 @@ private:
     RuntimeProfile::Counter* _get_result_timer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

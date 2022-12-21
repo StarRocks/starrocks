@@ -30,12 +30,10 @@
 #include "udf/java/utils.h"
 
 namespace starrocks {
-namespace vectorized {
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          FunctionContext* context);
 
-} // namespace vectorized
 Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}
 
 Status Aggregator::open(RuntimeState* state) {
@@ -57,8 +55,8 @@ Status Aggregator::open(RuntimeState* state) {
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
-                    auto st = vectorized::init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum,
-                                                            fn.aggregate_fn.symbol, _agg_fn_ctxs[i]);
+                    auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                _agg_fn_ctxs[i]);
                     RETURN_IF_ERROR(st);
                 }
             }
@@ -166,7 +164,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             {
                 bool is_input_nullable =
                         !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
-                auto* func = vectorized::get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
+                auto* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
                 _agg_functions[i] = func;
             }
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
@@ -200,8 +198,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             }
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
-            auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable, fn.binary_type, state->func_version());
+            auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
+                                                is_input_nullable, fn.binary_type, state->func_version());
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid agg function plan: $0", fn.name.function_name));
@@ -307,7 +305,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     return Status::OK();
 }
 
-Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<vectorized::ChunkPtr>& refill_chunks,
+Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
                                pipeline::Operator* refill_op) {
     RETURN_IF_ERROR(_reset_state(state));
     // begin_pending_reset_state just tells the Aggregator, the chunks are intermediate type, it should call
@@ -410,17 +408,17 @@ bool Aggregator::is_chunk_buffer_empty() {
     return _buffer.empty();
 }
 
-vectorized::ChunkPtr Aggregator::poll_chunk_buffer() {
+ChunkPtr Aggregator::poll_chunk_buffer() {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     if (_buffer.empty()) {
         return nullptr;
     }
-    vectorized::ChunkPtr chunk = _buffer.front();
+    ChunkPtr chunk = _buffer.front();
     _buffer.pop();
     return chunk;
 }
 
-void Aggregator::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
+void Aggregator::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     _buffer.push(chunk);
 }
@@ -518,10 +516,10 @@ Status Aggregator::_evaluate_const_columns(int i) {
     return Status::OK();
 }
 
-Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
+Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     // TODO(kks): we should approve memory allocate here
-    vectorized::Columns agg_result_column = _create_agg_result_columns(1);
+    Columns agg_result_column = _create_agg_result_columns(1);
     auto use_intermediate = _use_intermediate_as_output();
     if (!use_intermediate) {
         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
@@ -534,7 +532,7 @@ Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     if (UNLIKELY(_num_input_rows == 0 && _group_by_expr_ctxs.empty() && !use_intermediate)) {
         for (size_t i = 0; i < _agg_fn_types.size(); i++) {
             if (_agg_fn_types[i].is_nullable) {
-                agg_result_column[i] = vectorized::ColumnHelper::create_column(_agg_fn_types[i].result_type, true);
+                agg_result_column[i] = ColumnHelper::create_column(_agg_fn_types[i].result_type, true);
                 agg_result_column[i]->append_default();
             }
         }
@@ -542,7 +540,7 @@ Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
 
     TupleDescriptor* tuple_desc = use_intermediate ? _intermediate_tuple_desc : _output_tuple_desc;
 
-    vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < agg_result_column.size(); i++) {
         result_chunk->append_column(std::move(agg_result_column[i]), tuple_desc->slots()[i]->id());
     }
@@ -554,7 +552,7 @@ Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     return Status::OK();
 }
 
-void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
+void Aggregator::process_limit(ChunkPtr* chunk) {
     if (_reached_limit()) {
         int64_t num_rows_over = _num_rows_returned - _limit;
         (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
@@ -564,20 +562,20 @@ void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
     }
 }
 
-Status Aggregator::evaluate_exprs(vectorized::Chunk* chunk) {
+Status Aggregator::evaluate_exprs(Chunk* chunk) {
     _set_passthrough(chunk->owner_info().is_passthrough());
     _reset_exprs();
     return _evaluate_exprs(chunk);
 }
 
-void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
+void Aggregator::output_chunk_by_streaming(ChunkPtr* chunk) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
     auto use_intermediate = _use_intermediate_as_input();
     const auto& slots = _intermediate_tuple_desc->slots();
 
-    vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < _group_by_columns.size(); i++) {
         result_chunk->append_column(_group_by_columns[i], slots[i]->id());
     }
@@ -585,7 +583,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     if (!_agg_fn_ctxs.empty()) {
         DCHECK(!_group_by_columns.empty());
         const auto num_rows = _group_by_columns[0]->size();
-        vectorized::Columns agg_result_column = _create_agg_result_columns(num_rows);
+        Columns agg_result_column = _create_agg_result_columns(num_rows);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
@@ -607,7 +605,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     COUNTER_SET(_agg_stat->pass_through_row_count, _num_pass_through_rows);
 }
 
-void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk) {
+void Aggregator::output_chunk_by_streaming_with_selection(ChunkPtr* chunk) {
     // Streaming aggregate at least has one group by column
     size_t chunk_size = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -662,63 +660,60 @@ Status Aggregator::check_has_error() {
 
 // When need finalize, create column by result type
 // otherwise, create column by serde type
-vectorized::Columns Aggregator::_create_agg_result_columns(size_t num_rows) {
-    vectorized::Columns agg_result_columns(_agg_fn_types.size());
+Columns Aggregator::_create_agg_result_columns(size_t num_rows) {
+    Columns agg_result_columns(_agg_fn_types.size());
     auto use_intermediate = _use_intermediate_as_output();
 
     if (!use_intermediate) {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
             // For count, count distinct, bitmap_union_int such as never return null function,
             // we need to create a not-nullable column.
-            agg_result_columns[i] = vectorized::ColumnHelper::create_column(
+            agg_result_columns[i] = ColumnHelper::create_column(
                     _agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child & _agg_fn_types[i].is_nullable);
             agg_result_columns[i]->reserve(num_rows);
         }
     } else {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-            agg_result_columns[i] = vectorized::ColumnHelper::create_column(_agg_fn_types[i].serde_type,
-                                                                            _agg_fn_types[i].has_nullable_child);
+            agg_result_columns[i] =
+                    ColumnHelper::create_column(_agg_fn_types[i].serde_type, _agg_fn_types[i].has_nullable_child);
             agg_result_columns[i]->reserve(num_rows);
         }
     }
     return agg_result_columns;
 }
 
-vectorized::Columns Aggregator::_create_group_by_columns(size_t num_rows) {
-    vectorized::Columns group_by_columns(_group_by_types.size());
+Columns Aggregator::_create_group_by_columns(size_t num_rows) {
+    Columns group_by_columns(_group_by_types.size());
     for (size_t i = 0; i < _group_by_types.size(); ++i) {
         group_by_columns[i] =
-                vectorized::ColumnHelper::create_column(_group_by_types[i].result_type, _group_by_types[i].is_nullable);
+                ColumnHelper::create_column(_group_by_types[i].result_type, _group_by_types[i].is_nullable);
         group_by_columns[i]->reserve(num_rows);
     }
     return group_by_columns;
 }
 
-void Aggregator::_serialize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
-                                     const vectorized::Columns& agg_result_columns) {
+void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                                agg_result_columns[i].get());
     }
 }
 
-void Aggregator::_finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
-                                    const vectorized::Columns& agg_result_columns) {
+void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());
     }
 }
 
-void Aggregator::_destroy_state(vectorized::AggDataPtr __restrict state) {
+void Aggregator::_destroy_state(AggDataPtr __restrict state) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->destroy(_agg_fn_ctxs[i], state + _agg_states_offsets[i]);
     }
 }
 
-vectorized::ChunkPtr Aggregator::_build_output_chunk(const vectorized::Columns& group_by_columns,
-                                                     const vectorized::Columns& agg_result_columns) {
-    vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr Aggregator::_build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns) {
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
     // For different agg phase, we should use different TupleDescriptor
     if (!_use_intermediate_as_output()) {
         for (size_t i = 0; i < group_by_columns.size(); i++) {
@@ -755,7 +750,7 @@ void Aggregator::_reset_exprs() {
     }
 }
 
-Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
+Status Aggregator::_evaluate_exprs(Chunk* chunk) {
     SCOPED_TIMER(_agg_stat->expr_compute_timer);
     // Compute group by columns
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
@@ -768,7 +763,7 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {
-                auto* const_column = static_cast<vectorized::ConstColumn*>(_group_by_columns[i].get());
+                auto* const_column = static_cast<ConstColumn*>(_group_by_columns[i].get());
                 const_column->data_column()->assign(chunk->num_rows(), 0);
                 _group_by_columns[i] = const_column->data_column();
             }
@@ -777,8 +772,8 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
         // for nullable column when the real whole chunk data all not-null.
         if (_group_by_types[i].is_nullable && !_group_by_columns[i]->is_nullable()) {
             // TODO: optimized the memory usage
-            _group_by_columns[i] = vectorized::NullableColumn::create(
-                    _group_by_columns[i], vectorized::NullColumn::create(_group_by_columns[i]->size(), 0));
+            _group_by_columns[i] =
+                    NullableColumn::create(_group_by_columns[i], NullColumn::create(_group_by_columns[i]->size(), 0));
         }
     }
 
@@ -794,8 +789,7 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
             // TODO(kks): improve const column aggregate later
             if (j == 0) {
                 ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[i][j]->evaluate(chunk));
-                _agg_input_columns[i][j] =
-                        vectorized::ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+                _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
             } else {
                 ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[i][j]->evaluate(chunk));
                 _agg_input_columns[i][j] = std::move(col);
@@ -937,7 +931,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     hash_variant.init(_state, type, _agg_stat);
 
     hash_variant.visit([&](auto& variant) {
-        if constexpr (vectorized::is_combined_fixed_size_key<std::decay_t<decltype(*variant)>>) {
+        if constexpr (is_combined_fixed_size_key<std::decay_t<decltype(*variant)>>) {
             variant->has_null_column = has_null_column;
             variant->fixed_byte_size = fixed_byte_size;
         }
@@ -982,7 +976,7 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
     });
 }
 
-Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
     RETURN_IF_ERROR(_hash_map_variant.visit([&](auto& variant_value) {
@@ -994,8 +988,8 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chu
 
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
-        vectorized::Columns group_by_columns = _create_group_by_columns(num_rows);
-        vectorized::Columns agg_result_columns = _create_agg_result_columns(num_rows);
+        Columns group_by_columns = _create_group_by_columns(num_rows);
+        Columns agg_result_columns = _create_agg_result_columns(num_rows);
 
         auto use_intermediate = _use_intermediate_as_output();
         int32_t read_index = 0;
@@ -1083,7 +1077,7 @@ void Aggregator::build_hash_set_with_selection(size_t chunk_size) {
     });
 }
 
-void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
     _hash_set_variant.visit([&](auto& variant_value) {
@@ -1094,7 +1088,7 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, vectorized::Chunk
         auto end = hash_set.hash_set.end();
         const auto hash_set_size = _hash_set_variant.size();
         auto num_rows = std::min<size_t>(hash_set_size - _num_rows_processed, chunk_size);
-        vectorized::Columns group_by_columns = _create_group_by_columns(num_rows);
+        Columns group_by_columns = _create_group_by_columns(num_rows);
 
         // Computer group by columns and aggregate result column
         int32_t read_index = 0;
@@ -1132,7 +1126,7 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, vectorized::Chunk
 
         _it_hash = it;
 
-        vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
+        ChunkPtr result_chunk = std::make_shared<Chunk>();
         // For different agg phase, we should use different TupleDescriptor
         auto use_intermediate = _use_intermediate_as_output();
         if (!use_intermediate) {

@@ -27,12 +27,12 @@ class Tablet;
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
-    std::vector<std::unique_ptr<vectorized::Column>> write_columns;
+    std::vector<std::unique_ptr<Column>> write_columns;
 };
 
 class RowsetUpdateState {
 public:
-    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using ColumnUniquePtr = std::unique_ptr<Column>;
 
     RowsetUpdateState();
     ~RowsetUpdateState();
@@ -67,8 +67,8 @@ public:
     void release_deletes(uint32_t idx);
 
 private:
-    Status _load_deletes(Rowset* rowset, uint32_t delete_id, vectorized::Column* pk_column);
-    Status _load_upserts(Rowset* rowset, uint32_t upsert_id, vectorized::Column* pk_column);
+    Status _load_deletes(Rowset* rowset, uint32_t delete_id, Column* pk_column);
+    Status _load_upserts(Rowset* rowset, uint32_t upsert_id, Column* pk_column);
 
     Status _do_load(Tablet* tablet, Rowset* rowset);
 

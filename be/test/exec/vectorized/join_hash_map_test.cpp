@@ -20,7 +20,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class JoinHashMapTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -2469,4 +2469,4 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     ASSERT_EQ(probe_state.probe_match_index[1], 1);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -37,6 +37,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -166,6 +167,7 @@ public class AuthUpgrader {
                     LOG.info("ignore entry created by domain resolver : {}", entry);
                     continue;
                 }
+
                 UserPrivilegeCollection collection = new UserPrivilegeCollection();
                 // mark all the old grant pattern, will be used in lower level
                 Set<Pair<String, String>> grantPatterns = new HashSet<>();
@@ -251,6 +253,7 @@ public class AuthUpgrader {
                 case SELECT_PRIV:
                     upgradeTablePrivileges(STAR, STAR, privilege, collection, null);
                     upgradeViewPrivileges(STAR, STAR, privilege, collection, null);
+                    upgradeMaterializedViewPrivileges(STAR, STAR, privilege, collection, null);
                     break;
 
                 case LOAD_PRIV:
@@ -270,6 +273,7 @@ public class AuthUpgrader {
                     upgradeDbPrivileges(STAR, privilege, collection, null);
                     upgradeTablePrivileges(STAR, STAR, privilege, collection, null);
                     upgradeViewPrivileges(STAR, STAR, privilege, collection, null);
+                    upgradeMaterializedViewPrivileges(STAR, STAR, privilege, collection, null);
                     break;
 
                 case ADMIN_PRIV:
@@ -311,6 +315,7 @@ public class AuthUpgrader {
                     case SELECT_PRIV:
                         upgradeTablePrivileges(db, STAR, privilege, collection, grantPatterns);
                         upgradeViewPrivileges(db, STAR, privilege, collection, grantPatterns);
+                        upgradeMaterializedViewPrivileges(db, STAR, privilege, collection, grantPatterns);
                         break;
 
                     case LOAD_PRIV:
@@ -322,6 +327,7 @@ public class AuthUpgrader {
                         upgradeDbPrivileges(db, privilege, collection, grantPatterns);
                         upgradeTablePrivileges(db, STAR, privilege, collection, grantPatterns);
                         upgradeViewPrivileges(db, STAR, privilege, collection, grantPatterns);
+                        upgradeMaterializedViewPrivileges(db, STAR, privilege, collection, grantPatterns);
                         break;
 
                     case CREATE_PRIV:
@@ -369,6 +375,8 @@ public class AuthUpgrader {
                         Table.TableType tableType = globalStateMgr.getDb(dbName).getTable(tableName).getType();
                         if (tableType.equals(Table.TableType.VIEW)) {
                             upgradeViewPrivileges(dbName, tableName, privilege, collection, grantPatterns);
+                        } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
+                            upgradeMaterializedViewPrivileges(dbName, tableName, privilege, collection, grantPatterns);
                         } else {
                             upgradeTablePrivileges(dbName, tableName, privilege, collection, grantPatterns);
                         }
@@ -540,12 +548,15 @@ public class AuthUpgrader {
                             Table.TableType tableType = globalStateMgr.getDb(db).getTable(table).getType();
                             if (tableType.equals(Table.TableType.VIEW)) {
                                 upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
+                            } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
+                                upgradeMaterializedViewPrivileges(db, table, privilege, collection, grantPatterns);
                             } else {
                                 upgradeTablePrivileges(db, table, privilege, collection, grantPatterns);
                             }
                         } else {
                             upgradeTablePrivileges(db, table, privilege, collection, grantPatterns);
                             upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
+                            upgradeMaterializedViewPrivileges(db, table, privilege, collection, grantPatterns);
                         }
                         break;
 
@@ -573,6 +584,8 @@ public class AuthUpgrader {
                             Table.TableType tableType = globalStateMgr.getDb(db).getTable(table).getType();
                             if (tableType.equals(Table.TableType.VIEW)) {
                                 upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
+                            } else if (tableType.equals(Table.TableType.MATERIALIZED_VIEW)) {
+                                upgradeMaterializedViewPrivileges(db, table, privilege, collection, grantPatterns);
                             } else {
                                 upgradeTablePrivileges(db, table, privilege, collection, grantPatterns);
                             }
@@ -580,6 +593,7 @@ public class AuthUpgrader {
                             upgradeDbPrivileges(db, privilege, collection, grantPatterns);
                             upgradeTablePrivileges(db, table, privilege, collection, grantPatterns);
                             upgradeViewPrivileges(db, table, privilege, collection, grantPatterns);
+                            upgradeMaterializedViewPrivileges(db, table, privilege, collection, grantPatterns);
                         }
                         break;
 
@@ -663,6 +677,7 @@ public class AuthUpgrader {
                         assertGlobalResource(privilege, name);
                         upgradeTablePrivileges(STAR, STAR, privilege, collection, null);
                         upgradeViewPrivileges(STAR, STAR, privilege, collection, null);
+                        upgradeMaterializedViewPrivileges(STAR, STAR, privilege, collection, null);
                         break;
 
                     case ALTER_PRIV:
@@ -670,6 +685,7 @@ public class AuthUpgrader {
                         assertGlobalResource(privilege, name);
                         upgradeDbPrivileges(STAR, privilege, collection, null);
                         upgradeViewPrivileges(STAR, STAR, privilege, collection, null);
+                        upgradeMaterializedViewPrivileges(STAR, STAR, privilege, collection, null);
                         upgradeTablePrivileges(STAR, STAR, privilege, collection, null);
                         break;
 
@@ -729,7 +745,6 @@ public class AuthUpgrader {
                 actionSet = privilegeManager.analyzeActionSet(dbTypeId,
                         Arrays.asList(PrivilegeType.DbAction.ALTER.toString()));
                 break;
-
             default:
                 throw new AuthUpgradeUnrecoverableException("db privilege " + privilege + " hasn't implemented");
         }
@@ -884,6 +899,64 @@ public class AuthUpgrader {
 
         // grant table
         collection.grant(tableTypeId, actionSet, objects, isGrant);
+    }
+
+    protected void upgradeMaterializedViewPrivileges(
+            String db, String table, Privilege privilege, PrivilegeCollection collection,
+            Set<Pair<String, String>> grantPatterns) throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        // type
+        String mvTypeStr = PrivilegeType.MATERIALIZED_VIEW.toString();
+        short mvTypeId = privilegeManager.analyzeType(mvTypeStr);
+
+        // actionSet
+        ActionSet actionSet;
+        switch (privilege) {
+            case ALTER_PRIV:
+                actionSet = privilegeManager.analyzeActionSet(
+                        mvTypeId, Arrays.asList(
+                                PrivilegeType.MaterializedViewAction.ALTER.name(),
+                                PrivilegeType.MaterializedViewAction.REFRESH.name()
+                        ));
+                break;
+
+            case DROP_PRIV:
+                actionSet = privilegeManager.analyzeActionSet(
+                        mvTypeId, Collections.singletonList(PrivilegeType.MaterializedViewAction.DROP.toString()));
+                break;
+            case SELECT_PRIV:
+                actionSet = privilegeManager.analyzeActionSet(
+                        mvTypeId, Collections.singletonList(PrivilegeType.MaterializedViewAction.SELECT.toString()));
+                break;
+            default:
+                throw new AuthUpgradeUnrecoverableException("materialized view privilege "
+                                                            + privilege + " hasn't implemented");
+        }
+
+        // object
+        List<PEntryObject> objects;
+        if (db.equals(STAR)) {
+            objects = Collections.singletonList(privilegeManager.analyzeObject(
+                mvTypeStr,
+                Arrays.asList(PrivilegeType.MATERIALIZED_VIEW.getPlural(), PrivilegeType.DATABASE.getPlural()),
+                null, null));
+        } else if (table.equals(STAR)) {
+            // ALL TABLES in db
+            objects = Collections.singletonList(privilegeManager.analyzeObject(
+                mvTypeStr, Collections.singletonList(mvTypeStr), DB_TYPE_STR, db));
+        } else {
+            // db.mv
+            objects = Collections.singletonList(privilegeManager.analyzeObject(
+                mvTypeStr, Arrays.asList(db, table)));
+        }
+
+        // isGrant
+        boolean isGrant = false;
+        if (grantPatterns != null) {
+            isGrant = matchTableGrant(grantPatterns, db, table);
+        }
+
+        // grant table
+        collection.grant(mvTypeId, actionSet, objects, isGrant);
     }
 
     // `grantPattern` only contains dbx.tblx or dbx.*,

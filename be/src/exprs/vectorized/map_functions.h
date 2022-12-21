@@ -24,7 +24,7 @@
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class MapFunctions {
 public:
@@ -35,4 +35,4 @@ public:
     DEFINE_VECTORIZED_FN(map_values);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

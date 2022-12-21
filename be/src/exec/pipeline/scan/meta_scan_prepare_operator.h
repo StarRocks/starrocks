@@ -31,7 +31,7 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 protected:
     virtual Status _prepare_scan_context(RuntimeState* state) = 0;

@@ -44,9 +44,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -143,10 +145,19 @@ public class AnalyzerUtils {
             return null;
         }
 
-        if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-            throw new StarRocksPlannerException(String.format("Access denied. " +
-                    "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
-                    ErrorType.USER_ERROR);
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+                throw new StarRocksPlannerException(String.format("Access denied. " +
+                        "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                        ErrorType.USER_ERROR);
+            }
+        } else {
+            // check SELECT action on any object(table/view/mv) in db
+            if (!PrivilegeManager.checkActionInDb(session, dbName, "SELECT")) {
+                throw new StarRocksPlannerException(String.format("Access denied. " +
+                        "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
+                        fnName, dbName), ErrorType.USER_ERROR);
+            }
         }
 
         if (!Config.enable_udf) {

@@ -26,8 +26,6 @@
 #include "glog/logging.h"
 
 namespace starrocks {
-namespace vectorized {
-
 class MockExpr : public starrocks::Expr {
 public:
     explicit MockExpr(const TExprNode& dummy, ColumnPtr result) : Expr(dummy), _column(std::move(result)) {}
@@ -83,7 +81,7 @@ public:
     MockVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value)
             : MockCostExpr(t), size(size), value(value) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         ColumnPtr col;
         if constexpr (pt_is_decimal<Type>) {
@@ -111,7 +109,7 @@ public:
     MockMultiVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> num1, RunTimeCppType<Type> num2)
             : MockCostExpr(t), size(size), num1(num1), num2(num2) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         auto col = RunTimeColumnType<Type>::create();
         col->reserve(size);
@@ -141,7 +139,7 @@ public:
     MockNullVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value, bool only_null)
             : MockCostExpr(t), only_null(only_null), flag(0), size(size), value(value) {}
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         if (only_null) {
             return ColumnHelper::create_const_null_column(1);
@@ -187,7 +185,7 @@ public:
         col = ColumnHelper::create_const_column<Type>(value, 1);
     }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();
         stop();
         return col;
@@ -198,5 +196,4 @@ public:
     ColumnPtr col;
 };
 
-} // namespace vectorized
 } // namespace starrocks

@@ -24,7 +24,7 @@
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // ======================================================
 
@@ -583,4 +583,4 @@ bool ConnectorScanNode::always_shared_scan() const {
     return config::connector_scan_node_always_shared_scan;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

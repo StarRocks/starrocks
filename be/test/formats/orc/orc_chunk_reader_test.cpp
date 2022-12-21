@@ -30,7 +30,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OrcChunkReaderTest : public testing::Test {
 public:
@@ -1889,4 +1889,4 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

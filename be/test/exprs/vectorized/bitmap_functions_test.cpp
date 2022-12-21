@@ -26,7 +26,7 @@
 #include "types/bitmap_value.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class VecBitmapFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -2296,4 +2296,4 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

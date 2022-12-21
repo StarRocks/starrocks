@@ -19,10 +19,10 @@
 
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Bytes is a special vector<uint8_t> in which the internal memory is always allocated with an additional 16 bytes,
 // to make life easier with 128 bit instructions.
 typedef starrocks::raw::RawVectorPad16<uint8_t> Bytes;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

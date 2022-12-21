@@ -37,8 +37,8 @@ Status ChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> ChunkSource::get_next_chunk_from_buffer() {
-    vectorized::ChunkPtr chunk = nullptr;
+StatusOr<ChunkPtr> ChunkSource::get_next_chunk_from_buffer() {
+    ChunkPtr chunk = nullptr;
     _chunk_buffer.try_get(_scan_operator_seq, &chunk);
     return chunk;
 }
@@ -61,8 +61,6 @@ void ChunkSource::unpin_chunk_token() {
 
 Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
                                                       const workgroup::WorkGroup* running_wg) {
-    using namespace vectorized;
-
     if (!_status.ok()) {
         return _status;
     }
@@ -82,7 +80,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
             // in the chunk.
             if (chunk == nullptr) {
-                chunk = std::make_shared<vectorized::Chunk>();
+                chunk = std::make_shared<Chunk>();
             }
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
@@ -114,5 +112,4 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     return _status;
 }
 
-using namespace vectorized;
 } // namespace starrocks::pipeline

@@ -20,7 +20,7 @@
 
 #include <util/raw_container.h>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
     // union nullable column
@@ -127,4 +127,4 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -1313,8 +1313,10 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadStreamLoadManager(dis, checksum);
             remoteChecksum = dis.readLong();
-            loadRBACPrivilege(dis);
             checksum = MVManager.getInstance().reload(dis, checksum);
+            remoteChecksum = dis.readLong();
+            // TODO put this at the end of the image before 3.0 release
+            loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1402,7 +1404,6 @@ public class GlobalStateMgr {
         return newChecksum;
     }
 
-    // TODO put this at the end of the image before 3.0 release
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (isUsingNewPrivilege()) {
             this.authenticationManager = AuthenticationManager.load(dis);
@@ -1579,8 +1580,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
-            saveRBACPrivilege(dos);
             checksum = MVManager.getInstance().store(dos, checksum);
+            dos.writeLong(checksum);
+            // TODO put this at the end of the image before 3.0 release
+            saveRBACPrivilege(dos);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1619,7 +1622,6 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    // TODO put this at the end of the image before 3.0 release
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (isUsingNewPrivilege()) {
             this.authenticationManager.save(dos);
@@ -3064,7 +3066,7 @@ public class GlobalStateMgr {
         // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
+                if (!PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }

@@ -47,7 +47,7 @@ public:
     Status prepare(RuntimeState* state);
 
     // Add one chunk to partitioner
-    Status push_one_chunk_to_partitioner(RuntimeState* state, const vectorized::ChunkPtr& chunk);
+    Status push_one_chunk_to_partitioner(RuntimeState* state, const ChunkPtr& chunk);
 
     // Notify that there is no further input for partitiner
     void sink_complete();
@@ -62,26 +62,26 @@ public:
     bool is_finished();
 
     // Pull one chunk from sorters or downgrade_buffer
-    StatusOr<vectorized::ChunkPtr> pull_one_chunk();
+    StatusOr<ChunkPtr> pull_one_chunk();
 
 private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
-    StatusOr<vectorized::ChunkPtr> pull_one_chunk_from_sorters();
+    StatusOr<ChunkPtr> pull_one_chunk_from_sorters();
 
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
-    std::vector<vectorized::PartitionColumnType> _partition_types;
+    std::vector<PartitionColumnType> _partition_types;
     bool _has_nullable_key = false;
 
     // No more input chunks if after _is_sink_complete is set to true
     bool _is_sink_complete = false;
 
-    vectorized::ChunksPartitionerPtr _chunks_partitioner;
+    ChunksPartitionerPtr _chunks_partitioner;
     bool _is_transfered = false;
 
     // Every partition holds a chunks_sorter
-    vectorized::ChunksSorters _chunks_sorters;
+    ChunksSorters _chunks_sorters;
     const std::vector<ExprContext*>& _sort_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
@@ -114,7 +114,7 @@ private:
 
     const std::vector<TExpr>& _t_partition_exprs;
 
-    vectorized::ChunksSorters _chunks_sorters;
+    ChunksSorters _chunks_sorters;
     const std::vector<ExprContext*>& _sort_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;

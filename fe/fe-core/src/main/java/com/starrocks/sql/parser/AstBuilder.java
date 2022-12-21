@@ -601,6 +601,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(listPartitionDesc);
             }
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            throw new ParsingException("List partition is not supported.");
         }
         return partitionDesc;
     }
@@ -4097,6 +4098,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         GrantRevokePrivilegeObjects objects =
                 parseGrantRevokeOnAll(context.privilegeType(), context.identifierOrString());
         String type = ((Identifier) visit(context.privilegeType(0))).getValue().toUpperCase();
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
+    }
+
+    @Override
+    public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, true);
+    }
+
+    @Override
+    public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
         return newGrantRevokePrivilegeStmt(
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
     }

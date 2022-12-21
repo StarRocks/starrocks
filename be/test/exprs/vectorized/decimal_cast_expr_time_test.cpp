@@ -17,7 +17,7 @@
 #include "exprs/vectorized/decimal_cast_expr_test_helper.h"
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
-namespace starrocks::vectorized {
+namespace starrocks {
 class VectorizedDecimalCastExprTimeTest : public ::testing::Test {
 public:
     void SetUp() override { date::init_date_cache(); }
@@ -1018,4 +1018,4 @@ TEST_F(VectorizedDecimalCastExprTimeTest, testCastFromDatetimeToDecimal32p9s0Nor
                                     {-1, -1, "20120714162039", 9, 0, "55890872671359", "false"}};
     test_cast_all_fail<TYPE_TIME, TYPE_DECIMAL32>(test_cases);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

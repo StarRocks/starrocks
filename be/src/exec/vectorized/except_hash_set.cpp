@@ -18,7 +18,7 @@
 #include "exec/vectorized/aggregate/agg_hash_set.h"
 #include "runtime/mem_tracker.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename HashSet>
 void ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunk,
@@ -131,4 +131,4 @@ void ExceptHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunk, const std
 
 template class ExceptHashSet<phmap::flat_hash_set<ExceptSliceFlag, ExceptSliceFlagHash, ExceptSliceFlagEqual>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

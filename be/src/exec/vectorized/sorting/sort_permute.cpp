@@ -32,7 +32,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 bool TieIterator::next() {
     if (_inner_range_first >= end) {
@@ -265,4 +265,4 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
         materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

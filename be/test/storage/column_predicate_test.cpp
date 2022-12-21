@@ -20,7 +20,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // to string of boolean values, e.g,
 //   [1,2,3] => "1,1,1"
@@ -2219,4 +2219,4 @@ TEST(ColumnPredicateTest, test_convert_cmp_binary_predicate) {
         EXPECT_EQ(new_p->type(), p->type());
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

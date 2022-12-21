@@ -48,11 +48,11 @@ Status SortedAggregateStreamingSinkOperator::set_finishing(RuntimeState* state) 
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> SortedAggregateStreamingSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());

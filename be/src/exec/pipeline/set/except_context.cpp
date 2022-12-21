@@ -50,7 +50,7 @@ Status ExceptContext::erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& c
     return _hash_set->erase_duplicate_row(state, chunk, dst_exprs);
 }
 
-StatusOr<vectorized::ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
     // 1. Get at most *state->chunk_size()* remained keys from ht.
     size_t num_remained_keys = 0;
     _remained_keys.resize(state->chunk_size());
@@ -61,13 +61,13 @@ StatusOr<vectorized::ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
         ++_next_processed_iter;
     }
 
-    ChunkPtr dst_chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr dst_chunk = std::make_shared<Chunk>();
     if (num_remained_keys > 0) {
         // 2. Create dest columns.
-        vectorized::Columns dst_columns(_dst_nullables.size());
+        Columns dst_columns(_dst_nullables.size());
         for (size_t i = 0; i < _dst_nullables.size(); ++i) {
             const auto& slot = _dst_tuple_desc->slots()[i];
-            dst_columns[i] = vectorized::ColumnHelper::create_column(slot->type(), _dst_nullables[i]);
+            dst_columns[i] = ColumnHelper::create_column(slot->type(), _dst_nullables[i]);
             dst_columns[i]->reserve(num_remained_keys);
         }
 

@@ -26,7 +26,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class PushBrokerReader {
 public:
@@ -63,4 +63,4 @@ private:
     std::unique_ptr<ScannerCounter> _counter;
     std::unique_ptr<FileScanner> _scanner;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

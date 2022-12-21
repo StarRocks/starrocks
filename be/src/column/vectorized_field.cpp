@@ -19,7 +19,7 @@
 #include "storage/key_coder.h"
 #include "storage/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void VectorizedField::encode_ascending(const Datum& value, std::string* buf) const {
     if (_short_key_length > 0) {
@@ -44,4 +44,4 @@ ColumnPtr VectorizedField::create_column() const {
     return ChunkHelper::column_from_field(*this);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -16,10 +16,10 @@
 
 #include <variant>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Datum convert2Datum(const DatumKey& key) {
     return std::visit([](auto&& arg) -> Datum { return arg; }, key);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

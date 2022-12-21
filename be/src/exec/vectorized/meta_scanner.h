@@ -22,7 +22,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/meta_reader.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct MetaScannerParams {
     const TInternalScanRange* scan_range = nullptr;
@@ -61,4 +61,4 @@ protected:
     int64_t _version = 0;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

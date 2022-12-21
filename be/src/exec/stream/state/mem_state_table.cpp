@@ -126,7 +126,7 @@ VectorizedSchema MemStateTable::_make_schema_from_slots(const std::vector<SlotDe
     for (auto& slot : slots) {
         auto type_desc = slot->type();
         VLOG_ROW << "[make_schema_from_slots] type:" << type_desc;
-        auto field = std::make_shared<vectorized::VectorizedField>(slot->id(), slot->col_name(), type_desc.type, false);
+        auto field = std::make_shared<VectorizedField>(slot->id(), slot->col_name(), type_desc.type, false);
         fields.emplace_back(std::move(field));
     }
     return VectorizedSchema(std::move(fields), KeysType::PRIMARY_KEYS, {});
@@ -141,7 +141,7 @@ std::vector<ChunkIteratorPtrOr> MemStateTable::prefix_scan(const std::vector<Dat
     return ans;
 }
 
-DatumRow MemStateTable::_make_datum_row(vectorized::Chunk* chunk, size_t start, size_t end, int row_idx) {
+DatumRow MemStateTable::_make_datum_row(Chunk* chunk, size_t start, size_t end, int row_idx) {
     DatumRow row;
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
@@ -152,7 +152,7 @@ DatumRow MemStateTable::_make_datum_row(vectorized::Chunk* chunk, size_t start, 
     return row;
 }
 
-DatumKeyRow MemStateTable::_make_datum_key_row(vectorized::Chunk* chunk, size_t start, size_t end, int row_idx) {
+DatumKeyRow MemStateTable::_make_datum_key_row(Chunk* chunk, size_t start, size_t end, int row_idx) {
     DatumKeyRow row;
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
@@ -172,7 +172,7 @@ DatumKeyRow MemStateTable::_convert_datum_row_to_key(const DatumRow& row, size_t
     return key_row;
 }
 
-Status MemStateTable::flush(RuntimeState* state, vectorized::StreamChunk* chunk) {
+Status MemStateTable::flush(RuntimeState* state, StreamChunk* chunk) {
     DCHECK(chunk);
     auto chunk_size = chunk->num_rows();
     if (StreamChunkConverter::has_ops_column(chunk)) {

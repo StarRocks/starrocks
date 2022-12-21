@@ -19,7 +19,7 @@
 #include "gutil/casts.h"
 #include "runtime/decimalv2_value.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 Status DecimalV2Converter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
@@ -45,4 +45,4 @@ bool DecimalV2Converter::read_quoted_string(Column* column, Slice s, const Optio
     return read_string(column, s, options);
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

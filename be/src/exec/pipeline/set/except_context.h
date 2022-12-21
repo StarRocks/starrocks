@@ -71,11 +71,10 @@ public:
     Status erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
                                const std::vector<ExprContext*>& child_exprs);
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
 private:
-    std::unique_ptr<vectorized::ExceptHashSerializeSet> _hash_set =
-            std::make_unique<vectorized::ExceptHashSerializeSet>();
+    std::unique_ptr<ExceptHashSerializeSet> _hash_set = std::make_unique<ExceptHashSerializeSet>();
 
     const int _dst_tuple_id;
     // Cache the dest tuple descriptor in the preparation phase of ExceptBuildSinkOperatorFactory.
@@ -89,11 +88,11 @@ private:
     // when ExceptOutputSourceOperator is finished by calling close().
     std::unique_ptr<MemPool> _build_pool = nullptr;
 
-    vectorized::ExceptHashSerializeSet::KeyVector _remained_keys;
+    ExceptHashSerializeSet::KeyVector _remained_keys;
     // Used for traversal on the hash set to get the undeleted keys to dest chunk.
     // Init when the hash set is finished building in finish_build_ht().
-    vectorized::ExceptHashSerializeSet::Iterator _next_processed_iter;
-    vectorized::ExceptHashSerializeSet::Iterator _hash_set_end_iter;
+    ExceptHashSerializeSet::Iterator _next_processed_iter;
+    ExceptHashSerializeSet::Iterator _hash_set_end_iter;
     bool _is_hash_set_empty = false;
 
     // The BUILD, PROBES, and OUTPUT operators execute sequentially.

@@ -21,15 +21,14 @@
 #include "exprs/function_context.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /**
  * @param: [haystack, delimiter, part_number]
  * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
  * @return: BinaryColumn
  */
-StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context,
-                                                const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 3);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -125,4 +124,4 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context,
     return res.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

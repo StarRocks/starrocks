@@ -219,7 +219,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
             return Status::NotFound(fmt::format("Not found tablet: {}", request.tablet_id));
         }
 
-        vectorized::PushHandler push_handler;
+        PushHandler push_handler;
         res = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id=" << request.transaction_id
@@ -260,7 +260,7 @@ Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TT
 
     // 2. Process delete data by push interface
     DCHECK(request.__isset.transaction_id);
-    vectorized::PushHandler push_handler;
+    PushHandler push_handler;
     Status res = push_handler.process_streaming_ingestion(tablet, request, PUSH_FOR_DELETE, tablet_info_vec);
     if (!res.ok()) {
         LOG(WARNING) << "Fail to delete data. res: " << res << ", tablet: " << tablet->full_name();

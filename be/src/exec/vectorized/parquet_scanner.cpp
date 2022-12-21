@@ -25,7 +25,7 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                                ScannerCounter* counter)
@@ -391,4 +391,4 @@ void ParquetScanner::close() {
     _pool.clear();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

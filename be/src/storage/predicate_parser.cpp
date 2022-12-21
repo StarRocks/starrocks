@@ -24,7 +24,7 @@
 #include "storage/type_utils.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 bool PredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
     RETURN_IF(predicate->column_id() >= _schema.num_columns(), false);
@@ -96,4 +96,4 @@ StatusOr<ColumnPredicate*> PredicateParser::parse_expr_ctx(const SlotDescriptor&
     return ColumnExprPredicate::make_column_expr_predicate(type_info, column_id, state, expr_ctx, &slot_desc);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

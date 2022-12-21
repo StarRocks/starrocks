@@ -38,8 +38,8 @@ public:
                 {"col3", TYPE_INT, false},
                 {"agg1", TYPE_INT, false},
         };
-        auto slot_type_info_arrays = vectorized::DescTblHelper::create_slot_type_desc_info_arrays({src_slots});
-        _tbl = vectorized::DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, slot_type_info_arrays);
+        auto slot_type_info_arrays = DescTblHelper::create_slot_type_desc_info_arrays({src_slots});
+        _tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, slot_type_info_arrays);
         _runtime_state->set_desc_tbl(_tbl);
     }
     void TearDown() override {}

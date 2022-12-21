@@ -22,7 +22,7 @@
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // AvgResultPT for final result
 template <LogicalType PT, typename = guard::Guard>
@@ -263,4 +263,4 @@ template <LogicalType PT, typename = DecimalPTGuard<PT>>
 using DecimalAvgAggregateFunction =
         AvgAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

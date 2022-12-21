@@ -22,7 +22,7 @@
 
 #include "storage/seek_tuple.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SeekRange {
 public:
@@ -69,4 +69,4 @@ private:
     SeekTuple _upper;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

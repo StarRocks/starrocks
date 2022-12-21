@@ -20,7 +20,7 @@
 
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Chunk;
 
@@ -142,4 +142,4 @@ inline void ConjunctivePredicates::predicates_of_column(ColumnId cid, Container*
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

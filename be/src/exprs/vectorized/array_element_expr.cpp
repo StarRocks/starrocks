@@ -20,7 +20,7 @@
 #include "common/object_pool.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayElementExpr final : public Expr {
 public:
@@ -29,7 +29,7 @@ public:
     ArrayElementExpr(const ArrayElementExpr&) = default;
     ArrayElementExpr(ArrayElementExpr&&) = default;
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
         DCHECK_EQ(_type, _children[0]->type().children[0]);
         ASSIGN_OR_RETURN(ColumnPtr arg0, _children[0]->evaluate_checked(context, chunk));
@@ -123,4 +123,4 @@ Expr* ArrayElementExprFactory::from_thrift(const TExprNode& node) {
     return new ArrayElementExpr(node);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

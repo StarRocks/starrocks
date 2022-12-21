@@ -20,7 +20,7 @@
 #include "runtime/types.h"
 #include "simdjson.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AddNullableColumnTest : public ::testing::Test {};
 
@@ -97,4 +97,4 @@ TEST_F(AddNullableColumnTest, test_add_invalid) {
     ASSERT_TRUE(st.is_invalid_argument());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

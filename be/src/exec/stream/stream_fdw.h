@@ -23,19 +23,19 @@
 namespace starrocks::stream {
 
 template <typename T>
-using Buffer = vectorized::Buffer<T>;
-using Columns = vectorized::Columns;
+using Buffer = Buffer<T>;
+using Columns = Columns;
 
-using Datum = vectorized::Datum;
-using DaumKey = vectorized::DatumKey;
-using DatumRow = std::vector<vectorized::Datum>;
+using Datum = Datum;
+using DaumKey = DatumKey;
+using DatumRow = std::vector<Datum>;
 using DatumRowPtr = std::shared_ptr<DatumRow>;
 using DatumRowOpt = std::optional<DatumRow>;
-using Chunk = vectorized::Chunk;
-using ChunkPtr = vectorized::ChunkPtr;
-using StreamChunk = vectorized::StreamChunk;
-using StreamChunkPtr = vectorized::StreamChunkPtr;
-using StreamChunkConverter = vectorized::StreamChunkConverter;
-using StreamRowOp = vectorized::StreamRowOp;
+using Chunk = Chunk;
+using ChunkPtr = ChunkPtr;
+using StreamChunk = StreamChunk;
+using StreamChunkPtr = StreamChunkPtr;
+using StreamChunkConverter = StreamChunkConverter;
+using StreamRowOp = StreamRowOp;
 
 } // namespace starrocks::stream

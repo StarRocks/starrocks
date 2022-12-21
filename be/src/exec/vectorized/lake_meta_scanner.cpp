@@ -16,7 +16,7 @@
 
 #include "exec/vectorized/lake_meta_scan_node.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
 
@@ -85,4 +85,4 @@ Status LakeMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

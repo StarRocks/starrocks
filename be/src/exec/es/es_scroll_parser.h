@@ -27,7 +27,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class ScrollParser {
 public:
     ScrollParser(bool doc_value_mode);
@@ -95,4 +95,4 @@ private:
     rapidjson::StringBuffer _scratch_buffer;
     rapidjson::Writer<rapidjson::StringBuffer> _temp_writer;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

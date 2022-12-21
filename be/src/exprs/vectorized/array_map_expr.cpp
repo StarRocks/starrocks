@@ -29,7 +29,7 @@
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
 ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
@@ -98,7 +98,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                                              true); // array->elements must be of return array->elements' type
     } else {
         // construct a new chunk to evaluate the lambda expression.
-        auto cur_chunk = std::make_shared<vectorized::Chunk>();
+        auto cur_chunk = std::make_shared<Chunk>();
         // put all arguments into the new chunk
         std::vector<SlotId> arguments_ids;
         auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
@@ -153,4 +153,4 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     return array_col;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -32,7 +32,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/user_function_cache.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class MockExchangeNode : public ExecNode {
 public:
@@ -310,4 +310,4 @@ TEST_F(RepeatNodeTest, repeat_node_test) {
     ASSERT_TRUE(rows == 9);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -21,11 +21,11 @@
 // For esay of use these types, include phmap.h here
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 extern ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
 
 std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map);
 std::ostream& operator<<(std::ostream& stream, const GlobalDictMap& map);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

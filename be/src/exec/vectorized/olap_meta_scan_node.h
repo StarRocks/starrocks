@@ -23,8 +23,6 @@ namespace starrocks {
 
 class RuntimeState;
 
-namespace vectorized {
-
 class OlapMetaScanNode final : public MetaScanNode {
 public:
     OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -46,5 +44,4 @@ private:
     std::vector<OlapMetaScanner*> _scanners;
 };
 
-} // namespace vectorized
 } // namespace starrocks

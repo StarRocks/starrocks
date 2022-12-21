@@ -20,7 +20,7 @@
 #include "common/logging.h"
 #include "geo/geo_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct StConstructState {
     StConstructState() = default;
@@ -434,4 +434,4 @@ Status GeoFunctions::st_polygon_prepare(FunctionContext* ctx, FunctionContext::F
     return st_from_wkt_prepare_common(ctx, scope, GEO_SHAPE_POLYGON);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

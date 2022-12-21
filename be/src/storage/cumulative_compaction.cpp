@@ -20,7 +20,7 @@
 #include "util/time.h"
 #include "util/trace.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
@@ -243,4 +243,4 @@ Status CumulativeCompaction::check_version_continuity_with_cumulative_point(
     return Status::InternalError("cumulative compaction miss version error.");
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

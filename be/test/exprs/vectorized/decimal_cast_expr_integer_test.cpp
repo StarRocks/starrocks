@@ -18,7 +18,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/time_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 PARALLEL_TEST(VectorizedDecimalCastExprIntegerTest, testCastFromDecimal32p9s0ToBooleanNormal) {
     CastTestCaseArray test_cases = {
@@ -3731,4 +3731,4 @@ PARALLEL_TEST(VectorizedDecimalCastExprIntegerTest, testCastFromLargeIntToDecima
     test_cast_all<TYPE_LARGEINT, TYPE_DECIMAL128>(test_cases);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

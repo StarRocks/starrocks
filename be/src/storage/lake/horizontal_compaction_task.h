@@ -19,10 +19,10 @@
 
 #include "storage/lake/compaction_task.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Chunk;
 class ChunkIterator;
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace starrocks::lake {
 

@@ -214,8 +214,8 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     return Status::OK();
 }
 
-StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::VectorizedSchema& schema,
-                                                  const vectorized::SegmentReadOptions& read_options) {
+StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const VectorizedSchema& schema,
+                                                  const SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
     // trying to prune the current segment by segment-level zone map
     for (const auto& pair : read_options.predicates_for_zone_map) {
@@ -228,18 +228,18 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::VectorizedSc
             return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
         }
     }
-    return vectorized::new_segment_iterator(shared_from_this(), schema, read_options);
+    return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 
-StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::VectorizedSchema& schema,
-                                                 const vectorized::SegmentReadOptions& read_options) {
+StatusOr<ChunkIteratorPtr> Segment::new_iterator(const VectorizedSchema& schema,
+                                                 const SegmentReadOptions& read_options) {
     if (read_options.stats == nullptr) {
         return Status::InvalidArgument("stats is null pointer");
     }
     // If input schema is not match the actual meta, must convert the read_options according
     // to the actual format. And create an AdaptSegmentIterator to wrap
     if (_needs_chunk_adapter) {
-        std::unique_ptr<vectorized::SegmentChunkIteratorAdapter> adapter(new vectorized::SegmentChunkIteratorAdapter(
+        std::unique_ptr<SegmentChunkIteratorAdapter> adapter(new SegmentChunkIteratorAdapter(
                 *_tablet_schema, *_column_storage_types, schema, read_options.chunk_size));
         RETURN_IF_ERROR(adapter->prepare(read_options));
 
@@ -353,7 +353,7 @@ void Segment::_prepare_adapter_info() {
     }
 }
 
-Status Segment::new_column_iterator(uint32_t cid, ColumnIterator** iter) {
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid) {
     if (_column_readers[cid] == nullptr) {
         const TabletColumn& tablet_column = _tablet_schema->column(cid);
         if (!tablet_column.has_default_value() && !tablet_column.is_nullable()) {
@@ -366,10 +366,9 @@ Status Segment::new_column_iterator(uint32_t cid, ColumnIterator** iter) {
                 type_info, tablet_column.length(), num_rows()));
         ColumnIteratorOptions iter_opts;
         RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-        *iter = default_value_iter.release();
-        return Status::OK();
+        return default_value_iter;
     }
-    return _column_readers[cid]->new_iterator(iter);
+    return _column_readers[cid]->new_iterator();
 }
 
 Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter) {

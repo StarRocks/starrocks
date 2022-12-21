@@ -37,7 +37,7 @@
 #include "udf/java/utils.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
@@ -97,7 +97,7 @@ struct UDFFunctionCallHelper {
 
 JavaFunctionCallExpr::JavaFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
 
     for (int i = 0; i < _children.size(); ++i) {
@@ -269,4 +269,4 @@ void JavaFunctionCallExpr::_call_udf_close() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

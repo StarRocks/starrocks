@@ -37,11 +37,11 @@ void AggregateBlockingSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 
     const auto chunk_size = state->chunk_size();
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
 
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(&chunk));

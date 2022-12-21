@@ -37,7 +37,7 @@
 #include "runtime/sorted_chunks_merger.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 inline int kTestChunkSize = 4096;
 
@@ -588,6 +588,6 @@ static void BM_find_zero_memchr(benchmark::State& state) {
 }
 BENCHMARK(BM_find_zero_memchr)->Range(8, 8 << 12);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 BENCHMARK_MAIN();
