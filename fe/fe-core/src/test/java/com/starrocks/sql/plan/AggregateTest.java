@@ -582,21 +582,23 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select MIN(x1) from (select distinct v2 as x1 from t0) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: min(2: v2)\n" +
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: min(min_v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: t0");
+                "  0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id 5> : min_v2\n");
 
         sql = "select MIN(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: min(2: v2)\n" +
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: min(min_v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: t0");
+                "  0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id 5> : min_v2");
     }
 
     @Test
@@ -1724,5 +1726,73 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("ANALYTIC"));
         Assert.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE"));
+    }
+
+    @Test
+    public void testSimpleMinMaxAggRewrite() throws Exception {
+        // normal case
+        String sql = "select min(t1b),max(t1b),min(id_datetime) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        System.out.printf("%s\n", plan.toString());
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type\n" +
+                "     <id 16> : min_id_datetime\n" +
+                "     <id 14> : min_t1b\n" +
+                "     <id 15> : max_t1b");
+
+        // The following cases will not use MetaScan because some conditions are not met
+        // with group by key
+        sql = "select t1b,max(id_datetime) from test_all_type group by t1b";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(8: id_datetime)\n" +
+                "  |  group by: 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type");
+        // with expr in agg function
+        sql = "select min(t1b+1),max(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(11: expr), max(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with unsupported type in agg function
+        sql = "select min(t1b),max(t1a) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b), max(1: t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with filter
+        sql = "select min(t1b) from test_all_type where t1c > 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select min(t1b) from test_all_type having abs(1) = 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  having: abs(1) = 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
     }
 }
