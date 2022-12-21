@@ -5,16 +5,16 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/binary_predicate.h"
+#include "exprs/cast_expr.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/binary_predicate.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/column_ref.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/column_predicate.h"
 
 namespace starrocks {
 

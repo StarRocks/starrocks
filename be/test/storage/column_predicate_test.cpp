@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/column_predicate.h"
+
 #include <vector>
 
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_or_predicate.h"
-#include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
 namespace starrocks {

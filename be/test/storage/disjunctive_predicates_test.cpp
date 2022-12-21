@@ -23,7 +23,7 @@
 #include "common/object_pool.h"
 #include "runtime/primitive_type.h"
 #include "simd/simd.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/column_predicate.h"
 #include "util/value_generator.h"
 
 namespace starrocks {

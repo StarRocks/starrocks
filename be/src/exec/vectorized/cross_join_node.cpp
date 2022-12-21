@@ -30,7 +30,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/literal.h"
+#include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"

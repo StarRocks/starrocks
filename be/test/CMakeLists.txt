@@ -62,58 +62,58 @@ set(EXEC_FILES
         ./exec/vectorized/table_function_node_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
-        ./exprs/vectorized/arithmetic_expr_test.cpp
-        ./exprs/vectorized/arithmetic_operation_test.cpp
-        ./exprs/vectorized/array_element_expr_test.cpp
-        ./exprs/vectorized/decimal_binary_function_test.cpp
-        ./exprs/vectorized/array_expr_test.cpp
-        ./exprs/vectorized/array_functions_test.cpp
-        ./exprs/vectorized/binary_functions_test.cpp
-        ./exprs/vectorized/binary_predicate_test.cpp
-        ./exprs/vectorized/bitmap_functions_test.cpp
-        ./exprs/vectorized/case_expr_test.cpp
-        ./exprs/vectorized/cast_expr_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_decimal_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_integer_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_float_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_time_test.cpp
-        ./exprs/vectorized/decimal_cast_expr_decimalv2_test.cpp
-        ./exprs/vectorized/coalesce_expr_test.cpp
-        ./exprs/vectorized/compound_predicate_test.cpp
-        ./exprs/vectorized/condition_expr_test.cpp
-        ./exprs/vectorized/encryption_functions_test.cpp
-        ./exprs/vectorized/function_call_expr_test.cpp
-        ./exprs/vectorized/geography_functions_test.cpp
-        ./exprs/vectorized/hash_functions_test.cpp
-        ./exprs/vectorized/hyperloglog_functions_test.cpp
-        ./exprs/vectorized/if_expr_test.cpp
-        ./exprs/vectorized/function_helper_test.cpp
-        ./exprs/vectorized/in_predicate_test.cpp
-        ./exprs/vectorized/is_null_predicate_test.cpp
-        ./exprs/vectorized/json_functions_test.cpp
-        ./exprs/vectorized/lambda_function_expr_test.cpp
-        ./exprs/vectorized/like_test.cpp
-        ./exprs/vectorized/map_element_expr_test.cpp
-        ./exprs/vectorized/map_functions_test.cpp
-        ./exprs/vectorized/math_functions_test.cpp
-        ./exprs/vectorized/null_if_expr_test.cpp
-        ./exprs/vectorized/percentile_functions_test.cpp
-        ./exprs/vectorized/string_fn_concat_test.cpp
-        ./exprs/vectorized/string_fn_locate_test.cpp
-        ./exprs/vectorized/string_fn_pad_test.cpp
-        ./exprs/vectorized/string_fn_repeat_test.cpp
-        ./exprs/vectorized/string_fn_reverse_test.cpp
-        ./exprs/vectorized/string_fn_sm3_test.cpp
-        ./exprs/vectorized/string_fn_space_test.cpp
-        ./exprs/vectorized/string_fn_substr_test.cpp
-        ./exprs/vectorized/string_fn_test.cpp
-        ./exprs/vectorized/string_fn_trim_test.cpp
-        ./exprs/vectorized/string_fn_money_format_decimal_test.cpp
-        ./exprs/vectorized/time_functions_test.cpp
-        ./exprs/vectorized/es_functions_test.cpp
-        ./exprs/vectorized/utility_functions_test.cpp
-        ./exprs/vectorized/runtime_filter_test.cpp
-        ./exprs/vectorized/subfield_expr_test.cpp
+        ./exprs/arithmetic_expr_test.cpp
+        ./exprs/arithmetic_operation_test.cpp
+        ./exprs/array_element_expr_test.cpp
+        ./exprs/decimal_binary_function_test.cpp
+        ./exprs/array_expr_test.cpp
+        ./exprs/array_functions_test.cpp
+        ./exprs/binary_functions_test.cpp
+        ./exprs/binary_predicate_test.cpp
+        ./exprs/bitmap_functions_test.cpp
+        ./exprs/case_expr_test.cpp
+        ./exprs/cast_expr_test.cpp
+        ./exprs/decimal_cast_expr_decimal_test.cpp
+        ./exprs/decimal_cast_expr_integer_test.cpp
+        ./exprs/decimal_cast_expr_float_test.cpp
+        ./exprs/decimal_cast_expr_time_test.cpp
+        ./exprs/decimal_cast_expr_decimalv2_test.cpp
+        ./exprs/coalesce_expr_test.cpp
+        ./exprs/compound_predicate_test.cpp
+        ./exprs/condition_expr_test.cpp
+        ./exprs/encryption_functions_test.cpp
+        ./exprs/function_call_expr_test.cpp
+        ./exprs/geography_functions_test.cpp
+        ./exprs/hash_functions_test.cpp
+        ./exprs/hyperloglog_functions_test.cpp
+        ./exprs/if_expr_test.cpp
+        ./exprs/function_helper_test.cpp
+        ./exprs/in_predicate_test.cpp
+        ./exprs/is_null_predicate_test.cpp
+        ./exprs/json_functions_test.cpp
+        ./exprs/lambda_function_expr_test.cpp
+        ./exprs/like_test.cpp
+        ./exprs/map_element_expr_test.cpp
+        ./exprs/map_functions_test.cpp
+        ./exprs/math_functions_test.cpp
+        ./exprs/null_if_expr_test.cpp
+        ./exprs/percentile_functions_test.cpp
+        ./exprs/string_fn_concat_test.cpp
+        ./exprs/string_fn_locate_test.cpp
+        ./exprs/string_fn_pad_test.cpp
+        ./exprs/string_fn_repeat_test.cpp
+        ./exprs/string_fn_reverse_test.cpp
+        ./exprs/string_fn_sm3_test.cpp
+        ./exprs/string_fn_space_test.cpp
+        ./exprs/string_fn_substr_test.cpp
+        ./exprs/string_fn_test.cpp
+        ./exprs/string_fn_trim_test.cpp
+        ./exprs/string_fn_money_format_decimal_test.cpp
+        ./exprs/time_functions_test.cpp
+        ./exprs/es_functions_test.cpp
+        ./exprs/utility_functions_test.cpp
+        ./exprs/runtime_filter_test.cpp
+        ./exprs/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
@@ -334,10 +334,10 @@ endif ()
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(./exprs/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
     set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)

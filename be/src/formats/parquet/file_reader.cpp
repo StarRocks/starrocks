@@ -19,7 +19,7 @@
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
 #include "fs/fs.h"

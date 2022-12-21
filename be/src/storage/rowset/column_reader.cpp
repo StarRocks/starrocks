@@ -43,6 +43,7 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/logging.h"
+#include "storage/column_predicate.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -56,7 +57,6 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
-#include "storage/vectorized_column_predicate.h"
 #include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 
