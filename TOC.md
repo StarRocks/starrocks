@@ -388,6 +388,7 @@
         + [json_keys](/sql-reference/sql-functions/json-functions/json-processing-functions/json_keys.md)
         + [json_length](/sql-reference/sql-functions/json-functions/json-processing-functions/json_length.md)
         + [json_query](/sql-reference/sql-functions/json-functions/json-processing-functions/json_query.md)
+        + [json_string](/sql-reference/sql-functions/json-functions/json-processing-functions/json_string.md)
     + Map 函数
       + [map_keys](/sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](/sql-reference/sql-functions/map-functions/map_size.md)
