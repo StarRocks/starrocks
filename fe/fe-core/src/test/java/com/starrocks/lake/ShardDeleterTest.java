@@ -126,7 +126,7 @@ public class ShardDeleterTest {
 
     @Test
     public void testNormal() throws Exception {
-        Config.shard_group_clean_threshold_ms = 0;
+        Config.shard_group_clean_threshold_sec = 0;
         List<Long> allShardGroupId = Stream.of(1L, 2L, 3L, 4L, 12L).collect(Collectors.toList());
         // build shardGroupInfos
 

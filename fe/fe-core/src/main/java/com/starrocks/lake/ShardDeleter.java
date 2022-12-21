@@ -46,6 +46,10 @@ import java.util.stream.Collectors;
 public class ShardDeleter extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ShardDeleter.class);
 
+    public ShardDeleter() {
+        super("ShardDeleter", Config.shard_deleter_run_interval_sec * 1000L);
+    }
+
     private List<Long> getAllPartitionShardGroupId() {
         List<Long> groupIds = new ArrayList<>();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
@@ -159,7 +163,7 @@ public class ShardDeleter extends LeaderDaemon {
         long nowMs = System.currentTimeMillis();
         List<Long> emptyShardGroup = new ArrayList<>();
         for (long groupId : diffList) {
-            if (Config.shard_group_clean_threshold_ms + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
+            if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
                 try {
                     List<Long> shardIds = starOSAgent.listShard(groupId);
                     if (shardIds.isEmpty()) {

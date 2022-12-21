@@ -202,6 +202,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -1077,7 +1078,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private List<Partition> createPartitionList(Database db, OlapTable copiedTable, List<PartitionDesc> partitionDescs,
-                                                HashMap<String, Set<Long>> partitionNameToTabletSet)
+                                                HashMap<String, Set<Long>> partitionNameToTabletSet,
+                                                Set<Long> tabletIdSetForAll)
             throws DdlException {
         List<Partition> partitionList = Lists.newArrayListWithCapacity(partitionDescs.size());
         for (PartitionDesc partitionDesc : partitionDescs) {
@@ -1097,6 +1099,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
 
             partitionList.add(partition);
+            tabletIdSetForAll.addAll(tabletIdSet);
             partitionNameToTabletSet.put(partitionName, tabletIdSet);
         }
         return partitionList;
@@ -1302,6 +1305,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void cleanTabletIdSetForAll(Set<Long> tabletIdSetForAll) {
+        // Cleanup of shards for LakeTable is taken care by ShardDeleter
         for (Long tabletId : tabletIdSetForAll) {
             stateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
         }
@@ -1357,7 +1361,7 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             // create partition list
             List<Partition> partitionList =
-                    createPartitionList(db, copiedTable, partitionDescs, partitionNameToTabletSet);
+                    createPartitionList(db, copiedTable, partitionDescs, partitionNameToTabletSet, tabletIdSetForAll);
 
             // build partitions
             buildPartitions(db, copiedTable, partitionList);
@@ -1529,11 +1533,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // drop
-        Partition partition = olapTable.getPartition(partitionName);
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
             if (!clause.isForceDrop()) {
+                Partition partition = olapTable.getPartition(partitionName);
                 if (partition != null) {
                     if (stateMgr.getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
@@ -1546,6 +1550,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            if (olapTable instanceof MaterializedView) {
+                MaterializedView mv = (MaterializedView) olapTable;
+                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName);
+            }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
@@ -1573,7 +1581,6 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
-            Partition partition = olapTable.getPartition(info.getPartitionName());
             if (info.isTempPartition()) {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
@@ -2292,7 +2299,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         boolean createTblSuccess = false;
         boolean addToColocateGroupSuccess = false;
-
         // create partition
         try {
             // do not create partition for external table
@@ -4408,6 +4414,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (DdlException e) {
+            deleteUselessTablets(tabletIdSet);
             throw e;
         }
         Preconditions.checkState(origPartitions.size() == newPartitions.size());
@@ -4477,6 +4484,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } catch (DdlException e) {
+            deleteUselessTablets(tabletIdSet);
             throw e;
         } catch (MetaNotFoundException e) {
             LOG.warn("Table related materialized view can not be found", e);
@@ -4486,6 +4494,14 @@ public class LocalMetastore implements ConnectorMetadata {
 
         LOG.info("finished to truncate table {}, partitions: {}",
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
+    }
+
+    private void deleteUselessTablets(Set<Long> tabletIdSet) {
+        // create partition failed, remove all newly created tablets.
+        // For lakeTable, shards cleanup is taken care in ShardDeleter.
+        for (Long tabletId : tabletIdSet) {
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+        }
     }
 
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
