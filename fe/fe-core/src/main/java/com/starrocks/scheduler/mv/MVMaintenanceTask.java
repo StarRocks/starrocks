@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.mv;
 
 import com.starrocks.server.GlobalStateMgr;
@@ -21,9 +20,13 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TUniqueId;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * TODO(murphy) implement the Coordinator to compute task correctly
@@ -43,6 +46,8 @@ public class MVMaintenanceTask {
     private TNetworkAddress beHost;
     private long taskId;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
+    // TODO(murphy) maintain this state during epoch execution
+    private final Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
 
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, long beId, TNetworkAddress beHost,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
@@ -113,6 +118,10 @@ public class MVMaintenanceTask {
 
     public void setFragmentInstances(List<TExecPlanFragmentParams> fragmentInstances) {
         this.fragmentInstances = fragmentInstances;
+    }
+
+    public Map<TUniqueId, Map<Integer, List<TScanRange>>> getBinlogConsumeState() {
+        return binlogConsumeState;
     }
 
     @Override
