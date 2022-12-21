@@ -21,7 +21,7 @@
 #include "exec/vectorized/hash_join_node.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 
 namespace starrocks::pipeline {
 class RuntimeFilterHolder;

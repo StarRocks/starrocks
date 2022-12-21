@@ -19,7 +19,7 @@
 #include <memory>
 #include <string>
 
-#include "exprs/vectorized/json_functions.h"
+#include "exprs/json_functions.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 

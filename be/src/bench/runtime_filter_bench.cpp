@@ -20,8 +20,8 @@
 
 #include "bench.h"
 #include "column/column_helper.h"
-#include "exprs/vectorized/runtime_filter.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter.h"
+#include "exprs/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "util/time.h"
 

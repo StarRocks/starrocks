@@ -17,16 +17,16 @@
 #include <variant>
 
 #include "column/type_traits.h"
+#include "exprs/dictmapping_expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/dictmapping_expr.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
-#include "storage/vectorized_column_predicate.h"
 #include "types/date_value.hpp"
 
 namespace starrocks {

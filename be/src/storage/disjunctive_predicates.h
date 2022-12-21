@@ -16,8 +16,8 @@
 
 #include <vector>
 
+#include "storage/column_predicate.h"
 #include "storage/conjunctive_predicates.h"
-#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 

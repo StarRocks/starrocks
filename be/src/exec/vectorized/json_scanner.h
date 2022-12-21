@@ -19,7 +19,7 @@
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "exec/vectorized/file_scanner.h"
-#include "exprs/vectorized/json_functions.h"
+#include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
