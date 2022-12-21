@@ -57,6 +57,8 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
                                      .rowset_writer = writer->committed_rowset_writer(),
                                      .replicate_token = writer->replicate_token()};
             iter->write_cb->run(st, &info, nullptr);
+        } else if (st.ok()) {
+            iter->write_cb->run(st, nullptr, nullptr);
         } else {
             iter->write_cb->run(st, nullptr, &failed_info);
         }
