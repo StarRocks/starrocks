@@ -40,6 +40,9 @@ public:
     static void encode(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset, size_t len,
                        vectorized::Column* dest);
 
+    static void encode_sort_key(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset,
+                                size_t len, vectorized::Column* dest);
+
     static void encode_selective(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
                                  const uint32_t* indexes, size_t len, vectorized::Column* dest);
 
