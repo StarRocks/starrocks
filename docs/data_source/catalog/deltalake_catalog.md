@@ -7,7 +7,7 @@ A Delta Lake catalog is an external catalog supported in StarRocks 2.5 and later
 ## Usage notes
 
 - StarRocks supports querying Parquet data files of Delta Lake.
-- StarRocks supports querying data in the following types from Delta Lake: MAP, STRUCT, BOOLEAN, BYTE, TINYINT, SMALLINT, INTEGER, LONG, FLOAT, DOUBLE, DATE, TIMESTAMP, STRING, DECIMAL, and ARRAY. The BINARY data type is not supported. Note that errors occur if you query data in unsupported data types.
+- StarRocks does not support querying data of the BINARY type from Delta Lake. Note that errors occur if you query data in unsupported data types.
 - From StarRocks v2.4 onwards, you can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Delta Lake table. If the table contains columns of unsupported data types, the values in the columns are displayed as `unknown` in the returned result.
 
 ## Before you begin
