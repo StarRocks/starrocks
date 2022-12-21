@@ -211,6 +211,18 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   If you need to analyze the profile of a query, you can set this variable to `true`. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the latest 100 queries with `enable_profile` turned on.
 
+* enable_query_queue_load
+
+  Boolean value to enable query queues for loading tasks. Default: `false`.
+
+* enable_query_queue_select
+
+  Boolean value to enable query queues for SELECT queries. Default: `false`.
+
+* enable_query_queue_statistic
+
+  Boolean value to enable query queues for statistics queries.
+
 * language
 
   Used for MySQL client compatibility. No practical usage.
@@ -298,10 +310,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Default: `0`. Range: [0, 1000]
 
-* query_queue_insert_enable
-
-  Boolean value to enable query queues for INSERT loading. Default: `false`.
-
 * query_queue_max_queued_queries
 
   The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `0`.
@@ -313,14 +321,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * query_queue_pending_timeout_second
 
   The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected. Unit: second. Default: `300`.
-
-* query_queue_select_enable
-
-  Boolean value to enable query queues for SELECT queries. Default: `false`.
-
-* query_queue_statistic_enable
-
-  Boolean value to enable query queues for statistics queries.
 
 * query_timeout
 

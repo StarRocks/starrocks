@@ -1592,7 +1592,7 @@ public class AlterTest {
                 (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testAddMultiItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1639,7 +1639,7 @@ public class AlterTest {
 
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testAddSingleItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1684,7 +1684,7 @@ public class AlterTest {
 
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testSingleItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1760,7 +1760,7 @@ public class AlterTest {
         file.delete();
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testMultiItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1935,7 +1935,7 @@ public class AlterTest {
         Config.use_staros = false;
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_1 (\n" +
@@ -1965,7 +1965,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_1", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
@@ -1999,7 +1999,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_2", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddSingleListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_3 (\n" +
@@ -2029,7 +2029,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_3", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddMultiItemListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_4 (\n" +

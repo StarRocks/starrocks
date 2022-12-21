@@ -5,9 +5,9 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Snapshot;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -91,7 +91,7 @@ public class ResourceGroupMetricMgr {
         if (!sessionVariable.isEnableResourceGroup() || !sessionVariable.isEnablePipelineEngine()) {
             return null;
         }
-        ResourceGroup resourceGroup = ctx.getResourceGroup();
+        TWorkGroup resourceGroup = ctx.getResourceGroup();
         return resourceGroup == null ? "default_wg" : resourceGroup.getName();
     }
 

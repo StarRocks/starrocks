@@ -26,6 +26,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
@@ -46,6 +54,7 @@ public class StructType extends Type {
     private static final Logger LOG = LogManager.getLogger(StructType.class);
 
     private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
+    @SerializedName(value = "fields")
     private final ArrayList<StructField> fields;
 
     public StructType(ArrayList<StructField> structFields) {
@@ -210,6 +219,21 @@ public class StructType extends Type {
             structFields.add(field.clone());
         }
         return new StructType(structFields);
+    }
+
+    public static class StructTypeDeSerializer implements JsonDeserializer<StructType> {
+        @Override
+        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (JsonElement field : fields) {
+                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
+            }
+            return new StructType(structFields);
+        }
     }
 }
 
