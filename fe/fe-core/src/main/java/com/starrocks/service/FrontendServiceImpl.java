@@ -78,7 +78,6 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.UnauthorizedException;
@@ -110,11 +109,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.DistributionDesc;
-import com.starrocks.sql.ast.PartitionKeyDesc;
-import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -216,8 +211,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -1476,7 +1469,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
-        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
 
@@ -1552,59 +1544,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
         String granularity = granularityLiteral.getStringValue();
-        for (String partitionValue : partitionValues) {
-            DateTimeFormatter beginDateTimeFormat;
-            LocalDateTime beginTime;
-            LocalDateTime endTime;
 
+        Map<String, AddPartitionClause> addPartitionClauseMap;
+        try {
+            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(partitionValues,
+                    granularity, olapTable);
+        } catch (AnalysisException ex) {
+            result.setStatus(errorStatus);
+            result.setErr_msg(ex.getMessage());
+            return result;
+        }
+
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
             try {
-                beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
-                beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
-                switch (granularity.toLowerCase()) {
-                    case "day":
-                        endTime = beginTime.plusDays(1);
-                        break;
-                    case "hour":
-                        endTime = beginTime.plusHours(1);
-                        break;
-                    case "month":
-                        endTime = beginTime.plusMonths(1);
-                        break;
-                    case "year":
-                        endTime = beginTime.plusYears(1);
-                        break;
-                    default:
-                        result.setStatus(errorStatus);
-                        result.setErr_msg("unsupported partition granularity:" + granularity);
-                        return result;
-                }
-                String lowerBound = beginTime.format(DateUtils.DATEKEY_FORMATTER);
-                String upperBound = endTime.format(DateUtils.DATEKEY_FORMATTER);
-                String partitionName = "p" + lowerBound;
-                PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                        Collections.singletonList(new PartitionValue(lowerBound)),
-                        Collections.singletonList(new PartitionValue(upperBound)));
-                Map<String, String> partitionProperties = Maps.newHashMap();
-                Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-                partitionProperties.put("replication_num", String.valueOf(replicationNum));
-                DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
-
-                SingleRangePartitionDesc singleRangePartitionDesc =
-                        new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-
-                AddPartitionClause addPartitionClause = new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
-                        partitionProperties, false);
-                try {
-                    state.addPartitions(db, table.getName(), addPartitionClause);
-                } catch (DdlException | AnalysisException e) {
-                    result.setStatus(errorStatus);
-                    result.setErr_msg(String.format("create partition failed. stmt:%s", addPartitionClause.toSql()));
-                    return result;
-                }
-                partitionNames.add(partitionName);
-            } catch (AnalysisException e) {
+                state.addPartitions(db, olapTable.getName(), addPartitionClause);
+            } catch (DdlException | AnalysisException e) {
                 result.setStatus(errorStatus);
-                result.setErr_msg(String.format("failed to analysis partition value:%s", partitionValue));
+                result.setErr_msg(String.format("create partition failed. stmt:%s", addPartitionClause.toSql()));
                 return result;
             }
         }
@@ -1612,7 +1569,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
-        for (String partitionName : partitionNames) {
+        for (String partitionName : addPartitionClauseMap.keySet()) {
             Partition partition = table.getPartition(partitionName);
             TOlapTablePartition tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());

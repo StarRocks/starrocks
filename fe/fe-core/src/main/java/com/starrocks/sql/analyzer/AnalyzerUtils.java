@@ -33,10 +33,12 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -44,14 +46,19 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -62,6 +69,9 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -539,6 +549,57 @@ public class AnalyzerUtils {
         } else {
             return null;
         }
+    }
+
+    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(
+            List<String> partitionValues, String granularity, OlapTable olapTable) throws AnalysisException {
+        Map<String, AddPartitionClause> result = Maps.newHashMap();
+        for (String partitionValue : partitionValues) {
+            DateTimeFormatter beginDateTimeFormat;
+            LocalDateTime beginTime;
+            LocalDateTime endTime;
+
+            try {
+                beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
+                beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
+                switch (granularity.toLowerCase()) {
+                    case "day":
+                        endTime = beginTime.plusDays(1);
+                        break;
+                    case "hour":
+                        endTime = beginTime.plusHours(1);
+                        break;
+                    case "month":
+                        endTime = beginTime.plusMonths(1);
+                        break;
+                    case "year":
+                        endTime = beginTime.plusYears(1);
+                        break;
+                    default:
+                        throw new AnalysisException("unsupported partition granularity:" + granularity);
+                }
+                String lowerBound = beginTime.format(DateUtils.DATEKEY_FORMATTER);
+                String upperBound = endTime.format(DateUtils.DATEKEY_FORMATTER);
+                String partitionName = "p" + lowerBound;
+                PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
+                        Collections.singletonList(new PartitionValue(lowerBound)),
+                        Collections.singletonList(new PartitionValue(upperBound)));
+                Map<String, String> partitionProperties = Maps.newHashMap();
+                Short replicationNum = olapTable.getTableProperty().getReplicationNum();
+                partitionProperties.put("replication_num", String.valueOf(replicationNum));
+                DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+
+                SingleRangePartitionDesc singleRangePartitionDesc =
+                        new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
+
+                AddPartitionClause addPartitionClause = new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
+                        partitionProperties, false);
+                result.put(partitionName, addPartitionClause);
+            } catch (AnalysisException e) {
+                throw new AnalysisException(String.format("failed to analysis partition value:%s", partitionValue));
+            }
+        }
+        return result;
     }
 
 }

@@ -80,7 +80,9 @@ public class ExpressionPartitionDesc extends PartitionDesc {
 
     @Override
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
-        getRangePartitionDesc().analyze(columnDefs, otherProperties);
+        if (rangePartitionDesc != null) {
+            rangePartitionDesc.analyze(columnDefs, otherProperties);
+        }
     }
 
     @Override
@@ -94,34 +96,8 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         List<Column> partitionColumns = Lists.newArrayList();
 
         // check and get partition column
-        for (String colName : getRangePartitionDesc().getPartitionColNames()) {
-            boolean find = false;
-            for (Column column : schema) {
-                if (column.getName().equalsIgnoreCase(colName)) {
-                    if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
-                        throw new DdlException("The partition column could not be aggregated column"
-                                + " and unique table's partition column must be key column");
-                    }
-
-                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
-                        throw new DdlException(String.format("Invalid partition column '%s': %s",
-                                column.getName(), "invalid data type " + column.getType()));
-                    }
-
-                    try {
-                        RangePartitionInfo.checkRangeColumnType(column);
-                    } catch (AnalysisException e) {
-                        throw new DdlException(e.getMessage());
-                    }
-
-                    partitionColumns.add(column);
-                    find = true;
-                    break;
-                }
-            }
-            if (!find) {
-                throw new DdlException("Partition column[" + colName + "] does not found");
-            }
+        for (String colName : rangePartitionDesc.getPartitionColNames()) {
+            findRangePartitionColumn(schema, partitionColumns, colName);
         }
 
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
@@ -133,6 +109,37 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         }
 
         return expressionRangePartitionInfo;
+    }
+
+    static void findRangePartitionColumn(List<Column> schema, List<Column> partitionColumns, String colName)
+            throws DdlException {
+        boolean find = false;
+        for (Column column : schema) {
+            if (column.getName().equalsIgnoreCase(colName)) {
+                if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
+                    throw new DdlException("The partition column could not be aggregated column"
+                            + " and unique table's partition column must be key column");
+                }
+
+                if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                    throw new DdlException(String.format("Invalid partition column '%s': %s",
+                            column.getName(), "invalid data type " + column.getType()));
+                }
+
+                try {
+                    RangePartitionInfo.checkRangeColumnType(column);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+
+                partitionColumns.add(column);
+                find = true;
+                break;
+            }
+        }
+        if (!find) {
+            throw new DdlException("Partition column[" + colName + "] does not found");
+        }
     }
 
 }
