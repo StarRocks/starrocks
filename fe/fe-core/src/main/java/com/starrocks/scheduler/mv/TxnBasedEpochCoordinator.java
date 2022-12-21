@@ -21,7 +21,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
@@ -155,7 +154,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
         for (MVMaintenanceTask task : mvMaintenanceJob.getTasks().values()) {
             long taskId = task.getTaskId();
-            TNetworkAddress address = SystemInfoService.toBrpcHost(task.getBeHost());
+            TNetworkAddress address = task.getBeHost();
 
             // Request information
             MaterializedView view = mvMaintenanceJob.getView();

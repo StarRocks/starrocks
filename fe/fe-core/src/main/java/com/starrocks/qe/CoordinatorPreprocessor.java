@@ -1398,6 +1398,10 @@ public class CoordinatorPreprocessor {
             return backendNum;
         }
 
+        public void setBackendNum(int backendNum) {
+            this.backendNum = backendNum;
+        }
+
         public TNetworkAddress getHost() {
             return host;
         }

@@ -14,8 +14,9 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -33,8 +34,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -53,7 +52,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -61,6 +59,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * Long-running job responsible for MV incremental maintenance.
@@ -84,18 +83,19 @@ public class MVMaintenanceJob implements Writable {
     private final MVEpoch epoch;
 
     // TODO(murphy) serialize the plan, current we need to rebuild the plan for job
-    private transient ExecPlan plan;
+    private final transient ExecPlan plan;
 
     // Runtime ephemeral state
     // At most one thread could execute this job, this flag indicates is someone scheduling this job
     private transient AtomicReference<JobState> state = new AtomicReference<>();
     private transient AtomicBoolean inSchedule = new AtomicBoolean(false);
-    private transient MaterializedView view;
+    private final transient MaterializedView view;
     private transient ConnectContext connectContext;
     // TODO(murphy) implement a real query coordinator
     private transient CoordinatorPreprocessor queryCoordinator;
     private transient TxnBasedEpochCoordinator epochCoordinator;
     private transient Map<Long, MVMaintenanceTask> taskMap;
+    private transient BiMap<Long, TNetworkAddress> taskId2Addr;
 
     public MVMaintenanceJob(MaterializedView view) {
         this.jobId = view.getId();
@@ -188,38 +188,15 @@ public class MVMaintenanceJob implements Writable {
      * 1. Deploy tasks to executors on BE
      * 2. Trigger the epoch
      */
-    private void prepare() throws Exception {
+    void prepare() throws Exception {
         this.state.set(JobState.PREPARING);
         try {
-            // TODO(murphy) fill current user
-            // Build connection context
-            this.connectContext = StatisticUtils.buildConnectContext();
-            Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
-            this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
-            if (db != null) {
-                this.connectContext.setDatabase(db.getFullName());
-            }
-            TUniqueId queryId = connectContext.getExecutionId();
+            buildContext();
 
-            // Build  query coordinator
-            ExecPlan execPlan = this.view.getMaintenancePlan();
-            List<PlanFragment> fragments = execPlan.getFragments();
-            List<ScanNode> scanNodes = execPlan.getScanNodes();
-            TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
-            TQueryGlobals queryGlobals =
-                    CoordinatorPreprocessor.genQueryGlobals(connectContext.getStartTime(),
-                            connectContext.getSessionVariable().getTimeZone());
-            TQueryOptions queryOptions = connectContext.getSessionVariable().toThrift();
-            this.queryCoordinator =
-                    new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, descTable, queryGlobals,
-                            queryOptions);
-            this.epochCoordinator = new TxnBasedEpochCoordinator(this);
-
-            // Build physical plan instance
             buildPhysicalTopology();
 
-            // Build tasks
             deployTasks();
+
             this.state.set(JobState.RUN_EPOCH);
             LOG.info("MV maintenance job prepared: {}", this.view.getName());
         } catch (Exception e) {
@@ -228,42 +205,82 @@ public class MVMaintenanceJob implements Writable {
         }
     }
 
+    void buildContext() {
+        // TODO(murphy) fill current user
+        // Build connection context
+        this.connectContext = StatisticUtils.buildConnectContext();
+        Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
+        this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
+        if (db != null) {
+            this.connectContext.setDatabase(db.getFullName());
+        }
+        TUniqueId queryId = connectContext.getExecutionId();
+
+        // Build  query coordinator
+        ExecPlan execPlan = this.view.getMaintenancePlan();
+        List<PlanFragment> fragments = execPlan.getFragments();
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+        TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
+        TQueryGlobals queryGlobals =
+                CoordinatorPreprocessor.genQueryGlobals(connectContext.getStartTime(),
+                        connectContext.getSessionVariable().getTimeZone());
+        TQueryOptions queryOptions = connectContext.getSessionVariable().toThrift();
+        this.queryCoordinator =
+                new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, descTable, queryGlobals,
+                        queryOptions);
+        this.epochCoordinator = new TxnBasedEpochCoordinator(this);
+    }
+
     /**
-     * FIXME(murphy) build the real plan fragment params, this is not a valid plan fragment, since current coordinator
-     * is hard to reuse
-     * <p>
      * Build physical fragments for the maintenance plan
      */
-    @VisibleForTesting
-    private void buildPhysicalTopology() throws Exception {
+    void buildPhysicalTopology() throws Exception {
         queryCoordinator.prepareExec();
 
         Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
                 queryCoordinator.getFragmentExecParamsMap();
-        // FIXME(murphy) all of these are faked
-        Set<TUniqueId> instanceIds = new HashSet<>();
         TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
+        // TODO: dbIds
         Set<Long> dbIds = connectContext.getCurrentSqlDbIds();
         boolean enablePipeline = true;
         int tabletSinkDop = 1;
 
         // Group all fragment instances by BE id, and package them into a task
+        BiMap<Long, TNetworkAddress> taskId2Addr = HashBiMap.create();
+        BiMap<TNetworkAddress, Long> addr2TaskId = taskId2Addr.inverse();
         Map<Long, MVMaintenanceTask> tasksByBe = new HashMap<>();
-        int taskId = 0;
+        long taskIdGen = 0;
+        int backendIdGen = 0;
         for (Map.Entry<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
             CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
+            Set<TUniqueId> inflightInstanceSet =
+                    execParams.instanceExecParams.stream()
+                            .map(CoordinatorPreprocessor.FInstanceExecParam::getInstanceId)
+                            .collect(Collectors.toSet());
             List<TExecPlanFragmentParams> tParams =
-                    execParams.toThrift(instanceIds, descTable, dbIds, enablePipeline, tabletSinkDop, tabletSinkDop);
-            Preconditions.checkState(tParams.size() == execParams.instanceExecParams.size());
+                    execParams.toThrift(inflightInstanceSet, descTable, dbIds, enablePipeline, tabletSinkDop,
+                            tabletSinkDop);
             for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
-                long beId = execParams.instanceExecParams.get(i).getBackendNum();
-                TNetworkAddress beHost = execParams.instanceExecParams.get(i).getHost();
-                MVMaintenanceTask task =
-                        tasksByBe.computeIfAbsent(beId,
-                                k -> MVMaintenanceTask.build(this, taskId, beId, beHost, new ArrayList<>()));
+                CoordinatorPreprocessor.FInstanceExecParam instanceParam = execParams.instanceExecParams.get(i);
+                TNetworkAddress beHost = instanceParam.getHost();
+                Long taskId = addr2TaskId.get(beHost);
+                MVMaintenanceTask task;
+                if (taskId == null) {
+                    taskId = taskIdGen++;
+                    task = MVMaintenanceTask.build(this, taskId, beHost, new ArrayList<>());
+                    tasksByBe.put(taskId, task);
+                    addr2TaskId.put(beHost, taskId);
+                } else {
+                    task = tasksByBe.get(taskId);
+                }
+
+                // TODO(murphy) is this necessary
+                int backendId = backendIdGen++;
+                instanceParam.setBackendNum(backendId);
                 task.addFragmentInstance(tParams.get(i));
             }
         }
+        this.taskId2Addr = taskId2Addr;
         this.taskMap = tasksByBe;
     }
 
@@ -274,9 +291,8 @@ public class MVMaintenanceJob implements Writable {
     private void deployTasks() throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
-            LOG.info("deployTasks: {}", task);
             long taskId = task.getTaskId();
-            TNetworkAddress address = SystemInfoService.toBrpcHost(task.getBeHost());
+            TNetworkAddress address = task.getBeHost();
             // Request information
             String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
 
@@ -324,17 +340,13 @@ public class MVMaintenanceJob implements Writable {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
             LOG.info("stopTasks: {}", task);
-            long beId = task.getBeId();
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
             request.setQuery_id(connectContext.getExecutionId());
             request.setTask_type(MVTaskType.STOP_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(task.getTaskId());
             request.setStop_maintenance(new TMVMaintenanceStopTask());
-            Backend backend =
-                    Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId),
-                            "backend not found:" + beId);
-            TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+            TNetworkAddress address = task.getBeHost();
 
             try {
                 results.add(BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));

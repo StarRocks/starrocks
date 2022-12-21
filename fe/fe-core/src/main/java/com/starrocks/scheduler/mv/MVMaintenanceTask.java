@@ -51,19 +51,16 @@ public class MVMaintenanceTask {
     private String dbName;
 
     // Task specific information
-    private long beId;
-    private TNetworkAddress beHost;
     private long taskId;
+    private TNetworkAddress beHost;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
-    // TODO(murphy) maintain this state during epoch execution
     private Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
 
-    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, long beId, TNetworkAddress beHost,
+    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beHost,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
         MVMaintenanceTask task = new MVMaintenanceTask();
         task.dbName = GlobalStateMgr.getCurrentState().getDb(job.getView().getDbId()).getFullName();
         task.job = job;
-        task.beId = beId;
         task.beHost = beHost;
         task.taskId = taskId;
         task.fragmentInstances = fragmentInstances;
@@ -102,14 +99,6 @@ public class MVMaintenanceTask {
         this.dbName = dbName;
     }
 
-    public long getBeId() {
-        return beId;
-    }
-
-    public void setBeId(long beId) {
-        this.beId = beId;
-    }
-
     public long getTaskId() {
         return taskId;
     }
@@ -118,16 +107,16 @@ public class MVMaintenanceTask {
         this.taskId = taskId;
     }
 
+    public TNetworkAddress getBeHost() {
+        return beHost;
+    }
+
     public void addFragmentInstance(TExecPlanFragmentParams instance) {
         fragmentInstances.add(instance);
     }
 
     public List<TExecPlanFragmentParams> getFragmentInstances() {
         return fragmentInstances;
-    }
-
-    public TNetworkAddress getBeHost() {
-        return beHost;
     }
 
     public void setFragmentInstances(List<TExecPlanFragmentParams> fragmentInstances) {
@@ -193,7 +182,6 @@ public class MVMaintenanceTask {
         return "MVMaintenanceTask{" +
                 "job=" + job +
                 ", dbName='" + dbName + '\'' +
-                ", beId=" + beId +
                 ", host=" + beHost +
                 ", taskId=" + taskId +
                 '}';
