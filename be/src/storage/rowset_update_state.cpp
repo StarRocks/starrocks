@@ -331,7 +331,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 
     DCHECK(_upserts[idx] != nullptr);
     auto read_column_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, read_column_ids);
-    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    std::vector<std::unique_ptr<Column>> read_columns(read_column_ids.size());
 
     _partial_update_states[idx].write_columns.resize(read_columns.size());
     _partial_update_states[idx].src_rss_rowids.resize(_upserts[idx]->size());
@@ -431,7 +431,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
     }
     if (!conflict_idxes.empty()) {
         total_conflicts += conflict_idxes.size();
-        std::vector<std::unique_ptr<vectorized::Column>> read_columns;
+        std::vector<std::unique_ptr<Column>> read_columns;
         read_columns.resize(_partial_update_states[segment_id].write_columns.size());
         for (uint32_t i = 0; i < read_columns.size(); ++i) {
             read_columns[i] = _partial_update_states[segment_id].write_columns[i]->clone_empty();
@@ -445,7 +445,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
                 tablet->updates()->get_column_values(read_column_ids, num_default > 0, rowids_by_rssid, &read_columns));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-            std::unique_ptr<vectorized::Column> new_write_column =
+            std::unique_ptr<Column> new_write_column =
                     _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
             new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
             RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(

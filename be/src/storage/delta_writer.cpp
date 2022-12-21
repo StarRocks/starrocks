@@ -201,7 +201,11 @@ Status DeltaWriter::_init() {
         if (average_row_size != 0) {
             _memtable_buffer_row = config::write_buffer_size / average_row_size;
         } else {
-            _memtable_buffer_row = 10240;
+            // If tablet is a new created tablet and has no historical data, average_row_size is 0
+            // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
+            // we will consider it as 16 bytes.
+            average_row_size = _tablet->tablet_schema()->estimate_row_size(16);
+            _memtable_buffer_row = config::write_buffer_size / average_row_size;
         }
 
         writer_context.partial_update_tablet_schema =
