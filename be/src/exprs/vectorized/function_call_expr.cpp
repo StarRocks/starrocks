@@ -98,7 +98,6 @@ void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks
     if (_fn_desc != nullptr && _fn_desc->close_function != nullptr) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
         _fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
-
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             _fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
         }

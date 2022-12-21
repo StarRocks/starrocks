@@ -33,7 +33,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -108,6 +107,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -230,7 +230,7 @@ public class Coordinator {
     private final boolean usePipeline;
 
     // Resource group
-    ResourceGroup resourceGroup = null;
+    TWorkGroup resourceGroup = null;
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -488,6 +488,8 @@ public class Coordinator {
                     DebugUtil.printId(queryId), descTable);
         }
 
+        resetFragmentState();
+
         // prepare information
         prepare();
 
@@ -509,6 +511,20 @@ public class Coordinator {
         prepareProfile();
     }
 
+    /**
+     * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
+     */
+    private void resetFragmentState() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment instanceof MultiCastPlanFragment) {
+                MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+                for (List<TPlanFragmentDestination> destination : multiSink.getDestinations()) {
+                    destination.clear();
+                }
+            }
+        }
+    }
+
     public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
         return fragmentExecParamsMap;
     }
@@ -527,12 +543,13 @@ public class Coordinator {
         }
     }
 
-    public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
-        ResourceGroup resourceGroup = null;
+    public static TWorkGroup prepareResourceGroup(ConnectContext connect) {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
-            return resourceGroup;
+            return null;
         }
+
         SessionVariable sessionVariable = connect.getSessionVariable();
+        TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
@@ -543,8 +560,7 @@ public class Coordinator {
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = new ResourceGroup();
-            resourceGroup.setId(workgroupId);
+            resourceGroup =  GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -2881,7 +2897,7 @@ public class Coordinator {
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
                     if (enableResourceGroup && resourceGroup != null) {
-                        commonParams.setWorkgroup(resourceGroup.toThrift());
+                        commonParams.setWorkgroup(resourceGroup);
                     }
                 }
             }
