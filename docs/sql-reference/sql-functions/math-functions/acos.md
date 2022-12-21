@@ -2,7 +2,7 @@
 
 ## Description
 
-Computes the arc cosine of the argument.
+Computes the arc cosine of an argument.
 
 ## Syntax
 
