@@ -434,27 +434,54 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public WorkGroup chooseWorkGroupByName(String wgName) {
+    public TWorkGroup chooseWorkGroupByName(String wgName) {
         readLock();
         try {
-            return workGroupMap.get(wgName);
+            WorkGroup rg = workGroupMap.get(wgName);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
         } finally {
             readUnlock();
         }
     }
 
-    public WorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType, Set<Long> databases) {
-        String user = getUnqualifiedUser(ctx);
-        String role = getUnqualifiedRole(ctx);
-        String remoteIp = ctx.getRemoteIP();
-        List<WorkGroupClassifier> classifierList = classifierMap.values().stream()
-                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
-                .sorted(Comparator.comparingDouble(WorkGroupClassifier::weight))
-                .collect(Collectors.toList());
-        if (classifierList.isEmpty()) {
-            return null;
-        } else {
-            return id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
+    public TWorkGroup chooseWorkGroupByID(long wgID) {
+        readLock();
+        try {
+            WorkGroup rg = id2WorkGroupMap.get(wgID);
+            if (rg == null) {
+                return null;
+            }
+            return rg.toThrift();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public TWorkGroup chooseWorkGroup(ConnectContext ctx, WorkGroupClassifier.QueryType queryType, Set<Long> databases) {
+        readLock();
+        try {
+            String user = getUnqualifiedUser(ctx);
+            String role = getUnqualifiedRole(ctx);
+            String remoteIp = ctx.getRemoteIP();
+            List<WorkGroupClassifier> classifierList =
+                    classifierMap.values().stream().filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                            .sorted(Comparator.comparingDouble(WorkGroupClassifier::weight))
+                            .collect(Collectors.toList());
+            if (classifierList.isEmpty()) {
+                return null;
+            } else {
+                WorkGroup rg =
+                        id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
+                if (rg == null) {
+                    return null;
+                }
+                return rg.toThrift();
+            }
+        } finally {
+            readUnlock();
         }
     }
 

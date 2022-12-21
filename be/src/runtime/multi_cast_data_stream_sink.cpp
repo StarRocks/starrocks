@@ -4,7 +4,10 @@
 
 namespace starrocks {
 
-static Status kOnlyPipelinedEngine = Status::NotSupported("Don't support non-pipelined query engine");
+static Status kOnlyPipelinedEngine = Status::NotSupported(
+        "Don't support non-pipelined query engine. "
+        "enable by: set enable_pipeline=true; "
+        "and ADMIN SET FRONTEND CONFIG (\"enable_pipeline_load_for_insert\" = \"true\"); (for INSERT INTO)");
 
 MultiCastDataStreamSink::MultiCastDataStreamSink(RuntimeState* state) : _state(state), _sinks() {}
 

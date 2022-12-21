@@ -21,12 +21,12 @@ public class SubqueryTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("17:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: 3: v3 + 14: v5 = 13: expr, CASE WHEN (15: countRows IS NULL) OR (15: countRows = 0) THEN FALSE WHEN 2: v2 IS NULL THEN NULL WHEN 9: v4 IS NOT NULL THEN TRUE WHEN 16: countNulls < 15: countRows THEN NULL ELSE FALSE END IS NULL"));
-        Assert.assertTrue(plan.contains("10:HASH JOIN\n" +
+        assertContains(plan, "15:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 9: v4 = 2: v2\n" +
-                "  |  other join predicates: 3: v3 + 11: v5 = 10: expr"));
+                "  |  other join predicates: 3: v3 + 11: v5 = 10: expr");
     }
 
     @Test
@@ -82,15 +82,7 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----13:EXCHANGE\n" +
                 "  |    \n" +
-                "  1:AGGREGATE (update finalize)");
-        assertContains(plan, "  11:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
-                "  |  \n" +
-                "  |----10:EXCHANGE\n" +
-                "  |    \n" +
-                "  3:AGGREGATE (update finalize)\n" +
-                "  |  output: avg(9: v7)");
+                "  10:Project");
     }
 
     @Test
@@ -140,24 +132,24 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
                         "and NOT EXISTS (select * from join1 as a where join1.dt = 2 and a.id = join1.id);";
-        String explainString = getFragmentPlan(sql);
+        String plan = getFragmentPlan(sql);
 
-        Assert.assertTrue(explainString.contains("  5:HASH JOIN\n" +
-                "  |  join op: RIGHT ANTI JOIN (COLOCATE)\n" +
+        assertContains(plan, "5:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 9: id = 2: id\n" +
-                "  |  other join predicates: 1: dt = 2"));
-        Assert.assertTrue(explainString.contains("  |    3:HASH JOIN\n" +
-                "  |    |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
-                "  |    |  hash predicates:\n" +
-                "  |    |  colocate: true\n" +
-                "  |    |  equal join conjunct: 2: id = 5: id\n" +
-                "  |    |  other join predicates: 1: dt = 1"));
-        Assert.assertTrue(explainString.contains("  |    1:OlapScanNode\n" +
-                "  |       TABLE: join1\n" +
-                "  |       PREAGGREGATION: ON\n" +
-                "  |       PREDICATES: 1: dt > 1"));
+                "  |  equal join conjunct: 2: id = 9: id\n" +
+                "  |  other join predicates: 1: dt = 2");
+        assertContains(plan, "2:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 2: id = 5: id\n" +
+                "  |  other join predicates: 1: dt = 1");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: dt > 1");
         FeConstants.runningUnitTest = false;
     }
 
@@ -166,10 +158,10 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "SELECT max(1) FROM t0 WHERE 1 = (SELECT t1.v4 FROM t0, t1 WHERE t1.v4 IN (SELECT t1.v4 FROM  t1))";
         String explainString = getFragmentPlan(sql);
-        assertContains(explainString, ("9:Project\n" +
+        assertContains(explainString, ("8:Project\n" +
                 "  |  <slot 7> : 7: v4\n" +
                 "  |  \n" +
-                "  8:HASH JOIN\n" +
+                "  7:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)"));
     }
 
@@ -273,17 +265,14 @@ public class SubqueryTest extends PlanTestBase {
                 "  t0_2.v1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  30:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 16: v1 = 1: v1\n" +
+                "  |  equal join conjunct: 1: v1 = 16: v1\n" +
                 "  |  \n" +
                 "  |----29:EXCHANGE\n" +
                 "  |    \n" +
-                "  5:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 16: v1\n" +
-                "  |  \n" +
-                "  4:EXCHANGE");
+                "  23:Project\n");
     }
 
     @Test
