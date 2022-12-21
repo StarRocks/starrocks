@@ -38,8 +38,7 @@ MySQL > select multiply(1,2.1);
 +------------------+
 1 row in set (0.01 sec)
 
--- 对表数据进行 multiply 计算。
-
+-- 对表内的数据进行 multiply 计算。
 MySQL > select * from t;
 +------+------+------+------+
 | id   | name | job1 | job2 |
