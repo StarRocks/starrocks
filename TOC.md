@@ -253,6 +253,7 @@
       + [month](/sql-reference/sql-functions/date-time-functions/month.md)
       + [monthname](/sql-reference/sql-functions/date-time-functions/monthname.md)
       + [months_diff](/sql-reference/sql-functions/date-time-functions/months_diff.md)
+      + [months_sub](/sql-reference/sql-functions/date-time-functions/months_sub.md)
       + [now](/sql-reference/sql-functions/date-time-functions/now.md)
       + [quarter](/sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](/sql-reference/sql-functions/date-time-functions/second.md)
