@@ -56,7 +56,7 @@ public class MVMaintenanceTask {
     private long taskId;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
     // TODO(murphy) maintain this state during epoch execution
-    private Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
+    private final Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
 
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, long beId, TNetworkAddress beHost,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
