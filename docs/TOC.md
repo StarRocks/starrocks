@@ -324,6 +324,7 @@
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
@@ -427,6 +428,7 @@
       + [bitmap_to_string](./sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
+      + [intersect_count](./sql-reference/sql-functions/bitmap-functions/intersect_count.md)
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
     + Array Functions
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
