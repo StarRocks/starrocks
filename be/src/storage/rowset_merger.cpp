@@ -85,6 +85,7 @@ struct MergeEntry {
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
         chunk->reset();
+<<<<<<< HEAD
         while (true) {
             auto st = segment_itr->get_next(chunk.get(), source_masks);
             if (st.ok()) {
@@ -106,6 +107,15 @@ struct MergeEntry {
                 return Status::OK();
             } else if (st.is_end_of_file()) {
                 return Status::EndOfFile("End of merge entry iterator");
+=======
+        auto st = segment_itr->get_next(chunk.get(), source_masks);
+        if (st.ok()) {
+            // 1. setup chunk_pk_column
+            if (encode_schema != nullptr) {
+                // need to encode
+                chunk_pk_column->reset_column();
+                PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
+>>>>>>> 452376e48 ([BugFix] Fix Potential out of bounds or heap overflow in encode procedure when primary key model compaction with sort key. (#15124))
             } else {
                 // error
                 return st;

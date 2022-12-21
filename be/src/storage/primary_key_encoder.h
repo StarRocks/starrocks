@@ -40,8 +40,16 @@ public:
     static void encode(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset, size_t len,
                        vectorized::Column* dest);
 
+<<<<<<< HEAD
     static void encode_selective(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
                                  const uint32_t* indexes, size_t len, vectorized::Column* dest);
+=======
+    static void encode_sort_key(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len,
+                                Column* dest);
+
+    static void encode_selective(const VectorizedSchema& schema, const Chunk& chunk, const uint32_t* indexes,
+                                 size_t len, Column* dest);
+>>>>>>> 452376e48 ([BugFix] Fix Potential out of bounds or heap overflow in encode procedure when primary key model compaction with sort key. (#15124))
 
     static bool encode_exceed_limit(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset,
                                     size_t len, size_t limit_size);
