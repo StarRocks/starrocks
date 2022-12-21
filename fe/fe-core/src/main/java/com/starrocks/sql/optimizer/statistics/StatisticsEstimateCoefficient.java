@@ -32,4 +32,6 @@ public class StatisticsEstimateCoefficient {
     // if after aggregate row count < (input row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT),
     // the aggregate has good effect.
     public static final double DEFAULT_AGGREGATE_EFFECT_COEFFICIENT = 0.001;
+    // default or predicate limit
+    public static final int DEFAULT_OR_OPERATOR_LIMIT = 15;
 }
