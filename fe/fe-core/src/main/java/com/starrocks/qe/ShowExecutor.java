@@ -565,7 +565,7 @@ public class ShowExecutor {
 
             if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
                 if (CatalogMgr.isInternalCatalog(catalogName) &&
-                        !PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
+                        !PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
                     continue;
                 }
             } else {

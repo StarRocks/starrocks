@@ -242,8 +242,8 @@ public class ExportMgr {
                 } else {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                         if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
-                                                                    tableName.getDb(),
-                                                                    tableName.getTbl())) {
+                                tableName.getDb(),
+                                tableName.getTbl())) {
                             continue;
                         }
                     } else {
