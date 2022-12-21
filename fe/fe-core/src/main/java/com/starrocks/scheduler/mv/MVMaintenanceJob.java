@@ -283,6 +283,7 @@ public class MVMaintenanceJob implements Writable {
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setTask_type(MVTaskType.START_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(taskId);
             request.setStart_maintenance(new TMVMaintenanceStartTask());
