@@ -220,6 +220,7 @@ public class ReorderJoinRule extends Rule {
                             .setProjection(new Projection(newOutputProjections))
                             .build();
                     optExpression = OptExpression.create(newOp, optExpression.getInputs());
+                    optExpression.deriveLogicalPropertyItself();
                 }
 
                 for (ScalarOperator value : optExpression.getOp().getProjection().getColumnRefMap().values()) {
