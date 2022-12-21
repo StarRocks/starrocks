@@ -370,6 +370,16 @@ int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_colum
     return lhs_size < rhs_size ? -1 : (lhs_size == rhs_size ? 0 : 1);
 }
 
+void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* output) const {
+    CHECK(size() == rhs_column.size()) << "Two input columns must have same rows";
+
+    size_t rows = size();
+    output->resize(rows);
+    for (size_t i = 0; i < rows; i++) {
+        (*output)[i] = compare_at(i, i, rhs_column, 1);
+    }
+}
+
 void ArrayColumn::fnv_hash_at(uint32_t* hash, int32_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];

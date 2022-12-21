@@ -513,6 +513,11 @@ PARALLEL_TEST(ArrayColumnTest, test_compare_at) {
     ASSERT_EQ(2, column_2->size());
 
     ASSERT_EQ(0, column->compare_at(1, 0, *column_2, -1));
+
+    std::vector<int8_t> cmp_res;
+    column->compare_column(*column_2, &cmp_res);
+    std::vector<int8_t> expected{-1, -1};
+    ASSERT_EQ(expected, cmp_res);
 }
 
 // NOLINTNEXTLINE
