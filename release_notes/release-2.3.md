@@ -92,6 +92,10 @@
 - 修复拥有逻辑视图的 SELECT 权限但无法查询的问题。[#10563](https://github.com/StarRocks/starrocks/pull/10563)
 - 修复逻辑视图命名无限制的问题。逻辑视图的命名规范同数据库表的命名规范。[#10558](https://github.com/StarRocks/starrocks/pull/10558)
 
+### 行为变更
+
+- 增加 BE 配置项 `max_length_for_bitmap_function` （默认值1000000）和 `max_length_for_to_base64`（默认值200000），以控制 bitmap 函数和 base64 的最大长度。 [#10851](https://github.com/StarRocks/starrocks/pull/10851)
+
 ## 2.3.1
 
 发布日期： 2022 年 8 月 22 日
