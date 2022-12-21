@@ -433,12 +433,15 @@
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
+<<<<<<< HEAD
       + [substring](./sql-reference/sql-functions/string-functions/substring.md)
       + [substring](./sql-reference/sql-functions/string-functions/substring.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
       + [ucase](./sql-reference/sql-functions/string-functions/ucase.md)
       + [unhex](./sql-reference/sql-functions/string-functions/unhex.md)
       + [upper](./sql-reference/sql-functions/string-functions/upper.md)
+=======
+>>>>>>> 9adf25080 ([doc] add trim function doc (#15595))
     + JSON Functions
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
