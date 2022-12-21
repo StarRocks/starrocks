@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the variance of the expr expression.
+Returns the variance of a expression.
 
 ## Syntax
 
@@ -12,26 +12,30 @@ VARIANCE(expr)
 
 ## Examples
 
-```plain text
-MySQL > select variance(scan_rows)
-from log_statis
-group by datetime;
-+-----------------------+
-| variance(`scan_rows`) |
-+-----------------------+
-|    5.6183332881176211 |
-+-----------------------+
+```plain
+MySQL [tpcds_1g_orc]> select var_pop(i_current_price), i_rec_start_date from item group by i_rec_start_date;
++--------------------------+------------------+
+| var_pop(i_current_price) | i_rec_start_date |
++--------------------------+------------------+
+|       314.96177792808226 | 1997-10-27       |
+|       463.73633459357285 | NULL             |
+|       302.02102643609123 | 1999-10-28       |
+|        337.9318386924913 | 2000-10-27       |
+|       333.80931439318346 | 2001-10-27       |
++--------------------------+------------------+
 
-MySQL > select var_pop(scan_rows)
-from log_statis
-group by datetime;
-+----------------------+
-| var_pop(`scan_rows`) |
-+----------------------+
-|   5.6230744719006163 |
-+----------------------+
+MySQL [tpcds_1g_orc]> select variance(i_current_price), i_rec_start_date from item group by i_rec_start_date;
++---------------------------+------------------+
+| variance(i_current_price) | i_rec_start_date |
++---------------------------+------------------+
+|        314.96177792808226 | 1997-10-27       |
+|         463.7363345935729 | NULL             |
+|        302.02102643609123 | 1999-10-28       |
+|         337.9318386924912 | 2000-10-27       |
+|        333.80931439318346 | 2001-10-27       |
++---------------------------+------------------+
 ```
 
 ## keyword
 
-VARIANCE,VAR_POP,VARIANCE_POP,VAR,POP
+VARIANCE,VAR_POP,VARIANCE_POP
