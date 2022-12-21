@@ -191,6 +191,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_version(1);
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
+    LOG(INFO) << "lake create tablet " << fmt::format("tid:{}", req.tablet_id);
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
@@ -491,7 +492,8 @@ static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* 
 
 static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletMetadata* metadata,
                                  MetaFileBuilder* builder, int64_t base_version) {
-    if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
+    if (op_write.has_rowset() &&
+        (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate() || op_write.dels_size() > 0)) {
         // handle primary key table publish
         RETURN_IF_ERROR(
                 tablet->update_mgr()->publish_primary_key_tablet(op_write, metadata, tablet, builder, base_version));

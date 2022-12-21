@@ -101,8 +101,7 @@ static Status write_orphan_list_file(const std::set<std::string>& orphans, Writa
     return file->close();
 }
 
-static Status delete_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_location,
-                                     const std::set<int64_t>& owned_tablets) {
+static Status delete_tablet_metadata(std::string_view root_location, const std::set<int64_t>& owned_tablets) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     const auto max_versions = config::lake_gc_metadata_max_versions;
     if (UNLIKELY(max_versions < 1)) {
@@ -203,7 +202,7 @@ static Status drop_disk_cache(std::string_view root_location) {
 Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_id) {
     const auto owned_tablets = tablet_mgr->owned_tablets();
     Status ret;
-    ret.update(delete_tablet_metadata(tablet_mgr, root_location, owned_tablets));
+    ret.update(delete_tablet_metadata(root_location, owned_tablets));
     ret.update(delete_txn_log(root_location, owned_tablets, min_active_txn_id));
     ret.update(drop_disk_cache(root_location));
     return ret;
