@@ -94,8 +94,10 @@ struct TMVMaintenanceTasks {
     3: optional i64 signature
     4: optional string db_name
     5: optional string mv_name
-    6: optional i64 job_id
-    7: optional i64 task_id
+    6: optional i64 db_id
+    7: optional i64 mv_id
+    8: optional i64 job_id
+    9: optional i64 task_id
 
     // Tasks for BE
     11: optional TMVMaintenanceStartTask start_maintenance
