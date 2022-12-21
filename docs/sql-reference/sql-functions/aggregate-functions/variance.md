@@ -11,6 +11,7 @@ VARIANCE(expr)
 ```
 
 The return type is numerical type:
+
 - If type of `expr` is Decimal type, then return Decimal type
 - or else return Double type.
 
