@@ -259,6 +259,7 @@
     + [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
     + [窗口函数](/sql-reference/sql-functions/Window_function.md)
     + 日期函数
+      + [adddate](/sql-reference/sql-functions/date-time-functions/adddate.md)
       + [convert_tz](/sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [current_date](/sql-reference/sql-functions/date-time-functions/curdate.md)
       + [current_time](/sql-reference/sql-functions/date-time-functions/curtime.md)
