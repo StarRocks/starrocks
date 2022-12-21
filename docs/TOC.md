@@ -249,6 +249,7 @@
       + [microseconds_sub](./sql-reference/sql-functions/date-time-functions/microseconds_sub.md)
       + [minute](./sql-reference/sql-functions/date-time-functions/minute.md)
       + [minutes_diff](./sql-reference/sql-functions/date-time-functions/minutes_diff.md)
+      + [minutes_sub](./sql-reference/sql-functions/date-time-functions/minutes_sub.md)
       + [month](./sql-reference/sql-functions/date-time-functions/month.md)
       + [months_add](./sql-reference/sql-functions/date-time-functions/months_add.md)
       + [months_diff](./sql-reference/sql-functions/date-time-functions/months_diff.md)
