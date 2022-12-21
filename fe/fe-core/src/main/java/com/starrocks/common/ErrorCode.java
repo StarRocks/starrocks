@@ -295,6 +295,14 @@ public enum ErrorCode {
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
             "Routine load job [%s] not found when checking privilege"),
 
+    ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND(5090, new byte[] {'4', '2', '0', '0', '0'},
+            "Export job [%s] not found when checking privilege"),
+    
+    ERR_PRIVILEGE_BACKUP_JOB_NOT_FOUND(5091, new byte[] {'4', '2', '0', '0', '0'},
+            "Backup job not found when checking privilege"),
+
+    ERR_PRIVILEGE_FUNC_NOT_FOUND(5092, new byte[] {'4', '2', '0', '0', '0'},
+            "Func not found when checking privilege"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");

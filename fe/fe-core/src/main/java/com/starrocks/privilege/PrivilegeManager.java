@@ -231,6 +231,8 @@ public class PrivilegeManager {
         switch (type) {
             case TABLE:
             case VIEW:
+            case MATERIALIZED_VIEW:
+            case FUNCTION:
                 objects.add(provider.generateObject(
                         type.name(),
                         Arrays.asList(type.getPlural(), PrivilegeType.DATABASE.getPlural()),
@@ -689,6 +691,64 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkMaterializedViewAction(
+            ConnectContext context, String db, String materializedView,
+            PrivilegeType.MaterializedViewAction action) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            return manager.checkMaterializedViewAction(collection, db, materializedView, action);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check action[{}] on materialized view {}.{}",
+                     action, db, materializedView, e);
+            return false;
+        }
+    }
+
+    public static boolean checkFunctionAction(
+            ConnectContext context, String db, String functionSig,
+            PrivilegeType.FunctionAction action) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            return manager.checkFunctionAction(collection, db, functionSig, action);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check action[{}] on function {}.{}",
+                     action, db, functionSig, e);
+            return false;
+        }
+    }
+
+    public static boolean checkAnyActionOnMaterializedView(
+            ConnectContext context, String db, String materializedView) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            PEntryObject materializedViewObject = manager.provider.generateObject(
+                    PrivilegeType.MATERIALIZED_VIEW.name(), Arrays.asList(db, materializedView), manager.globalStateMgr);
+            short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
+            return manager.provider.searchObject(mvTypeId, materializedViewObject, collection);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check any on materialized view {}", db, e);
+            return false;
+        }
+    }
+
+    public static boolean checkAnyActionOnView(
+            ConnectContext context, String db, String view) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            PEntryObject viewObject = manager.provider.generateObject(
+                    PrivilegeType.VIEW.name(), Arrays.asList(db, view), manager.globalStateMgr);
+            short viewId = manager.analyzeType(PrivilegeType.VIEW.name());
+            return manager.provider.searchObject(viewId, viewObject, collection);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check any on view {}", db, e);
+            return false;
+        }
+    }
+
     /**
      * show databases; use database
      */
@@ -813,6 +873,22 @@ public class PrivilegeManager {
             PrivilegeCollection collection, String db, String view, PrivilegeType.ViewAction action)
         throws PrivilegeException {
         return checkAction(collection, PrivilegeType.VIEW, action.name(), Arrays.asList(db, view));
+    }
+
+    protected boolean checkMaterializedViewAction(
+            PrivilegeCollection collection, String db, String materializeView,
+            PrivilegeType.MaterializedViewAction action)
+        throws PrivilegeException {
+        return checkAction(collection, PrivilegeType.MATERIALIZED_VIEW, action.name(),
+                           Arrays.asList(db, materializeView));
+    }
+
+    protected boolean checkFunctionAction(
+            PrivilegeCollection collection, String db, String functionSig,
+            PrivilegeType.FunctionAction action)
+        throws PrivilegeException {
+        return checkAction(collection, PrivilegeType.FUNCTION, action.name(),
+                           Arrays.asList(db, functionSig));
     }
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {

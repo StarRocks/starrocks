@@ -4096,6 +4096,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
     }
 
+    @Override
+    public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, true);
+    }
+
+    @Override
+    public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
+    }
+
     private GrantRevokePrivilegeObjects parseGrantRevokeOnAll(
             List<StarRocksParser.PrivilegeTypeContext> privilegeTypeContexts,
             StarRocksParser.IdentifierOrStringContext identifierOrStringContext) {
