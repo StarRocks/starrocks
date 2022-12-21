@@ -28,11 +28,11 @@ public:
 
     [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const VectorizedSchema& schema, const RowsetReadOptions& options);
 
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(
-            const vectorized::VectorizedSchema& schema, OlapReaderStatistics* stats);
+    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const VectorizedSchema& schema,
+                                                                                    OlapReaderStatistics* stats);
 
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
-            const vectorized::VectorizedSchema& schema, const int64_t version, OlapReaderStatistics* stats);
+            const VectorizedSchema& schema, const int64_t version, OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
 

@@ -66,8 +66,8 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetad
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, pk_columns);
-    std::unique_ptr<vectorized::Column> pk_column;
+    VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
@@ -120,7 +120,6 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetad
                 }
             }
             itr->close();
-            CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
         }
         dest = std::move(col);
     }
@@ -228,7 +227,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     }
 
     auto read_column_schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, read_column_ids);
-    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    std::vector<std::unique_ptr<Column>> read_columns(read_column_ids.size());
     size_t num_segments = op_write.rowset().segments_size();
     _partial_update_states.resize(num_segments);
     for (size_t i = 0; i < num_segments; i++) {

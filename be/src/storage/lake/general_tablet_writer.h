@@ -42,7 +42,7 @@ public:
 
     Status write(const starrocks::Chunk& data) override;
 
-    Status flush_del_file(const vectorized::Column& deletes) {
+    Status flush_del_file(const Column& deletes) {
         return Status::NotSupported("GeneralTabletWriter flush_del_file not support");
     }
 

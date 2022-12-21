@@ -49,7 +49,7 @@ private:
 
 private:
     std::shared_ptr<TabletMetadata> _tablet_meta;
-    vectorized::Buffer<uint8_t> _buf;
+    Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPairPB> _delvecs;
     std::vector<std::pair<TabletSegmentId, DelVectorPtr>> _cache_delvec_updates;
 };

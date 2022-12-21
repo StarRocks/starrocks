@@ -40,8 +40,8 @@ namespace starrocks::lake {
 
 using namespace starrocks::vectorized;
 
-using VSchema = starrocks::vectorized::VectorizedSchema;
-using VChunk = starrocks::vectorized::Chunk;
+using VSchema = starrocks::VectorizedSchema;
+using VChunk = starrocks::Chunk;
 
 class PrimaryKeyTest : public testing::Test {
 public:

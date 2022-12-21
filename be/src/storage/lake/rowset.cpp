@@ -122,13 +122,13 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
     }
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const vectorized::VectorizedSchema& schema,
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const VectorizedSchema& schema,
                                                                           OlapReaderStatistics* stats) {
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
-    std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
+    std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     seg_options.stats = stats;
     for (auto& seg_ptr : segments) {
@@ -147,13 +147,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     return seg_iterators;
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
-        const vectorized::VectorizedSchema& schema, const int64_t version, OlapReaderStatistics* stats) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const VectorizedSchema& schema,
+                                                                                      const int64_t version,
+                                                                                      OlapReaderStatistics* stats) {
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
-    std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
+    std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     seg_options.stats = stats;
     seg_options.is_primary_keys = true;

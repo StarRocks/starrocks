@@ -24,7 +24,6 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -261,11 +260,6 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTableException() {
-        // primary key type is not supported
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Lake table does not support primary key type",
-                () -> createTable(
-                        "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
-                                "engine = starrocks primary key (key1) distributed by hash(key1) buckets 3"));
 
         // storage_cache disabled but allow_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,

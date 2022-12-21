@@ -57,7 +57,7 @@ public:
     Status get_column_values(Tablet* tablet, TabletMetadata* metadata, TabletSchema* tablet_schema,
                              std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<vectorized::Column>>* columns);
+                             vector<std::unique_ptr<Column>>* columns);
     // get delvec by version
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 

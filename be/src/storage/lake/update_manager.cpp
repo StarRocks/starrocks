@@ -166,7 +166,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, TabletMetadata* me
 Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata, TabletSchema* tablet_schema,
                                         std::vector<uint32_t>& column_ids, bool with_default,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<std::unique_ptr<vectorized::Column>>* columns) {
+                                        vector<std::unique_ptr<Column>>* columns) {
     if (with_default) {
         for (auto i = 0; i < column_ids.size(); ++i) {
             const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
@@ -214,9 +214,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(rssid_to_path[rssid]));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
-            ColumnIterator* col_iter_raw_ptr = nullptr;
-            RETURN_IF_ERROR((*segment)->new_column_iterator(column_ids[i], &col_iter_raw_ptr));
-            std::unique_ptr<ColumnIterator> col_iter(col_iter_raw_ptr);
+            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator(column_ids[i]));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }

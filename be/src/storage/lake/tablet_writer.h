@@ -46,7 +46,7 @@ public:
     virtual Status write(const starrocks::Chunk& data) = 0;
 
     // Write del file to this rowset. PK table only
-    virtual Status flush_del_file(const vectorized::Column& deletes) = 0;
+    virtual Status flush_del_file(const Column& deletes) = 0;
 
     // Flushes this writer and forces any buffered bytes to be written out to segment files.
     // There is no order guarantee between the data written before a `flush()`

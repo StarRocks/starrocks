@@ -54,16 +54,12 @@ static Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata
                                int64_t base_version);
 static StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version,
                                 int64_t new_version, const int64_t* txns, int txns_size);
-static void* metadata_gc_trigger(void* arg);
-static void* segment_gc_trigger(void* arg);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
           _metacache(new_lru_cache(cache_capacity)),
-          _gc_checker_tid(INVALID_BTHREAD),
           _update_mgr(update_mgr),
-          _metadata_gc_tid(INVALID_BTHREAD),
-          _segment_gc_tid(INVALID_BTHREAD) {}
+          _gc_checker_tid(INVALID_BTHREAD) {}
 
 TabletManager::~TabletManager() {
     if (_gc_checker_tid != INVALID_BTHREAD) {

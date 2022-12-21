@@ -27,12 +27,12 @@ namespace lake {
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
-    std::vector<std::unique_ptr<vectorized::Column>> write_columns;
+    std::vector<std::unique_ptr<Column>> write_columns;
 };
 
 class RowsetUpdateState {
 public:
-    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using ColumnUniquePtr = std::unique_ptr<Column>;
 
     RowsetUpdateState();
     ~RowsetUpdateState();

@@ -39,7 +39,7 @@ Status PkTabletWriter::open() {
     return Status::OK();
 }
 
-Status PkTabletWriter::write(const starrocks::vectorized::Chunk& data) {
+Status PkTabletWriter::write(const starrocks::Chunk& data) {
     if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
         RETURN_IF_ERROR(flush_segment_writer());
@@ -50,7 +50,7 @@ Status PkTabletWriter::write(const starrocks::vectorized::Chunk& data) {
     return Status::OK();
 }
 
-Status PkTabletWriter::flush_del_file(const vectorized::Column& deletes) {
+Status PkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = fmt::format("{}.del", generate_uuid_string());
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.del_location(name)));
     _files.emplace_back(std::move(name));

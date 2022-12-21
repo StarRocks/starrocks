@@ -45,7 +45,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, TabletMetadata* metadata,
     _set_schema(pkey_schema);
 
     OlapReaderStatistics stats;
-    std::unique_ptr<vectorized::Column> pk_column;
+    std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
         // more than one key column
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
@@ -82,7 +82,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, TabletMetadata* metadata,
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    vectorized::Column* pkc = nullptr;
+                    Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());

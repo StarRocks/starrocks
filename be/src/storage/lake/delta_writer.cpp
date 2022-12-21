@@ -153,7 +153,7 @@ Status DeltaWriterImpl::build_schema() {
 }
 
 inline Status DeltaWriterImpl::reset_memtable() {
-    build_schema();
+    RETURN_IF_ERROR(build_schema());
     if (!_schema_initialized) {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
@@ -187,7 +187,7 @@ inline Status DeltaWriterImpl::flush() {
 // in a bthread.
 Status DeltaWriterImpl::open() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    build_schema();
+    RETURN_IF_ERROR(build_schema());
 
     DCHECK(_tablet_writer == nullptr);
     // TODO: remove the dependency |ExecEnv::GetInstance()|
