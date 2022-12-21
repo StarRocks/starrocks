@@ -114,7 +114,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayPredicate(*this)); }
 
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         auto lhs_arr = std::static_pointer_cast<ArrayColumn>(l);
