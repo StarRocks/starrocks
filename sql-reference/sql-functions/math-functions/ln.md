@@ -1,4 +1,4 @@
-# ln, dlog1
+# ln, dlog1, log
 
 ## 功能
 
