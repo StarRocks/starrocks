@@ -113,8 +113,14 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case VIEW:
                 return ViewPEntryObject.generate(mgr, objectTokens);
 
+            case MATERIALIZED_VIEW:
+                return MaterializedViewPEntryObject.generate(mgr, objectTokens);
+
             case CATALOG:
                 return CatalogPEntryObject.generate(mgr, objectTokens);
+
+            case FUNCTION:
+                return FunctionPEntryObject.generate(mgr, objectTokens);
 
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(mgr, objectTokens);
@@ -154,8 +160,14 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case VIEW:
                 return ViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
 
+            case MATERIALIZED_VIEW:
+                return MaterializedViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
+
             case CATALOG:
                 return CatalogPEntryObject.generate(allTypes, restrictType, restrictName);
+
+            case FUNCTION:
+                return FunctionPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
 
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(allTypes, restrictType, restrictName);
