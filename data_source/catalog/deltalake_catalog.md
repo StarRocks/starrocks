@@ -7,7 +7,7 @@ Delta Lake catalog 是一个外部数据目录 (external catalog)。从 StarRock
 ## **使用说明**
 
 - StarRocks 支持查询 Parquet 格式的 Delta Lake 数据。
-- StarRocks 支持查询如下类型的 Delta Lake 数据：MAP、STRUCT、BOOLEAN、BYTE、TINYINT、SMALLINT、INTEGER、LONG、FLOAT、DOUBLE、DATE、TIMESTAMP、STRING、DECIMAL 和 ARRAY。不支持 BINARY 类型的数据。注意查询命中不支持的数据类型时会报错。
+- StarRocks 不支持查询 BINARY 类型的 Delta Lake 数据。注意查询命中不支持的数据类型时会报错。
 - StarRocks 2.4 及以上版本支持使用 [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Delta Lake 表结构。查看时，不支持的数据类型会显示成 `unknown`。
 
 ## **前提条件**
