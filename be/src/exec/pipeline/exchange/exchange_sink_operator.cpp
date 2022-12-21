@@ -249,6 +249,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         if (auto delta_statistic = state->intermediate_query_statistic()) {
             delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
         }
+        // as _chunk_request is moved to info and sent by RPC, do not copy it here.
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment, false);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
@@ -711,8 +712,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     return Status::OK();
 }
 
-static void none_free(void*) {}
-
+// a chunk_request should be copied if it will be sent by many times.
 int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
                                                         butil::IOBuf& attachment, bool copy) {
     int64_t attachment_physical_bytes = 0;
@@ -726,8 +726,7 @@ int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkPara
             attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
             chunk->clear_data();
         } else {
-            size_t size = attachment.append_user_data((void*)(chunk->data().c_str()), chunk->data().size(), none_free);
-            attachment_physical_bytes += size;
+            attachment_physical_bytes += chunk->data_size();
         }
 
         // If the request is too big, free the memory in order to avoid OOM
