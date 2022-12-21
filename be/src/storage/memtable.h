@@ -62,8 +62,6 @@ public:
 
     bool is_full() const;
 
-    void set_write_buffer_size(size_t max_buffer_size) { _max_buffer_size = max_buffer_size; }
-
     void set_write_buffer_row(size_t max_buffer_row) { _max_buffer_row = max_buffer_row; }
 
     static VectorizedSchema convert_schema(const TabletSchema* tablet_schema,
