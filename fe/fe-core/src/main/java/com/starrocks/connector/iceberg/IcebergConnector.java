@@ -42,8 +42,7 @@ public class IcebergConnector implements Connector {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         this.cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(properties);
-        this.hdfsEnvironment = new HdfsEnvironment();
-        this.hdfsEnvironment.tryApplyCloudConfiguration(this.cloudConfiguration);
+        this.hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build(cloudConfiguration);
     }
 
     @Override

@@ -43,8 +43,7 @@ public class DeltaLakeConnector implements Connector {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         this.cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(properties);
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        hdfsEnvironment.tryApplyCloudConfiguration(this.cloudConfiguration);
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build(cloudConfiguration);
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
         validate();

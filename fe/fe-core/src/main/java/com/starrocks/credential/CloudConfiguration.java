@@ -21,5 +21,5 @@ public interface CloudConfiguration {
 
     void toThrift(TCloudConfiguration tCloudConfiguration);
 
-    void setConfiguration(Configuration configuration);
+    void applyToConfiguration(Configuration configuration);
 }

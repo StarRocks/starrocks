@@ -29,7 +29,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
 
     private boolean enableSSL = true;
 
-    public AWSCloudConfiguration(AWSCloudCredential awsCloudCredential) {
+    protected AWSCloudConfiguration(AWSCloudCredential awsCloudCredential) {
         this.awsCloudCredential = awsCloudCredential;
     }
 
@@ -46,22 +46,22 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public void setConfiguration(Configuration configuration) {
+    public void applyToConfiguration(Configuration configuration) {
         configuration.set("fs.s3a.path.style.access", String.valueOf(enablePathStyleAccess));
         configuration.set("fs.s3a.connection.ssl.enabled", String.valueOf(enableSSL));
-        awsCloudCredential.setConfiguration(configuration);
+        awsCloudCredential.applyToConfiguration(configuration);
     }
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
+        tCloudConfiguration.setCloud_type(TCloudType.AWS);
+
         List<TCloudProperty> properties = new LinkedList<>();
         properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
                 String.valueOf(enablePathStyleAccess)));
         properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL)));
-
-        tCloudConfiguration.setCloud_type(TCloudType.AWS);
+        awsCloudCredential.toThrift(properties);
         tCloudConfiguration.setCloud_properties(properties);
-        awsCloudCredential.toThrift(tCloudConfiguration);
     }
 
     @Override

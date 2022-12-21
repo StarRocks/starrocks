@@ -81,7 +81,7 @@ public class IcebergUtil {
             throws StarRocksIcebergException {
         IcebergCatalogType catalogType = table.getCatalogType();
 
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.buildHdfsEnvironment(table.getIcebergProperties());
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build(table.getIcebergProperties());
 
         switch (catalogType) {
             case HIVE_CATALOG:

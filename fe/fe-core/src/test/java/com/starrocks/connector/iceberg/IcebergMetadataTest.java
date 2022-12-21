@@ -55,7 +55,7 @@ public class IcebergMetadataTest {
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
         properties.put(ICEBERG_CATALOG_TYPE, "hive");
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, properties, hdfsEnvironment);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assert.assertEquals(expectResult, metadata.listDbNames());
@@ -74,7 +74,7 @@ public class IcebergMetadataTest {
         };
 
         Map<String, String> properties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
         properties.put(ICEBERG_CATALOG_TYPE, "hive");
@@ -99,7 +99,7 @@ public class IcebergMetadataTest {
         };
 
         Map<String, String> properties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
         properties.put(ICEBERG_CATALOG_TYPE, "hive");
@@ -121,7 +121,7 @@ public class IcebergMetadataTest {
         };
 
         Map<String, String> properties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
         properties.put(ICEBERG_CATALOG_TYPE, "hive");
@@ -142,7 +142,7 @@ public class IcebergMetadataTest {
         };
 
         Map<String, String> properties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
         properties.put(ICEBERG_CATALOG_TYPE, "hive");

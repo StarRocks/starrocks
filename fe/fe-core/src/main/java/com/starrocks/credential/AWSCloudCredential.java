@@ -24,11 +24,11 @@ import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
-import com.starrocks.thrift.TAWSCloudCredential;
-import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -133,7 +133,7 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public void setConfiguration(Configuration configuration) {
+    public void applyToConfiguration(Configuration configuration) {
         if (useAWSSDKDefaultBehavior) {
             configuration.set("fs.s3a.aws.credentials.provider",
                     "com.amazonaws.auth.DefaultAWSCredentialsProviderChain");
@@ -196,31 +196,17 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public void toThrift(TCloudConfiguration tCloudConfiguration) {
-        TAWSCloudCredential tAWSCloudCredential = new TAWSCloudCredential();
-        tAWSCloudCredential.setUse_aws_sdk_default_behavior(useAWSSDKDefaultBehavior);
-        tAWSCloudCredential.setUse_instance_profile(useInstanceProfile);
-
-        if (!accessKey.isEmpty()) {
-            tAWSCloudCredential.setAccess_key(accessKey);
-        }
-        if (!secretKey.isEmpty()) {
-            tAWSCloudCredential.setSecret_key(secretKey);
-        }
-        if (!iamRoleArn.isEmpty()) {
-            tAWSCloudCredential.setIam_role_arn(iamRoleArn);
-        }
-        if (!externalId.isEmpty()) {
-            tAWSCloudCredential.setExternal_id(externalId);
-        }
-        if (!region.isEmpty()) {
-            tAWSCloudCredential.setRegion(region);
-        }
-        if (!endpoint.isEmpty()) {
-            tAWSCloudCredential.setEndpoint(endpoint);
-        }
-
-        tCloudConfiguration.setAws_cloud_credential(tAWSCloudCredential);
+    public void toThrift(List<TCloudProperty> properties) {
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
+                String.valueOf(useAWSSDKDefaultBehavior)));
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+                String.valueOf(useInstanceProfile)));
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey));
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey));
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, iamRoleArn));
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, externalId));
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_REGION, region));
+        properties.add(new TCloudProperty(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint));
     }
 
     @Override

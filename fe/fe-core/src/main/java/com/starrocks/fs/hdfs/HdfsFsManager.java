@@ -552,7 +552,7 @@ public class HdfsFsManager {
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
                 if (cloudConfiguration != null) {
-                    cloudConfiguration.setConfiguration(conf);
+                    cloudConfiguration.applyToConfiguration(conf);
                 } else {
                     conf.set(FS_S3A_ACCESS_KEY, accessKey);
                     conf.set(FS_S3A_SECRET_KEY, secretKey);

@@ -40,7 +40,7 @@ public class IcebergHiveCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         IcebergHiveCatalog icebergHiveCatalog =
                 IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
         Assert.assertEquals(IcebergCatalogType.HIVE_CATALOG, icebergHiveCatalog.getIcebergCatalogType());
@@ -68,7 +68,7 @@ public class IcebergHiveCatalogTest {
 
         Map<String, String> icebergProperties = new HashMap<>();
         Configuration configuration = new Configuration();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         IcebergHiveCatalog icebergHiveCatalog =
                 IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
         Table table = icebergHiveCatalog.loadTable(identifier);
@@ -96,7 +96,7 @@ public class IcebergHiveCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
         IcebergHiveCatalog icebergHiveCatalog =
                 IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties, hdfsEnvironment);
         List<String> dbs = icebergHiveCatalog.listAllDatabases();

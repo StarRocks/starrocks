@@ -60,6 +60,7 @@ public class HdfsScanNode extends ScanNode {
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         hiveTable = (HiveTable) desc.getTable();
+        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -82,7 +83,7 @@ public class HdfsScanNode extends ScanNode {
         scanRangeLocations.setupScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
     }
 
-    public void setupCloudCredential() {
+    private void setupCloudCredential() {
         HiveConnector connector = (HiveConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
                 getConnector(hiveTable.getCatalogName());
         if (connector != null) {

@@ -45,6 +45,7 @@ public class HudiScanNode extends ScanNode {
     public HudiScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         this.hudiTable = (HudiTable) desc.getTable();
+        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -67,7 +68,7 @@ public class HudiScanNode extends ScanNode {
         scanRangeLocations.setupScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
     }
 
-    public void setupCloudCredential() {
+    private void setupCloudCredential() {
         HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
                 getConnector(hudiTable.getCatalogName());
         if (connector != null) {

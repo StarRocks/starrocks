@@ -74,6 +74,7 @@ public class DeltaLakeScanNode extends ScanNode {
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         deltaLakeTable = (DeltaLakeTable) desc.getTable();
+        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -84,7 +85,7 @@ public class DeltaLakeScanNode extends ScanNode {
         return deltaLakeTable;
     }
 
-    public void setupCloudCredential() {
+    private void setupCloudCredential() {
         DeltaLakeConnector connector = (DeltaLakeConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
                 getConnector(deltaLakeTable.getCatalogName());
         if (connector != null) {

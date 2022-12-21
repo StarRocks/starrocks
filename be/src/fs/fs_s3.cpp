@@ -39,6 +39,7 @@
 #include "common/config.h"
 #include "common/s3_uri.h"
 #include "fs/output_stream_adapter.h"
+#include "gutil/casts.h"
 #include "gutil/strings/util.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
@@ -104,7 +105,7 @@ private:
     S3ClientFactory();
 
     static std::shared_ptr<Aws::Auth::AWSCredentialsProvider> _get_aws_credentials_provider(
-            const TAWSCloudCredential& aws_cloud_credential);
+            const std::shared_ptr<AWSCloudCredential> aws_cloud_credential);
 
     constexpr static int kMaxItems = 8;
 
@@ -120,73 +121,64 @@ S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
 // Get a AWSCredentialsProvider based on CloudCredential
 std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_credentials_provider(
-        const TAWSCloudCredential& aws_cloud_credential) {
-    // Do some check
-    DCHECK(aws_cloud_credential.__isset.use_aws_sdk_default_behavior)
-            << "use_aws_sdk_default_behavior value must set in FE";
-    DCHECK(aws_cloud_credential.__isset.use_instance_profile) << "use_instance_profile value must set in FE";
-
+        const std::shared_ptr<AWSCloudCredential> aws_cloud_credential) {
     std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credential_provider = nullptr;
-    if (aws_cloud_credential.use_aws_sdk_default_behavior) {
+    if (aws_cloud_credential->use_aws_sdk_default_behavior) {
         credential_provider = std::make_shared<Aws::Auth::DefaultAWSCredentialsProviderChain>();
     } else {
         // Create a base credentials provider
-        if (aws_cloud_credential.use_instance_profile) {
+        if (aws_cloud_credential->use_instance_profile) {
             credential_provider = std::make_shared<Aws::Auth::InstanceProfileCredentialsProvider>();
-        } else if (aws_cloud_credential.__isset.access_key && aws_cloud_credential.__isset.secret_key) {
+        } else if (!aws_cloud_credential->access_key.empty() && !aws_cloud_credential->secret_key.empty()) {
             credential_provider = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
-                    aws_cloud_credential.access_key, aws_cloud_credential.secret_key);
+                    aws_cloud_credential->access_key, aws_cloud_credential->secret_key);
         } else {
             DCHECK(false) << "Unreachable!";
             credential_provider = std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>();
         }
 
-        if (aws_cloud_credential.__isset.iam_role_arn) {
+        if (!aws_cloud_credential->iam_role_arn.empty()) {
             // Do assume role
             auto sts = std::make_shared<Aws::STS::STSClient>(credential_provider);
             credential_provider = std::make_shared<Aws::Auth::STSAssumeRoleCredentialsProvider>(
-                    aws_cloud_credential.iam_role_arn, Aws::String(), aws_cloud_credential.external_id,
+                    aws_cloud_credential->iam_role_arn, Aws::String(), aws_cloud_credential->external_id,
                     Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
         }
     }
     return credential_provider;
 }
 
-S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& cloud_configuration) {
-    DCHECK(cloud_configuration.__isset.cloud_properties);
-    DCHECK(cloud_configuration.__isset.cloud_type);
-    DCHECK(cloud_configuration.__isset.aws_cloud_credential);
-
+S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
+    const std::shared_ptr<CloudConfiguration> cloud_configuration = CloudConfigurationFactory::create(t_cloud_configuration);
+    DCHECK(cloud_configuration != nullptr);
     // S3 sdk can only use AWSCloudCredential
-    DCHECK(cloud_configuration.cloud_type == TCloudType::AWS);
-    // TODO(SmithCruise) Extract a new class to handle this
+    const auto* aws_cloud_configuration =
+            down_cast<const AWSCloudConfiguration*>(cloud_configuration.get());
+
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    TAWSCloudCredential aws_cloud_credential = cloud_configuration.aws_cloud_credential;
+    std::shared_ptr<AWSCloudCredential> aws_cloud_credential = aws_cloud_configuration->aws_cloud_credential;
     // Set into config
-    bool path_style_access = config::object_storage_endpoint_path_style_access;
-    for (const auto& property : cloud_configuration.cloud_properties) {
-        if (property.key == "aws.s3.enable_path_style_access") {
-            std::istringstream(property.value) >> std::boolalpha >> path_style_access;
-        } else if (property.key == "aws.s3.enable_ssl") {
-            if (property.value == "true") {
-                config.scheme = Aws::Http::Scheme::HTTPS;
-            } else {
-                config.scheme = Aws::Http::Scheme::HTTP;
-            }
+    bool path_style_access = aws_cloud_configuration->enable_path_style_access;
+    if (aws_cloud_configuration->enable_ssl) {
+        config.scheme = Aws::Http::Scheme::HTTPS;
+    } else {
+        config.scheme = Aws::Http::Scheme::HTTP;
+    }
+
+    if (!aws_cloud_credential->region.empty()) {
+        config.region = aws_cloud_credential->region;
+    }
+    if (!aws_cloud_credential->endpoint.empty()) {
+        config.endpointOverride = aws_cloud_credential->endpoint;
+    }
+
+    {
+        // Duplicate code for cache s3 client
+        std::lock_guard l(_lock);
+
+        for (size_t i = 0; i < _items; i++) {
+            if (_configs[i] == config) return _clients[i];
         }
-    }
-    if (aws_cloud_credential.__isset.region) {
-        config.region = aws_cloud_credential.region;
-    }
-    if (aws_cloud_credential.__isset.endpoint) {
-        config.endpointOverride = aws_cloud_credential.endpoint;
-    }
-
-    // Duplicate code for cache s3 client
-    std::lock_guard l(_lock);
-
-    for (size_t i = 0; i < _items; i++) {
-        if (_configs[i] == config) return _clients[i];
     }
 
     auto credential_provider = _get_aws_credentials_provider(aws_cloud_credential);
@@ -194,14 +186,16 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
     S3ClientPtr client = std::make_shared<Aws::S3::S3Client>(
             credential_provider, config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, !path_style_access);
 
-    if (UNLIKELY(_items >= kMaxItems)) {
-        int idx = _rand.Uniform(kMaxItems);
-        _configs[idx] = config;
-        _clients[idx] = client;
-    } else {
-        _configs[_items] = config;
-        _clients[_items] = client;
-        _items++;
+    {
+        if (UNLIKELY(_items >= kMaxItems)) {
+            int idx = _rand.Uniform(kMaxItems);
+            _configs[idx] = config;
+            _clients[idx] = client;
+        } else {
+            _configs[_items] = config;
+            _clients[_items] = client;
+            _items++;
+        }
     }
     return client;
 }

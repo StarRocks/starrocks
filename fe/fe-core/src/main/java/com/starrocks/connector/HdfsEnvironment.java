@@ -27,35 +27,16 @@ public class HdfsEnvironment {
     /**
      * Create default Hdfs environment
      */
-    public HdfsEnvironment() {
+    private HdfsEnvironment() {
         this.hdfsConfiguration = new HdfsConfiguration();
     }
 
     /**
      * Apply CloudConfiguration into HdfsConfiguration
      */
-    public void tryApplyCloudConfiguration(CloudConfiguration cloudConfiguration) {
-        if (cloudConfiguration == null) {
-            return;
-        }
-        applyCloudConfiguration(cloudConfiguration);
-    }
-
-    private void applyCloudConfiguration(CloudConfiguration cloudConfiguration) {
+    private void applyToCloudConfiguration(CloudConfiguration cloudConfiguration) {
         Preconditions.checkNotNull(cloudConfiguration);
-        hdfsConfiguration.applyCloudConfiguration(cloudConfiguration);
-    }
-
-    /**
-     * Crate Hdfs environment by properties
-     */
-    public static HdfsEnvironment buildHdfsEnvironment(Map<String, String> properties) {
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(properties);
-        if (cloudConfiguration != null) {
-            hdfsEnvironment.applyCloudConfiguration(cloudConfiguration);
-        }
-        return hdfsEnvironment;
+        hdfsConfiguration.applyToCloudConfiguration(cloudConfiguration);
     }
 
     public Configuration getConfiguration() {
@@ -69,14 +50,46 @@ public class HdfsEnvironment {
             this.configuration = new Configuration();
         }
 
-        public void applyCloudConfiguration(CloudConfiguration cloudConfiguration) {
-            cloudConfiguration.setConfiguration(configuration);
+        public void applyToCloudConfiguration(CloudConfiguration cloudConfiguration) {
+            cloudConfiguration.applyToConfiguration(configuration);
         }
 
         public Configuration getConfiguration() {
             return configuration;
         }
     }
+
+    public static class HdfsEnvironmentFactory {
+        public static HdfsEnvironment build(Map<String, String> properties) {
+            return build(properties, null);
+        }
+
+        public static HdfsEnvironment build(CloudConfiguration cloudConfiguration) {
+            return build(null, cloudConfiguration);
+        }
+
+        public static HdfsEnvironment build() {
+            return build(null, null);
+        }
+
+        public static HdfsEnvironment build(Map<String, String> properties, CloudConfiguration cloudConfiguration) {
+            HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+            if (properties != null) {
+                CloudConfiguration tmpCloudConfiguration =
+                        CloudConfigurationFactory.buildStorageCloudConfiguration(properties);
+                if (tmpCloudConfiguration != null) {
+                    hdfsEnvironment.applyToCloudConfiguration(tmpCloudConfiguration);
+                }
+            }
+
+            if (cloudConfiguration != null) {
+                hdfsEnvironment.applyToCloudConfiguration(cloudConfiguration);
+            }
+            return hdfsEnvironment;
+        }
+    }
 }
+
+
 
 

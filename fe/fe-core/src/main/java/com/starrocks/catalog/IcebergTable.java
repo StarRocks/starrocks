@@ -272,7 +272,7 @@ public class IcebergTable extends Table {
             copiedProps.remove(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
         }
 
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.buildHdfsEnvironment(icebergProperties);
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build(icebergProperties);
         IcebergCatalog icebergCatalog;
         switch (type) {
             case HIVE_CATALOG:

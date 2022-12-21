@@ -49,6 +49,7 @@ public class FileTableScanNode extends ScanNode {
     public FileTableScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         this.fileTable = (FileTable) desc.getTable();
+        setupCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -59,7 +60,7 @@ public class FileTableScanNode extends ScanNode {
         return fileTable;
     }
 
-    public void setupCredential() {
+    private void setupCredential() {
         cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(fileTable.getFileProperties());
     }
 

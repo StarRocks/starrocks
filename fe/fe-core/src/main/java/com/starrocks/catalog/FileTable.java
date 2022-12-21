@@ -100,7 +100,7 @@ public class FileTable extends Table {
         Configuration configuration = new Configuration();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(fileProperties);
         if (cloudConfiguration != null) {
-            cloudConfiguration.setConfiguration(configuration);
+            cloudConfiguration.applyToConfiguration(configuration);
         }
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), false, Optional.empty());

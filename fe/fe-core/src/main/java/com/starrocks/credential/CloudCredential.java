@@ -14,15 +14,17 @@
 
 package com.starrocks.credential;
 
-import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
+
+import java.util.List;
 
 public interface CloudCredential {
 
     /**
     * Set credentials into Hadoop configuration
     */
-    void setConfiguration(Configuration configuration);
+    void applyToConfiguration(Configuration configuration);
 
     /**
      * Check CloudCredential is valid.
@@ -34,5 +36,5 @@ public interface CloudCredential {
     /**
      * Write credential into thrift.
      */
-    void toThrift(TCloudConfiguration tCloudConfiguration);
+    void toThrift(List<TCloudProperty> properties);
 }

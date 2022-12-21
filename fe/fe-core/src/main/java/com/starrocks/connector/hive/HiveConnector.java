@@ -48,8 +48,7 @@ public class HiveConnector implements Connector {
         this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
         this.cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(properties);
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        hdfsEnvironment.tryApplyCloudConfiguration(cloudConfiguration);
+        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
         validate();

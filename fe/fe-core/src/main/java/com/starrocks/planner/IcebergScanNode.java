@@ -98,9 +98,10 @@ public class IcebergScanNode extends ScanNode {
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         srIcebergTable = (IcebergTable) desc.getTable();
+        setupCloudCredential();
     }
 
-    public void setupCloudCredential() {
+    private void setupCloudCredential() {
         IcebergConnector connector = (IcebergConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
                 getConnector(srIcebergTable.getCatalog());
         if (connector != null) {
