@@ -348,6 +348,9 @@ public class AnalyzeSingleTest {
         Assert.assertEquals("'Hello \" World \" !'",
                 AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
+        statement = (QueryStatement) analyzeSuccess("select * from (VALUES('20221019','5f8e53afaa68a90001597158'," +
+                "'A\\'FAVOR ',2),('20221019','62028e206ca09d0001cdf1a1','----',39)) t");
+
         analyzeSuccess("select @@`sql_mode`");
     }
 
