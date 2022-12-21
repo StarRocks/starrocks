@@ -43,7 +43,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         Preconditions.checkState(partitionExprs.size() > 0);
         Preconditions.checkState(partitionExprs.size() == columns.size());
         this.partitionExprs = partitionExprs;
-        this.isMultiColumnPartition = true;
+        this.isMultiColumnPartition = partitionExprs.size() > 0;
     }
 
     public List<Expr> getPartitionExprs() {

@@ -30,6 +30,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +88,10 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
         // we will support other PartitionInto in the future
+        if (rangePartitionDesc == null) {
+            // for materialized view express partition.
+            return new ExpressionRangePartitionInfo(Collections.singletonList(expr), schema);
+        }
         List<Column> partitionColumns = Lists.newArrayList();
 
         // check and get partition column
@@ -120,18 +125,6 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             }
         }
 
-        /*
-         * validate key range
-         * eg.
-         * VALUE LESS THEN (10, 100, 1000)
-         * VALUE LESS THEN (50, 500)
-         * VALUE LESS THEN (80)
-         *
-         * key range is:
-         * ( {MIN, MIN, MIN},     {10,  100, 1000} )
-         * [ {10,  100, 1000},    {50,  500, MIN } )
-         * [ {50,  500, MIN },    {80,  MIN, MIN } )
-         */
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
                 new ExpressionRangePartitionInfo(Collections.singletonList(expr), partitionColumns);
 
@@ -139,7 +132,6 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             long partitionId = partitionNameToId.get(desc.getPartitionName());
             expressionRangePartitionInfo.handleNewSinglePartitionDesc(desc, partitionId, isTemp);
         }
-
 
         return expressionRangePartitionInfo;
     }
