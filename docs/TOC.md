@@ -1,4 +1,4 @@
-# Table of content
+# nTable of content
 
 ## Index
 
@@ -268,7 +268,7 @@
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
-      + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md)
+      + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md) (subdate)
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_slice](./sql-reference/sql-functions/date-time-functions/date_slice.md)
       + [date_trunc](./sql-reference/sql-functions/date-time-functions/date_trunc.md)
@@ -306,7 +306,7 @@
       + [timestamp](./sql-reference/sql-functions/date-time-functions/timestamp.md)
       + [timestampadd](./sql-reference/sql-functions/date-time-functions/timestampadd.md)
       + [timestampdiff](./sql-reference/sql-functions/date-time-functions/timestampdiff.md)
-      + [time_to_sec]((./sql-reference/sql-functions/date-time-functions/time_to_sec.md))
+      + [time_to_sec](./sql-reference/sql-functions/date-time-functions/time_to_sec.md))
       + [to_date](./sql-reference/sql-functions/date-time-functions/to_date.md)
       + [to_days](./sql-reference/sql-functions/date-time-functions/to_days.md)
       + [unix_timestamp](./sql-reference/sql-functions/date-time-functions/unix_timestamp.md)
@@ -336,7 +336,7 @@
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
       + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
-      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
+      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md) (	variance_pop / var_pop)
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
       + [multi_distinct_sum](./sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
