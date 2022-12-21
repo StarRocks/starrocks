@@ -280,6 +280,7 @@
       + [hours_add](/sql-reference/sql-functions/date-time-functions/hours_add.md)
       + [hours_diff](/sql-reference/sql-functions/date-time-functions/hours_diff.md)
       + [minute](/sql-reference/sql-functions/date-time-functions/minute.md)
+      + [minutes_add](/sql-reference/sql-functions/date-time-functions/minutes_add.md)
       + [minutes_diff](/sql-reference/sql-functions/date-time-functions/minutes_diff.md)
       + [microseconds_add](/sql-reference/sql-functions/date-time-functions/microseconds_add.md)
       + [microseconds_sub](/sql-reference/sql-functions/date-time-functions/microseconds_sub.md)
