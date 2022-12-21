@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
@@ -242,7 +241,8 @@ public class ExpressionTest extends PlanTestBase {
                 new ColumnRefOperator(100000, Type.INT, "x", true),
                 ConstantOperator.createInt(1));
         ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
-        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        LambdaFunctionOperator lambda =
+                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
         variableToSlotRef.clear();
         projectMap.clear();
         context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
@@ -1324,4 +1324,12 @@ public class ExpressionTest extends PlanTestBase {
             assertContains(plan, "<slot 2> : 8190");
         }
     }
+
+    @Test
+    public void testInPredicate() throws Exception {
+        String sql = "select * from t0 where v1 in (v2, v3, 3, 4, 5) ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: ((1: v1 = 2: v2) OR (1: v1 = 3: v3)) OR (1: v1 IN (3, 4, 5))");
+    }
+
 }

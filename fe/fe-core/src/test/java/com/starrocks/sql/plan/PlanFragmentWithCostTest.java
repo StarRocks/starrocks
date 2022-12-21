@@ -1558,32 +1558,18 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             // case 4: use two-phase aggregation for multiple BEs.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode");
-            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: sum(4: sum)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  2:EXCHANGE");
+                    "  |  withLocalShuffle: true");
 
             // case 5: use two-phase aggregation for low-cardinality agg.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode");
-            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: sum(4: sum)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  2:EXCHANGE");
+                    "  |  withLocalShuffle: true");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
@@ -1664,8 +1650,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         //Test excessive recursion and optimizer timeout due to too many OR
         getFragmentPlan(sql);
     }
+
     @Test
-    public void testTimeOutOr50() throws Exception {
+    public void testTimeOutOrAnd50() throws Exception {
         String sql = "SELECT v1\n" +
                 "FROM t0\n" +
                 "WHERE (v2 = 1\n" +
@@ -1732,7 +1719,42 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testTimeOutOr15() throws Exception {
+    public void testTimeOutOr16() throws Exception {
+        String sql = "SELECT v1\n" +
+                "FROM t0\n" +
+                "WHERE (v2 = 1\n" +
+                " OR ((v2 = 2\n" +
+                "  OR ((v2 = 3\n" +
+                "   OR ((v2 = 4\n" +
+                "    OR ((v2 = 5\n" +
+                "     OR ((v2 = 6\n" +
+                "      OR ((v2 = 7\n" +
+                "       OR ((v2 = 8\n" +
+                "        OR ((v2 = 9\n" +
+                "         OR ((v2 = 10\n" +
+                "          OR (v1 = 11 AND (v2 = 12\n" +
+                "           OR (v2 = 13\n" +
+                "            OR (v2 = 14\n" +
+                "             OR (v1 = 15 AND (v2 = 16\n" +
+                "              OR (v2 = 17  AND v1 = 70\n" +
+                "               OR v2 = 71 AND v1 = 72) AND v1 = 73\n" +
+                "              OR v2 = 80 AND (v1 = 2 OR (v2 = 99 AND v1 = 29))))) AND v1 = 81 AND v1 = 82\n" +
+                "            OR v2 = 85 AND v1 = 86) AND v1 = 87)))\n" +
+                "            AND v1 = 91))\n" +
+                "           AND v1 = 92))\n" +
+                "          AND v1 = 93))\n" +
+                "         AND v1 = 94))\n" +
+                "        AND v1 = 95))\n" +
+                "       AND v1 = 96))\n" +
+                "      AND v1 = 97))\n" +
+                "     AND v1 = 98))\n" +
+                "    AND v1 = 99))\n" +
+                "   AND v1 = 100";
+        String plan = getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testTimeOutOr11() throws Exception {
         String sql = "SELECT v1\n" +
                 "FROM t0\n" +
                 "WHERE (v2 = 1\n" +
@@ -1759,6 +1781,55 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "          AND v1 = 98))\n" +
                 "         AND v1 = 99))\n" +
                 "        AND v1 = 100;";
+        getFragmentPlan(sql);
+    }
+
+
+    @Test
+    public void testTimeOutOnlyOr20() throws Exception {
+        String sql = "SELECT v1\n" +
+                "FROM t0\n" +
+                "WHERE 1 = 1" +
+                "   OR v1 = 1" +
+                "   OR v2 = 2" +
+                "   OR v1 = 3" +
+                "   OR v2 = 4" +
+                "   OR v1 = 5" +
+                "   OR v2 = 6" +
+                "   OR v1 = 7" +
+                "   OR v2 = 8" +
+                "   OR v1 = 9" +
+                "   OR v2 = 0" +
+                "   OR v1 = 11" +
+                "   OR v2 = 12" +
+                "   OR v1 = 13" +
+                "   OR v2 = 14" +
+                "   OR v1 = 15" +
+                "   OR v2 = 16" +
+                "   OR v1 = 17" +
+                "   OR v2 = 18" +
+                "   OR v1 = 19" +
+                "   OR v2 = 20" +
+                "   OR v1 = 21" +
+                "   OR v2 = 22" +
+                "   OR v1 = 23" +
+                "   OR v2 = 24" +
+                "   OR v1 = 25" +
+                "   OR v2 = 26" +
+                "   OR v1 = 27" +
+                "   OR v2 = 28" +
+                "   OR v1 = 29" +
+                "   OR v2 = 30" +
+                "   OR v1 = 31" +
+                "   OR v2 = 32" +
+                "   OR v1 = 33" +
+                "   OR v2 = 34" +
+                "   OR v1 = 35" +
+                "   OR v2 = 36" +
+                "   OR v1 = 37" +
+                "   OR v2 = 38" +
+                "   OR v1 = 39" +
+                "   ;";
         getFragmentPlan(sql);
     }
 }
