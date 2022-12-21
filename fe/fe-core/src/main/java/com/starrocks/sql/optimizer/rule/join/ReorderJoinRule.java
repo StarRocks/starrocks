@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
@@ -282,7 +281,7 @@ public class ReorderJoinRule extends Rule {
             Statistics newStats = Statistics.buildFrom(optExpression.getStatistics()).build();
             Iterator<Map.Entry<ColumnRefOperator, ColumnStatistic>>
                     iterator = newStats.getColumnStatistics().entrySet().iterator();
-            while(iterator.hasNext()) {
+            while (iterator.hasNext()) {
                 Map.Entry<ColumnRefOperator, ColumnStatistic> columnStatistic = iterator.next();
                 if (!newCols.contains(columnStatistic.getKey())) {
                     iterator.remove();
