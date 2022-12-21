@@ -590,6 +590,11 @@ Status HdfsScanNode::_init_partition_values_map() {
 
     for (auto& scan_range : _scan_ranges) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
+        if (partition_desc == nullptr) {
+            return Status::InternalError(fmt::format(
+                    "Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
+                    scan_range.partition_id));
+        }
         auto partition_id = scan_range.partition_id;
         if (_partition_values_map.find(partition_id) == _partition_values_map.end()) {
             _partition_values_map[partition_id] = partition_desc->partition_key_value_evals();
