@@ -75,7 +75,7 @@ struct TMVReportEpochTask {
     1: optional TMVEpoch epoch
     
     // Each tablet's binlog consumption state
-    2: optional list<Types.TBinlogOffset> binlog_consume_state
+    2: optional map<Types.TUniqueId, map<Types.TPlanNodeId, list<PlanNodes.TScanRange>>> binlog_consume_state 
     // Transaction state
     3: optional list<Types.TTabletCommitInfo> txn_commit_info
     4: optional list<Types.TTabletFailInfo> txn_fail_info
