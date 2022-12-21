@@ -7,8 +7,8 @@ A Delta Lake catalog is an external catalog supported in StarRocks 2.5 and later
 ## Usage notes
 
 - StarRocks supports querying Parquet data files of Delta Lake.
-- StarRocks supports querying data in the following types from Delta Lake: BOOLEAN, BYTE, TINYINT, SMALLINT, INTEGER, LONG, FLOAT, DOUBLE, DATE, TIMESTAMP, STRING, DECIMAL, and ARRAY. Note that an error occurs when you query data in unsupported data types. The following data types are not supported: MAP, STRUCT, and BINARY.
-- You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a table of Delta Lake in StarRocks 2.4 and later versions.
+- StarRocks supports querying data in the following types from Delta Lake: MAP, STRUCT, BOOLEAN, BYTE, TINYINT, SMALLINT, INTEGER, LONG, FLOAT, DOUBLE, DATE, TIMESTAMP, STRING, DECIMAL, and ARRAY. The BINARY data type is not supported. Note that errors occur if you query data in unsupported data types.
+- From StarRocks v2.4 onwards, you can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Delta Lake table. If the table contains columns of unsupported data types, the values in the columns are displayed as `unknown` in the returned result.
 
 ## Before you begin
 
@@ -43,7 +43,7 @@ If you use Hive metastore for your Delta Lake, configure the following propertie
 | **Property**        | **Required** | **Description**                                              |
 | ------------------- | ------------ | ------------------------------------------------------------ |
 | type                | Yes          | The type of the data source. Set the value to `deltalake`.   |
-| hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+| hive.metastore.uris | Yes          | The URI of the Hive metastore. The value of this parameter is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to `9083`. |
 
 > **NOTE**
 >
@@ -59,7 +59,7 @@ If you use AWS Glue for your Delta Lake, configure the following properties for 
 | hive.metastore.type                    | Yes          | The metadata service used by your Delta Lake. Set the value to `glue`. |
 | aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the IAM user.                           |
 | aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the IAM user.                       |
-| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For example, if your service is in US East (Ohio), the endpoint is `glue.us-east-2.amazonaws.com`. For more information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
+| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For example, if your service is in the US East (Ohio) region, the endpoint is `glue.us-east-2.amazonaws.com`. For more information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
 ## What to do next
 
