@@ -93,11 +93,18 @@ void LoadChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkR
 }
 
 void LoadChannel::cancel() {
+    std::lock_guard l(_lock);
+    for (auto& it : _tablets_channels) {
+        it.second->cancel();
+    }
+}
+
+void LoadChannel::abort() {
     _span->AddEvent("cancel");
     auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
-        it.second->cancel();
+        it.second->abort();
     }
 }
 
