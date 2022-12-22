@@ -14,7 +14,7 @@ For detailed instructions on deleting a repository, see [DROP REPOSITORY](../dat
 
 ```SQL
 CREATE [READ ONLY] REPOSITORY <repository_name>
-WITH BROKER
+WITH BROKER <broker_name>
 ON LOCATION "<repository_location>"
 PROPERTIES ("key"="value", ...)
 ```
@@ -24,6 +24,7 @@ PROPERTIES ("key"="value", ...)
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only warehouse for the new cluster and only grant it RESTORE permissions.|
+| broker_name         | The name of the broker used to create the repository.
 | repository_name     | Repository name.                                             |
 | repository_location | Location of the repository in the remote storage system.     |
 | PROPERTIES          | Username/password or access key/endpoint to the remote storage system. See [Examples](#examples) for more instructions. |
@@ -57,7 +58,7 @@ Example 1: creates a repository named `oss_repo` using the remote storage direct
 
 ```SQL
 CREATE REPOSITORY oss_repo
-WITH BROKER
+WITH BROKER oss_broker
 ON LOCATION "oss://starRocks_backup"
 PROPERTIES
 (
