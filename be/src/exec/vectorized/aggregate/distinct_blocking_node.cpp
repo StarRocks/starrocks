@@ -116,16 +116,17 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     return Status::OK();
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) {
+pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 
     // shared by sink operator and source operator
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
-    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    auto partition_type = context->source_operator(ops_with_sink)->partition_type();
+
+    auto operators_generator = [this, should_cache, &could_local_shuffle, &partition_type, context](bool post_cache) {
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
@@ -138,38 +139,36 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory);
         source_operator->set_could_local_shuffle(could_local_shuffle);
+        source_operator->set_partition_type(partition_type);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
     };
 
-    auto operators = operators_generator(false);
-    auto sink_operator = std::move(std::get<0>(operators));
-    auto source_operator = std::move(std::get<1>(operators));
+    auto [agg_sink_op, agg_source_op] = operators_generator(false);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
 
-    if (could_local_shuffle) {
-        auto partition_expr_ctxs =
-                dynamic_cast<AggregateDistinctBlockingSinkOperatorFactory*>(sink_operator.get())->partition_by_exprs();
-        ops_with_sink =
-                context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, partition_expr_ctxs);
-    }
-    ops_with_sink.push_back(std::move(sink_operator));
+    const auto& agg_partition_exprs =
+            down_cast<AggregateDistinctBlockingSinkOperatorFactory*>(agg_sink_op.get())->partition_by_exprs();
+    ops_with_sink =
+            context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, agg_partition_exprs);
+    ops_with_sink.push_back(std::move(agg_sink_op));
 
     // Aggregator must be used by a pair of sink and source operators,
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
-    auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
-    source_operator->set_degree_of_parallelism(degree_of_parallelism);
-    dynamic_cast<pipeline::SourceOperatorFactory*>(source_operator.get())
-            ->set_could_local_shuffle(
-                    down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
-    ops_with_source.push_back(std::move(source_operator));
+    auto* upstream_source_op = context->source_operator(ops_with_sink);
+    could_local_shuffle = context->source_operator(ops_with_sink)->could_local_shuffle();
+    partition_type = context->source_operator(ops_with_sink)->partition_type();
+    agg_source_op->set_degree_of_parallelism(upstream_source_op->degree_of_parallelism());
+    agg_source_op->set_could_local_shuffle(could_local_shuffle);
+    agg_source_op->set_partition_type(partition_type);
+    ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
         ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
