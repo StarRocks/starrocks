@@ -226,7 +226,7 @@ StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, cons
     if (columns.size() > 1 && columns[1]->is_constant()) {
         msg = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1]).to_string();
     }
-    
+
     const auto size = column->size();
 
     if (column->has_null()) {
