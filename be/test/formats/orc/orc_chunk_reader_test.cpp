@@ -1177,8 +1177,13 @@ Padding ratio: 0%
  */
 TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
     SlotDesc slot_descs[] = {
+<<<<<<< HEAD
             {"col_upper_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {"col_upper_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+=======
+            {"col_upper_int", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+            {"col_upper_CHAR", TypeDescriptor::from_primtive_type(LogicalType::TYPE_CHAR)},
+>>>>>>> 6e7e4a6f9 ([BugFix] Fix init_position_in_orc() case sensitive bug (#15615))
             {""},
     };
 
