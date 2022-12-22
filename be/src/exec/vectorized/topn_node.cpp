@@ -194,7 +194,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    OpFactories ops_sink_with_sort = _children[0]->decompose_to_pipeline(context);
     bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
     bool is_rank_topn_type = _tnode.sort_node.__isset.topn_type && _tnode.sort_node.topn_type != TTopNType::ROW_NUMBER;
     bool is_merging = _analytic_partition_exprs.empty();
@@ -205,12 +205,13 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     if (!is_merging) {
         // prepend local shuffle to PartitionSortSinkOperator
-        operators_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
-                runtime_state(), operators_sink_with_sort, _analytic_partition_exprs);
+        ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_sink_with_sort,
+                                                                               _analytic_partition_exprs);
     }
 
-    auto degree_of_parallelism =
-            down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
+    auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
+    auto could_local_shuffle = context->source_operator(ops_sink_with_sort)->could_local_shuffle();
+    auto partition_type = context->source_operator(ops_sink_with_sort)->partition_type();
     std::any context_factory;
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
@@ -256,18 +257,24 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    operators_sink_with_sort.emplace_back(std::move(sink_operator));
-    context->add_pipeline(operators_sink_with_sort);
+    ops_sink_with_sort.emplace_back(std::move(sink_operator));
+    context->add_pipeline(ops_sink_with_sort);
     if (is_merging) {
         if (is_partition) {
             source_operator->set_degree_of_parallelism(degree_of_parallelism);
+            source_operator->set_could_local_shuffle(could_local_shuffle);
+            source_operator->set_partition_type(partition_type);
         } else {
             // source_operator's instance count must be 1
             source_operator->set_degree_of_parallelism(1);
+            source_operator->set_could_local_shuffle(true);
+            source_operator->set_partition_type(partition_type);
         }
     } else {
         // Each PartitionSortSinkOperator has an independent LocalMergeSortSinkOperator respectively
         source_operator->set_degree_of_parallelism(degree_of_parallelism);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
+        source_operator->set_partition_type(partition_type);
     }
     operators_source_with_sort.emplace_back(std::move(source_operator));
 

@@ -38,7 +38,7 @@ You can use the `streaming_load_max_mb` parameter to specify the maximum size of
 
 Stream Load does not support loading the data of a CSV file that contains a JSON-formatted column.
 
-## Principles
+## How it works
 
 You can submit a load request on your client to an FE according to HTTP, and the FE then uses an HTTP redirect to forward the load request to a specific BE. You can also directly submit a load request on your client to a BE of your choice.
 

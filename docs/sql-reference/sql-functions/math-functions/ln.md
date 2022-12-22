@@ -2,7 +2,7 @@
 
 ## Description
 
-Computes the natural (base e) logarithm of a number.
+Computes the natural (base `e`) logarithm of a number.
 
 ## Syntax
 
@@ -14,7 +14,7 @@ dlog1(arg)
 
 ## Parameters
 
-- `arg`: The value whose logarithm you want to calculate. Only DOUBLE data type is supported.
+- `arg`: the value whose logarithm you want to calculate. Only the DOUBLE data type is supported.
 
 > **NOTE**
 >

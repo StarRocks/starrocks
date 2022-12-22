@@ -26,6 +26,7 @@
 
 #include <cstring>
 #include <memory>
+#include <numeric>
 #include <type_traits>
 
 #include "column/binary_column.h"
@@ -340,16 +341,16 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
 
 typedef void (*EncodeOp)(const void*, int, string*);
 
-static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized::Chunk& chunk, vector<EncodeOp>* pops,
-                              vector<const void*>* pdatas) {
-    int ncol = schema.num_key_fields();
+static void prepare_ops_datas(const vectorized::Schema& schema, const std::vector<ColumnId>& sort_key_idxes,
+                              const vectorized::Chunk& chunk, std::vector<EncodeOp>* pops,
+                              std::vector<const void*>* pdatas) {
+    DCHECK_EQ(pops->size(), pdatas->size());
+    int ncol = sort_key_idxes.size();
     auto& ops = *pops;
     auto& datas = *pdatas;
-    ops.resize(ncol, nullptr);
-    datas.resize(ncol, nullptr);
     for (int j = 0; j < ncol; j++) {
-        datas[j] = chunk.get_column_by_index(j)->raw_data();
-        switch (schema.field(j)->type()->type()) {
+        datas[j] = chunk.get_column_by_index(sort_key_idxes[j])->raw_data();
+        switch (schema.field(sort_key_idxes[j])->type()->type()) {
         case OLAP_FIELD_TYPE_BOOL:
             ops[j] = [](const void* data, int idx, string* buff) {
                 encode_integral(((const uint8_t*)data)[idx], buff);
@@ -415,9 +416,11 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
     } else {
         CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
-        vector<EncodeOp> ops;
-        vector<const void*> datas;
-        prepare_ops_datas(schema, chunk, &ops, &datas);
+        std::vector<EncodeOp> ops(ncol);
+        std::vector<const void*> datas(ncol);
+        std::vector<ColumnId> primary_key_iota_idxes(ncol);
+        std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+        prepare_ops_datas(schema, primary_key_iota_idxes, chunk, &ops, &datas);
         auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         string buff;
@@ -431,6 +434,25 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
     }
 }
 
+void PrimaryKeyEncoder::encode_sort_key(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset,
+                                        size_t len, vectorized::Column* dest) {
+    CHECK(dest->is_binary()) << "dest column should be binary";
+    int ncol = schema.sort_key_idxes().size();
+    std::vector<EncodeOp> ops(ncol);
+    std::vector<const void*> datas(ncol);
+    prepare_ops_datas(schema, schema.sort_key_idxes(), chunk, &ops, &datas);
+    auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+    bdest.reserve(bdest.size() + len);
+    std::string buff;
+    for (size_t i = 0; i < len; i++) {
+        buff.clear();
+        for (int j = 0; j < ncol; j++) {
+            ops[j](datas[j], offset + i, &buff);
+        }
+        bdest.append(buff);
+    }
+}
+
 void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
                                          const uint32_t* indexes, size_t len, vectorized::Column* dest) {
     if (schema.num_key_fields() == 1) {
@@ -440,9 +462,11 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
     } else {
         CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
-        vector<EncodeOp> ops;
-        vector<const void*> datas;
-        prepare_ops_datas(schema, chunk, &ops, &datas);
+        std::vector<EncodeOp> ops(ncol);
+        std::vector<const void*> datas(ncol);
+        std::vector<ColumnId> primary_key_iota_idxes(ncol);
+        std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+        prepare_ops_datas(schema, primary_key_iota_idxes, chunk, &ops, &datas);
         auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         string buff;
