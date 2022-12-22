@@ -2,7 +2,7 @@
 
 ## 功能
 
-恢复指定数据库、表或分区的数据。当前 StarRocks 仅支持恢复 OLAP 类型表。
+恢复指定数据库、表或分区的数据。当前 StarRocks 仅支持恢复 OLAP 类型表。更多信息，请见 [备份和恢复](../../../administration/Backup_and_restore.md)。
 
 数据恢复为异步操作。您可以通过 [SHOW RESTORE](../data-manipulation/SHOW%20RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../data-definition/CANCEL%20RESTORE.md) 语句取消恢复作业。
 
