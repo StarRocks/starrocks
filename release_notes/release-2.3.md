@@ -1,5 +1,34 @@
 # StarRocks version 2.3
 
+## 2.3.6
+
+发布日期： 2022 年 12 月 22 日
+
+### 功能优化
+
+- Pipeline 执行引擎支持 INSERT INTO 语句。如果需要启用，则需要设置 FE 配置项 `enable_pipeline_load_for_insert` 为 `true`。 [#14723](https://github.com/StarRocks/starrocks/pull/14723)
+- 优化主键模型 Compaction 阶段所占内存。[#13861](https://github.com/StarRocks/starrocks/pull/13861) 、[#13862](https://github.com/StarRocks/starrocks/pull/13862)
+
+### 问题修复
+
+修复了如下问题：
+
+- 对于聚合和多表 JOIN 的查询，统计信息收集不准确，出现 CROSS JOIN ，导致查询耗时过长。[#15497](https://github.com/StarRocks/starrocks/pull/15497)
+- 创建物化视图 `CREATE MATERIALIZED VIEW AS SELECT`，如果 `SELECT` 查询中未使用聚合函数，使用 GROUP BY，例如`CREATE MATERIALIZED VIEW test_view AS` `select a,b from test group by b,a order by a;`，则 BE 节点全部崩溃。[#13743](https://github.com/StarRocks/starrocks/pull/13743)
+- 执行 INSERT INTO 高频导入至主键模型的表，进行数据变更后，立即重启 BE，重启缓慢。[#15128](https://github.com/StarRocks/starrocks/pull/15128)
+- 如果环境中只安装 JRE 未安装 JDK，则重启 FE 后查询失败。修复后，在该环境无法成功重启 FE，会直接报错 `Error: JAVA_HOME can not be jre`，您需要在环境中安装 JDK。[#14332](https://github.com/StarRocks/starrocks/pull/14332)
+- 查询导致 BE 崩溃。[#14221](https://github.com/StarRocks/starrocks/pull/14221)
+- 设置 exec_mem_limit 时不支持使用表达式。[#13647](https://github.com/StarRocks/starrocks/pull/13647)
+- 根据子查询结果创建同步刷新的物化视图，创建失败。[#13507](https://github.com/StarRocks/starrocks/pull/13507)
+- 手动刷新 Hive 外表后列的 comment 注释被清空。[#13742](https://github.com/StarRocks/starrocks/pull/13742)
+- 关联查询表 A 和 B 时，先计算右表 B 再计算左表 A，如果右表 B 特别大，在计算右表 B 过程中，左表 A 的数据执行了 Compaction，导致 BE 节点崩溃。[#14070](https://github.com/StarRocks/starrocks/pull/14070)
+- 如果 Parquet 文件列名大小写敏感，此时查询条件中使用了 Parquet 文件中的大写列名，则查询结果为空。[#13860](https://github.com/StarRocks/starrocks/pull/13860) 、[#14773](https://github.com/StarRocks/starrocks/pull/14773)
+- 批量导入时，Broker 的连接数过多，超过默认最大连接数，导致 Broker 连接断开，最终导入失败，并且报错 list path error。[#13911](https://github.com/StarRocks/starrocks/pull/13911)
+- BE 负载很高时，资源组的监控指标 starrocks_be_resource_group_running_queries 统计错误。[#14043](https://github.com/StarRocks/starrocks/pull/14043)
+- 如果查询语句使用 OUTER JOIN，可能会导致 BE 节点崩溃。[#14840](https://github.com/StarRocks/starrocks/pull/14840)
+- 2.4 版本使用了异步物化视图后回滚到 2.3 版本，导致 FE 无法启动。[#14400](https://github.com/StarRocks/starrocks/pull/14400)
+- 主键模型的表部分地方使用了delete_range，如果性能不佳可能会导致后续从 RocksDB 读取数据过慢，导致 CPU 资源占用率过高。[#15130](https://github.com/StarRocks/starrocks/pull/15130)
+
 ## 2.3.5
 
 发布日期： 2022 年 11 月 30 日
@@ -61,7 +90,7 @@
 - 修复查询文件格式为 Textfile 的 Hive 表，结果不准确的问题。[#11546](https://github.com/StarRocks/starrocks/pull/11546)
 - 修复查询 Parquet 格式的文件时不支持查询嵌套的 ARRAY 的问题。[#10983](https://github.com/StarRocks/starrocks/pull/10983)
 - 修复一个查询读取外部数据源和 StarRocks 表，或者并行查询读取外部数据源和 StarRocks 表，并且查询路由至一个资源组，则可能会导致查询超时的问题。[#10983](https://github.com/StarRocks/starrocks/pull/10983)
-- 修复默认开启 Pipeline 执行引擎后，参数 parallel_fragment_exec_instance_num 变为  1，导致 INSERT INTO 导入变慢的问题。[#11462](https://github.com/StarRocks/starrocks/pull/11462)
+- 修复默认开启 Pipeline 执行引擎后，参数 parallel_fragment_exec_instance_num 变为 1，导致 INSERT INTO 导入变慢的问题。[#11462](https://github.com/StarRocks/starrocks/pull/11462)
 - 修复表达式在初始阶段发生错误时可能导致 BE 停止服务的问题。[#11396](https://github.com/StarRocks/starrocks/pull/11396)
 - 修复执行 ORDER BY LIMIT 时导致堆溢出的问题。 [#11185](https://github.com/StarRocks/starrocks/pull/11185)
 - 修复重启 Leader FE，会造成 schema change 执行失败的问题。 [#11561](https://github.com/StarRocks/starrocks/pull/11561)
