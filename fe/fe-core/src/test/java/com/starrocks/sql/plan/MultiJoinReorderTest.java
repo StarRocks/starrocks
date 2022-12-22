@@ -503,20 +503,4 @@ public class MultiJoinReorderTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("<slot 27> : NULL"));
     }
 
-    @Test
-    public void testPruneColsWithMultiJoin() throws Exception {
-        String sql = "select true from t1, (select v10, v11, v12, 3 from t3) subt3 inner join (select v3, v1, 4 from t0) " +
-                "subt0 on subt3.v10 =subt0.v1 and subt0.v1 = 1 and subt3.v10 != subt0.v3, " +
-                "(select v7, v8, 'aa' from t2) subv0 inner join t2 on subv0.v7 = t2.v7 group by 'abc';";
-        String plan = getCostExplain(sql);
-        assertContains(plan, "1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  4 <-> [4: v10, BIGINT, true]\n" +
-                "  |  cardinality: 500000000\n" +
-                "  |  column statistics: \n" +
-                "  |  * v10-->[1.0, 1.0, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     table: t3, rollup: t3");
-    }
 }
