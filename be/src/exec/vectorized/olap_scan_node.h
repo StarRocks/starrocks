@@ -80,6 +80,8 @@ public:
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
     static int compute_priority(int32_t num_submitted_tasks);
 
+    const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
+
 private:
     friend class TabletScanner;
 
@@ -181,6 +183,8 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _enable_shared_scan = false;
+
+    std::vector<ExprContext*> _bucket_exprs;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

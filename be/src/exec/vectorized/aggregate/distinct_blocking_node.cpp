@@ -130,8 +130,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     return Status::OK();
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) {
+pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
@@ -146,13 +145,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
             context->next_operator_id(), id(), aggregator_factory, partition_expr_ctxs);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
 
     OpFactories ops_with_source;
     auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
                                                                                             id(), aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
 
     if (context->could_local_shuffle(ops_with_sink)) {
         ops_with_sink =
@@ -163,10 +162,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
 
     // Aggregator must be used by a pair of sink and source operators,
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
-    auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
-    source_operator->set_degree_of_parallelism(degree_of_parallelism);
-    source_operator->set_could_local_shuffle(
-            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
+    auto* upstream_source_op = context->source_operator(ops_with_sink);
+    source_operator->set_degree_of_parallelism(upstream_source_op->degree_of_parallelism());
+    source_operator->set_could_local_shuffle(upstream_source_op->could_local_shuffle());
+    source_operator->set_partition_type(upstream_source_op->partition_type());
     ops_with_source.push_back(std::move(source_operator));
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
