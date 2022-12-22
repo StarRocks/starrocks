@@ -157,7 +157,11 @@ public class OrderByTest extends PlanTestBase {
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(2: v5)\n" +
                 "  |  group by: \n" +
-                "  |  limit: 10");
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1");
+
 
         // TODO opt this case
         sql = "select * from (select max(v5) from t1) tmp order by \"\" > null limit 10;";

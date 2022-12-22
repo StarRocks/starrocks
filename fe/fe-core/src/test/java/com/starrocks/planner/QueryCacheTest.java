@@ -483,12 +483,19 @@ public class QueryCacheTest {
     public void testNoGroupBy() throws Exception {
         ctx.getSessionVariable().setNewPlanerAggStage(2);
         List<String> aggrFunctions =
-                Lists.newArrayList("count(v1)", "sum(v1)", "avg(v1)", "max(v1)", "min(v1)", "count(distinct v1)",
+                Lists.newArrayList("count(v1)", "sum(v1)", "avg(v1)", "count(distinct v1)",
                         "variance(v1)", "stddev(v1)", "ndv(v1)", "hll_raw_agg(hll_hash(v1))",
                         "bitmap_union(bitmap_hash(v1))", "hll_union_agg(hll_hash(v1))",
                         "bitmap_union_count(bitmap_hash(v1))");
         List<String> whereClauses = Lists.newArrayList("where dt between '2022-01-02' and '2022-01-03'",
                 "where dt between '2022-01-01' and '2022-01-31'", "where dt between '2022-01-04' and '2022-01-06'", "");
+        for (String agg : aggrFunctions) {
+            testNoGroupBy(agg, whereClauses);
+        }
+        // min/max without filters will use meta scan, so we should test them separately
+        aggrFunctions = Lists.newArrayList("max(v1)", "min(v1)");
+        whereClauses = Lists.newArrayList("where dt between '2022-01-02' and '2022-01-03'",
+                "where dt between '2022-01-01' and '2022-01-31'", "where dt between '2022-01-04' and '2022-01-06'");
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
@@ -1077,7 +1084,6 @@ public class QueryCacheTest {
                 "/*Q04*/ SELECT AVG(UserID) FROM hits",
                 "/*Q05*/ SELECT COUNT(DISTINCT UserID) FROM hits",
                 "/*Q06*/ SELECT COUNT(DISTINCT SearchPhrase) FROM hits",
-                "/*Q07*/ SELECT MIN(EventDate), MAX(EventDate) FROM hits",
                 "/*Q08*/ SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC",
                 "/*Q09*/ SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10",
                 "/*Q10*/ SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10",

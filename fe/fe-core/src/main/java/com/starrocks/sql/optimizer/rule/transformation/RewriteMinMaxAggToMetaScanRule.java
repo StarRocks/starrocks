@@ -82,6 +82,7 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), newAggCalls);
 
+        newAggOperator.setProjection(aggregationOperator.getProjection());
         OptExpression optExpression = OptExpression.create(newAggOperator);
         optExpression.getInputs().add(OptExpression.create(newMetaScan));
         return optExpression;
@@ -124,8 +125,9 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
                         return false;
                     }
                     ColumnRefOperator usedColumn = context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
-                    if (scanOperator.getColRefToColumnMetaMap().get(usedColumn) == null) {
-                        // this is not a primitive column on table
+                    Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
+                    if (column == null || column.isAllowNull()) {
+                        // this is not a primitive column on table or it is nullable
                         return false;
                     }
                     return true;
