@@ -108,7 +108,7 @@ public class CoordinatorPreprocessor {
     private final Random random = new Random();
 
     private TNetworkAddress coordAddress;
-    private final TUniqueId queryId;
+    private TUniqueId queryId;
     private final ConnectContext connectContext;
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
@@ -220,6 +220,10 @@ public class CoordinatorPreprocessor {
 
     public TUniqueId getQueryId() {
         return queryId;
+    }
+
+    public void setQueryId(TUniqueId queryId) {
+        this.queryId = queryId;
     }
 
     public ConnectContext getConnectContext() {
