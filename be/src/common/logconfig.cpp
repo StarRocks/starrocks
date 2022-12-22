@@ -110,8 +110,11 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (install_signal_handler) {
         google::InstallFailureSignalHandler();
+<<<<<<< HEAD
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction(failure_function);
+=======
+>>>>>>> 79bb68aad ([BugFix] remove wrong DCHECK in JavaUDAF (#15570))
     }
 
     // Don't log to stderr.
@@ -193,6 +196,15 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     }
 
     google::InitGoogleLogging(basename);
+
+    // dump trace info may access some runtime stats
+    // if runtime stats broken we won't dump stack
+    // These function should be called after InitGoogleLogging.
+
+    if (config::dump_trace_info) {
+        google::InstallFailureWriter(failure_writer);
+        google::InstallFailureFunction(failure_function);
+    }
 
     logging_initialized = true;
 
