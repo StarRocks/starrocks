@@ -323,6 +323,7 @@
       + [weeks_diff](/sql-reference/sql-functions/date-time-functions/weeks_diff.md)
       + [year](/sql-reference/sql-functions/date-time-functions/year.md)
       + [years_diff](/sql-reference/sql-functions/date-time-functions/years_diff.md)
+      + [years_sub](/sql-reference/sql-functions/date-time-functions/years_sub.md)
     + 加密函数
       + [aes_decrypt](/sql-reference/sql-functions/encryption-functions/aes_decrypt.md)
       + [aes_encrypt](/sql-reference/sql-functions/encryption-functions/aes_encrypt.md)
