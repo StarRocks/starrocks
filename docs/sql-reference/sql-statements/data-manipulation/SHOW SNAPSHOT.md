@@ -2,7 +2,7 @@
 
 ## Description
 
-Views data snapshots in a specified repository.
+Views data snapshots in a specified repository. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
 
 ## Syntax
 
