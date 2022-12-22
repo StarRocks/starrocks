@@ -6,6 +6,7 @@ import com.google.common.base.Stopwatch;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Group;
+import com.starrocks.sql.optimizer.Memo;
 
 import java.util.Stack;
 import java.util.concurrent.TimeUnit;
@@ -29,7 +30,9 @@ public class SeriallyTaskScheduler implements TaskScheduler {
             if (watch.elapsed(TimeUnit.MILLISECONDS) > timeout) {
                 // Should have at least one valid plan
                 // group will be null when in rewrite phase
-                Group group = context.getOptimizerContext().getMemo().getRootGroup();
+                // memo may be null for rule-based optimizer
+                Memo memo = context.getOptimizerContext().getMemo();
+                Group group = memo == null ? null : memo.getRootGroup();
                 if (group == null || !group.hasBestExpression(context.getRequiredProperty())) {
                     throw new StarRocksPlannerException("StarRocks planner use long time " + timeout +
                             " ms in " + (group == null ? "logical" : "memo") + " phase, This probably because " +
