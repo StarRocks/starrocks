@@ -61,6 +61,7 @@ TEST_F(StringFunctionTrimTest, trimTest) {
     for (int k = 0; k < 4096; ++k) {
         ASSERT_EQ("abcd" + std::to_string(k), v->get_data()[k].to_string());
     }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, trimCharTest) {
@@ -141,6 +142,7 @@ TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
     ASSERT_EQ(1, result->size());
     v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     ASSERT_EQ(v->get_slice(0).size, 0);
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, ltrimTest) {
@@ -165,6 +167,7 @@ TEST_F(StringFunctionTrimTest, ltrimTest) {
         std::string spaces(k, ' ');
         ASSERT_EQ("abcd" + std::to_string(k) + spaces, v->get_data()[k].to_string());
     }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, rtrimTest) {
@@ -189,6 +192,7 @@ TEST_F(StringFunctionTrimTest, rtrimTest) {
         std::string spaces(k, ' ');
         ASSERT_EQ(spaces + "abcd" + std::to_string(k), v->get_data()[k].to_string());
     }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, trimSpacesTest) {
@@ -234,5 +238,6 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
             ASSERT_EQ(std::string(), trim_result->get(k).get_slice().to_string());
         }
     }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 } // namespace starrocks
