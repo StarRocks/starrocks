@@ -1748,6 +1748,7 @@ functionCall
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
+    | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -1783,9 +1784,16 @@ informationFunctionExpression
     | name = CURRENT_USER ('(' ')')?
     ;
 
+specialDateTimeExpression
+    : name = CURRENT_DATE ('(' ')')?
+    | name = CURRENT_TIME ('(' ')')?
+    | name = CURRENT_TIMESTAMP ('(' ')')?
+    | name = LOCALTIME ('(' ')')?
+    | name = LOCALTIMESTAMP ('(' ')')?
+    ;
+
 specialFunctionExpression
     : CHAR '(' expression ')'
-    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
