@@ -1637,7 +1637,7 @@ public class CoordinatorPreprocessor {
         }
 
         public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                                      TDescriptorTable descTable, Set<Long> dbIds,
+                                                      TDescriptorTable descTable,
                                                       boolean enablePipelineEngine, int accTabletSinkDop,
                                                       int tabletSinkTotalDop) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();

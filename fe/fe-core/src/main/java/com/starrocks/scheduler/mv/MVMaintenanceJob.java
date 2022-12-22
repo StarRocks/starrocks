@@ -240,8 +240,6 @@ public class MVMaintenanceJob implements Writable {
         Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
                 queryCoordinator.getFragmentExecParamsMap();
         TDescriptorTable descTable = queryCoordinator.getDescriptorTable();
-        // TODO: dbIds
-        Set<Long> dbIds = connectContext.getCurrentSqlDbIds();
         boolean enablePipeline = true;
         int tabletSinkDop = 1;
 
@@ -258,7 +256,7 @@ public class MVMaintenanceJob implements Writable {
                             .map(CoordinatorPreprocessor.FInstanceExecParam::getInstanceId)
                             .collect(Collectors.toSet());
             List<TExecPlanFragmentParams> tParams =
-                    execParams.toThrift(inflightInstanceSet, descTable, dbIds, enablePipeline, tabletSinkDop,
+                    execParams.toThrift(inflightInstanceSet, descTable, enablePipeline, tabletSinkDop,
                             tabletSinkDop);
             for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
                 CoordinatorPreprocessor.FInstanceExecParam instanceParam = execParams.instanceExecParams.get(i);

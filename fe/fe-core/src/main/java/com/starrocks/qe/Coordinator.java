@@ -620,7 +620,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
+                            params.toThrift(instanceId2Host.keySet(), descTable, enablePipelineEngine,
                                     accTabletSinkDop, tabletSinkTotalDop);
                     if (enablePipelineTableSinkDop) {
                         for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
