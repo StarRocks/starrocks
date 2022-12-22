@@ -60,7 +60,7 @@ public class DecimalTypeTest extends PlanTestBase {
                 " WHERE (((0.00) BETWEEN (CASE WHEN (subt1.c_1_5) BETWEEN (subt1.c_1_5) AND (subt1.c_1_5) THEN CAST(151971657 AS DECIMAL32 ) " +
                 " WHEN false THEN CASE WHEN NULL THEN 0.03 ELSE 0.02 END ELSE 0.04 END) AND (0.04) ) IS NULL)";
         String explain = getFragmentPlan(sql);
-        String snippet = "  1:OlapScanNode\n" +
+        String snippet = "4:OlapScanNode\n" +
                 "     TABLE: tab1\n" +
                 "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join\n" +
                 "     PREDICATES: TRUE\n" +

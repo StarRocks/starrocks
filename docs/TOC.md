@@ -223,12 +223,16 @@
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + Date Functions
       + [convert_tz](./sql-reference/sql-functions/date-time-functions/convert_tz.md)
-      + [curdate](./sql-reference/sql-functions/date-time-functions/curdate.md)
-      + [curtime](./sql-reference/sql-functions/date-time-functions/curtime.md)
+      + [current_date](./sql-reference/sql-functions/date-time-functions/curdate.md)
+      + [current_time](./sql-reference/sql-functions/date-time-functions/curtime.md)
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
+<<<<<<< HEAD
       + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md)
+=======
+      + [date_sub, subdate](./sql-reference/sql-functions/date-time-functions/date_sub.md)
+>>>>>>> eb67faf0f ([Doc] fix doc of variance and toc (#15543))
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_trunc](./sql-reference/sql-functions/date-time-functions/date_trunc.md)
       + [datediff](./sql-reference/sql-functions/date-time-functions/datediff.md)
@@ -284,7 +288,11 @@
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
       + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
+<<<<<<< HEAD
       + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
+=======
+      + [variance, variance_pop, var_pop](./sql-reference/sql-functions/aggregate-functions/variance.md)
+>>>>>>> eb67faf0f ([Doc] fix doc of variance and toc (#15543))
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Geographic Functions
@@ -317,12 +325,14 @@
       + [ltrim](./sql-reference/sql-functions/string-functions/ltrim.md)
       + [money_format](./sql-reference/sql-functions/string-functions/money_format.md)
       + [null_or_empty](./sql-reference/sql-functions/string-functions/null_or_empty.md)
+      + [parse_url](./sql-reference/sql-functions/string-functions/parse_url.md)
       + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
       + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
       + [repeat](./sql-reference/sql-functions/string-functions/repeat.md)
       + [reverse](./sql-reference/sql-functions/string-functions/reverse.md)
       + [right](./sql-reference/sql-functions/string-functions/right.md)
       + [rpad](./sql-reference/sql-functions/string-functions/rpad.md)
+      + [rtrim](./sql-reference/sql-functions/string-functions/rtrim.md)
       + [split](./sql-reference/sql-functions/string-functions/split.md)
       + [split_part](./sql-reference/sql-functions/string-functions/split_part.md)
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
@@ -399,16 +409,24 @@
       + [to_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
     + Math Functions
+      + [abs](./sql-reference/sql-functions/math-functions/abs.md)
       + [acos](./sql-reference/sql-functions/math-functions/acos.md)
       + [asin](./sql-reference/sql-functions/math-functions/asin.md)
       + [atan](./sql-reference/sql-functions/math-functions/atan.md)
+      + [atan2](./sql-reference/sql-functions/math-functions/atan2.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
-      + [least](./sql-reference/sql-functions/math-functions/least.md)
+      + [least](./sql-reference/sql-functions/math-functions/least.m
+      + [ln](./sql-reference/sql-functions/math-functions/ln.md)
       + [log](./sql-reference/sql-functions/math-functions/log.md)
       + [log2](./sql-reference/sql-functions/math-functions/log2.md)
       + [log10](./sql-reference/sql-functions/math-functions/log10.md)
+<<<<<<< HEAD
+=======
+      + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
+      + [pow](./sql-reference/sql-functions/math-functions/pow.md)
+>>>>>>> a94fe5b48 (add math and string function docs (#15522))
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
       + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
