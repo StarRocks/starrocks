@@ -35,6 +35,8 @@ public:
 
     virtual void cancel() = 0;
 
+    virtual void abort() = 0;
+
 private:
     friend class RefCountedThreadSafe<TabletsChannel>;
     friend class LocalTabletsChannel;

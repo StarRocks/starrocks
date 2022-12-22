@@ -54,6 +54,8 @@ public:
     // [thread-safe and wait-free]
     void abort(bool with_log = true);
 
+    void cancel(const Status& st);
+
     int64_t partition_id() const { return _writer->partition_id(); }
 
 private:
