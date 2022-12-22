@@ -10,6 +10,7 @@ import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HudiPartitionKey;
@@ -61,6 +62,9 @@ public class PartitionUtil {
             case ICEBERG:
                 partitionKey = new IcebergPartitionKey();
                 break;
+            case DELTALAKE:
+                partitionKey = new DeltaLakePartitionKey();
+                break;
             default:
                 Preconditions.checkState(false, "Do not support create partition key for " +
                         "table type %s", tableType);
@@ -71,6 +75,10 @@ public class PartitionUtil {
             String rawValue = values.get(i);
             Type type = columns.get(i).getType();
             LiteralExpr exprValue;
+            // rawValue could be null for delta table
+            if (rawValue == null) {
+                rawValue = "null";
+            }
             if (((NullablePartitionKey) partitionKey).nullPartitionValue().equals(rawValue)) {
                 exprValue = NullLiteral.create(type);
             } else {
