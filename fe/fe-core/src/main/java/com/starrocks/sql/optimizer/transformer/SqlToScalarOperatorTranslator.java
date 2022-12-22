@@ -575,9 +575,9 @@ public final class SqlToScalarOperatorTranslator {
                     .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
                     .setUseSemiAnti(context.useSemiAnti).build();
 
-            // Note that the type is accurate, but we should never use it: MultiInPredicate should be replaced by a
-            // semi-join earlier in logical planning. In particular, ImplicitCast rule throws an unhandled exception for
-            // this operator.
+            // Note that the subquery operator type is not accurate, but we should never use it: MultiInPredicate should
+            // be replaced by a semi-join earlier in logical planning. In particular, ImplicitCast rule throws an unhandled
+            // exception for this operator.
             SubqueryOperator subqueryOperator = new SubqueryOperator(rightColRefs.get(0).getType(), queryStatement,
                     applyOperator, subqueryPlan.getRootBuilder());
 
