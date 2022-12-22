@@ -85,6 +85,13 @@ void LoadChannel::cancel() {
     }
 }
 
+void LoadChannel::abort() {
+    std::lock_guard l(_lock);
+    for (auto& it : _tablets_channels) {
+        it.second->abort();
+    }
+}
+
 void LoadChannel::remove_tablets_channel(int64_t index_id) {
     std::unique_lock l(_lock);
     _tablets_channels.erase(index_id);

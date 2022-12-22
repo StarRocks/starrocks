@@ -328,6 +328,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 
 void LocalTabletsChannel::cancel() {
     for (auto& it : _delta_writers) {
+        it.second->cancel(Status::Cancelled("cancel"));
+    }
+}
+
+void LocalTabletsChannel::abort() {
+    for (auto& it : _delta_writers) {
         (void)it.second->abort();
     }
 }

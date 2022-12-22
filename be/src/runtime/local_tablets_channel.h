@@ -58,6 +58,8 @@ public:
 
     void cancel() override;
 
+    void abort() override;
+
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
