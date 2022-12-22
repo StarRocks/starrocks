@@ -45,10 +45,7 @@ The following bugs are fixed:
 
 - When a view is created based directly on the result of UNION ALL, and the UNION ALL operator's input columns include NULL values, the schema of the view is incorrect since the data type of columns is NULL_TYPE rather than UNION ALL's input columns. [#13917](https://github.com/StarRocks/starrocks/pull/13917)
 - The query result of `SELECT * FROM ...` and `SELECT * FROM ... LIMIT ...`  is inconsistent. [#13585](https://github.com/StarRocks/starrocks/pull/13585)
-- External tablet metadata 
-
-
-chronized to FE may overwrite local tablet metadata, which causes data loading from Flink to fail. [#12579](https://github.com/StarRocks/starrocks/pull/12579)
+- External tablet metadata synchronized to FE may overwrite local tablet metadata, which causes data loading from Flink to fail. [#12579](https://github.com/StarRocks/starrocks/pull/12579)
 - BE nodes crash when null filter in Runtime Filter handles literal constants. [#13526](https://github.com/StarRocks/starrocks/pull/13526)
 - An error is returned when you execute CTAS. [#12388](https://github.com/StarRocks/starrocks/pull/12388)
 - The metrics `ScanRows` collected by pipeline engine in audit log may be wrong. [#12185](https://github.com/StarRocks/starrocks/pull/12185)
