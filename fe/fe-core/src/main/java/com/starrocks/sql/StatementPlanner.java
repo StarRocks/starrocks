@@ -101,7 +101,7 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")){
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
         }
 

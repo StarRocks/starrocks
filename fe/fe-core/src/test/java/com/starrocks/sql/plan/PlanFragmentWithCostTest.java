@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
@@ -87,6 +86,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "                             AS\n" +
                 "                             SELECT k1,k2,k3,k4, bitmap_union(to_bitmap(k7)), " +
                 "bitmap_union(to_bitmap(k8)) FROM duplicate_table_with_null group by k1,k2,k3,k4");
+
+        starRocksAssert.withTable("CREATE TABLE `test_dict` (\n" +
+                "  `name` varchar(65533) NOT NULL COMMENT \"\",\n" +
+                "  `dt` date NOT NULL  ,\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`name`,`dt`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "PARTITION p20221202 VALUES [('2022-12-02'), ('2022-12-03')),\n" +
+                "PARTITION p20221203 VALUES [('2022-12-03'), ('2022-12-04')),\n" +
+                "PARTITION p20221204 VALUES [('2022-12-04'), ('2022-12-05')),\n" +
+                "PARTITION p20221205 VALUES [('2022-12-05'), ('2022-12-06')),\n" +
+                "PARTITION p20221206 VALUES [('2022-12-06'), ('2022-12-07')),\n" +
+                "PARTITION p20221207 VALUES [('2022-12-07'), ('2022-12-08')),\n" +
+                "PARTITION p20221208 VALUES [('2022-12-08'), ('2022-12-09')),\n" +
+                "PARTITION p20221209 VALUES [('2022-12-09'), ('2022-12-10')),\n" +
+                "PARTITION p20221210 VALUES [('2022-12-10'), ('2022-12-11')),\n" +
+                "PARTITION p20221211 VALUES [('2022-12-11'), ('2022-12-12')),\n" +
+                "PARTITION p20221212 VALUES [('2022-12-12'), ('2022-12-13')),\n" +
+                "PARTITION p20221213 VALUES [('2022-12-13'), ('2022-12-14')))\n" +
+                "DISTRIBUTED BY HASH(`name`) BUCKETS 9 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
         FeConstants.runningUnitTest = true;
     }
 
@@ -1496,7 +1524,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
+            throws Exception {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
@@ -1507,9 +1536,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, NUM_TABLE0_ROWS));
             final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
                     new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, 100));
+
             {
                 mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
-                returns(avgHighCardinality, avgHighCardinality, avgHighCardinality, avgHighCardinality, avgLowCardinality);
+                returns(avgHighCardinality, avgHighCardinality, avgHighCardinality, avgHighCardinality,
+                        avgLowCardinality);
             }
 
             {
@@ -1558,18 +1589,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             // case 4: use two-phase aggregation for multiple BEs.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: sum(2: v2)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  withLocalShuffle: true");
+            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2");
 
             // case 5: use two-phase aggregation for low-cardinality agg.
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: sum(2: v2)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  withLocalShuffle: true");
+            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2\n");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
@@ -1716,6 +1745,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    AND v1 = 99))\n" +
                 "   AND v1 = 100";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
     }
 
     @Test
@@ -1751,6 +1781,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    AND v1 = 99))\n" +
                 "   AND v1 = 100";
         String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
     }
 
     @Test
@@ -1781,15 +1814,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "          AND v1 = 98))\n" +
                 "         AND v1 = 99))\n" +
                 "        AND v1 = 100;";
-        getFragmentPlan(sql);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
     }
-
 
     @Test
     public void testTimeOutOnlyOr20() throws Exception {
         String sql = "SELECT v1\n" +
                 "FROM t0\n" +
-                "WHERE 1 = 1" +
+                "WHERE 1 = 0" +
                 "   OR v1 = 1" +
                 "   OR v2 = 2" +
                 "   OR v1 = 3" +
@@ -1830,6 +1865,24 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "   OR v2 = 38" +
                 "   OR v1 = 39" +
                 "   ;";
-        getFragmentPlan(sql);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
+    }
+
+    @Test
+    public void test() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_dict");
+        setTableStatistics(table2, 20000000);
+
+        String sql = getSQLFile("optimized-plan/large_predicate");
+        // need JVM -Xss10m
+
+        //        String plan = getFragmentPlan(sql);
+        //        System.out.println(PlannerProfile.printPlannerTimeCost(connectContext.getPlannerProfile()));
+        //        assertContains(plan, "  0:OlapScanNode\n" +
+        //                "     TABLE: test_dict");
     }
 }

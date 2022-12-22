@@ -676,7 +676,7 @@ public class ExpressionTest extends PlanTestBase {
                         "c5 IN ('292278994-08-17', '1970-02-01') AND " +
                         "c5 IN ('292278994-08-17', '1970-02-01')  " +
                         " FROM test_in_pred_norm",
-                "<slot 7> : ((5: c4 = 8: cast) OR (5: c4 = '1970-02-01')) AND ((6: c5 = 8: cast) OR (6: c5 = '1970-02-01'))");
+                "<slot 7> : ((5: c4 = '1970-02-01') OR (5: c4 = 8: cast)) AND ((6: c5 = '1970-02-01') OR (6: c5 = 8: cast))");
 
         String plan = getFragmentPlan("SELECT " +
                 "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +

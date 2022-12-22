@@ -53,7 +53,8 @@ public class PlannerProfile {
 
     public static class ScopedTimer implements AutoCloseable {
         private volatile long currentThreadId = 0;
-        private final PlannerProfile profile;
+        private PlannerProfile profile;
+        private final String name;
         private final int level;
         private final int order;
         private final AtomicInteger count = new AtomicInteger(0);
@@ -62,18 +63,23 @@ public class PlannerProfile {
 
         private final Stopwatch watch = Stopwatch.createUnstarted();
 
-        public ScopedTimer(PlannerProfile profile) {
+        public ScopedTimer(PlannerProfile profile, String name) {
             this.profile = profile;
+            this.name = name;
             this.level = profile.levels.getAndIncrement();
             this.order = profile.orders.getAndIncrement();
         }
 
         public void start() {
             if (count.getAndIncrement() == 0) {
+                Preconditions.checkState(currentThreadId == 0);
                 currentThreadId = Thread.currentThread().getId();
                 watch.start();
+            } else {
+                Preconditions.checkState(currentThreadId == Thread.currentThread().getId());
             }
-            totalCount = count.get();
+
+            totalCount++;
         }
 
         public void close() {
@@ -81,7 +87,10 @@ public class PlannerProfile {
             if (count.decrementAndGet() != 0) {
                 return;
             }
-            profile.levels.decrementAndGet();
+            if (profile != null) {
+                profile.levels.decrementAndGet();
+                profile = null;
+            }
             currentThreadId = 0;
             watch.stop();
 
@@ -114,7 +123,7 @@ public class PlannerProfile {
     private ScopedTimer getOrCreateScopedTimer(String name) {
         return timers.computeIfAbsent(name, key -> {
             timePoint.put(name, timing.elapsed(TimeUnit.MICROSECONDS) / 1000);
-            return new ScopedTimer(this);
+            return new ScopedTimer(this, name);
         });
     }
 

@@ -289,7 +289,7 @@ public class PredicateStatisticsCalculator {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
 
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
-                Statistics cumulativeStatistics = predicate.getChild(0).accept(this, null);
+                Statistics cumulativeStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = cumulativeStatistics.getOutputRowCount();
 
                 for (int i = 1; i < disjunctive.size(); ++i) {
@@ -372,7 +372,7 @@ public class PredicateStatisticsCalculator {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
 
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
-                Statistics baseStatistics = predicate.getChild(0).accept(this, null);
+                Statistics baseStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = baseStatistics.getOutputRowCount();
 
                 for (int i = 1; i < disjunctive.size(); ++i) {

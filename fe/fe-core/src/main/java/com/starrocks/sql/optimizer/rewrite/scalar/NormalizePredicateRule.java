@@ -164,6 +164,17 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         ScalarOperator lhs = predicate.getChild(0);
         boolean isIn = !predicate.isNotIn();
 
+        List<ScalarOperator> constants = predicate.getChildren().stream().skip(1).filter(ScalarOperator::isConstant)
+                .collect(Collectors.toList());
+        if (constants.size() == 1) {
+            BinaryPredicateOperator.BinaryType op =
+                    isIn ? BinaryPredicateOperator.BinaryType.EQ : BinaryPredicateOperator.BinaryType.NE;
+            result.add(new BinaryPredicateOperator(op, lhs, constants.get(0)));
+        } else if (!constants.isEmpty()) {
+            constants.add(0, lhs);
+            result.add(new InPredicateOperator(predicate.isNotIn(), constants));
+        }
+
         predicate.getChildren().stream().skip(1).filter(ScalarOperator::isVariable).forEach(child -> {
             BinaryPredicateOperator newOp;
             if (isIn) {
@@ -173,13 +184,6 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             }
             result.add(newOp);
         });
-
-        List<ScalarOperator> constants = predicate.getChildren().stream().skip(1).filter(ScalarOperator::isConstant)
-                .collect(Collectors.toList());
-        if (!constants.isEmpty()) {
-            constants.add(0, lhs);
-            result.add(new InPredicateOperator(predicate.isNotIn(), constants));
-        }
 
         return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
     }
