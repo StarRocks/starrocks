@@ -68,6 +68,8 @@ public:
 
     void cancel() override;
 
+    void abort() override;
+
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
@@ -495,6 +497,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 }
 
 void LocalTabletsChannel::cancel() {
+    for (auto& it : _delta_writers) {
+        it.second->cancel(Status::Cancelled("cancel"));
+    }
+}
+
+void LocalTabletsChannel::abort() {
     vector<int64_t> tablet_ids;
     tablet_ids.reserve(_delta_writers.size());
     for (auto& it : _delta_writers) {
