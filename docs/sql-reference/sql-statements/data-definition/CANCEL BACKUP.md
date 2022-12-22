@@ -2,7 +2,7 @@
 
 ## Description
 
-Cancels an on-going BACKUP task in a specified database.
+Cancels an on-going BACKUP task in a specified database. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
 
 ## Syntax
 
