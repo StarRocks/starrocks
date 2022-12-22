@@ -23,13 +23,13 @@ import java.util.LinkedList;
 import java.util.List;
 public class AWSCloudConfiguration implements CloudConfiguration {
 
-    private final AWSCloudCredential awsCloudCredential;
+    private AWSCloudCredential awsCloudCredential;
 
     private boolean enablePathStyleAccess = false;
 
     private boolean enableSSL = true;
 
-    protected AWSCloudConfiguration(AWSCloudCredential awsCloudCredential) {
+    public void setAWSCloudCredential(AWSCloudCredential awsCloudCredential) {
         this.awsCloudCredential = awsCloudCredential;
     }
 

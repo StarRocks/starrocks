@@ -61,7 +61,7 @@ public class FileTableScanNode extends ScanNode {
     }
 
     private void setupCredential() {
-        cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(fileTable.getFileProperties());
+        cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(fileTable.getFileProperties());
     }
 
     @Override

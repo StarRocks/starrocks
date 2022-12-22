@@ -501,15 +501,14 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFsIdentity fileSystemIdentity = null;
 
-        CloudConfiguration cloudConfiguration =
-                CloudConfigurationFactory.buildStorageCloudConfiguration(loadProperties);
-
         String accessKey = loadProperties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_S3A_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
 
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.tryBuildForStorage(loadProperties);
         if (cloudConfiguration != null) {
             String host = S3A_SCHEME + "://" + pathUri.getUri().getHost();
             fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toString());

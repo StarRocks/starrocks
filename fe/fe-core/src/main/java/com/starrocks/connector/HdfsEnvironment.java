@@ -76,7 +76,7 @@ public class HdfsEnvironment {
             HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
             if (properties != null) {
                 CloudConfiguration tmpCloudConfiguration =
-                        CloudConfigurationFactory.buildStorageCloudConfiguration(properties);
+                        CloudConfigurationFactory.tryBuildForStorage(properties);
                 if (tmpCloudConfiguration != null) {
                     hdfsEnvironment.applyToCloudConfiguration(tmpCloudConfiguration);
                 }

@@ -98,7 +98,7 @@ public class FileTable extends Table {
 
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
         Configuration configuration = new Configuration();
-        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildStorageCloudConfiguration(fileProperties);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(fileProperties);
         if (cloudConfiguration != null) {
             cloudConfiguration.applyToConfiguration(configuration);
         }

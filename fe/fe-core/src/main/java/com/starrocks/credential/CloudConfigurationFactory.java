@@ -14,77 +14,27 @@
 
 package com.starrocks.credential;
 
-import org.apache.hadoop.hive.conf.HiveConf;
-
 import java.util.Map;
 
-public class CloudConfigurationFactory {
-
-    public static CloudConfiguration buildStorageCloudConfiguration(Map<String, String> properties) {
-        CloudConfiguration cloudConfiguration = null;
-        if ((cloudConfiguration = buildAWSS3CloudConfiguration(properties)) != null) {
+public abstract class CloudConfigurationFactory {
+    public static CloudConfiguration tryBuildForStorage(Map<String, String> properties) {
+        CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(properties);
+        CloudConfiguration cloudConfiguration = factory.buildForStorage();
+        if (cloudConfiguration != null) {
             return cloudConfiguration;
         }
-        if ((cloudConfiguration = buildAliyunOSSCloudConfiguration(properties)) != null) {
+
+        factory = new AliyunCloudConfigurationFactory(properties);
+        cloudConfiguration = factory.buildForStorage();
+        if (cloudConfiguration != null) {
             return cloudConfiguration;
         }
-        return null;
+        return cloudConfiguration;
     }
 
-    public static AWSCloudConfiguration buildAWSGlueCloudConfiguration(HiveConf properties) {
-        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
-                properties.getBoolean(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
-                properties.getBoolean(CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE, false),
-                properties.get(CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY, ""),
-                properties.get(CloudConfigurationConstants.AWS_GLUE_SECRET_KEY, ""),
-                properties.get(CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN, ""),
-                properties.get(CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID, ""),
-                properties.get(CloudConfigurationConstants.AWS_GLUE_REGION, ""),
-                properties.get(CloudConfigurationConstants.AWS_GLUE_ENDPOINT, "")
-        );
-        if (!awsCloudCredential.validate()) {
-            return null;
-        }
-        return new AWSCloudConfiguration(awsCloudCredential);
-    }
+    protected abstract CloudConfiguration buildForStorage();
 
-    private static AWSCloudConfiguration buildAWSS3CloudConfiguration(Map<String, String> properties) {
-        // build cloud credential first
-        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
-                Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false")),
-                Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false")),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_SECRET_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, "")
-        );
-        if (!awsCloudCredential.validate()) {
-            return null;
-        }
+    public abstract CloudCredential buildCloudCredential();
 
-        AWSCloudConfiguration awsCloudConfiguration = new AWSCloudConfiguration(awsCloudCredential);
-        // put cloud configuration
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS)) {
-            awsCloudConfiguration.setEnablePathStyleAccess(
-                    Boolean.parseBoolean(properties.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS))
-            );
-        }
-
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_SSL)) {
-            awsCloudConfiguration.setEnableSSL(
-                    Boolean.parseBoolean(properties.get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL))
-            );
-        }
-
-        return awsCloudConfiguration;
-    }
-
-    private static CloudConfiguration buildAliyunOSSCloudConfiguration(Map<String, String> properties) {
-        return null;
-    }
-
+    protected abstract CloudConfiguration buildSDKConfiguration();
 }
