@@ -5,8 +5,6 @@
 
 返回 `expr` 表达式的总体标准差。
 
-> 这两个函数返回的是估计值，两次执行的结果可能不相同。
-
 ### 语法
 
 ```Haskell
@@ -24,21 +22,10 @@ STDDEV(expr)
 ## 示例
 
 ```plain text
-select stddev(scan_rows)
-from log_statis
-group by datetime;
-+---------------------+
-| stddev(`scan_rows`) |
-+---------------------+
-|  2.3736656687790934 |
-+---------------------+
-
-select stddev_pop(scan_rows)
-from log_statis
-group by datetime;
-+-------------------------+
-| stddev_pop(`scan_rows`) |
-+-------------------------+
-|      2.3722760595994914 |
-+-------------------------+
+mysql> SELECT  stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
++---------------------+-------------------------+
+| stddev(lo_quantity) | stddev_pop(lo_quantity) |
++---------------------+-------------------------+
+|   14.43100708360797 |       14.43100708360797 |
++---------------------+-------------------------+
 ```
