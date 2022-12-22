@@ -70,7 +70,6 @@ set(EXEC_FILES
     vectorized/chunks_sorter_full_sort.cpp
     vectorized/cross_join_node.cpp
     vectorized/union_node.cpp
-    vectorized/tablet_info.cpp
     vectorized/except_hash_set.cpp
     vectorized/except_node.cpp
     vectorized/file_scanner.cpp
