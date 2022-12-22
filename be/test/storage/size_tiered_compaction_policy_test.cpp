@@ -875,6 +875,9 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
     write_new_version(tablet_meta, 4);
     write_new_version(tablet_meta, 3);
     write_new_version(tablet_meta, 3);
+    write_new_version(tablet_meta, 3);
+    write_new_version(tablet_meta, 2);
+    write_new_version(tablet_meta, 2);
     write_new_version(tablet_meta, 2);
     write_new_version(tablet_meta, 2);
 
@@ -883,16 +886,16 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
     tablet->init();
     init_compaction_context(tablet);
 
-    ASSERT_EQ(5, tablet->version_count());
+    ASSERT_EQ(8, tablet->version_count());
 
     {
         auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
-        ASSERT_EQ(4, tablet->version_count());
+        ASSERT_EQ(5, tablet->version_count());
         std::vector<Version> versions;
         tablet->list_versions(&versions);
-        ASSERT_EQ(4, versions.size());
+        ASSERT_EQ(5, versions.size());
         ASSERT_EQ(0, versions[0].first);
         ASSERT_EQ(0, versions[0].second);
         ASSERT_EQ(1, versions[1].first);
@@ -900,7 +903,9 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
         ASSERT_EQ(2, versions[2].first);
         ASSERT_EQ(2, versions[2].second);
         ASSERT_EQ(3, versions[3].first);
-        ASSERT_EQ(4, versions[3].second);
+        ASSERT_EQ(3, versions[3].second);
+        ASSERT_EQ(4, versions[4].first);
+        ASSERT_EQ(7, versions[4].second);
     }
 
     {
@@ -914,7 +919,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
         ASSERT_EQ(0, versions[0].first);
         ASSERT_EQ(0, versions[0].second);
         ASSERT_EQ(1, versions[1].first);
-        ASSERT_EQ(4, versions[1].second);
+        ASSERT_EQ(7, versions[1].second);
     }
 
     {
@@ -926,7 +931,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
         tablet->list_versions(&versions);
         ASSERT_EQ(1, versions.size());
         ASSERT_EQ(0, versions[0].first);
-        ASSERT_EQ(4, versions[0].second);
+        ASSERT_EQ(7, versions[0].second);
     }
 }
 
