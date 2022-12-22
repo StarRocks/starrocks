@@ -1578,7 +1578,6 @@ public class Coordinator {
         return false;
     }
 
-<<<<<<< HEAD
     private TNetworkAddress toRpcHost(TNetworkAddress host) throws Exception {
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
