@@ -309,6 +309,9 @@ public class Coordinator {
 
     public void setQueryId(TUniqueId queryId) {
         this.queryId = queryId;
+        if (this.coordinatorPreprocessor != null) {
+            this.coordinatorPreprocessor.setQueryId(queryId);
+        }
     }
 
     public void setQueryType(TQueryType type) {
