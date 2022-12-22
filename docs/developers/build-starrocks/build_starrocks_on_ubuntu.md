@@ -1,3 +1,5 @@
+Support build on x86_64 and aarch64
+
 ### Prerequisite
 
 ```
