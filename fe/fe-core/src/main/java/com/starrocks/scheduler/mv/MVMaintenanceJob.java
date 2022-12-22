@@ -290,7 +290,6 @@ public class MVMaintenanceJob implements Writable {
             request.setDb_name(dbName);
             request.setMv_name(view.getName());
             request.start_maintenance.setFragments(task.getFragmentInstances());
-            request.start_maintenance.setQuery_id(queryCoordinator.getQueryId());
 
             try {
                 Future<PMVMaintenanceTaskResult> resultFuture =
