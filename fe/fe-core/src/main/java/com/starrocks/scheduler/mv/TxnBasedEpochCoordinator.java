@@ -154,6 +154,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(mvMaintenanceJob.getQueryId());
             request.setTask_type(MVTaskType.START_EPOCH);
             request.setTask_id(taskId);
             request.setJob_id(mvMaintenanceJob.getJobId());

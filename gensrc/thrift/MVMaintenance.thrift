@@ -34,8 +34,7 @@ enum MVTaskType {
 }
 
 struct TMVMaintenanceStartTask {
-    1: optional Types.TUniqueId query_id;
-    3: optional list<InternalService.TExecPlanFragmentParams> fragments;
+    1: optional list<InternalService.TExecPlanFragmentParams> fragments;
 }
 
 struct TMVMaintenanceStopTask {
@@ -98,6 +97,7 @@ struct TMVMaintenanceTasks {
     7: optional i64 mv_id
     8: optional i64 job_id
     9: optional i64 task_id
+    10: optional Types.TUniqueId query_id;
 
     // Tasks for BE
     11: optional TMVMaintenanceStartTask start_maintenance

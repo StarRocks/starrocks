@@ -69,6 +69,7 @@ public class MVMaintenanceTask {
 
     public TMVMaintenanceTasks toThrift() {
         TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+        request.setQuery_id(job.getQueryId());
         request.setTask_type(MVTaskType.START_MAINTENANCE);
         TMVMaintenanceStartTask task = new TMVMaintenanceStartTask();
         request.setJob_id(job.getJobId());

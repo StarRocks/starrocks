@@ -283,6 +283,7 @@ public class MVMaintenanceJob implements Writable {
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(queryCoordinator.getQueryId());
             request.setTask_type(MVTaskType.START_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(taskId);
@@ -290,7 +291,6 @@ public class MVMaintenanceJob implements Writable {
             request.setDb_name(dbName);
             request.setMv_name(view.getName());
             request.start_maintenance.setFragments(task.getFragmentInstances());
-            request.start_maintenance.setQuery_id(queryCoordinator.getQueryId());
 
             try {
                 Future<PMVMaintenanceTaskResult> resultFuture =
@@ -326,6 +326,7 @@ public class MVMaintenanceJob implements Writable {
         for (MVMaintenanceTask task : taskMap.values()) {
             long beId = task.getBeId();
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(connectContext.getExecutionId());
             request.setTask_type(MVTaskType.STOP_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(task.getTaskId());
@@ -390,6 +391,10 @@ public class MVMaintenanceJob implements Writable {
 
     public long getJobId() {
         return jobId;
+    }
+
+    public TUniqueId getQueryId() {
+        return connectContext.getExecutionId();
     }
 
     public CoordinatorPreprocessor getQueryCoordinator() {
