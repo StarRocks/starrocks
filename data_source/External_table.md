@@ -649,11 +649,11 @@ select count(*) from profile_wos_p7;
 <configuration>
    <property>
       <name>fs.oss.impl</name>
-      <value>org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem</value>
+      <value>com.aliyun.jindodata.oss.JindoOssFileSystem</value>
    </property>
    <property>
       <name>fs.AbstractFileSystem.oss.impl</name>
-      <value>com.aliyun.emr.fs.oss.OSS</value>
+      <value>com.aliyun.jindodata.oss.OSS</value>
    </property>
    <property>
         <name>fs.oss.accessKeyId</name>
