@@ -17,7 +17,7 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SchemaTablesConfigScanner : public SchemaScanner {
 public:
@@ -36,4 +36,4 @@ private:
     static SchemaScanner::ColumnDesc _s_table_tables_config_columns[];
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

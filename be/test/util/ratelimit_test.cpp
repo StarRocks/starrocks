@@ -28,21 +28,25 @@ public:
 
 TEST_F(RateLimitTest, rate_limit) {
     int count = 0;
+    int64_t start = starrocks::UnixMillis();
     for (int i = 0; i < 100; i++) {
         RATE_LIMIT(count++, 100); // inc each 0.1s
         RATE_LIMIT(std::cout << "skip log cnt: " << RATE_LIMIT_SKIP_CNT << std::endl, 100);
-        usleep(10000); // execute inc each 10ms
+        starrocks::SleepForMs(10); // execute inc each 10ms, which is probably not accurate.
     }
-    ASSERT_TRUE(count <= 10);
+    int64_t end = starrocks::UnixMillis();
+    ASSERT_TRUE(count <= (end - start) / 100);
 }
 
 TEST_F(RateLimitTest, rate_limit_by_tag) {
     int count = 0;
+    int64_t start = starrocks::UnixMillis();
     for (int i = 0; i < 100; i++) {
         RATE_LIMIT_BY_TAG(i % 2, count++, 100); // inc each 0.1s
-        usleep(10000);                          // execute inc each 10ms
+        starrocks::SleepForMs(10);              // execute inc each 10ms, which is probably not accurate.
     }
-    ASSERT_TRUE(count <= 20);
+    int64_t end = starrocks::UnixMillis();
+    ASSERT_TRUE(count <= (end - start) / 100 * 2);
 }
 
 } // namespace starrocks

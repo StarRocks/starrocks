@@ -22,7 +22,7 @@
 #include "runtime/runtime_state.h"
 #include "util/utf8_check.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
@@ -420,4 +420,4 @@ void CSVScanner::_report_error(const std::string& line, const std::string& err_m
     _state->append_error_msg_to_file(line, err_msg);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

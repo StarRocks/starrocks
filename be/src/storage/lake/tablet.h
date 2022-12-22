@@ -29,9 +29,9 @@ namespace starrocks {
 class TabletSchema;
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class VectorizedSchema;
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -86,7 +86,7 @@ public:
 
     StatusOr<std::unique_ptr<TabletWriter>> new_writer();
 
-    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, vectorized::VectorizedSchema schema);
+    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, VectorizedSchema schema);
 
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 

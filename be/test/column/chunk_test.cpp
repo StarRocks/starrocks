@@ -22,7 +22,7 @@
 #include "column/vectorized_field.h"
 #include "column/vectorized_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunkTest : public testing::Test {
 public:
@@ -77,15 +77,14 @@ public:
     }
 
     ChunkExtraColumnsDataPtr make_extra_data(size_t num_cols, size_t size = 100) {
-        auto chunk = std::make_unique<vectorized::Chunk>(make_columns(num_cols, size), make_schema(num_cols));
-        std::vector<vectorized::ChunkExtraColumnsMeta> extra_data_metas;
+        auto chunk = std::make_unique<Chunk>(make_columns(num_cols, size), make_schema(num_cols));
+        std::vector<ChunkExtraColumnsMeta> extra_data_metas;
         for (size_t i = 0; i < num_cols; i++) {
-            extra_data_metas.push_back(vectorized::ChunkExtraColumnsMeta{
-                    .type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false});
+            extra_data_metas.push_back(
+                    ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false});
         }
-        auto extra_data_cols = std::vector<vectorized::ColumnPtr>{make_columns(num_cols, size)};
-        return std::make_shared<vectorized::ChunkExtraColumnsData>(std::move(extra_data_metas),
-                                                                   std::move(extra_data_cols));
+        auto extra_data_cols = std::vector<ColumnPtr>{make_columns(num_cols, size)};
+        return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(extra_data_cols));
     }
 };
 
@@ -413,4 +412,4 @@ TEST_F(ChunkTest, test_reset_with_extra_data) {
     ASSERT_TRUE(!chunk1->has_extra_data());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

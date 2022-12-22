@@ -28,8 +28,6 @@ namespace starrocks {
 class SlotDescriptor;
 class TabletSchema;
 
-namespace vectorized {
-
 class MemTableSink;
 
 class MemTable {
@@ -116,9 +114,7 @@ private:
     size_t _aggregator_bytes_usage = 0;
 };
 
-} // namespace vectorized
-
-inline std::ostream& operator<<(std::ostream& os, const vectorized::MemTable& table) {
+inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {
     os << "MemTable(addr=" << &table << ", tablet=" << table.tablet_id() << ", mem=" << table.memory_usage();
     return os;
 }

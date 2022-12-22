@@ -205,7 +205,7 @@ Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_matc
     return Status::OK();
 }
 
-Status IndexedColumnIterator::next_batch(size_t* n, vectorized::Column* column) {
+Status IndexedColumnIterator::next_batch(size_t* n, Column* column) {
     DCHECK(_seeked);
     if (_current_ordinal == _reader->num_values()) {
         *n = 0;

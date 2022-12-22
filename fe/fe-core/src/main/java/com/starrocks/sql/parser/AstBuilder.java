@@ -595,6 +595,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(listPartitionDesc);
             }
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            throw new ParsingException("List partition is not supported.");
         }
         return partitionDesc;
     }
@@ -4095,6 +4096,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
     }
 
+    @Override
+    public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, true);
+    }
+
+    @Override
+    public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
+    }
+
     private GrantRevokePrivilegeObjects parseGrantRevokeOnAll(
             List<StarRocksParser.PrivilegeTypeContext> privilegeTypeContexts,
             StarRocksParser.IdentifierOrStringContext identifierOrStringContext) {
@@ -4594,11 +4619,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitSpecialDateTimeExpression(StarRocksParser.SpecialDateTimeExpressionContext context) {
+        if (context.name.getText().equalsIgnoreCase("current_timestamp")
+                || context.name.getText().equalsIgnoreCase("current_time")
+                || context.name.getText().equalsIgnoreCase("current_date")
+                || context.name.getText().equalsIgnoreCase("localtime")
+                || context.name.getText().equalsIgnoreCase("localtimestamp")) {
+            return new FunctionCallExpr(context.name.getText().toUpperCase(), Lists.newArrayList());
+        }
+        throw new ParsingException("Unknown special function " + context.name.getText());
+    }
+
+    @Override
     public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
         if (context.CHAR() != null) {
             return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
-        } else if (context.CURRENT_TIMESTAMP() != null) {
-            return new FunctionCallExpr("current_timestamp", Lists.newArrayList());
         } else if (context.DAY() != null) {
             return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
         } else if (context.HOUR() != null) {

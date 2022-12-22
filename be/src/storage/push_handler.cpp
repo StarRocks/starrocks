@@ -24,7 +24,7 @@
 #include "storage/txn_manager.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Process push command, the main logical is as follows:
 //    a. related tablets not exist:
@@ -338,4 +338,4 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
              << ", processed_rows" << num_rows;
     return st;
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

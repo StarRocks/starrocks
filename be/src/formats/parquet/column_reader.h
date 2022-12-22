@@ -18,14 +18,12 @@
 namespace starrocks {
 class RandomAccessFile;
 class SharedBufferedInputStream;
-namespace vectorized {
 struct HdfsScanStats;
-}
 } // namespace starrocks
 
 namespace starrocks::parquet {
 struct ColumnReaderContext {
-    vectorized::Buffer<uint8_t>* filter = nullptr;
+    Buffer<uint8_t>* filter = nullptr;
     size_t next_row = 0;
     size_t rows_to_skip = 0;
 
@@ -36,7 +34,7 @@ struct ColumnReaderOptions {
     std::string timezone;
     bool case_sensitive = false;
     int chunk_size = 0;
-    vectorized::HdfsScanStats* stats = nullptr;
+    HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
     SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
@@ -52,21 +50,19 @@ public:
 
     virtual ~ColumnReader() = default;
 
-    virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column) = 0;
+    virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) = 0;
     virtual Status finish_batch() = 0;
 
-    Status next_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column) {
+    Status next_batch(size_t* num_records, ColumnContentType content_type, Column* column) {
         RETURN_IF_ERROR(prepare_batch(num_records, content_type, column));
         return finish_batch();
     }
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
-    virtual Status get_dict_values(vectorized::Column* column) {
-        return Status::NotSupported("get_dict_values is not supported");
-    }
+    virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }
 
-    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
 

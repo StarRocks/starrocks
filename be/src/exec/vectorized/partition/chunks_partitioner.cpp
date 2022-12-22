@@ -20,7 +20,7 @@
 #include "exprs/expr_context.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
                                      const std::vector<ExprContext*>& partition_exprs,
@@ -62,7 +62,7 @@ Status ChunksPartitioner::offer(const ChunkPtr& chunk) {
 }
 
 ChunkPtr ChunksPartitioner::consume_from_downgrade_buffer() {
-    vectorized::ChunkPtr chunk = nullptr;
+    ChunkPtr chunk = nullptr;
     if (_downgrade_buffer.empty()) {
         return chunk;
     }
@@ -201,4 +201,4 @@ void ChunksPartitioner::_init_hash_map_variant() {
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
 #undef SET_FIXED_SLICE_HASH_MAP_FIELD
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

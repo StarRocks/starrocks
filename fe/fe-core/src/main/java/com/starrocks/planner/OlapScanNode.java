@@ -69,12 +69,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
@@ -146,6 +146,9 @@ public class OlapScanNode extends ScanNode {
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
     public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
 
+    private List<Expr> bucketExprs = Lists.newArrayList();
+    private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -193,6 +196,18 @@ public class OlapScanNode extends ScanNode {
 
     public long getActualRows() {
         return actualRows;
+    }
+
+    public List<ColumnRefOperator> getBucketColumns() {
+        return bucketColumns;
+    }
+
+    public void setBucketColumns(List<ColumnRefOperator> bucketColumns) {
+        this.bucketColumns = bucketColumns;
+    }
+
+    public void setBucketExprs(List<Expr> bucketExprs) {
+        this.bucketExprs = bucketExprs;
     }
 
     // The column names applied dict optimization
@@ -627,6 +642,7 @@ public class OlapScanNode extends ScanNode {
                 keyColumnTypes.add(col.getPrimitiveType().toThrift());
             }
         }
+
         if (olapTable.isLakeTable()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
@@ -668,6 +684,10 @@ public class OlapScanNode extends ScanNode {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
+
+            if (!bucketExprs.isEmpty()) {
+                msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
+            }
         }
     }
 

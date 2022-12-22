@@ -28,7 +28,7 @@ namespace starrocks {
 class SequentialFile;
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CSVScanner final : public FileScanner {
 public:
@@ -82,4 +82,4 @@ private:
     bool _use_v2;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

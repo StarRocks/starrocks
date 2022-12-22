@@ -32,7 +32,7 @@
 #include "util/runtime_profile.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Broker scanner convert the data read from broker to starrocks's tuple.
 class ParquetScanner : public FileScanner {
@@ -79,4 +79,4 @@ private:
     ArrowConvertContext _conv_ctx;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

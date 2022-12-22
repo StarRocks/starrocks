@@ -16,8 +16,10 @@
 
 #pragma once
 
+#ifdef __SSE2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#endif
 
 #include <cstddef>
 #include <cstdint>

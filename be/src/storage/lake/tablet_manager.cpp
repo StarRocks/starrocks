@@ -16,6 +16,8 @@
 
 #include <bthread/bthread.h>
 
+#include <atomic>
+#include <chrono>
 #include <variant>
 
 #include "agent/agent_server.h"
@@ -24,8 +26,6 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/AgentService_types.h"
-#include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
@@ -49,26 +49,19 @@ namespace starrocks::lake {
 static Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
 static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
                                 int txns_size);
-static void* metadata_gc_trigger(void* arg);
-static void* segment_gc_trigger(void* arg);
+static void* gc_checker(void* arg);
 
 TabletManager::TabletManager(LocationProvider* location_provider, int64_t cache_capacity)
         : _location_provider(location_provider),
           _metacache(new_lru_cache(cache_capacity)),
-          _metadata_gc_tid(INVALID_BTHREAD),
-          _segment_gc_tid(INVALID_BTHREAD) {}
+          _gc_checker_tid(INVALID_BTHREAD) {}
 
 TabletManager::~TabletManager() {
-    if (_metadata_gc_tid != INVALID_BTHREAD) {
+    if (_gc_checker_tid != INVALID_BTHREAD) {
         [[maybe_unused]] void* ret = nullptr;
         // We don't care about the return value of bthread_stop or bthread_join.
-        (void)bthread_stop(_metadata_gc_tid);
-        (void)bthread_join(_metadata_gc_tid, &ret);
-    }
-    if (_segment_gc_tid != INVALID_BTHREAD) {
-        [[maybe_unused]] void* ret = nullptr;
-        (void)bthread_stop(_segment_gc_tid);
-        (void)bthread_join(_segment_gc_tid, &ret);
+        (void)bthread_stop(_gc_checker_tid);
+        (void)bthread_join(_gc_checker_tid, &ret);
     }
 }
 
@@ -786,76 +779,94 @@ std::set<int64_t> TabletManager::owned_tablets() {
 }
 
 void TabletManager::start_gc() {
-    int r = bthread_start_background(&_metadata_gc_tid, nullptr, metadata_gc_trigger, this);
-    PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
-
-    r = bthread_start_background(&_segment_gc_tid, nullptr, segment_gc_trigger, this);
+    int r = bthread_start_background(&_gc_checker_tid, nullptr, gc_checker, this);
     PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
 }
 
-void* metadata_gc_trigger(void* arg) {
-    auto tablet_mgr = static_cast<TabletManager*>(arg);
-    auto lp = tablet_mgr->location_provider();
-    // NOTE: Share the same thread pool with local tablet's clone task.
+static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
-    while (!bthread_stopped(bthread_self())) {
-        // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
-        // configured value, which is ok now.
-        if (bthread_usleep(config::lake_gc_metadata_check_interval * 1000 * 1000) != 0) {
-            continue;
-        }
-
-        std::set<std::string> roots;
-        auto st = lp->list_root_locations(&roots);
-
-        LOG_IF(ERROR, !st.ok()) << st;
-        auto master_info = get_master_info();
-
-        for (const auto& root : roots) {
-            // TODO: limit GC concurrency
-            st = thread_pool->submit_func([=]() {
-                auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_id);
-                LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
-            });
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-                break;
+    auto num_running = std::atomic<int>(roots.size());
+    for (const auto& root : roots) {
+        auto st = thread_pool->submit_func([&, root]() {
+            auto t1 = std::chrono::steady_clock::now();
+            auto r = metadata_gc(root, tablet_mgr, min_active_txn_id);
+            auto t2 = std::chrono::steady_clock::now();
+            auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+            if (r.ok()) {
+                LOG(INFO) << "Finished garbage collection of metadata for directory " << root << ". cost:" << cost
+                          << "ms";
+            } else {
+                LOG(WARNING) << "Fail to do garbage collection of metadata for directory " << root << ". cost:" << cost
+                             << "ms error:" << r;
             }
+            num_running.fetch_sub(1);
+        });
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+            num_running.fetch_sub(1);
         }
-        // TODO: wait until all tasks finished.
     }
-    return nullptr;
+    while (num_running.load() > 0) {
+        LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
+        bthread_usleep(/*100ms=*/100 * 1000);
+    }
 }
 
-void* segment_gc_trigger(void* arg) {
+static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
+    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    auto num_running = std::atomic<int>(roots.size());
+    for (const auto& root : roots) {
+        auto st = thread_pool->submit_func([&, root]() {
+            auto t1 = std::chrono::steady_clock::now();
+            auto r = segment_gc(root, tablet_mgr);
+            auto t2 = std::chrono::steady_clock::now();
+            auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+            if (r.ok()) {
+                LOG(INFO) << "Finished garbage collection of data for directory " << root << ". cost:" << cost << "ms";
+            } else {
+                LOG(WARNING) << "Fail to do garbage collection of data for directory " << root << ". cost:" << cost
+                             << "ms error:" << r;
+            }
+            num_running.fetch_sub(1);
+        });
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+            num_running.fetch_sub(1);
+        }
+    }
+    while (num_running.load() > 0) {
+        LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
+        bthread_usleep(/*100ms=*/100 * 1000);
+    }
+}
+
+void* gc_checker(void* arg) {
     auto tablet_mgr = static_cast<TabletManager*>(arg);
     auto lp = tablet_mgr->location_provider();
     // NOTE: Share the same thread pool with local tablet's clone task.
-    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    int64_t curr = butil::gettimeofday_s();
+    int64_t gc_time[2] = {curr + config::lake_gc_metadata_check_interval,
+                          curr + config::lake_gc_segment_check_interval};
     while (!bthread_stopped(bthread_self())) {
-        // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
-        // configured value, which is ok now.
-        if (bthread_usleep(config::lake_gc_segment_check_interval * 1000 * 1000) != 0) {
-            continue;
+        int64_t now = butil::gettimeofday_s();
+        int64_t min_gc_time = std::min(gc_time[0], gc_time[1]);
+        if (min_gc_time > now) {
+            // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
+            // configured value, which is ok now.
+            (void)bthread_usleep((min_gc_time - now) * 1000ULL * 1000ULL);
         }
 
         std::set<std::string> roots;
-        auto st = lp->list_root_locations(&roots);
+        (void)lp->list_root_locations(&roots);
 
-        LOG_IF(ERROR, !st.ok()) << st;
-
-        for (const auto& root : roots) {
-            // TODO: limit GC concurrency
-            st = thread_pool->submit_func([=]() {
-                auto r = segment_gc(root, tablet_mgr);
-                LOG_IF(WARNING, !r.ok()) << "Fail to do segment gc in " << root << ": " << r;
-            });
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-                break;
-            }
+        if (min_gc_time == gc_time[0]) {
+            auto master_info = get_master_info();
+            metadata_gc(tablet_mgr, roots, master_info.min_active_txn_id);
+            gc_time[0] = butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
+        } else {
+            data_gc(tablet_mgr, roots);
+            gc_time[1] = butil::gettimeofday_s() + config::lake_gc_segment_check_interval;
         }
-        // TODO: wait until all tasks finished.
     }
     return nullptr;
 }

@@ -40,6 +40,9 @@ public:
     void do_close(RuntimeState* state) override;
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
 
+    TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
+    const std::vector<ExprContext*>& partition_exprs() const override;
+
 private:
     OlapScanContextFactoryPtr _ctx_factory;
 };

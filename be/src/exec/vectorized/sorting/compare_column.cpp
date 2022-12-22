@@ -29,7 +29,7 @@
 #include "runtime/primitive_type.h"
 #include "simd/selector.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Compare a column with datum, store result into a vector
 // For column-wise compare, only consider rows that are equal at previous columns
@@ -85,7 +85,7 @@ public:
               _sort_order(sort_desc.sort_order),
               _null_first(sort_desc.null_first) {}
 
-    Status do_visit(const vectorized::NullableColumn& column) {
+    Status do_visit(const NullableColumn& column) {
         // Two step compare:
         // 1. Compare null values, store at temporary result
         // 2. Mask notnull values, and compare not-null values
@@ -145,14 +145,14 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) {
+    Status do_visit(const ConstColumn& column) {
         _equal_count =
                 compare_column(column.data_column(), _cmp_vector, _rhs_value, SortDesc(_sort_order, _null_first));
 
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ArrayColumn& column) {
+    Status do_visit(const ArrayColumn& column) {
         // Convert the datum to a array column
         auto rhs_column = column.elements().clone_empty();
         auto& datum_array = _rhs_value.get_array();
@@ -166,7 +166,7 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::MapColumn& column) {
+    Status do_visit(const MapColumn& column) {
         // Convert the datum to a array column
         auto rhs_column = column.clone_empty();
         rhs_column->append_datum(_rhs_value);
@@ -177,13 +177,13 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::StructColumn& column) {
+    Status do_visit(const StructColumn& column) {
         //TODO(SmithCruise)
         return Status::NotSupported("Not support");
     }
 
     template <typename T>
-    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumnBase<T>& column) {
         const auto& lhs_datas = column.get_data();
         Slice rhs_data = _rhs_value.get<Slice>();
 
@@ -199,7 +199,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
         T rhs_data = _rhs_value.get<T>();
         auto& lhs_data = column.get_data();
 
@@ -215,13 +215,13 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+    Status do_visit(const ObjectColumn<T>& column) {
         DCHECK(false) << "not support object column sort_and_tie";
 
         return Status::NotSupported("not support object column sort_and_tie");
     }
 
-    Status do_visit(const vectorized::JsonColumn& column) {
+    Status do_visit(const JsonColumn& column) {
         auto& lhs_data = column.get_data();
         const JsonValue& rhs_json = *_rhs_value.get_json();
 
@@ -258,7 +258,7 @@ public:
               _tie(tie),
               _nullable_column(std::move(nullable_column)) {}
 
-    Status do_visit(const vectorized::NullableColumn& column) {
+    Status do_visit(const NullableColumn& column) {
         // TODO: maybe could skip compare rows that contains null
         // 1. Compare the null flag
         // 2. Compare the value if both are not null. Since value for null is just default value,
@@ -273,7 +273,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumnBase<T>& column) {
         auto& data = column.get_data();
         NullData* null_data = nullptr;
         if (_nullable_column != nullptr) {
@@ -288,7 +288,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
         auto& data = column.get_data();
         NullData* null_data = nullptr;
         if (_nullable_column != nullptr) {
@@ -302,12 +302,12 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("Not support"); }
-    Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("Not support"); }
-    Status do_visit(const vectorized::MapColumn& column) { return Status::NotSupported("Not support"); }
-    Status do_visit(const vectorized::StructColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const ConstColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const ArrayColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const MapColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const StructColumn& column) { return Status::NotSupported("Not support"); }
     template <typename T>
-    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+    Status do_visit(const ObjectColumn<T>& column) {
         return Status::NotSupported("not support");
     }
 
@@ -354,4 +354,4 @@ void build_tie_for_column(const ColumnPtr& column, Tie* tie, const NullColumnPtr
     DCHECK(st.ok());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

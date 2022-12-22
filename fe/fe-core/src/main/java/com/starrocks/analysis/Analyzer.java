@@ -34,7 +34,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -42,10 +41,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -53,7 +49,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -231,62 +226,6 @@ public class Analyzer {
         tableRefMap_.put(result.getId(), ref);
 
         return result;
-    }
-
-    /**
-     * Resolves the given TableRef into a concrete BaseTableRef, ViewRef or
-     * CollectionTableRef. Returns the new resolved table ref or the given table
-     * ref if it is already resolved.
-     * Registers privilege requests and throws an AnalysisException if the tableRef's
-     * path could not be resolved. The privilege requests are added to ensure that
-     * an AuthorizationException is preferred over an AnalysisException so as not to
-     * accidentally reveal the non-existence of tables/databases.
-     * <p>
-     * TODO(zc): support collection table ref
-     */
-    public TableRef resolveTableRef(TableRef tableRef) throws AnalysisException {
-        // Return the table if it is already resolved.
-        if (tableRef.isResolved()) {
-            return tableRef;
-        }
-        // Try to find a matching local view.
-        TableName tableName = tableRef.getName();
-        if (!tableName.isFullyQualified()) {
-            // Searches the hierarchy of analyzers bottom-up for a registered local view with
-            // a matching alias.
-            String viewAlias = tableName.getTbl();
-            Analyzer analyzer = this;
-            do {
-                analyzer = (analyzer.ancestors.isEmpty() ? null : analyzer.ancestors.get(0));
-            } while (analyzer != null);
-        }
-
-        // Resolve the table ref's path and determine what resolved table ref
-        // to replace it with.
-        String dbName = tableName.getDb();
-        if (Strings.isNullOrEmpty(dbName)) {
-            dbName = getDefaultDb();
-        }
-        if (Strings.isNullOrEmpty(dbName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-        }
-
-        Database database = globalState.globalStateMgr.getDb(dbName);
-        MetaUtils.checkDbNullAndReport(database, dbName);
-
-        Table table = database.getTable(tableName.getTbl());
-        if (table == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName.getTbl());
-        }
-
-        if (table.getType() == TableType.OLAP && (((OlapTable) table).getState() == OlapTableState.RESTORE
-                || ((OlapTable) table).getState() == OlapTableState.RESTORE_WITH_LOAD)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
-        }
-
-        TableName tblName = new TableName(database.getFullName(), table.getName());
-        // The table must be a base table.
-        return new BaseTableRef(tableRef, table, tblName);
     }
 
     public Table getTable(TableName tblName) {

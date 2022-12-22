@@ -17,7 +17,7 @@
 #include "exec/exec_node.h"
 #include "exec/sort_exec_exprs.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunksSorter;
 
@@ -71,4 +71,4 @@ private:
     RuntimeProfile::Counter* _sort_timer;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

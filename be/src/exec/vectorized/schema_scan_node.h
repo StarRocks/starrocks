@@ -25,7 +25,7 @@ class RuntimeState;
 class Status;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SchemaScanNode final : public ScanNode {
 public:
@@ -81,4 +81,4 @@ private:
     RuntimeProfile::Counter* _filter_timer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

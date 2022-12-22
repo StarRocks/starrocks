@@ -34,7 +34,7 @@ Status GeneralTabletWriter::open() {
     return Status::OK();
 }
 
-Status GeneralTabletWriter::write(const starrocks::vectorized::Chunk& data) {
+Status GeneralTabletWriter::write(const starrocks::Chunk& data) {
     if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
         RETURN_IF_ERROR(flush_segment_writer());

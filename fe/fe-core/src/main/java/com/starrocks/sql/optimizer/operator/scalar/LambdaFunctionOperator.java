@@ -17,17 +17,28 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class LambdaFunctionOperator extends ScalarOperator {
 
     private List<ColumnRefOperator> refColumns;
     private ScalarOperator lambdaExpr;
+
+    public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
+        return columnRefMap;
+    }
+
+    // should be in order.
+    private Map<ColumnRefOperator, ScalarOperator> columnRefMap =
+            Maps.newTreeMap(Comparator.comparing(ColumnRefOperator::getId));
 
     public LambdaFunctionOperator(List<ColumnRefOperator> refColumns, ScalarOperator lambdaExpr, Type retType) {
         super(OperatorType.LAMBDA_FUNCTION, retType);
@@ -43,13 +54,16 @@ public class LambdaFunctionOperator extends ScalarOperator {
         return lambdaExpr;
     }
 
+    public void addColumnToExpr(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+        this.columnRefMap.putAll(columnRefMap);
+    }
+
     // array_map((x,y) -> x, arr1, arr2) can be reduced to arr1
     public int canReduce() {
-        int res = 0;
         if (lambdaExpr.getOpType().equals(OperatorType.LAMBDA_ARGUMENT) && refColumns.contains(lambdaExpr)) {
             return refColumns.indexOf(lambdaExpr) + 1;
         }
-        return res;
+        return 0;
     }
 
     // only need to concern the lambda expression.

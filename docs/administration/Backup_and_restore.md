@@ -48,14 +48,18 @@ ON (sr_member);
 
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md).
 
-## Restore data
+## Restore or migrate data
 
-You can restore the data snapshot backed up in the remote storage system to the current or other StarRocks clusters to complete data recovery or migration.
+You can restore the data snapshot backed up in the remote storage system to the current or other StarRocks clusters to complete data restoration or migration.
 
 > **CAUTION**
 >
 > - Because data are backed up as snapshots, the data loaded after the snapshot is generated is not included in the snapshot. Therefore, if any data is loaded into the old cluster during the period between snapshot generation and RESTORE job completion, you also need to load the data into the cluster that data is restored into. It is recommended that you load data into both clusters in parallel for a period of time after the data migration is complete, and then migrate your application to the new cluster after verifying the correctness of the data and services.
 > - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase of the recovery job. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless your are sure that the current data is no longer used. The overwrite operation will check metadata consistency between the snapshot and the existing database, table, or partition. If inconsistency is detected, the RESTORE operation cannot be performed.
+
+### (Optional) Create the repository in the new cluster
+
+To migrate data to another StarRocks cluster, you need to create a repository with the same **repository name** and **location** in the new cluster, otherwise you will not be able to view the previously backed up data snapshots. See [creating a repository](#create-a-repository) for details.
 
 ### Check the snapshot
 

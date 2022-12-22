@@ -26,7 +26,7 @@
 #include "storage/tablet_schema.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SegmentChunkIteratorAdapter final : public ChunkIterator {
 public:
@@ -76,4 +76,4 @@ protected:
     ChunkPtr _in_chunk;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -24,7 +24,7 @@
 #include "storage/column_aggregate_func.h"
 #include "storage/row_source_mask.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunkAggregator {
 private:
@@ -123,4 +123,4 @@ private:
     bool _is_key = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

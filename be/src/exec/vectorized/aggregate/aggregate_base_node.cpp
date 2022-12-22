@@ -17,7 +17,7 @@
 #include "exprs/anyval_util.h"
 #include "gutil/strings/substitute.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _tnode(tnode) {}
@@ -57,8 +57,7 @@ Status AggregateBaseNode::close(RuntimeState* state) {
     return ExecNode::close(state);
 }
 
-void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
-                                                      vectorized::RuntimeFilterProbeCollector* collector) {
+void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
     _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 
@@ -106,4 +105,4 @@ void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

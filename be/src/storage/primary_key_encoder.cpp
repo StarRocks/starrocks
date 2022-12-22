@@ -37,6 +37,7 @@
 
 #include <cstring>
 #include <memory>
+#include <numeric>
 #include <type_traits>
 
 #include "column/binary_column.h"
@@ -236,7 +237,7 @@ inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
     return Status::OK();
 }
 
-bool PrimaryKeyEncoder::is_supported(const vectorized::VectorizedField& f) {
+bool PrimaryKeyEncoder::is_supported(const VectorizedField& f) {
     if (f.is_nullable()) {
         return false;
     }
@@ -256,8 +257,7 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::VectorizedField& f) {
     }
 }
 
-bool PrimaryKeyEncoder::is_supported(const vectorized::VectorizedSchema& schema,
-                                     const std::vector<ColumnId>& key_idxes) {
+bool PrimaryKeyEncoder::is_supported(const VectorizedSchema& schema, const std::vector<ColumnId>& key_idxes) {
     for (const auto key_idx : key_idxes) {
         if (!is_supported(*schema.field(key_idx))) {
             return false;
@@ -266,7 +266,7 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::VectorizedSchema& schema,
     return true;
 }
 
-LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::VectorizedSchema& schema,
+LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const VectorizedSchema& schema,
                                                         const std::vector<ColumnId>& key_idxes) {
     if (!is_supported(schema, key_idxes)) {
         return TYPE_NONE;
@@ -277,7 +277,7 @@ LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Vector
     return TYPE_VARCHAR;
 }
 
-size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::VectorizedSchema& schema) {
+size_t PrimaryKeyEncoder::get_encoded_fixed_size(const VectorizedSchema& schema) {
     size_t ret = 0;
     size_t n = schema.num_key_fields();
     for (size_t i = 0; i < n; i++) {
@@ -290,8 +290,7 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::VectorizedSch
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const vectorized::VectorizedSchema& schema,
-                                        std::unique_ptr<vectorized::Column>* pcolumn) {
+Status PrimaryKeyEncoder::create_column(const VectorizedSchema& schema, std::unique_ptr<Column>* pcolumn) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;
@@ -299,8 +298,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::VectorizedSchema& sche
     return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes);
 }
 
-Status PrimaryKeyEncoder::create_column(const vectorized::VectorizedSchema& schema,
-                                        std::unique_ptr<vectorized::Column>* pcolumn,
+Status PrimaryKeyEncoder::create_column(const VectorizedSchema& schema, std::unique_ptr<Column>* pcolumn,
                                         const std::vector<ColumnId>& key_idxes) {
     if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
@@ -315,31 +313,31 @@ Status PrimaryKeyEncoder::create_column(const vectorized::VectorizedSchema& sche
         auto type = schema.field(key_idxes[0])->type()->type();
         switch (type) {
         case TYPE_BOOLEAN:
-            *pcolumn = vectorized::BooleanColumn::create_mutable();
+            *pcolumn = BooleanColumn::create_mutable();
             break;
         case TYPE_TINYINT:
-            *pcolumn = vectorized::Int8Column::create_mutable();
+            *pcolumn = Int8Column::create_mutable();
             break;
         case TYPE_SMALLINT:
-            *pcolumn = vectorized::Int16Column::create_mutable();
+            *pcolumn = Int16Column::create_mutable();
             break;
         case TYPE_INT:
-            *pcolumn = vectorized::Int32Column::create_mutable();
+            *pcolumn = Int32Column::create_mutable();
             break;
         case TYPE_BIGINT:
-            *pcolumn = vectorized::Int64Column::create_mutable();
+            *pcolumn = Int64Column::create_mutable();
             break;
         case TYPE_LARGEINT:
-            *pcolumn = vectorized::Int128Column::create_mutable();
+            *pcolumn = Int128Column::create_mutable();
             break;
         case TYPE_VARCHAR:
-            *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+            *pcolumn = std::make_unique<BinaryColumn>();
             break;
         case TYPE_DATE:
-            *pcolumn = vectorized::DateColumn::create_mutable();
+            *pcolumn = DateColumn::create_mutable();
             break;
         case TYPE_DATETIME:
-            *pcolumn = vectorized::TimestampColumn::create_mutable();
+            *pcolumn = TimestampColumn::create_mutable();
             break;
         default:
             return Status::NotSupported(StringPrintf("primary key type not support: %s", logical_type_to_string(type)));
@@ -347,23 +345,22 @@ Status PrimaryKeyEncoder::create_column(const vectorized::VectorizedSchema& sche
     } else {
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
-        *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+        *pcolumn = std::make_unique<BinaryColumn>();
     }
     return Status::OK();
 }
 
 typedef void (*EncodeOp)(const void*, int, std::string*);
 
-static void prepare_ops_datas(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
-                              std::vector<EncodeOp>* pops, std::vector<const void*>* pdatas) {
-    int ncol = schema.num_key_fields();
+static void prepare_ops_datas(const VectorizedSchema& schema, const std::vector<ColumnId>& sort_key_idxes,
+                              const Chunk& chunk, std::vector<EncodeOp>* pops, std::vector<const void*>* pdatas) {
+    DCHECK_EQ(pops->size(), pdatas->size());
+    int ncol = sort_key_idxes.size();
     auto& ops = *pops;
     auto& datas = *pdatas;
-    ops.resize(ncol, nullptr);
-    datas.resize(ncol, nullptr);
     for (int j = 0; j < ncol; j++) {
-        datas[j] = chunk.get_column_by_index(j)->raw_data();
-        switch (schema.field(j)->type()->type()) {
+        datas[j] = chunk.get_column_by_index(sort_key_idxes[j])->raw_data();
+        switch (schema.field(sort_key_idxes[j])->type()->type()) {
         case TYPE_BOOLEAN:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const uint8_t*)data)[idx], buff);
@@ -422,8 +419,8 @@ static void prepare_ops_datas(const vectorized::VectorizedSchema& schema, const 
     }
 }
 
-void PrimaryKeyEncoder::encode(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
-                               size_t offset, size_t len, vectorized::Column* dest) {
+void PrimaryKeyEncoder::encode(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len,
+                               Column* dest) {
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
@@ -431,10 +428,12 @@ void PrimaryKeyEncoder::encode(const vectorized::VectorizedSchema& schema, const
     } else {
         CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
-        std::vector<EncodeOp> ops;
-        std::vector<const void*> datas;
-        prepare_ops_datas(schema, chunk, &ops, &datas);
-        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+        std::vector<EncodeOp> ops(ncol);
+        std::vector<const void*> datas(ncol);
+        std::vector<ColumnId> primary_key_iota_idxes(ncol);
+        std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+        prepare_ops_datas(schema, primary_key_iota_idxes, chunk, &ops, &datas);
+        auto& bdest = down_cast<BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         std::string buff;
         for (size_t i = 0; i < len; i++) {
@@ -447,8 +446,27 @@ void PrimaryKeyEncoder::encode(const vectorized::VectorizedSchema& schema, const
     }
 }
 
-void PrimaryKeyEncoder::encode_selective(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
-                                         const uint32_t* indexes, size_t len, vectorized::Column* dest) {
+void PrimaryKeyEncoder::encode_sort_key(const VectorizedSchema& schema, const Chunk& chunk, size_t offset, size_t len,
+                                        Column* dest) {
+    CHECK(dest->is_binary()) << "dest column should be binary";
+    int ncol = schema.sort_key_idxes().size();
+    std::vector<EncodeOp> ops(ncol);
+    std::vector<const void*> datas(ncol);
+    prepare_ops_datas(schema, schema.sort_key_idxes(), chunk, &ops, &datas);
+    auto& bdest = down_cast<BinaryColumn&>(*dest);
+    bdest.reserve(bdest.size() + len);
+    std::string buff;
+    for (size_t i = 0; i < len; i++) {
+        buff.clear();
+        for (int j = 0; j < ncol; j++) {
+            ops[j](datas[j], offset + i, &buff);
+        }
+        bdest.append(buff);
+    }
+}
+
+void PrimaryKeyEncoder::encode_selective(const VectorizedSchema& schema, const Chunk& chunk, const uint32_t* indexes,
+                                         size_t len, Column* dest) {
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
@@ -456,10 +474,12 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::VectorizedSchema& sch
     } else {
         CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
-        std::vector<EncodeOp> ops;
-        std::vector<const void*> datas;
-        prepare_ops_datas(schema, chunk, &ops, &datas);
-        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+        std::vector<EncodeOp> ops(ncol);
+        std::vector<const void*> datas(ncol);
+        std::vector<ColumnId> primary_key_iota_idxes(ncol);
+        std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+        prepare_ops_datas(schema, primary_key_iota_idxes, chunk, &ops, &datas);
+        auto& bdest = down_cast<BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         std::string buff;
         for (int i = 0; i < len; i++) {
@@ -473,8 +493,8 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::VectorizedSchema& sch
     }
 }
 
-bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
-                                            size_t offset, size_t len, const size_t limit_size) {
+bool PrimaryKeyEncoder::encode_exceed_limit(const VectorizedSchema& schema, const Chunk& chunk, size_t offset,
+                                            size_t len, const size_t limit_size) {
     int ncol = schema.num_key_fields();
     std::vector<const void*> datas(ncol, nullptr);
     if (ncol == 1) {
@@ -523,14 +543,14 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::VectorizedSchema& 
     return false;
 }
 
-Status PrimaryKeyEncoder::decode(const vectorized::VectorizedSchema& schema, const vectorized::Column& keys,
-                                 size_t offset, size_t len, vectorized::Chunk* dest) {
+Status PrimaryKeyEncoder::decode(const VectorizedSchema& schema, const Column& keys, size_t offset, size_t len,
+                                 Chunk* dest) {
     if (schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
         dest->get_column_by_index(0)->append(keys, offset, len);
     } else {
         CHECK(keys.is_binary()) << "keys column should be binary";
-        auto& bkeys = down_cast<const vectorized::BinaryColumn&>(keys);
+        auto& bkeys = down_cast<const BinaryColumn&>(keys);
         const int ncol = schema.num_key_fields();
         for (int i = 0; i < len; i++) {
             Slice s = bkeys.get_slice(offset + i);
@@ -538,56 +558,56 @@ Status PrimaryKeyEncoder::decode(const vectorized::VectorizedSchema& schema, con
                 auto& column = *(dest->get_column_by_index(j));
                 switch (schema.field(j)->type()->type()) {
                 case TYPE_BOOLEAN: {
-                    auto& tc = down_cast<vectorized::UInt8Column&>(column);
+                    auto& tc = down_cast<UInt8Column&>(column);
                     uint8_t v;
                     decode_integral(&s, &v);
                     tc.append((int8_t)v);
                 } break;
                 case TYPE_TINYINT: {
-                    auto& tc = down_cast<vectorized::Int8Column&>(column);
+                    auto& tc = down_cast<Int8Column&>(column);
                     int8_t v;
                     decode_integral(&s, &v);
                     tc.append(v);
                 } break;
                 case TYPE_SMALLINT: {
-                    auto& tc = down_cast<vectorized::Int16Column&>(column);
+                    auto& tc = down_cast<Int16Column&>(column);
                     int16_t v;
                     decode_integral(&s, &v);
                     tc.append(v);
                 } break;
                 case TYPE_INT: {
-                    auto& tc = down_cast<vectorized::Int32Column&>(column);
+                    auto& tc = down_cast<Int32Column&>(column);
                     int32_t v;
                     decode_integral(&s, &v);
                     tc.append(v);
                 } break;
                 case TYPE_BIGINT: {
-                    auto& tc = down_cast<vectorized::Int64Column&>(column);
+                    auto& tc = down_cast<Int64Column&>(column);
                     int64_t v;
                     decode_integral(&s, &v);
                     tc.append(v);
                 } break;
                 case TYPE_LARGEINT: {
-                    auto& tc = down_cast<vectorized::Int128Column&>(column);
+                    auto& tc = down_cast<Int128Column&>(column);
                     int128_t v;
                     decode_integral(&s, &v);
                     tc.append(v);
                 } break;
                 case TYPE_VARCHAR: {
-                    auto& tc = down_cast<vectorized::BinaryColumn&>(column);
+                    auto& tc = down_cast<BinaryColumn&>(column);
                     std::string v;
                     RETURN_IF_ERROR(decode_slice(&s, &v, j + 1 == ncol));
                     tc.append(v);
                 } break;
                 case TYPE_DATE: {
-                    auto& tc = down_cast<vectorized::DateColumn&>(column);
-                    vectorized::DateValue v;
+                    auto& tc = down_cast<DateColumn&>(column);
+                    DateValue v;
                     decode_integral(&s, &v._julian);
                     tc.append(v);
                 } break;
                 case TYPE_DATETIME_V1: {
-                    auto& tc = down_cast<vectorized::TimestampColumn&>(column);
-                    vectorized::TimestampValue v;
+                    auto& tc = down_cast<TimestampColumn&>(column);
+                    TimestampValue v;
                     decode_integral(&s, &v._timestamp);
                     tc.append(v);
                 } break;

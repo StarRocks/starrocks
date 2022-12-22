@@ -54,7 +54,7 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 

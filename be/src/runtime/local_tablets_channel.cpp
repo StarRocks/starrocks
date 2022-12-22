@@ -105,7 +105,7 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     closure_guard.release();
 }
 
-void LocalTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                     PTabletWriterAddBatchResult* response) {
     auto t0 = std::chrono::steady_clock::now();
 
@@ -236,7 +236,7 @@ void LocalTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWrite
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
             (void)tablet_id;
             // Secondary replica will commit by Primary replica
-            if (delta_writer->replica_state() != vectorized::Secondary) {
+            if (delta_writer->replica_state() != Secondary) {
                 if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
                     // no data load, abort txn without printing log
                     delta_writer->abort(false);
@@ -266,12 +266,11 @@ void LocalTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWrite
         bool timeout = false;
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
             // Wait util seconary replica commit/abort by primary
-            if (delta_writer->replica_state() == vectorized::Secondary) {
+            if (delta_writer->replica_state() == Secondary) {
                 int i = 0;
                 do {
                     auto state = delta_writer->get_state();
-                    if (state == vectorized::kCommitted || state == vectorized::kAborted ||
-                        state == vectorized::kUninitialized) {
+                    if (state == kCommitted || state == kAborted || state == kUninitialized) {
                         break;
                     }
                     i++;
@@ -366,7 +365,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     }
     // init global dict info if needed
     for (auto& slot : params.schema().slot_descs()) {
-        vectorized::GlobalDictMap global_dict;
+        GlobalDictMap global_dict;
         if (slot.global_dict_words_size()) {
             for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
                 const std::string& dict_word = slot.global_dict_words(i);
@@ -385,7 +384,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     tablet_ids.reserve(params.tablets_size());
     std::vector<int64_t> failed_tablet_ids;
     for (const PTabletWithPartition& tablet : params.tablets()) {
-        vectorized::DeltaWriterOptions options;
+        DeltaWriterOptions options;
         options.tablet_id = tablet.tablet_id();
         options.schema_hash = schema_hash;
         options.txn_id = _txn_id;
@@ -403,12 +402,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
                 options.replicas.emplace_back(replica);
             }
             if (options.replicas.size() > 0 && options.replicas[0].node_id() == options.node_id) {
-                options.replica_state = vectorized::Primary;
+                options.replica_state = Primary;
             } else {
-                options.replica_state = vectorized::Secondary;
+                options.replica_state = Secondary;
             }
         } else {
-            options.replica_state = vectorized::Peer;
+            options.replica_state = Peer;
         }
         options.merge_condition = params.merge_condition();
 
@@ -418,7 +417,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
             tablet_ids.emplace_back(tablet.tablet_id());
         } else {
-            if (options.replica_state == vectorized::Secondary) {
+            if (options.replica_state == Secondary) {
                 failed_tablet_ids.emplace_back(tablet.tablet_id());
             } else {
                 return res.status();
@@ -446,6 +445,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 }
 
 void LocalTabletsChannel::cancel() {
+    for (auto& it : _delta_writers) {
+        it.second->cancel(Status::Cancelled("cancel"));
+    }
+}
+
+void LocalTabletsChannel::abort() {
     vector<int64_t> tablet_ids;
     tablet_ids.reserve(_delta_writers.size());
     for (auto& it : _delta_writers) {
@@ -459,7 +464,7 @@ void LocalTabletsChannel::cancel() {
               << " tablet_ids:" << tablet_id_list_str;
 }
 
-void LocalTabletsChannel::cancel(int64_t tablet_id) {
+void LocalTabletsChannel::abort(int64_t tablet_id) {
     auto it = _delta_writers.find(tablet_id);
     if (it != _delta_writers.end()) {
         it->second->abort(true);
@@ -467,7 +472,7 @@ void LocalTabletsChannel::cancel(int64_t tablet_id) {
 }
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
-        vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+        Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     if (chunk == nullptr && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }

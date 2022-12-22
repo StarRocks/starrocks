@@ -990,7 +990,7 @@ public class MvRewriteOptimizationTest {
         MaterializedView ttlMv1 = getMv("test", "ttl_union_mv_1");
         Assert.assertNotNull(ttlMv1);
         waitTtl(ttlMv1, 3, 200);
-        String query4 = "select sum(c2) from test_base_part";
+        String query4 = "select c3, sum(c2) from test_base_part group by c3";
         String plan4 = getFragmentPlan(query4);
         PlanTestBase.assertContains(plan4, "ttl_union_mv_1", "UNION", "test_base_part");
         dropMv("test", "ttl_union_mv_1");
@@ -1028,6 +1028,24 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "multi_mv_2");
         dropMv("test", "multi_mv_3");
         starRocksAssert.dropTable("multi_mv_table");
+
+        createAndRefreshMv("test", "mv_agg_1", "CREATE MATERIALIZED VIEW `mv_agg_1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "DISTRIBUTED BY HASH(`name`) BUCKETS 2\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `emps`.`deptno`, `emps`.`name`, sum(`emps`.`salary`) AS `salary`\n" +
+                "FROM `emps`\n" +
+                "WHERE `emps`.`empid` < 5\n" +
+                "GROUP BY `emps`.`deptno`, `emps`.`name`;");
+        String query6 = "SELECT `emps`.`deptno`, `emps`.`name`, sum(salary) as salary FROM `emps` group by deptno, name;";
+        String plan6 = getFragmentPlan(query6);
+        PlanTestBase.assertNotContains(plan6, "mv_agg_1");
+        PlanTestBase.assertContains(plan6, "emps");
+        dropMv("test", "mv_agg_1");
     }
 
     @Test
@@ -1089,6 +1107,7 @@ public class MvRewriteOptimizationTest {
     @Test
     public void testPartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(300000000);
 
         cluster.runSql("test", "insert into table_with_partition values(\"varchar1\", '1991-02-01', 1, 1, 1)");
         cluster.runSql("test", "insert into table_with_partition values(\"varchar2\", '1992-02-01', 2, 1, 1)");
@@ -1194,7 +1213,7 @@ public class MvRewriteOptimizationTest {
                 " select c1, c3, sum(c2) as c2 from test_base_part group by c1, c3;");
         cluster.runSql("test", "alter table test_base_part add partition p6 values less than (\"4000\")");
         cluster.runSql("test", "insert into test_base_part partition(p6) values (1, 2, 4500, 4)");
-        String query8 = "select sum(c2) from test_base_part";
+        String query8 = "select c3, sum(c2) from test_base_part group by c3";
         String plan8 = getFragmentPlan(query8);
         PlanTestBase.assertContains(plan8, "partial_mv_5");
         PlanTestBase.assertContains(plan8, "UNION");

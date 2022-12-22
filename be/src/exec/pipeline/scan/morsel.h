@@ -37,7 +37,6 @@ using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 
-namespace vectorized {
 struct TabletReaderParams;
 class SeekTuple;
 struct RowidRangeOption;
@@ -45,11 +44,10 @@ using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangeOption;
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 struct ShortKeyOption;
-using ShortKeyOptionPtr = std::unique_ptr<vectorized::ShortKeyOption>;
+using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
 class VectorizedSchema;
 using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
 class Range;
-} // namespace vectorized
 
 namespace pipeline {
 
@@ -71,7 +69,7 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    virtual void init_tablet_reader_params(vectorized::TabletReaderParams* params) {}
+    virtual void init_tablet_reader_params(TabletReaderParams* params) {}
 
     virtual std::tuple<int64_t, int64_t> get_lane_owner_and_version() const {
         return std::tuple<int64_t, int64_t>{0L, 0L};
@@ -124,26 +122,25 @@ private:
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
 public:
-    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
-                            vectorized::RowidRangeOptionPtr rowid_range_option)
+    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
             : ScanMorsel(plan_node_id, scan_range), _rowid_range_option(std::move(rowid_range_option)) {}
 
-    void init_tablet_reader_params(vectorized::TabletReaderParams* params) override;
+    void init_tablet_reader_params(TabletReaderParams* params) override;
 
 private:
-    vectorized::RowidRangeOptionPtr _rowid_range_option;
+    RowidRangeOptionPtr _rowid_range_option;
 };
 
 class LogicalSplitScanMorsel final : public ScanMorsel {
 public:
     LogicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
-                           std::vector<vectorized::ShortKeyRangeOptionPtr> short_key_ranges)
+                           std::vector<ShortKeyRangeOptionPtr> short_key_ranges)
             : ScanMorsel(plan_node_id, scan_range), _short_key_ranges(std::move(short_key_ranges)) {}
 
-    void init_tablet_reader_params(vectorized::TabletReaderParams* params) override;
+    void init_tablet_reader_params(TabletReaderParams* params) override;
 
 private:
-    std::vector<vectorized::ShortKeyRangeOptionPtr> _short_key_ranges;
+    std::vector<ShortKeyRangeOptionPtr> _short_key_ranges;
 };
 
 /// MorselQueueFactory.
@@ -303,8 +300,8 @@ public:
     std::string name() const override { return "physical_split_morsel_queue"; }
 
 private:
-    rowid_t _lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower) const;
-    rowid_t _upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower, rowid_t end) const;
+    rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
+    rowid_t _upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) const;
     bool _is_last_split_of_current_morsel();
 
     Rowset* _cur_rowset();
@@ -321,10 +318,8 @@ private:
     std::mutex _mutex;
 
     /// Key ranges passed to the storage layer.
-    vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
-            vectorized::TabletReaderParams::RangeStartOperation::GT;
-    vectorized::TabletReaderParams::RangeEndOperation _range_end_op =
-            vectorized::TabletReaderParams::RangeEndOperation::LT;
+    TabletReaderParams::RangeStartOperation _range_start_op = TabletReaderParams::RangeStartOperation::GT;
+    TabletReaderParams::RangeEndOperation _range_end_op = TabletReaderParams::RangeEndOperation::LT;
     std::vector<OlapTuple> _range_start_key;
     std::vector<OlapTuple> _range_end_key;
 
@@ -336,9 +331,9 @@ private:
 
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
-    std::vector<vectorized::SeekRange> _tablet_seek_ranges;
-    vectorized::SparseRange _segment_scan_range;
-    vectorized::SparseRangeIterator _segment_range_iter;
+    std::vector<SeekRange> _tablet_seek_ranges;
+    SparseRange _segment_scan_range;
+    SparseRangeIterator _segment_range_iter;
     // The number of unprocessed rows of the current segment.
     size_t _num_segment_rest_rows = 0;
 
@@ -374,22 +369,20 @@ private:
     bool _next_tablet();
     Status _init_tablet();
 
-    vectorized::ShortKeyOptionPtr _create_range_lower() const;
-    vectorized::ShortKeyOptionPtr _create_range_upper() const;
-    bool _valid_range(const vectorized::ShortKeyOptionPtr& lower, const vectorized::ShortKeyOptionPtr& upper) const;
+    ShortKeyOptionPtr _create_range_lower() const;
+    ShortKeyOptionPtr _create_range_upper() const;
+    bool _valid_range(const ShortKeyOptionPtr& lower, const ShortKeyOptionPtr& upper) const;
 
-    ShortKeyIndexGroupIterator _lower_bound_ordinal(const vectorized::SeekTuple& key, bool lower) const;
-    ShortKeyIndexGroupIterator _upper_bound_ordinal(const vectorized::SeekTuple& key, bool lower) const;
+    ShortKeyIndexGroupIterator _lower_bound_ordinal(const SeekTuple& key, bool lower) const;
+    ShortKeyIndexGroupIterator _upper_bound_ordinal(const SeekTuple& key, bool lower) const;
     bool _is_last_split_of_current_morsel();
 
 private:
     std::mutex _mutex;
 
     /// Key ranges passed to the storage layer.
-    vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
-            vectorized::TabletReaderParams::RangeStartOperation::GT;
-    vectorized::TabletReaderParams::RangeEndOperation _range_end_op =
-            vectorized::TabletReaderParams::RangeEndOperation::LT;
+    TabletReaderParams::RangeStartOperation _range_start_op = TabletReaderParams::RangeStartOperation::GT;
+    TabletReaderParams::RangeEndOperation _range_end_op = TabletReaderParams::RangeEndOperation::LT;
     std::vector<OlapTuple> _range_start_key;
     std::vector<OlapTuple> _range_end_key;
 
@@ -400,10 +393,10 @@ private:
 
     // Used to allocate memory for _tablet_seek_ranges.
     MemPool _mempool;
-    std::vector<vectorized::SeekRange> _tablet_seek_ranges;
+    std::vector<SeekRange> _tablet_seek_ranges;
     Rowset* _largest_rowset = nullptr;
     SegmentGroupPtr _segment_group = nullptr;
-    vectorized::VectorizedSchemaPtr _short_key_schema = nullptr;
+    VectorizedSchemaPtr _short_key_schema = nullptr;
     int64_t _sample_splitted_scan_blocks = 0;
 
     std::vector<std::pair<ShortKeyIndexGroupIterator, ShortKeyIndexGroupIterator>> _block_ranges_per_seek_range;

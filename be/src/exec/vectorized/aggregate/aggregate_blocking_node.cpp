@@ -33,7 +33,7 @@
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status AggregateBlockingNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
@@ -168,51 +168,46 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 }
 
 template <class AggFactory, class SourceFactory, class SinkFactory>
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_decompose_to_pipeline(
-        std::vector<std::shared_ptr<pipeline::OperatorFactory>>& ops_with_sink,
-        pipeline::PipelineBuilderContext* context) {
+pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                                    pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+
     // create aggregator factory
     // shared by sink operator and source operator
     auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
 
-    // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
-    // and we may set other parallelism for source operator in many special cases
-    size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
-
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
-    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    auto partition_type = context->source_operator(ops_with_sink)->partition_type();
+    auto operators_generator = [this, should_cache, could_local_shuffle, partition_type, context](bool post_cache) {
         // shared by sink operator and source operator
         auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
         auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
         auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
+
         source_operator->set_could_local_shuffle(could_local_shuffle);
+        source_operator->set_partition_type(partition_type);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
 
-    auto operators = operators_generator(false);
-    auto sink_operator = std::move(std::get<0>(operators));
-    auto source_operator = std::move(std::get<1>(operators));
+    auto [agg_sink_op, agg_source_op] = operators_generator(false);
     // Create a shared RefCountedRuntimeFilterCollector
     // Initialize OperatorFactory's fields involving runtime filters.
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
-    ops_with_sink.push_back(std::move(sink_operator));
+    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    ops_with_sink.push_back(std::move(agg_sink_op));
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
+    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
     // Aggregator must be used by a pair of sink and source operators,
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
-    source_operator->set_degree_of_parallelism(degree_of_parallelism);
+    auto* upstream_source_op = context->source_operator(ops_with_sink);
+    agg_source_op->set_degree_of_parallelism(upstream_source_op->degree_of_parallelism());
+    ops_with_source.push_back(std::move(agg_source_op));
 
-    source_operator->set_could_local_shuffle(
-            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
-
-    ops_with_source.push_back(std::move(source_operator));
     if (should_cache) {
         ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
     }
@@ -221,9 +216,9 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
     return ops_with_source;
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) {
+pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+
     context->has_aggregation = true;
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
@@ -233,11 +228,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
-        std::vector<ExprContext*> group_by_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
-        Expr::prepare(group_by_expr_ctxs, runtime_state());
-        Expr::open(group_by_expr_ctxs, runtime_state());
-        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, [this]() {
+            std::vector<ExprContext*> group_by_expr_ctxs;
+            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
+            return group_by_expr_ctxs;
+        });
     };
 
     if (!sorted_streaming_aggregate) {
@@ -289,4 +284,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
     return ops_with_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

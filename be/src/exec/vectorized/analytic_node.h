@@ -20,7 +20,7 @@
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AnalyticNode final : public ExecNode {
 public:
@@ -37,8 +37,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     const TPlanNode _tnode;
@@ -56,4 +55,4 @@ private:
     Status _fetch_next_chunk(RuntimeState* state);
     Status _try_fetch_next_partition_data(RuntimeState* state);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -19,7 +19,7 @@
 #include "exprs/expr_context.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorterTopn : public ChunksSorter {
 public:
@@ -146,4 +146,4 @@ private:
     RuntimeProfile::Counter* _sort_filter_timer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -30,7 +30,7 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
     std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
@@ -58,7 +58,7 @@ DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, Storag
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     if (_flush_token != nullptr) {
-        _flush_token->cancel();
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
         _replicate_token->cancel();
@@ -487,13 +487,20 @@ Status DeltaWriter::commit() {
     return Status::OK();
 }
 
+void DeltaWriter::cancel(const Status& st) {
+    _set_state(kAborted, st);
+    if (_flush_token != nullptr) {
+        _flush_token->cancel(st);
+    }
+}
+
 void DeltaWriter::abort(bool with_log) {
     _set_state(kAborted, Status::Cancelled("aborted by others"));
     _with_rollback_log = with_log;
     if (_flush_token != nullptr) {
         // Wait until all background tasks finished/cancelled.
         // https://github.com/StarRocks/starrocks/issues/8906
-        _flush_token->cancel();
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
         _replicate_token->cancel();
@@ -533,4 +540,4 @@ const char* DeltaWriter::_replica_state_name(ReplicaState state) const {
     return "";
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

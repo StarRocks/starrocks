@@ -17,7 +17,7 @@
 #include "column/fixed_length_column.h"
 #include "common/statusor.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // RowSourceMask stores a uint16_t data that represents the source (segment iterator in compaction) of each row
 // and the aggregation state of the row.
@@ -104,4 +104,4 @@ private:
     std::string _storage_root_path;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

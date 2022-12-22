@@ -31,7 +31,7 @@
 #include "exec/vectorized/sorting/sorting.h"
 #include "util/orlp/pdqsort.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Sort a column by permtuation
 class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter> {
@@ -46,7 +46,7 @@ public:
               _range(std::move(range)),
               _build_tie(build_tie) {}
 
-    Status do_visit(const vectorized::NullableColumn& column) {
+    Status do_visit(const NullableColumn& column) {
         // Fastpath
         if (!column.has_null()) {
             return column.data_column_ref().accept(this);
@@ -65,12 +65,12 @@ public:
                                             _tie, _range, _build_tie);
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) {
+    Status do_visit(const ConstColumn& column) {
         // noop
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ArrayColumn& column) {
+    Status do_visit(const ArrayColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
@@ -79,7 +79,7 @@ public:
                                    _build_tie);
     }
 
-    Status do_visit(const vectorized::MapColumn& column) {
+    Status do_visit(const MapColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
@@ -88,13 +88,13 @@ public:
                                    _build_tie);
     }
 
-    Status do_visit(const vectorized::StructColumn& column) {
+    Status do_visit(const StructColumn& column) {
         // TODO(SmithCruise)
         return Status::NotSupported("Not support");
     }
 
     template <typename T>
-    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumnBase<T>& column) {
         DCHECK_GE(column.size(), _permutation.size());
         using ItemType = InlinePermuteItem<Slice>;
         auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
@@ -110,7 +110,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
         DCHECK_GE(column.size(), _permutation.size());
         using ItemType = InlinePermuteItem<T>;
 
@@ -127,13 +127,13 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+    Status do_visit(const ObjectColumn<T>& column) {
         DCHECK(false) << "not support object column sort_and_tie";
 
         return Status::NotSupported("not support object column sort_and_tie");
     }
 
-    Status do_visit(const vectorized::JsonColumn& column) {
+    Status do_visit(const JsonColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
             return column.get_object(lhs.index_in_chunk)->compare(*column.get_object(rhs.index_in_chunk));
         };
@@ -170,7 +170,7 @@ public:
 
     size_t get_limited() const { return _pruned_limit; }
 
-    Status do_visit(const vectorized::NullableColumn& column) {
+    Status do_visit(const NullableColumn& column) {
         std::vector<const NullData*> null_datas;
         std::vector<ColumnPtr> data_columns;
         for (auto& col : _vertical_columns) {
@@ -203,7 +203,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumnBase<T>& column) {
         using ColumnType = BinaryColumnBase<T>;
 
         if (_need_inline_value()) {
@@ -241,7 +241,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
         using ColumnType = FixedLengthColumnBase<T>;
         using Container = typename FixedLengthColumnBase<T>::Container;
 
@@ -276,12 +276,12 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) {
+    Status do_visit(const ConstColumn& column) {
         // noop
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ArrayColumn& column) {
+    Status do_visit(const ArrayColumn& column) {
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
@@ -294,7 +294,7 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::MapColumn& column) {
+    Status do_visit(const MapColumn& column) {
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
@@ -307,18 +307,18 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::StructColumn& column) {
+    Status do_visit(const StructColumn& column) {
         // TODO(SmithCruise)
         return Status::NotSupported("Not support");
     }
 
     template <typename T>
-    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+    Status do_visit(const ObjectColumn<T>& column) {
         DCHECK(false) << "not supported";
         return Status::NotSupported("TOOD");
     }
 
-    Status do_visit(const vectorized::JsonColumn& column) {
+    Status do_visit(const JsonColumn& column) {
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
@@ -530,4 +530,4 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

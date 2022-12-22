@@ -440,7 +440,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
@@ -470,7 +471,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
@@ -523,7 +525,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
@@ -556,7 +559,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 1> : 1: v1\n" +
                     "  |  <slot 4> : 4: sum\n" +
                     "  |  <slot 8> : 10: anyValue\n" +
-                    "  |  <slot 11> : assert_true((9: countRows IS NULL) OR (9: countRows <= 1))\n" +
+                    "  |  <slot 11> : assert_true((9: countRows IS NULL) OR (9: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  6:HASH JOIN\n" +
                     "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
@@ -971,11 +975,11 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on t0.v1 = t1.v4 " +
                     "and t0.v1 = (exists (select v7 from t2 where t2.v8 = 1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  12:HASH JOIN\n" +
+            assertContains(plan, "  11:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
-            assertContains(plan, "  8:HASH JOIN\n" +
+            assertContains(plan, "  7:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (PARTITIONED)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 12: cast");
@@ -986,10 +990,10 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on " +
                     "t0.v1 = (exists (select v7 from t2 where t2.v8 = 1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  11:NESTLOOP JOIN\n" +
+            assertContains(plan, "  10:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, "  7:HASH JOIN\n" +
+            assertContains(plan, "  6:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 12: cast");
@@ -1001,14 +1005,14 @@ public class SubqueryTest extends PlanTestBase {
                     "t0.v1 = (not exists (select v7 from t2 where t2.v8 = 1)) " +
                     "and t1.v4 = (exists(select v10 from t3 where t3.v11 < 5))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, ":NESTLOOP JOIN\n" +
+            assertContains(plan, "  17:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, ":HASH JOIN\n" +
+            assertContains(plan, "  6:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 18: cast");
-            assertContains(plan, ":HASH JOIN\n" +
+            assertContains(plan, "  14:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 4: v4 = 17: cast");
@@ -1019,12 +1023,12 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on t0.v1 = t1.v4 " +
                     "and t0.v1 = (exists (select v7 from t2 where t2.v8 = t1.v5))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, ":HASH JOIN\n" +
+            assertContains(plan, "  8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 4: v4 = 1: v1\n" +
                     "  |  equal join conjunct: 12: cast = 1: v1");
-            assertContains(plan, ":HASH JOIN\n" +
+            assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v8\n" +
@@ -1036,11 +1040,11 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on " +
                     "t0.v1 = (exists (select v7 from t2 where t2.v8 = t1.v5))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, ":HASH JOIN\n" +
+            assertContains(plan, "  8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 12: cast = 1: v1");
-            assertContains(plan, ":HASH JOIN\n" +
+            assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v8\n" +

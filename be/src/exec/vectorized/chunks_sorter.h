@@ -22,7 +22,7 @@
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct DataSegment {
     static const uint8_t SMALLER_THAN_MIN_OF_SEGMENT = 2;
@@ -98,10 +98,9 @@ public:
                  const bool is_topn);
     virtual ~ChunksSorter();
 
-    static StatusOr<vectorized::ChunkPtr> materialize_chunk_before_sort(vectorized::Chunk* chunk,
-                                                                        TupleDescriptor* materialized_tuple_desc,
-                                                                        const SortExecExprs& sort_exec_exprs,
-                                                                        const std::vector<OrderByType>& order_by_types);
+    static StatusOr<ChunkPtr> materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
+                                                            const SortExecExprs& sort_exec_exprs,
+                                                            const std::vector<OrderByType>& order_by_types);
 
     virtual void setup_runtime(RuntimeProfile* profile);
 
@@ -145,4 +144,4 @@ protected:
     std::atomic<bool> _is_sink_complete = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

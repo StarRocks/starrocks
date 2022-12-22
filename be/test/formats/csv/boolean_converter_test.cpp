@@ -19,7 +19,7 @@
 #include "formats/csv/output_stream_string.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 // NOLINTNEXTLINE
 TEST(BooleanConverterTest, test_read_string) {
@@ -184,4 +184,4 @@ TEST(BooleanConverterTest, test_write_string_as_textual_value) {
     ASSERT_EQ("truefalsetruefalsetruefalsetruefalse", buff.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

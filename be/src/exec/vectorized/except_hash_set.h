@@ -22,7 +22,7 @@
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ExceptSliceFlag;
 struct ExceptSliceFlagEqual;
@@ -94,4 +94,4 @@ private:
 using ExceptHashSerializeSet =
         ExceptHashSet<phmap::flat_hash_set<ExceptSliceFlag, ExceptSliceFlagHash, ExceptSliceFlagEqual>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

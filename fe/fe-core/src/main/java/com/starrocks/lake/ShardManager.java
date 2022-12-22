@@ -15,33 +15,22 @@
 
 package com.starrocks.lake;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
+/**
+ * Deprecated class, keep only for backward compatible purpose.
+ */
+@Deprecated
 public class ShardManager implements Writable {
 
-    private static final Logger LOG = LogManager.getLogger(ShardManager.class);
-
-    @SerializedName(value = "ShardDeleter")
-    private final ShardDeleter shardDeleter;
-
-    public ShardManager() {
-        this.shardDeleter = new ShardDeleter();
-    }
-
-    public ShardDeleter getShardDeleter() {
-        return shardDeleter;
-    }
-
+    @Deprecated
     public long saveShardManager(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;

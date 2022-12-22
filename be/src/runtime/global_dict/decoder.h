@@ -17,13 +17,13 @@
 #include "column/column.h"
 #include "common/status.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class GlobalDictDecoder {
 public:
     virtual ~GlobalDictDecoder() = default;
 
-    virtual Status decode(vectorized::Column* in, vectorized::Column* out) = 0;
+    virtual Status decode(Column* in, Column* out) = 0;
 };
 
 using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;
@@ -31,4 +31,4 @@ using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;
 template <typename DictType>
 GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

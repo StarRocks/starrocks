@@ -27,7 +27,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 OlapMetaReader::OlapMetaReader() : MetaReader() {}
 
@@ -151,7 +151,7 @@ Status OlapMetaReader::do_get_next(ChunkPtr* result) {
     const uint32_t chunk_capacity = _chunk_size;
     uint16_t chunk_start = 0;
 
-    *result = std::make_shared<vectorized::Chunk>();
+    *result = std::make_shared<Chunk>();
     if (nullptr == result->get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     }
@@ -178,14 +178,14 @@ Status OlapMetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(desc, false);
+            ColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), false);
             chunk->append_column(std::move(column), slot->id());
         }
     }
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

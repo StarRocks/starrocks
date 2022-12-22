@@ -21,7 +21,7 @@
 #include "runtime/runtime_state.h"
 #include "util/stopwatch.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                            const std::vector<bool>* is_asc_order,
@@ -125,4 +125,4 @@ int64_t ChunksSorterFullSort::mem_usage() const {
     return _merged_runs.mem_usage();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

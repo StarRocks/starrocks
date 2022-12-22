@@ -25,18 +25,17 @@
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
-using namespace vectorized;
 
 // ================================
 
-DataSourceProviderPtr HiveConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<HiveDataSourceProvider>(scan_node, plan_node);
 }
 
 // ================================
 
-HiveDataSourceProvider::HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {}
 
 DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -80,7 +79,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
-    _init_partition_values();
+    RETURN_IF_ERROR(_init_partition_values());
     if (_filter_by_eval_partition_conjuncts) {
         _no_data = true;
         return Status::OK();
@@ -115,6 +114,12 @@ Status HiveDataSource::_init_partition_values() {
     if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
 
     auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
+    if (partition_desc == nullptr) {
+        return Status::InternalError(
+                fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
+                            _scan_range.partition_id));
+    }
+
     const auto& partition_values = partition_desc->partition_key_value_evals();
     _partition_values = partition_values;
 
@@ -399,7 +404,7 @@ void HiveDataSource::close(RuntimeState* state) {
     }
 }
 
-Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
     }

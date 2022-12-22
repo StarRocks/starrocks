@@ -124,14 +124,12 @@ public class NestLoopJoinTest extends PlanTestBase {
         getFragmentPlan(sql);
 
         sql = " select a.v2 from t0 a join t0 b on a.v3 < b.v3;";
-        String planFragment = getFragmentPlan(sql);
-        System.err.println(planFragment);
-        Assert.assertTrue(planFragment, planFragment.contains(" 3:NESTLOOP JOIN\n" +
+        assertPlanContains(sql, " 3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 3: v3 < 6: v3\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n"));
+                "  |----2:EXCHANGE\n");
 
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
         // Prune should make the HASH JOIN(LEFT ANTI) could output the left table, but not join slot

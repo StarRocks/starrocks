@@ -30,16 +30,16 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/column_ref.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ProjectNode::ProjectNode(starrocks::ObjectPool* pool, const starrocks::TPlanNode& node,
                          const starrocks::DescriptorTbl& desc)
@@ -213,11 +213,11 @@ void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext
             continue;
         }
 
-        auto column = down_cast<vectorized::ColumnRef*>(ctx->root()->get_child(0));
+        auto column = down_cast<ColumnRef*>(ctx->root()->get_child(0));
 
         for (int i = 0; i < _slot_ids.size(); ++i) {
             if (_slot_ids[i] == column->slot_id() && _expr_ctxs[i]->root()->is_slotref()) {
-                auto ref = down_cast<vectorized::ColumnRef*>(_expr_ctxs[i]->root());
+                auto ref = down_cast<ColumnRef*>(_expr_ctxs[i]->root());
                 column->set_slot_id(ref->slot_id());
                 column->set_tuple_id(ref->tuple_id());
                 break;
@@ -235,8 +235,8 @@ void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
     DCHECK(_tuple_ids.size() == 1);
     for (int i = 0; i < _slot_ids.size(); ++i) {
         if (_expr_ctxs[i]->root()->is_slotref()) {
-            DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(_expr_ctxs[i]->root()));
-            auto ref = ((vectorized::ColumnRef*)_expr_ctxs[i]->root());
+            DCHECK(nullptr != dynamic_cast<ColumnRef*>(_expr_ctxs[i]->root()));
+            auto ref = ((ColumnRef*)_expr_ctxs[i]->root());
             _tuple_slot_mappings.emplace_back(ref->tuple_id(), ref->slot_id(), _tuple_ids[0], _slot_ids[i]);
         }
     }
@@ -246,8 +246,7 @@ void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
     }
 }
 
-void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,
-                                                vectorized::RuntimeFilterProbeCollector* collector) {
+void ProjectNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.
     _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
 
@@ -310,4 +309,4 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
     return operators;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

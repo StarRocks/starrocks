@@ -22,7 +22,7 @@
 #include "column/nullable_column.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_create) {
@@ -654,4 +654,4 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     ASSERT_EQ("def", slices[4]);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
