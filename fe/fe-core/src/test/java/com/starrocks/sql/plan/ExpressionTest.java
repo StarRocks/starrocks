@@ -1262,19 +1262,19 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testAssertTrue() throws Exception {
         {
-            String sql = "select assert_true(null)";
+            String sql = "select assert_true(null, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(NULL)");
+            assertContains(plan, "<slot 2> : assert_true(NULL, 'a')");
         }
         {
-            String sql = "select assert_true(true)";
+            String sql = "select assert_true(true, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(TRUE)");
+            assertContains(plan, "<slot 2> : assert_true(TRUE, 'a')");
         }
         {
-            String sql = "select assert_true(false)";
+            String sql = "select assert_true(false, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(FALSE)");
+            assertContains(plan, "<slot 2> : assert_true(FALSE, 'a')");
         }
     }
 }

@@ -495,6 +495,7 @@ vectorized_functions = [
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
     [100016, 'uuid_numeric', 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
     [100017, 'assert_true', 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
+    [100019, 'assert_true', 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', 'VARCHAR', [], "UtilityFunctions::host_name"],
 
     # json string function

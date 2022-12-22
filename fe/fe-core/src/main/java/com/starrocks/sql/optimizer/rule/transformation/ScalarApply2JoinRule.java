@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 31e678fe8 ([Enhancement] Update assert_true return error msg (#15352))
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -106,7 +122,8 @@ public class ScalarApply2JoinRule extends TransformationRule {
         CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
                 apply.getCorrelationColumnRefs(), context);
 
-        ScalarOperator newPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicate, rewriter);
+        ScalarOperator newPredicate =
+                SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicate, rewriter);
 
         Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
 
@@ -177,12 +194,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
         PredicateOperator countRowsPredicate =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, countRowsIsNullPredicate,
                         countRowsLEOneRowPredicate);
-        Function assertTrueFn = Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN},
+        Function assertTrueFn = Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
-        CallOperator assertTrueCallOp =
-                new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
-                        Collections.singletonList(countRowsPredicate),
-                        assertTrueFn);
+        CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
+                Lists.newArrayList(countRowsPredicate,
+                        ConstantOperator.createVarchar("correlate scalar subquery result must 1 row")), assertTrueFn);
         ColumnRefOperator assertion =
                 factory.create("subquery_assertion", assertTrueCallOp.getType(), assertTrueCallOp.isNullable());
         projectMap.put(assertion, assertTrueCallOp);

@@ -210,6 +210,11 @@ ColumnPtr UtilityFunctions::uuid_numeric(FunctionContext*, const Columns& column
 
 ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns& columns) {
     auto column = columns[0];
+    std::string msg = "assert_true failed due to false value";
+    if (columns.size() > 1 && columns[1]->is_constant()) {
+        msg = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1]).to_string();
+    }
+    
     const auto size = column->size();
 
     if (column->has_null()) {
@@ -219,7 +224,7 @@ ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns&
     if (column->is_constant()) {
         bool const_value = ColumnHelper::get_const_value<TYPE_BOOLEAN>(column);
         if (!const_value) {
-            throw std::runtime_error("assert_true failed due to const false value");
+            throw std::runtime_error(msg);
         }
     } else {
         if (column->is_nullable()) {
@@ -229,7 +234,7 @@ ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns&
         auto data = bool_column->get_data();
         for (size_t i = 0; i < size; ++i) {
             if (!data[i]) {
-                throw std::runtime_error("assert_true failed due to false value");
+                throw std::runtime_error(msg);
             }
         }
     }
