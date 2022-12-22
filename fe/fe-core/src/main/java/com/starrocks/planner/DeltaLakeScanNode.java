@@ -120,7 +120,8 @@ public class DeltaLakeScanNode extends ScanNode {
 
             Metadata metadata = snapshot.getMetadata();
             PartitionKey partitionKey =
-                    PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns());
+                    PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
+                            deltaLakeTable.getType());
             addPartitionLocations(partitionKeys, partitionKey, descTbl, file, metadata);
         }
     }
