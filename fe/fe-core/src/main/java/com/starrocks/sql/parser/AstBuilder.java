@@ -4509,11 +4509,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitSpecialDateTimeExpression(StarRocksParser.SpecialDateTimeExpressionContext context) {
+        if (context.name.getText().equalsIgnoreCase("current_timestamp")
+                || context.name.getText().equalsIgnoreCase("current_time")
+                || context.name.getText().equalsIgnoreCase("current_date")
+                || context.name.getText().equalsIgnoreCase("localtime")
+                || context.name.getText().equalsIgnoreCase("localtimestamp")) {
+            return new FunctionCallExpr(context.name.getText().toUpperCase(), Lists.newArrayList());
+        }
+        throw new ParsingException("Unknown special function " + context.name.getText());
+    }
+
+    @Override
     public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
         if (context.CHAR() != null) {
             return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
-        } else if (context.CURRENT_TIMESTAMP() != null) {
-            return new FunctionCallExpr("current_timestamp", Lists.newArrayList());
         } else if (context.DAY() != null) {
             return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
         } else if (context.HOUR() != null) {
