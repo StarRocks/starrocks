@@ -91,6 +91,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {

@@ -117,6 +117,7 @@ import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -486,6 +487,12 @@ public class Analyzer {
 
         @Override
         public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
             WarehouseAnalyzer.analyze(statement, context);
             return null;
         }

@@ -436,4 +436,8 @@ public class StarOSAgent {
     public void deleteWorkerGroup(long groupId) {
 
     }
+
+    public void modifyWorkerGroup(long groupId, String size) {
+
+    }
 }

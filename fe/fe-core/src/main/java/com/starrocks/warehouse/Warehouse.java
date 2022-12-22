@@ -139,10 +139,6 @@ public class Warehouse implements Writable {
         return name;
     }
 
-    public void setState(WarehouseState state) {
-        this.state = state;
-    }
-
     public WarehouseState getState() {
         return state;
     }
@@ -201,6 +197,38 @@ public class Warehouse implements Writable {
         return procNode.fetchResult().getRows();
     }
 
+    public void suspendSelf(boolean isReplay) {
+        writeLock();
+        this.state = WarehouseState.SUSPENDED;
+        if (!isReplay) {
+            releaseComputeNodes();
+        }
+        writeUnLock();
+    }
+
+    public void releaseComputeNodes() {
+        for (Cluster cluster : clusters.values()) {
+            long workerGroupId = cluster.getWorkerGroupId();
+            GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(workerGroupId);
+            // for debug
+            LOG.info("release worker group {}", workerGroupId);
+        }
+    }
+
+    public void modifyCluterSize() throws DdlException {
+        readLock();
+        try {
+            for (Cluster cluster : clusters.values()) {
+                long workerGroupId = cluster.getWorkerGroupId();
+                GlobalStateMgr.getCurrentStarOSAgent().modifyWorkerGroup(workerGroupId, size);
+
+                // for debug
+                LOG.info("modify cluster {} size", cluster.getId());
+            }
+        } finally {
+            readUnlock();
+        }
+    }
 
     public void addCluster() throws DdlException {
         writeLock();
@@ -213,7 +241,7 @@ public class Warehouse implements Writable {
                 OpClusterLog opClusterLog = new OpClusterLog(this.getFullName(), cluster);
                 GlobalStateMgr.getCurrentState().getEditLog().logAddCluster(opClusterLog);
 
-                state = WarehouseState.RUNNING;
+                this.state = WarehouseState.RUNNING;
 
                 // for debug
                 LOG.info("add cluster {} for warehouse {} ", clusterId, name);
@@ -271,12 +299,7 @@ public class Warehouse implements Writable {
         }
     }
 
-    public void suspend() {
-        state = WarehouseState.SUSPENDED;
-    }
     public void resume() {}
-    public void showClusters() {}
-
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(this.getFullName(),
@@ -321,13 +344,17 @@ public class Warehouse implements Writable {
             result.setNames(CLUSTER_PROC_NODE_TITLE_NAMES);
             readLock();
             try {
-                for (Map.Entry<Long, Cluster> entry : clusters.entrySet()) {
-                    Cluster cluster = entry.getValue();
-                    if (cluster == null) {
-                        continue;
+                // suspend should show empty clusters
+                if (state != WarehouseState.SUSPENDED) {
+                    for (Map.Entry<Long, Cluster> entry : clusters.entrySet()) {
+                        Cluster cluster = entry.getValue();
+                        if (cluster == null) {
+                            continue;
+                        }
+                        cluster.getProcNodeData(result);
                     }
-                    cluster.getProcNodeData(result);
                 }
+
             } finally {
                 readUnlock();
             }

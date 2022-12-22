@@ -175,6 +175,14 @@ public class EditLog {
                     warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
                     break;
                 }
+                case OperationType.OP_SUSPEND_WH: {
+                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
+                    // long whId = log.getId();
+                    String warehouseName = log.getWhName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replaySuspendWarehouse(warehouseName);
+                    break;
+                }
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
@@ -1080,8 +1088,12 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_CLUSTER, opClusterLog);
     }
 
-    public void logModifyWarehouseProperty(ModifyWarehousePropertyOperationLog log) {
+    public void logModifyWhProperty(ModifyWarehousePropertyOperationLog log) {
         logEdit(OperationType.OP_MODIFY_WAREHOUSE_PROPERTY, log);
+    }
+
+    public void logSuspendWh(OpWarehouseLog log) {
+        logEdit(OperationType.OP_SUSPEND_WH, log);
     }
 
     public void logCreateDb(Database db) {

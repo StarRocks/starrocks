@@ -340,6 +340,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.SyncStmt;
@@ -1416,6 +1417,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     properties);
         }
         return null;
+    }
+
+    @Override
+    public ParseNode visitSuspendWarehouseStatement(StarRocksParser.SuspendWarehouseStatementContext context) {
+        String whName = ((Identifier) visit(context.identifier())).getValue();
+        return new SuspendWarehouseStmt(whName);
     }
 
 

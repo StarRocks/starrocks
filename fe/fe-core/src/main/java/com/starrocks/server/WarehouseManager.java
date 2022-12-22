@@ -28,11 +28,11 @@ import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.ModifyWarehousePropertyOperationLog;
-import com.starrocks.persist.OpClusterLog;
+import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
-import com.starrocks.warehouse.Cluster;
+import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,9 +51,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
-    private final Map<Long, Warehouse> idToWh = new HashMap<>();
+    private Map<Long, Warehouse> idToWh = new HashMap<>();
     @SerializedName(value = "fullNameToWh")
-    private final Map<String, Warehouse> fullNameToWh = new HashMap<>();
+    private Map<String, Warehouse> fullNameToWh = new HashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final WarehouseProcNode procNode = new WarehouseProcNode();
@@ -139,17 +139,32 @@ public class WarehouseManager implements Writable {
 
     public void dropWarehouse(String name) {}
 
+    public void suspendWarehouse(SuspendWarehouseStmt stmt) {
+        String whName = stmt.getFullWhName();
+        readLock();
+        Warehouse warehouse = fullNameToWh.get(whName);
+        readUnlock();
+        warehouse.suspendSelf(false);
+        OpWarehouseLog log = new OpWarehouseLog(whName);
+        GlobalStateMgr.getCurrentState().getEditLog().logSuspendWh(log);
+    }
+
+    public void replaySuspendWarehouse(String whName) {
+        readLock();
+        Warehouse wh = fullNameToWh.get(whName);
+        readUnlock();
+        wh.suspendSelf(true);
+    }
+
     public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
         if (stmt.getOpType() == AlterWarehouseStmt.OpType.ADD_CLUSTER) {
-            // addCluster(stmt);
+            // add cluster
             addCluster(stmt.getFullWhName());
         } else if (stmt.getOpType() == AlterWarehouseStmt.OpType.REMOVE_CLUSTER) {
-            // removeCluster(stmt);
+            // remove cluster
             removeCluster(stmt.getFullWhName());
         } else {
             // modify some property
-            // for debug
-            LOG.info("enter alterWarehouse modifyProperty func");
             Map<String, String> properties = stmt.getProperties();
             modifyProperty(stmt.getFullWhName(), properties);
         }
@@ -169,13 +184,15 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    private void modifyProperty(String warehouseName, Map<String, String> properties) {
+    private void modifyProperty(String warehouseName, Map<String, String> properties) throws DdlException {
         boolean isChanged = false;
         if (fullNameToWh.containsKey(warehouseName)) {
             Warehouse wh = fullNameToWh.get(warehouseName);
             if (properties != null) {
                 if (properties.get("size") != null) {
                     wh.setSize(properties.get("size"));
+                    // 调用modify worker group进行资源调整
+                    wh.modifyCluterSize();
                     isChanged = true;
                 }
 
@@ -193,7 +210,7 @@ public class WarehouseManager implements Writable {
 
         if (isChanged) {
             ModifyWarehousePropertyOperationLog log = new ModifyWarehousePropertyOperationLog(warehouseName, properties);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyWarehouseProperty(log);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyWhProperty(log);
         }
 
         LOG.info("alter warehouse properties {}, warehouse name: {}", properties, warehouseName);
@@ -220,6 +237,10 @@ public class WarehouseManager implements Writable {
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= fullNameToWh.size();
+        // for debug
+        for (Warehouse wh : fullNameToWh.values()) {
+            LOG.info("wh state for {} when save is {}", wh.getFullName(), wh.getState());
+        }
         write(out);
         return checksum;
     }
@@ -230,14 +251,9 @@ public class WarehouseManager implements Writable {
             String s = Text.readString(dis);
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
             if (data != null) {
-                if (data.fullNameToWh != null) {
-                    for (Warehouse warehouse : data.fullNameToWh.values()) {
-                        replayCreateWarehouse(warehouse);
-                        for (Cluster cluster : warehouse.getClusters().values()) {
-                            OpClusterLog log = new OpClusterLog(warehouse.getFullName(), cluster);
-                            warehouse.replayAddCluster(log);
-                        }
-                    }
+                if (data.fullNameToWh != null && data.idToWh != null) {
+                    this.fullNameToWh = data.fullNameToWh;
+                    this.idToWh = data.idToWh;
                 }
                 warehouseCount = data.fullNameToWh.size();
             }

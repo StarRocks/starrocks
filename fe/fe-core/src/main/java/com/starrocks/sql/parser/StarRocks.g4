@@ -39,6 +39,7 @@ statement
     | showWarehousesStatement
     | alterWarehouseStatement
     | showClusterStatement
+    | suspendWarehouseStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -618,7 +619,7 @@ useWarehouseStatement
     ;
 
 dropWarehouseStatement
-    : DROP (WAREHOUSE) (IF EXISTS)? warehouseName=identifierOrString
+    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
     ;
 
 alterWarehouseStatement
@@ -631,6 +632,9 @@ showClusterStatement
     : SHOW CLUSTERS FROM WAREHOUSE identifier
     ;
 
+suspendWarehouseStatement
+    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
+    ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
@@ -2216,7 +2220,7 @@ nonReserved
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SYNC | SYSTEM_TIME
+    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
