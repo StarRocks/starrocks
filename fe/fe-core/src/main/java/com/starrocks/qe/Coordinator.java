@@ -149,6 +149,7 @@ import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
+    private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -1715,6 +1716,7 @@ public class Coordinator {
                 continue;
             }
 
+<<<<<<< HEAD
             MultiCastPlanFragment multi = (MultiCastPlanFragment) params.fragment;
             Preconditions.checkState(multi.getSink() instanceof MultiCastDataSink);
             // set # of senders
@@ -1777,6 +1779,22 @@ public class Coordinator {
                         dest.setBrpc_server(toBrpcHost(destParams.instanceExecParams.get(j).host));
                         multiSink.getDestinations().get(i).add(dest);
                     }
+=======
+        // wait for all backends
+        if (needReport) {
+            try {
+                int timeout;
+                // connectContext can be null for broker export task coordinator
+                if (connectContext != null) {
+                    timeout = connectContext.getSessionVariable().getProfileTimeout();
+                } else {
+                    timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
+                }
+                // Waiting for other fragment instances to finish execution
+                // Ideally, it should wait indefinitely, but out of defense, set timeout
+                if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
+                    LOG.warn("failed to get profile within {} seconds", timeout);
+>>>>>>> 1bbd06802 ([BugFix] Fix NPE when export job waiting coordinator profile finish (#14710))
                 }
             }
         }
