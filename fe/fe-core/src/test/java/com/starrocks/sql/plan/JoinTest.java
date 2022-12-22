@@ -2668,4 +2668,27 @@ public class JoinTest extends PlanTestBase {
                 "  12:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)");
     }
+
+    @Test
+    public void testSmallestColInJoin() throws Exception {
+        String sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2 where t.v1 = t1.v4 and t2.v7 = 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v4\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode");
+        sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "|----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:Project\n" +
+                "  |  <slot 21> : 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
 }
