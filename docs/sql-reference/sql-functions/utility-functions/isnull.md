@@ -21,9 +21,9 @@ Returns 1 if it is `NULL`, and returns 0 if it is not `NULL`.
 ## Example
 
 ```plain text
-MYSQL > SELECT c2, isnull(c2) FROM t1;
+MYSQL > SELECT c1, isnull(c1) FROM t1;
 +------+--------------+
-| c2   | `c2` IS NULL |
+| c1   | `c1` IS NULL |
 +------+--------------+
 | NULL |            1 |
 |    1 |            0 |
