@@ -17,7 +17,7 @@ The following bugs are fixed:
 - When you create a materialized view by using CREATE MATERIALIZED VIEW AS SELECT, if the SELECT clause does not use aggregate functions, and uses GROUP BY, for example `CREATE MATERIALIZED VIEW test_view AS SELECT a,b from test group by b,a order by a;`, then the BE nodes all crash. [#13743](https://github.com/StarRocks/starrocks/pull/13743)
 - If you restart the BE immediately after you use INSERT INTO to frequently load data into the primary key table to make data changes, the BE may restart very slowly. [#15128](https://github.com/StarRocks/starrocks/pull/15128)
 - If only JRE is installed on the environment and JDK is not installed, queries fail after FE restarts. After the bug is fixed, FE cannot restart in that environment and it returns error `JAVA_HOME can not be jre`. To successfully restart FE, you need to install JDK on the environment. [#14332](https://github.com/StarRocks/starrocks/pull/14332)
-- Queries cause BE crashes。[#14221](https://github.com/StarRocks/starrocks/pull/14221)
+- Queries cause BE crashes. [#14221](https://github.com/StarRocks/starrocks/pull/14221)
 - `exec_mem_limit` cannot be set to an expression. [#13647](https://github.com/StarRocks/starrocks/pull/13647)
 - You cannot create a syn refreshed materialized view based on subquery results. [#13507](https://github.com/StarRocks/starrocks/pull/13507)
 - The comments for columns are deleted after you refresh the Hive external table. [#13742](https://github.com/StarRocks/starrocks/pull/13742)
