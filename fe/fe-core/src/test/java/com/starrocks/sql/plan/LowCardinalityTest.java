@@ -1359,9 +1359,9 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select max(v1), min(v1) from t0 [_META_]";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:MetaScan\n" +
+                "     Table: t0\n" +
                 "     <id 6> : max_v1\n" +
                 "     <id 7> : min_v1"));
-
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("id_to_names:{6=max_v1, 7=min_v1}"));
     }
@@ -1372,6 +1372,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
 
         Assert.assertTrue(plan.contains("  0:MetaScan\n" +
+                "     Table: test_all_type\n" +
                 "     <id 16> : dict_merge_t1a\n" +
                 "     <id 14> : max_t1c\n" +
                 "     <id 15> : min_t1d"));

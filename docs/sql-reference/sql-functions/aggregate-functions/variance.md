@@ -2,13 +2,19 @@
 
 ## Description
 
-Returns the variance of a expression.
+Returns the variance of an expression.
 
 ## Syntax
 
 ```Haskell
 VARIANCE(expr)
 ```
+
+## Return value
+
+Returns a numerical value.
+
+If the type of `expr` is DECIMAL, this function returns a DECIMAL value, or else returns a DOUBLE value.
 
 ## Examples
 

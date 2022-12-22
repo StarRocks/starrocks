@@ -43,7 +43,7 @@
 #include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"

@@ -35,6 +35,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_or_predicate.h"
+#include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/olap_runtime_range_pruner.hpp"
@@ -53,7 +54,6 @@
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized_column_predicate.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

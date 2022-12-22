@@ -415,7 +415,7 @@ public:
                     // the index for vgetq_lane_u8 should be a literal integer
                     // but in ASAN/DEBUG the loop is unrolled. so we won't call vgetq_lane_u8
                     // in ASAN/DEBUG
-#ifndef NDEBUG
+#if defined(NDEBUG) && !defined(ADDRESS_SANITIZER)
                     if (vgetq_lane_u8(filter, i)) {
 #else
                     if (f_data[i]) {

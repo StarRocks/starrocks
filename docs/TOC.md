@@ -1,4 +1,4 @@
-# pnTable of content
+# Table of content
 
 ## Index
 
@@ -268,7 +268,7 @@
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
-      + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md) (alias: subdate)
+      + [date_sub, subdate](./sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_slice](./sql-reference/sql-functions/date-time-functions/date_slice.md)
       + [date_trunc](./sql-reference/sql-functions/date-time-functions/date_trunc.md)
@@ -289,6 +289,7 @@
       + [minute](./sql-reference/sql-functions/date-time-functions/minute.md)
       + [minutes_add](./sql-reference/sql-functions/date-time-functions/minutes_add.md)
       + [minutes_diff](./sql-reference/sql-functions/date-time-functions/minutes_diff.md)
+      + [minutes_sub](./sql-reference/sql-functions/date-time-functions/minutes_sub.md)
       + [month](./sql-reference/sql-functions/date-time-functions/month.md)
       + [months_add](./sql-reference/sql-functions/date-time-functions/months_add.md)
       + [months_diff](./sql-reference/sql-functions/date-time-functions/months_diff.md)
@@ -324,6 +325,7 @@
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
@@ -336,7 +338,7 @@
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
       + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
-      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md) (alias: variance_pop / var_pop)
+      + [variance, variance_pop, var_pop](./sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
       + [multi_distinct_sum](./sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
@@ -385,6 +387,7 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
+      + [trim](./sql-reference/sql-functions/string-functions/trim.md)
     + JSON Functions
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
@@ -403,6 +406,7 @@
         + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
         + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
+        + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_or](./sql-reference/sql-functions/bitmap-functions/bitmap_or.md)
@@ -426,6 +430,7 @@
       + [bitmap_to_string](./sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
+      + [intersect_count](./sql-reference/sql-functions/bitmap-functions/intersect_count.md)
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
     + Array Functions
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)

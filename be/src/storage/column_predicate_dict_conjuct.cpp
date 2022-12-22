@@ -19,7 +19,7 @@
 #include "column/datum.h"
 #include "runtime/global_dict/dict_column.h"
 #include "storage/column_operator_predicate.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/column_predicate.h"
 
 namespace starrocks {
 

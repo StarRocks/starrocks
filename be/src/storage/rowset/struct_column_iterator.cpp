@@ -29,9 +29,9 @@ public:
 
     Status init(const ColumnIteratorOptions& opts) override;
 
-    Status next_batch(size_t* n, vectorized::Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     Status seek_to_first() override;
 
@@ -40,14 +40,13 @@ public:
     ordinal_t get_current_ordinal() const override { return _field_iters[0]->get_current_ordinal(); }
 
     /// for vectorized engine
-    Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                      const vectorized::ColumnPredicate* del_predicate,
-                                      vectorized::SparseRange* row_ranges) override {
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
         CHECK(false) << "array column does not has zone map index";
         return Status::OK();
     }
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
     std::unique_ptr<ColumnIterator> _null_iter;
@@ -73,22 +72,22 @@ Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
     return Status::OK();
 }
 
-Status StructColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
-    vectorized::StructColumn* struct_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
+    StructColumn* struct_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        struct_column = down_cast<vectorized::StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     } else {
-        struct_column = down_cast<vectorized::StructColumn*>(dst);
+        struct_column = down_cast<StructColumn*>(dst);
     }
 
     // 1. Read null column
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->next_batch(n, null_column));
-        down_cast<vectorized::NullableColumn*>(dst)->update_has_null();
+        down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
     // Read all fields
@@ -102,21 +101,21 @@ Status StructColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
-Status StructColumnIterator::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
-    vectorized::StructColumn* struct_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status StructColumnIterator::next_batch(const SparseRange& range, Column* dst) {
+    StructColumn* struct_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        struct_column = down_cast<vectorized::StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column->null_column().get());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
     } else {
-        struct_column = down_cast<vectorized::StructColumn*>(dst);
+        struct_column = down_cast<StructColumn*>(dst);
     }
     // Read null column
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->next_batch(range, null_column));
-        down_cast<vectorized::NullableColumn*>(dst)->update_has_null();
+        down_cast<NullableColumn*>(dst)->update_has_null();
     }
     // Read all fields
     for (int i = 0; i < _field_iters.size(); ++i) {
@@ -125,18 +124,18 @@ Status StructColumnIterator::next_batch(const vectorized::SparseRange& range, ve
     return Status::OK();
 }
 
-Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
-    vectorized::StructColumn* struct_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    StructColumn* struct_column = nullptr;
+    NullColumn* null_column = nullptr;
     // 1. Read null column
     if (_null_iter != nullptr) {
-        auto* nullable_column = down_cast<vectorized::NullableColumn*>(values);
-        struct_column = down_cast<vectorized::StructColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column->null_column().get());
+        auto* nullable_column = down_cast<NullableColumn*>(values);
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
         RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
         nullable_column->update_has_null();
     } else {
-        struct_column = down_cast<vectorized::StructColumn*>(values);
+        struct_column = down_cast<StructColumn*>(values);
     }
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));

@@ -243,7 +243,7 @@ public class LogicalPlanPrinter {
         @Override
         public OperatorStr visitPhysicalMetaScan(OptExpression optExpression, Integer step) {
             PhysicalMetaScanOperator scan = (PhysicalMetaScanOperator) optExpression.getOp();
-            String sb = "Meta SCAN (" + "columns" + scan.getUsedColumns() + ")";
+            String sb = "META SCAN (" + "columns" + scan.getUsedColumns() + ")";
             return new OperatorStr(sb, step, Collections.emptyList());
         }
 

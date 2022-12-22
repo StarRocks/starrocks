@@ -23,6 +23,7 @@
 #include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/delete_predicates.h"
@@ -34,7 +35,6 @@
 #include "storage/tablet.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
-#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 

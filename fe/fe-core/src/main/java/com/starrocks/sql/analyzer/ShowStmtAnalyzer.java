@@ -304,14 +304,14 @@ public class ShowStmtAnalyzer {
             }
 
             if (CatalogMgr.isInternalCatalog(catalogName)) {
-                descInternalTbl(node, context);
+                descInternalCatalogTable(node, context);
             } else {
-                descExternalTbl(node, catalogName, dbName, tbl);
+                descExternalCatalogTable(node, catalogName, dbName, tbl);
             }
             return null;
         }
 
-        private void descInternalTbl(DescribeStmt node, ConnectContext context) {
+        private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
             Database db = GlobalStateMgr.getCurrentState().getDb(node.getDb());
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
@@ -451,7 +451,7 @@ public class ShowStmtAnalyzer {
             }
         }
 
-        private void descExternalTbl(DescribeStmt node, String catalogName, String dbName, String tbl) {
+        private void descExternalCatalogTable(DescribeStmt node, String catalogName, String dbName, String tbl) {
             // show external table schema only
             String procString = "/catalog/" + catalogName + "/" + dbName + "/" + tbl + "/" + ExternalTableProcDir.SCHEMA;
             try {
