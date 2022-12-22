@@ -24,13 +24,12 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -97,11 +96,8 @@ public class FileTable extends Table {
     }
 
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
-        Configuration configuration = new Configuration();
-        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(fileProperties);
-        if (cloudConfiguration != null) {
-            cloudConfiguration.applyToConfiguration(configuration);
-        }
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties, null);
+        Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), false, Optional.empty());
         try {

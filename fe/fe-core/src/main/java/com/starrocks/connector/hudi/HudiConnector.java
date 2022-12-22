@@ -39,7 +39,7 @@ public class HudiConnector implements Connector {
     public HudiConnector(ConnectorContext context) {
         this.properties = context.getProperties();
         this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build(cloudConfiguration);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
         this.catalogName = context.getCatalogName();
         this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();

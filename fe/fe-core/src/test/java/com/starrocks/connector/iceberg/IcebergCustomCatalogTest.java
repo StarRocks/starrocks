@@ -73,7 +73,7 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties, hdfsEnvironment);
         Assert.assertEquals(IcebergCatalogType.CUSTOM_CATALOG, customCatalog.getIcebergCatalogType());
     }
@@ -100,7 +100,7 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties, hdfsEnvironment);
         Table table = customCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
@@ -127,7 +127,7 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergCustomTestingCatalog icebergCustomCatalog = (IcebergCustomTestingCatalog) getIcebergCustomCatalog(
                 catalogImpl, icebergProperties, hdfsEnvironment);
         List<String> dbs = icebergCustomCatalog.listAllDatabases();

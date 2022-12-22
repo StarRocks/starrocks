@@ -60,7 +60,7 @@ public class IcebergUtilTest {
     @Test
     public void testGetIcebergHiveCatalog() {
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog("thrift://test:9030", icebergProperties, hdfsEnvironment);
         Assert.assertTrue(catalog instanceof IcebergHiveCatalog);
     }

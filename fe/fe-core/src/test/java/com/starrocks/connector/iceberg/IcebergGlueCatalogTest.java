@@ -40,7 +40,7 @@ public class IcebergGlueCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergGlueCatalog icebergGlueCatalog =
                 IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
         Assert.assertEquals(IcebergCatalogType.GLUE_CATALOG, icebergGlueCatalog.getIcebergCatalogType());
@@ -67,7 +67,7 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergGlueCatalog icebergGlueCatalog =
                 IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
         Table table = icebergGlueCatalog.loadTable(identifier);
@@ -95,7 +95,7 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = HdfsEnvironment.HdfsEnvironmentFactory.build();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
         IcebergGlueCatalog icebergGlueCatalog =
                 IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
         List<String> dbs = icebergGlueCatalog.listAllDatabases();

@@ -27,16 +27,22 @@ public class HdfsEnvironment {
     /**
      * Create default Hdfs environment
      */
-    private HdfsEnvironment() {
+    public HdfsEnvironment() {
         this.hdfsConfiguration = new HdfsConfiguration();
     }
 
-    /**
-     * Apply CloudConfiguration into HdfsConfiguration
-     */
-    private void applyToCloudConfiguration(CloudConfiguration cloudConfiguration) {
-        Preconditions.checkNotNull(cloudConfiguration);
-        hdfsConfiguration.applyToCloudConfiguration(cloudConfiguration);
+    public HdfsEnvironment(Map<String, String> properties, CloudConfiguration cloudConfiguration) {
+        this.hdfsConfiguration = new HdfsConfiguration();
+        if (cloudConfiguration != null) {
+            this.hdfsConfiguration.applyToCloudConfiguration(cloudConfiguration);
+        } else if (properties != null) {
+            CloudConfiguration tmp = CloudConfigurationFactory.tryBuildForStorage(properties);
+            if (tmp != null) {
+                this.hdfsConfiguration.applyToCloudConfiguration(tmp);
+            }
+        } else {
+            Preconditions.checkArgument(false, "Unreachable");
+        }
     }
 
     public Configuration getConfiguration() {
@@ -56,36 +62,6 @@ public class HdfsEnvironment {
 
         public Configuration getConfiguration() {
             return configuration;
-        }
-    }
-
-    public static class HdfsEnvironmentFactory {
-        public static HdfsEnvironment build(Map<String, String> properties) {
-            return build(properties, null);
-        }
-
-        public static HdfsEnvironment build(CloudConfiguration cloudConfiguration) {
-            return build(null, cloudConfiguration);
-        }
-
-        public static HdfsEnvironment build() {
-            return build(null, null);
-        }
-
-        public static HdfsEnvironment build(Map<String, String> properties, CloudConfiguration cloudConfiguration) {
-            HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-            if (properties != null) {
-                CloudConfiguration tmpCloudConfiguration =
-                        CloudConfigurationFactory.tryBuildForStorage(properties);
-                if (tmpCloudConfiguration != null) {
-                    hdfsEnvironment.applyToCloudConfiguration(tmpCloudConfiguration);
-                }
-            }
-
-            if (cloudConfiguration != null) {
-                hdfsEnvironment.applyToCloudConfiguration(cloudConfiguration);
-            }
-            return hdfsEnvironment;
         }
     }
 }
