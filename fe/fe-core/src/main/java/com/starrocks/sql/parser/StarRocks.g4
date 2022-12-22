@@ -1781,14 +1781,13 @@ informationFunctionExpression
 specialDateTimeExpression
     : name = CURRENT_DATE ('(' ')')?
     | name = CURRENT_TIME ('(' ')')?
-    | name = CURRENT_TIMESTAMP
+    | name = CURRENT_TIMESTAMP ('(' ')')?
     | name = LOCALTIME ('(' ')')?
     | name = LOCALTIMESTAMP ('(' ')')?
     ;
 
 specialFunctionExpression
     : CHAR '(' expression ')'
-    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
