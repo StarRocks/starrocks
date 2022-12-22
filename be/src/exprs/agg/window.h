@@ -305,6 +305,7 @@ struct FirstValueState {
     bool is_null = false;
 };
 
+// TODO(murphy) refactor with AggDataTypeTraits
 template <LogicalType PT>
 struct FirstValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
@@ -345,16 +346,16 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
             return;
         }
 
-        if (columns[0]->is_null(frame_start)) {
-            this->data(state).is_null = true;
-            this->data(state).has_value = true;
-            return;
-        }
-
+        size_t value_index =
+                !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
-        this->data(state).value = column->get_data()[frame_start];
-        this->data(state).is_null = false;
+        if (value_index == frame_end || columns[0]->is_null(value_index)) {
+            this->data(state).is_null = true;
+        } else {
+            this->data(state).is_null = false;
+            this->data(state).value = column->get_data()[value_index];
+        }
         this->data(state).has_value = true;
     }
 
@@ -373,6 +374,7 @@ struct LastValueState {
     bool is_null = ignoreNulls;
 };
 
+// TODO(murphy) refactor with AggDataTypeTraits
 template <LogicalType PT, bool ignoreNulls>
 struct LastValueState<PT, ignoreNulls, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
@@ -393,33 +395,21 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if constexpr (!ignoreNulls) {
-            // For cases like: rows between 2 preceding and 1 preceding
-            // If frame_start ge frame_end, means the frame is empty
-            if (frame_start >= frame_end) {
-                this->data(state).is_null = true;
-                return;
-            }
-
-            if (columns[0]->is_null(frame_end - 1)) {
-                this->data(state).is_null = true;
-                return;
-            }
-        } else {
-            if (frame_start >= frame_end) {
-                return;
-            }
-
-            if (columns[0]->is_null(frame_end - 1)) {
-                return;
-            }
+        if (frame_start >= frame_end) {
+            this->data(state).is_null = true;
+            return;
         }
 
-        this->data(state).is_null = false;
-
+        size_t value_index =
+                !ignoreNulls ? frame_end - 1 : ColumnHelper::last_nonnull(columns[0], frame_start, frame_end);
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
-        this->data(state).value = column->get_data()[frame_end - 1];
+        if (value_index == frame_end || columns[0]->is_null(value_index)) {
+            this->data(state).is_null = true;
+        } else {
+            this->data(state).is_null = false;
+            this->data(state).value = column->get_data()[value_index];
+        }
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -499,6 +489,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
     std::string get_name() const override { return "lead-lag"; }
 };
 
+// TODO(murphy) refactor with AggDataTypeTraits
 template <LogicalType PT, bool ignoreNulls>
 class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         : public WindowFunction<FirstValueState<PT>> {
@@ -521,18 +512,26 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             }
         }
 
-        if (columns[0]->is_null(frame_start)) {
+        // For cases like: rows between 2 preceding and 1 preceding
+        // If frame_start ge frame_end, means the frame is empty
+        if (frame_start >= frame_end) {
             this->data(state).is_null = true;
             this->data(state).has_value = true;
             return;
         }
 
+        size_t value_index =
+                !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
-        Slice slice = column->get_slice(frame_start);
-        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
-        this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
-        this->data(state).is_null = false;
+        if (value_index == frame_end || columns[0]->is_null(value_index)) {
+            this->data(state).is_null = true;
+        } else {
+            Slice slice = column->get_slice(frame_start);
+            const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
+            this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
+            this->data(state).is_null = false;
+        }
         this->data(state).has_value = true;
     }
 
@@ -544,6 +543,7 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
+// TODO(murphy) refactor with AggDataTypeTraits
 template <LogicalType PT, bool ignoreNulls>
 class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         : public WindowFunction<LastValueState<PT, ignoreNulls>> {
@@ -555,20 +555,23 @@ class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if (!columns[0]->is_null(frame_end - 1)) {
-            this->data(state).is_null = false;
+        if (frame_start >= frame_end) {
+            this->data(state).is_null = true;
+            return;
+        }
 
-            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const auto* column = down_cast<const BinaryColumn*>(data_column);
-            Slice slice = column->get_slice(frame_end - 1);
+        size_t value_index =
+                !ignoreNulls ? frame_end - 1 : ColumnHelper::last_nonnull(columns[0], frame_start, frame_end);
+        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+        const auto* column = down_cast<const BinaryColumn*>(data_column);
+        if (value_index == frame_end || columns[0]->is_null(value_index)) {
+            this->data(state).is_null = true;
+        } else {
+            this->data(state).is_null = false;
+            Slice slice = column->get_slice(value_index);
             const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).buffer.clear();
             this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
-        } else {
-            if constexpr (!ignoreNulls) {
-                this->data(state).is_null = true;
-                return;
-            }
         }
     }
 
