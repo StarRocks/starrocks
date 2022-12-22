@@ -224,6 +224,11 @@ public class AuthenticationManager {
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         UserIdentity userIdentity = stmt.getUserIdent();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
+        upgradeUserWithAuthenticationInfoUnlocked(userIdentity, info);
+    }
+
+    public void upgradeUserWithAuthenticationInfoUnlocked(UserIdentity userIdentity,
+                                                          UserAuthenticationInfo info) throws DdlException {
         writeLock();
         try {
             updateUserNoLock(userIdentity, info, true);
@@ -469,6 +474,10 @@ public class AuthenticationManager {
         UserAuthenticationInfo info = provider.upgradedFromPassword(userIdentity, password);
         userToAuthenticationInfo.put(userIdentity, info);
         LOG.info("upgrade user {}", userIdentity);
+    }
+
+    public UserAuthenticationInfo getUserAuthenticationInfoByUserIdentity(UserIdentity userIdentity) {
+        return userToAuthenticationInfo.get(userIdentity);
     }
 
     public void upgradeUserProperty(String userName, long maxConn) {
