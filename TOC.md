@@ -403,6 +403,8 @@
     + 工具函数
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
       + [version](/sql-reference/sql-functions/utility-functions/version.md)
+      + [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)
+      + [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](/sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](/sql-reference/sql-functions/utility-functions/uuid.md)
