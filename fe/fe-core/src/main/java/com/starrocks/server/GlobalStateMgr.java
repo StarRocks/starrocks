@@ -89,6 +89,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -451,6 +452,8 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
+    private ConfigRefreshDaemon configRefreshDaemon;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -511,6 +514,10 @@ public class GlobalStateMgr {
 
     public CompactionManager getCompactionManager() {
         return compactionManager;
+    }
+
+    public ConfigRefreshDaemon getConfigRefreshDaemon() {
+        return configRefreshDaemon;
     }
 
     private static class SingletonHolder {
@@ -615,6 +622,7 @@ public class GlobalStateMgr {
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
+        this.configRefreshDaemon = new ConfigRefreshDaemon();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1185,6 +1193,7 @@ public class GlobalStateMgr {
         if (Config.use_staros) {
             compactionManager.start();
         }
+        configRefreshDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
