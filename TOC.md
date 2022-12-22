@@ -457,6 +457,7 @@
       + [cos](/sql-reference/sql-functions/math-functions/cos.md)
       + [cot](/sql-reference/sql-functions/math-functions/cot.md)
       + [degrees](/sql-reference/sql-functions/math-functions/degrees.md)
+      + [divide](/sql-reference/sql-functions/math-functions/divide.md)
       + [e](/sql-reference/sql-functions/math-functions/e.md)
       + [exp](/sql-reference/sql-functions/math-functions/exp.md)
       + [floor](/sql-reference/sql-functions/math-functions/floor.md)
