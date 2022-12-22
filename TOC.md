@@ -261,8 +261,9 @@
       + [now](/sql-reference/sql-functions/date-time-functions/now.md)
       + [quarter](/sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](/sql-reference/sql-functions/date-time-functions/second.md)
-      + [seconds_sub](/sql-reference/sql-functions/date-time-functions/seconds_sub.md)
+      + [seconds_add](/sql-reference/sql-functions/date-time-functions/seconds_add.md)
       + [seconds_diff](/sql-reference/sql-functions/date-time-functions/seconds_diff.md)
+      + [seconds_sub](/sql-reference/sql-functions/date-time-functions/seconds_sub.md)
       + [str_to_date](/sql-reference/sql-functions/date-time-functions/str_to_date.md)
       + [str2date](/sql-reference/sql-functions/date-time-functions/str2date.md)
       + [timediff](/sql-reference/sql-functions/date-time-functions/timediff.md)
@@ -279,6 +280,7 @@
       + [weekofyear](/sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [weeks_diff](/sql-reference/sql-functions/date-time-functions/weeks_diff.md)
       + [year](/sql-reference/sql-functions/date-time-functions/year.md)
+      + [years_add](/sql-reference/sql-functions/date-time-functions/years_add.md)
       + [years_diff](/sql-reference/sql-functions/date-time-functions/years_diff.md)
       + [years_sub](/sql-reference/sql-functions/date-time-functions/years_sub.md)
     + 加密函数
