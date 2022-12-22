@@ -95,6 +95,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitResumeWarehouseStatement(ResumeWarehouseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitDropWarehouseStatement(DropWarehouseStmt statement, C context) {
         return visitStatement(statement, context);
     }

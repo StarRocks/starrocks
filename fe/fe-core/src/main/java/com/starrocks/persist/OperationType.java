@@ -309,4 +309,5 @@ public class OperationType {
     public static final short OP_REMOVE_CLUSTER = 12003;
     public static final short OP_MODIFY_WAREHOUSE_PROPERTY = 12004;
     public static final short OP_SUSPEND_WH = 12005;
+    public static final short OP_RESUME_WH = 12006;
 }

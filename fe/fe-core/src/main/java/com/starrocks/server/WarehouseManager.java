@@ -33,6 +33,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
+import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -154,6 +155,23 @@ public class WarehouseManager implements Writable {
         Warehouse wh = fullNameToWh.get(whName);
         readUnlock();
         wh.suspendSelf(true);
+    }
+
+    public void resumeWarehouse(ResumeWarehouseStmt stmt) {
+        String whName = stmt.getFullWhName();
+        readLock();
+        Warehouse warehouse = fullNameToWh.get(whName);
+        readUnlock();
+        warehouse.resumeSelf(false);
+        OpWarehouseLog log = new OpWarehouseLog(whName);
+        GlobalStateMgr.getCurrentState().getEditLog().logResumeWh(log);
+    }
+
+    public void replayResumeWarehouse(String whName) {
+        readLock();
+        Warehouse wh = fullNameToWh.get(whName);
+        readUnlock();
+        wh.resumeSelf(true);
     }
 
     public void dropWarehouse(DropWarehouseStmt stmt) {

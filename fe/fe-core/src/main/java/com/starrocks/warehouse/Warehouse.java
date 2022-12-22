@@ -206,18 +206,36 @@ public class Warehouse implements Writable {
         writeUnLock();
     }
 
+    public void resumeSelf(boolean isReplay) {
+        writeLock();
+        if (!isReplay) {
+            applyComputeNodes();
+        }
+        this.state = WarehouseState.RUNNING;
+        writeUnLock();
+    }
+
     public void dropSelf() {
         readLock();
         releaseComputeNodes();
         readUnlock();
     }
 
-    public void releaseComputeNodes() {
+    private void releaseComputeNodes() {
         for (Cluster cluster : clusters.values()) {
             long workerGroupId = cluster.getWorkerGroupId();
             GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(workerGroupId);
             // for debug
             LOG.info("release worker group {}", workerGroupId);
+        }
+    }
+
+    private void applyComputeNodes() {
+        for (Cluster cluster : clusters.values()) {
+            long newGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup();
+            cluster.setWorkerGroupId(newGroupId);
+            // for debug
+            LOG.info("apply new worker group {}", newGroupId);
         }
     }
 

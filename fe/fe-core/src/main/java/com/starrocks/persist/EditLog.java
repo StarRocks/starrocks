@@ -183,6 +183,14 @@ public class EditLog {
                     warehouseMgr.replaySuspendWarehouse(warehouseName);
                     break;
                 }
+                case OperationType.OP_RESUME_WH: {
+                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
+                    // long whId = log.getId();
+                    String warehouseName = log.getWhName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayResumeWarehouse(warehouseName);
+                    break;
+                }
                 case OperationType.OP_DROP_WH: {
                     OpWarehouseLog log = (OpWarehouseLog) journal.getData();
                     String warehouseName = log.getWhName();
@@ -1101,6 +1109,10 @@ public class EditLog {
 
     public void logSuspendWh(OpWarehouseLog log) {
         logEdit(OperationType.OP_SUSPEND_WH, log);
+    }
+
+    public void logResumeWh(OpWarehouseLog log) {
+        logEdit(OperationType.OP_RESUME_WH, log);
     }
 
     public void logDropWh(OpWarehouseLog log) {

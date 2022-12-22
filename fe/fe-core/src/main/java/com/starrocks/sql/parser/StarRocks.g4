@@ -40,6 +40,7 @@ statement
     | alterWarehouseStatement
     | showClusterStatement
     | suspendWarehouseStatement
+    | resumeWarehouseStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -634,6 +635,10 @@ showClusterStatement
 
 suspendWarehouseStatement
     : SUSPEND WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+resumeWarehouseStatement
+    : RESUME WAREHOUSE (IF EXISTS)? identifier
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
