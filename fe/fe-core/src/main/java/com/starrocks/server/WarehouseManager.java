@@ -32,6 +32,7 @@ import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
+import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -137,7 +138,6 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public void dropWarehouse(String name) {}
 
     public void suspendWarehouse(SuspendWarehouseStmt stmt) {
         String whName = stmt.getFullWhName();
@@ -154,6 +154,33 @@ public class WarehouseManager implements Writable {
         Warehouse wh = fullNameToWh.get(whName);
         readUnlock();
         wh.suspendSelf(true);
+    }
+
+    public void dropWarehouse(DropWarehouseStmt stmt) {
+        String whName = stmt.getFullWhName();
+        writeLock();
+        try {
+            Warehouse warehouse = fullNameToWh.get(whName);
+            fullNameToWh.remove(whName);
+            idToWh.remove(warehouse.getId());
+            warehouse.dropSelf();
+
+            OpWarehouseLog log = new OpWarehouseLog(whName);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropWh(log);
+        } finally {
+            writeUnLock();
+        }
+    }
+
+    public void replayDropWarehouse(String whName) {
+        writeLock();
+        try {
+            Warehouse warehouse = fullNameToWh.get(whName);
+            fullNameToWh.remove(whName);
+            idToWh.remove(warehouse.getId());
+        } finally {
+            writeUnLock();
+        }
     }
 
     public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
@@ -237,10 +264,6 @@ public class WarehouseManager implements Writable {
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= fullNameToWh.size();
-        // for debug
-        for (Warehouse wh : fullNameToWh.values()) {
-            LOG.info("wh state for {} when save is {}", wh.getFullName(), wh.getState());
-        }
         write(out);
         return checksum;
     }

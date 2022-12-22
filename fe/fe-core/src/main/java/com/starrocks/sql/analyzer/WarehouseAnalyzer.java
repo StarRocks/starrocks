@@ -21,8 +21,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
+import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SuspendWarehouseStmt;
 
 public class WarehouseAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -50,6 +52,24 @@ public class WarehouseAnalyzer {
 
         @Override
         public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            String whName = statement.getFullWhName();
+            if (Strings.isNullOrEmpty(whName)) {
+                throw new SemanticException("'warehouse name' can not be null or empty");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+            String whName = statement.getFullWhName();
+            if (Strings.isNullOrEmpty(whName)) {
+                throw new SemanticException("'warehouse name' can not be null or empty");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
             String whName = statement.getFullWhName();
             if (Strings.isNullOrEmpty(whName)) {
                 throw new SemanticException("'warehouse name' can not be null or empty");

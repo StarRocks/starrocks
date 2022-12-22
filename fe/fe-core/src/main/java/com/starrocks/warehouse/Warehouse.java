@@ -206,6 +206,12 @@ public class Warehouse implements Writable {
         writeUnLock();
     }
 
+    public void dropSelf() {
+        readLock();
+        releaseComputeNodes();
+        readUnlock();
+    }
+
     public void releaseComputeNodes() {
         for (Cluster cluster : clusters.values()) {
             long workerGroupId = cluster.getWorkerGroupId();

@@ -195,6 +195,7 @@ import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -1425,6 +1426,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SuspendWarehouseStmt(whName);
     }
 
+    @Override
+    public ParseNode visitDropWarehouseStatement(StarRocksParser.DropWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String whName = identifier.getValue();
+        return new DropWarehouseStmt(context.IF() != null, whName);
+    }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override

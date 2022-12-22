@@ -183,6 +183,13 @@ public class EditLog {
                     warehouseMgr.replaySuspendWarehouse(warehouseName);
                     break;
                 }
+                case OperationType.OP_DROP_WH: {
+                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
+                    String warehouseName = log.getWhName();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayDropWarehouse(warehouseName);
+                    break;
+                }
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
@@ -1094,6 +1101,10 @@ public class EditLog {
 
     public void logSuspendWh(OpWarehouseLog log) {
         logEdit(OperationType.OP_SUSPEND_WH, log);
+    }
+
+    public void logDropWh(OpWarehouseLog log) {
+        logEdit(OperationType.OP_DROP_WH, log);
     }
 
     public void logCreateDb(Database db) {

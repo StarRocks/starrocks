@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -493,6 +494,12 @@ public class Analyzer {
 
         @Override
         public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
             WarehouseAnalyzer.analyze(statement, context);
             return null;
         }

@@ -14,21 +14,14 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.common.util.PrintableMap;
-
-import java.util.Map;
-
-public class CreateWarehouseStmt extends DdlStmt {
+public class DropWarehouseStmt extends DdlStmt {
     private final boolean ifNotExists;
     private final String warehouseName;
-    private Map<String, String> properties;
 
-    public CreateWarehouseStmt(boolean ifNotExists,
-                               String warehouseName,
-                               Map<String, String> properties) {
+    public DropWarehouseStmt(boolean ifNotExists,
+                             String warehouseName) {
         this.ifNotExists = ifNotExists;
         this.warehouseName = warehouseName;
-        this.properties = properties;
     }
 
     public String getFullWhName() {
@@ -39,28 +32,9 @@ public class CreateWarehouseStmt extends DdlStmt {
         return ifNotExists;
     }
 
-    public Map<String, String> getProperties() {
-        return this.properties;
-    }
-
-    public void setProperties(Map<String, String> properties) {
-        this.properties = properties;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateWarehouseStatement(this, context);
+        return visitor.visitDropWarehouseStatement(this, context);
     }
 
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("CREATE WAREHOUSE '");
-        sb.append(warehouseName).append("' ");
-        sb.append("WITH PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
-        return sb.toString();
-    }
 }
-
-
-
