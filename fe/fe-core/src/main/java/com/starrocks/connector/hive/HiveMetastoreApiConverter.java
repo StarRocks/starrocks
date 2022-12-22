@@ -28,6 +28,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.credential.CloudConfiguration;
@@ -121,14 +122,16 @@ public class HiveMetastoreApiConverter {
 
     public static HudiTable toHudiTable(Table table, String catalogName) {
         String hudiBasePath = table.getSd().getLocation();
-        Configuration configuration = new Configuration();
         // Trick
-        HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalogName);
-        CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
-        if (cloudConfiguration != null) {
-            cloudConfiguration.applyToConfiguration(configuration);
+        Configuration configuration = new Configuration();
+        if (catalogName != null) {
+            HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+                    getConnector(catalogName);
+            CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
+            HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+            configuration = hdfsEnvironment.getConfiguration();
         }
+
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(configuration).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
