@@ -308,7 +308,7 @@ public class MaterializedViewRewriter {
         for (LogicalScanOperator scanOperator : scanOperators) {
             scanOutputColumns.addAll(scanOperator.getOutputColumns());
         }
-        // should exclude the columns are both in query scan output columns and mv ref set, which are valid columns
+        // should exclude the columns that are both in query scan output columns and mv ref set, which are valid columns
         // left columns are only in mv scan output columns
         mvRefSets.except(scanOutputColumns);
         if (!ConstantOperator.TRUE.equals(equalPredicates)) {
@@ -638,7 +638,7 @@ public class MaterializedViewRewriter {
         for (ScalarOperator expr : exprsToRewrites) {
             ScalarOperator rewritten = replaceExprWithTarget(expr, reversedViewProjection, outputMapping);
             if (expr.isVariable() && expr == rewritten) {
-                // it means it can not be rewrrite  by target
+                // it means it can not be rewritten  by target
                 return Lists.newArrayList();
             }
             if (originalColumnSet != null && !isAllExprReplaced(rewritten, originalColumnSet)) {
