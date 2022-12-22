@@ -564,7 +564,7 @@ public:
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
-    Status flush_tmp_l1();
+    Status flush_advance();
 
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
 
