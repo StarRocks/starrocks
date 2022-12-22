@@ -70,4 +70,5 @@ message PersistentIndexMetaPB {
     // only store a version to get file name
     EditVersionPB l1_version = 5;
     uint32 format_version = 6;
+    uint64 usage =7;
 }

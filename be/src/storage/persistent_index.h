@@ -71,8 +71,6 @@ struct KeysInfo {
                             std::back_inserter(infos), [](auto& a, auto& b) { return a.first < b.first; });
         key_infos.swap(infos);
     }
-
-    //void swap(KeysInfo& input) { key_infos.swap(input.key_infos); }
 };
 
 struct KVRef {
@@ -184,10 +182,6 @@ public:
     virtual void clear() = 0;
 
     virtual size_t memory_usage() = 0;
-
-    virtual void update_overlap_info(size_t overlap_size, size_t overlap_usage) = 0;
-
-    virtual size_t overlap_size() = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
@@ -308,9 +302,6 @@ public:
 
     void clear();
 
-    Status update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys, const IndexValue* values,
-                               const KeysInfo& keys_info, bool erase);
-
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -385,18 +376,6 @@ private:
     Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t shard_bits,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    /*
-    Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                IndexValue* values, size_t* num_found,
-                                std::unique_ptr<ImmutableIndexShard>* shard) const;
-
-    Status _get_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
-                                IndexValue* values, size_t* num_found,
-                                std::unique_ptr<ImmutableIndexShard>* shard) const;
-
-    Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values,
-                         size_t* num_found) const;
-    */
     Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
                                 IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
@@ -447,6 +426,8 @@ public:
     Status write_shard_as_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info, ImmutableIndex* immutable_index);
 
     Status finish();
+
+    size_t total_kv_size() { return _total_kv_size; }
 
 private:
     EditVersion _version;

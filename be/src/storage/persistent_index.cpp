@@ -699,8 +699,6 @@ public:
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, IndexValue(NullIndexValue)); inserted) {
                 old_values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
             } else {
                 old_values[idx] = it->second;
                 nfound += it->second.get_value() != NullIndexValue;
@@ -718,8 +716,6 @@ public:
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
                 it->second = value;
-            } else {
-                _overlap_size += 1;
             }
         }
         return Status::OK();
@@ -831,18 +827,11 @@ public:
 
     void reserve(size_t size) override { _map.reserve(size); }
 
-    void clear() override {
-        _map.clear();
-        _overlap_size = 0;
-    }
+    void clear() override { _map.clear(); }
 
     size_t memory_usage() override { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
 
-    void update_overlap_info(size_t overlap_size, size_t overlap_usage) override { _overlap_size += overlap_size; }
-    size_t overlap_size() override { return _overlap_size; }
-
 private:
-    size_t _overlap_size = 0;
     phmap::flat_hash_map<KeyType, IndexValue, FixedKeyHash<KeySize>> _map;
 };
 
@@ -1045,8 +1034,6 @@ public:
             uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
-                _overlap_kv_pairs_usage += composite_key.size();
-                _overlap_size += 1;
             } else {
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
@@ -1246,8 +1233,6 @@ public:
     void clear() override {
         _set.clear();
         _total_kv_pairs_usage = 0;
-        _overlap_size = 0;
-        _overlap_kv_pairs_usage = 0;
     }
 
     // TODO: more accurate estimation for phmap::flat_hash_set<std::string, ...
@@ -1262,22 +1247,11 @@ public:
         return ret;
     }
 
-    void update_overlap_info(size_t overlap_size, size_t overlap_usage) override {
-        _overlap_kv_pairs_usage += overlap_usage;
-        _overlap_size += overlap_size;
-    }
-
-    size_t overlap_size() override { return _overlap_size; }
-
 private:
     friend ShardByLengthMutableIndex;
     friend PersistentIndex;
     phmap::flat_hash_set<KeyType, StringHasher2, EqualOnStringWithHash> _set;
     size_t _total_kv_pairs_usage = 0;
-    // _overlap_num and _overlap_kv_pairs_usage will lost after be restart,
-    // but it is not very important because it will be fixed in later _merge_compaction.
-    size_t _overlap_size = 0;
-    size_t _overlap_kv_pairs_usage = 0;
 };
 
 StatusOr<std::unique_ptr<MutableIndex>> MutableIndex::create(size_t key_size) {
@@ -1662,37 +1636,6 @@ Status ShardByLengthMutableIndex::erase(size_t n, const Slice* keys, IndexValue*
             }
         }
     }
-    return Status::OK();
-}
-
-Status ShardByLengthMutableIndex::update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys,
-                                                      const IndexValue* values, const KeysInfo& keys_info, bool erase) {
-    DCHECK(_fixed_key_size != -1);
-    const auto [shard_offset, shard_size] = _shard_info_by_key_size[key_size];
-    DCHECK(shard_size == 1);
-    if (key_size > 0) {
-        for (size_t i = 0; i < shard_size; ++i) {
-            _shards[shard_offset + i]->update_overlap_info(num_overlap, 0);
-        }
-    } else {
-        DCHECK(key_size == 0);
-        DCHECK(_fixed_key_size == 0);
-        size_t overlap_size = 0;
-        for (size_t i = 0; i < keys_info.size(); i++) {
-            //auto key_idx = keys_info.key_idxes[i];
-            auto key_idx = keys_info.key_infos[i].first;
-            if (values[key_idx].get_value() != NullIndexValue) {
-                overlap_size += keys[key_idx].get_size() + kIndexValueSize;
-            }
-        }
-        if (erase) {
-            overlap_size *= 2;
-        }
-        for (size_t i = 0; i < shard_size; ++i) {
-            _shards[shard_offset + i]->update_overlap_info(num_overlap, overlap_size);
-        }
-    }
-
     return Status::OK();
 }
 
@@ -2408,6 +2351,36 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
 Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     size_t key_size = index_meta.key_size();
     _size = index_meta.size();
+    if (_size != 0 && index_meta.usage() == 0) {
+        if (key_size != 0) {
+            _usage = (key_size + kIndexValueSize) * _size;
+        } else {
+            // if persistent index is varlen and upgrade from old version, we can't estimate accurate usage of index
+            // so we use index file size as the _usage and the _usage will be adjusted in subsequent compaction.
+            if (index_meta.has_l1_version()) {
+                EditVersion version = index_meta.l1_version();
+                auto l1_file_path = strings::Substitute("$0/index.l1.$1.$2", _path, version.major(), version.minor());
+                auto l1_st = _fs->get_file_size(l1_file_path);
+                if (!l1_st.ok()) {
+                    return l1_st.status();
+                }
+                _usage = l1_st.value();
+            } else {
+                DCHECK(index_meta.has_l0_meta());
+                const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+                const IndexSnapshotMetaPB& snapshot_meta = l0_meta.snapshot();
+                const EditVersion& start_version = snapshot_meta.version();
+                std::string l0_file_path = get_l0_index_file_name(_path, start_version);
+                auto l0_st = _fs->get_file_size(l0_file_path);
+                if (!l0_st.ok()) {
+                    return l0_st.status();
+                }
+                _usage = l0_st.value();
+            }
+        }
+    } else {
+        _usage = index_meta.usage();
+    }
     DCHECK_EQ(key_size, _key_size);
     if (!index_meta.has_l0_meta()) {
         return Status::InternalError("invalid PersistentIndexMetaPB");
@@ -2737,6 +2710,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     if (_flushed) {
         // update PersistentIndexMetaPB
         index_meta->set_size(_size);
+        index_meta->set_usage(_usage);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         _version.to_pb(index_meta->mutable_l1_version());
@@ -2746,12 +2720,14 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         RETURN_IF_ERROR(_reload(*index_meta));
     } else if (_dump_snapshot) {
         index_meta->set_size(_size);
+        index_meta->set_usage(_usage);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
     } else {
         index_meta->set_size(_size);
+        index_meta->set_usage(_usage);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
@@ -3267,6 +3243,12 @@ Status PersistentIndex::_merge_compaction() {
             l0_kvs_by_shard[shard_idx].clear();
             l0_kvs_by_shard[shard_idx].shrink_to_fit();
         }
+    }
+    // _usage should be equal to total_kv_size. But they may be differen because of compatibility problemw when we upgrade
+    // from old version and _usage maybe not accurate.
+    // so we use total_kv_size to correct the _usage.
+    if (_usage != writer->total_kv_size()) {
+        _usage = writer->total_kv_size();
     }
     return writer->finish();
 }
