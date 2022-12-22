@@ -368,6 +368,8 @@
     + 工具函数
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
       + [version](/sql-reference/sql-functions/utility-functions/version.md)
+      + [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)
+      + [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](/sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](/sql-reference/sql-functions/utility-functions/uuid.md)
@@ -388,6 +390,7 @@
       + [max](/sql-reference/sql-functions/aggregate-functions/max.md)
       + [min](/sql-reference/sql-functions/aggregate-functions/min.md)
       + [multi_distinct_count](/sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
+      + [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
       + [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [retention](/sql-reference/sql-functions/aggregate-functions/retention.md)
       + [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)
