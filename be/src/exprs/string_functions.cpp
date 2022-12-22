@@ -1733,7 +1733,7 @@ template <bool simd_optimization, bool trim_single>
 static inline const char* skip_leading_spaces(const char* begin, const char* end, const std::string& remove) {
     auto p = begin;
 #if defined(__SSE2__)
-    if (simd_optimization && remove.size() == 1) {
+    if constexpr (simd_optimization && trim_single) {
         const auto size = end - begin;
         const auto SSE2_BYTES = sizeof(__m128i);
         const auto sse2_end = begin + (size & ~(SSE2_BYTES - 1));
