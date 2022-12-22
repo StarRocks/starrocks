@@ -310,6 +310,13 @@ public class MaterializedViewRewriter {
         }
         // should exclude the columns that are both in query scan output columns and mv ref set, which are valid columns
         // left columns are only in mv scan output columns
+        // if the columns used in compensation predicates exist in the mvRefSets, but not in the scanOutputColumns, it means
+        // the predicate can not be rewritten.
+        // for example:
+        //  predicate: empid:1 < 10
+        //  query scan output columsn: name: 2, salary: 3
+        //  mvRefSets: empid:1, name: 2, salary: 3
+        // the predicate empid:1 < 10 can not be rewritten
         mvRefSets.except(scanOutputColumns);
         if (!ConstantOperator.TRUE.equals(equalPredicates)) {
             equalPredicates = rewriteScalarOperatorToTarget(otherPredicates, queryExprMap, rewriteContext, mvRefSets, true);
