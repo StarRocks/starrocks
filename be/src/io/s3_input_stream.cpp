@@ -25,15 +25,6 @@
 #include "metrics/metrics.h"
 #endif
 
-#ifdef USE_STAROS
-namespace {
-static const staros::starlet::metrics::Labels kSrS3FsLables({{"fstype", "srs3"}});
-
-DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_srs3_read_iosize, staros::starlet::fslib::kMKReadIOSize, kSrS3FsLables);
-DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_srs3_read_iolatency, staros::starlet::fslib::kMKReadIOLatency, kSrS3FsLables);
-} // namespace
-#endif
-
 namespace starrocks::io {
 
 inline Status make_error_status(const Aws::S3::S3Error& error) {
@@ -49,10 +40,6 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         return 0;
     }
 
-#ifdef USE_STAROS
-    staros::starlet::metrics::TimeObserver observer(s_srs3_read_iolatency);
-#endif
-
     auto range = fmt::format("bytes={}-{}", _offset, std::min<int64_t>(_offset + count, _size));
     Aws::S3::Model::GetObjectRequest request;
     request.SetBucket(_bucket);
@@ -64,9 +51,6 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
         body.read(static_cast<char*>(out), count);
         _offset += body.gcount();
-#ifdef USE_STAROS
-        s_srs3_read_iosize.Observe(body.gcount());
-#endif
         return body.gcount();
     } else {
         return make_error_status(outcome.GetError());
