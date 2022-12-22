@@ -12,7 +12,7 @@ ISNULL(v)
 
 ## Parameters
 
-- `v`: the value to check. All date typs is supported.
+- `v`: the value to check. All date types is supported.
 
 ## Return value
 
