@@ -348,11 +348,11 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
 
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
             this->data(state).is_null = true;
         } else {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).value = column->get_data()[value_index];
         }
@@ -402,11 +402,11 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
 
         size_t value_index =
                 !ignoreNulls ? frame_end - 1 : ColumnHelper::last_nonnull(columns[0], frame_start, frame_end);
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
             this->data(state).is_null = true;
         } else {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).value = column->get_data()[value_index];
         }
@@ -522,12 +522,12 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
 
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const auto* column = down_cast<const BinaryColumn*>(data_column);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
             this->data(state).is_null = true;
         } else {
-            Slice slice = column->get_slice(frame_start);
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            const auto* column = down_cast<const BinaryColumn*>(data_column);
+            Slice slice = column->get_slice(value_index);
             const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
             this->data(state).is_null = false;
