@@ -80,8 +80,20 @@ public class PrivilegeCheckerV2Test {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addBroker("broker0");
-        String createTblStmtStr1 = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "primary KEY(k1, k2, k3) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr1 = "create table db1.tbl1(event_day DATE, k1 varchar(32), " +
+                "k2 varchar(32), k3 varchar(32), k4 int) "
+                + "primary KEY(event_day, k1, k2, k3) " + " PARTITION BY RANGE(event_day)(\n" +
+                "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                "PARTITION p20200324 VALUES LESS THAN (\"2020-03-25\")\n" +
+                ")\n" + "distributed by hash(k1) buckets 3 properties('replication_num' = '1', \n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "    \"dynamic_partition.start\" = \"-3\",\n" +
+                "    \"dynamic_partition.end\" = \"3\",\n" +
+                "    \"dynamic_partition.prefix\" = \"p\",\n" +
+                "    \"dynamic_partition.buckets\" = \"32\"" + ");";
         String createTblStmtStr2 = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
@@ -691,7 +703,7 @@ public class PrivilegeCheckerV2Test {
                 "revoke select on db1.tbl1 from test",
                 "SELECT command denied to user 'test'");
         verifyGrantRevoke(
-                "insert into db1.tbl1 values ('petals', 'on', 'a', 99);",
+                "insert into db1.tbl1 values ('2020-03-23', 'petals', 'on', 'a', 99);",
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
                 "INSERT command denied to user 'test'");
@@ -844,6 +856,21 @@ public class PrivilegeCheckerV2Test {
                         "revoke select on table db1.tbl1 from test"
                 ),
                 "Access denied for user 'test' to database 'db1'");
+    }
+
+    @Test
+    public void testShowDynamicPartitionTables() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW DYNAMIC PARTITION TABLES from db1", ctx);
+        grantRevokeSqlAsRoot("grant SELECT on db1.tbl1 to test");
+        ctxToTestUser();
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) statement);
+        ShowResultSet showResultSet = showExecutor.execute();
+        grantRevokeSqlAsRoot("revoke SELECT on db1.tbl1 from test");
+        List<List<String>> resultRows = showResultSet.getResultRows();
+        System.out.println(resultRows);
+        Assert.assertEquals(1, resultRows.size());
+        Assert.assertEquals("tbl1", resultRows.get(0).get(0));
     }
 
     @Test
@@ -1110,6 +1137,16 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
                 "set property 'max_user_connections' = '100'", ctx), ctx);
+    }
+
+    @Test
+    public void testSetGlobalVar() throws Exception {
+        ctxToRoot();
+        verifyGrantRevoke(
+                "SET global enable_cbo = true",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
     }
 
     @Test

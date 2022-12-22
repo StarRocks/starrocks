@@ -90,7 +90,7 @@ public class SetExecutor {
                 }
                 userAuthenticationInfo.setPassword(setPassVar.getPassword());
                 GlobalStateMgr.getCurrentState().getAuthenticationManager().
-                        upgradeUserWithAuthenticationInfoUnlocked(
+                        updateUserWithAuthenticationInfo(
                                 setPassVar.getUserIdent(), userAuthenticationInfo);
             } else {
                 ctx.getGlobalStateMgr().getAuth().setPassword(setPassVar);
