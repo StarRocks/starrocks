@@ -1140,7 +1140,7 @@ public class StmtExecutor {
             }
             context.setState(e.getQueryState());
         } catch (Throwable e) {
-            // Maybe our bug or wrong input parematers
+            // Maybe our bug or wrong input parameters
             String sql = AstToStringBuilder.toString(parsedStmt);
             if (sql == null || sql.isEmpty()) {
                 sql = originStmt.originStmt;
