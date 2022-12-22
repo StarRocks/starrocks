@@ -1884,33 +1884,63 @@ struct AdaptiveTrimFunction {
     }
 };
 
+struct TrimState {
+    std::string remove_chars;
+};
+
 template <TrimType trim_type>
 static StatusOr<ColumnPtr> trim_impl(FunctionContext* context, const starrocks::Columns& columns) {
-    if (columns.size() == 1) {
-        // trim whitespace
+    auto* state = reinterpret_cast<TrimState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    DCHECK(!!state);
+    auto& remove_chars = state->remove_chars;
+    DCHECK(remove_chars.size() > 0);
+    if (remove_chars.size() == 1) {
         return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, true>>::template evaluate<TYPE_VARCHAR,
                                                                                                     const std::string&>(
-                columns[0], " ");
-    } else if (columns.size() == 2 && columns[1]->is_constant()) {
-        // trim specififed characters
-        if (columns[1]->only_null()) {
-            return Status::InvalidArgument("The second parameter should not be null");
-        }
-        const Slice chars = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1].get());
-        std::string remove(chars.get_data(), chars.get_size());
-        if (remove.empty()) {
-            return Status::InvalidArgument("The second parameter should not be empty string");
-        }
-        if (remove.size() == 1) {
-            return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, true>>::template evaluate<
-                    TYPE_VARCHAR, const std::string&>(columns[0], remove);
-        } else {
-            return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, false>>::template evaluate<
-                    TYPE_VARCHAR, const std::string&>(columns[0], remove);
-        }
+                columns[0], remove_chars);
     } else {
+        return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, false>>::template evaluate<
+                TYPE_VARCHAR, const std::string&>(columns[0], remove_chars);
+    }
+}
+
+Status StringFunctions::trim_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    if (context->get_num_constant_columns() == 1) {
+        auto* state = new TrimState();
+        context->set_function_state(scope, state);
+        state->remove_chars = " ";
+        return Status::OK();
+    }
+    if (!context->is_constant_column(1)) {
         return Status::InvalidArgument("The second parameter of trim only accept literal value");
     }
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::InvalidArgument("The second parameter should not be null");
+    }
+    auto remove_col = context->get_constant_column(1);
+    const Slice chars = ColumnHelper::get_const_value<TYPE_VARCHAR>(remove_col);
+    std::string remove(chars.get_data(), chars.get_size());
+    if (remove.empty()) {
+        return Status::InvalidArgument("The second parameter should not be empty string");
+    }
+
+    auto* state = new TrimState();
+    context->set_function_state(scope, state);
+    state->remove_chars = std::move(remove);
+
+    return Status::OK();
+}
+
+Status StringFunctions::trim_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<TrimState*>(context->get_function_state(scope));
+        delete state;
+    }
+
+    return Status::OK();
 }
 
 StatusOr<ColumnPtr> StringFunctions::trim(FunctionContext* context, const starrocks::Columns& columns) {
