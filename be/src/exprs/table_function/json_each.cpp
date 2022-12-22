@@ -19,7 +19,7 @@
 #include "exprs/table_function/table_function.h"
 #include "velocypack/vpack.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 std::pair<Columns, ColumnPtr> JsonEach::process(TableFunctionState* state, bool* eos) const {
     size_t num_input_rows = 0;
@@ -69,4 +69,4 @@ std::pair<Columns, ColumnPtr> JsonEach::process(TableFunctionState* state, bool*
     return std::make_pair(result, offset_column);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

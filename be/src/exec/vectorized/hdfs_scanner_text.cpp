@@ -22,7 +22,7 @@
 #include "util/compression/stream_compression.h"
 #include "util/utf8_check.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
@@ -35,15 +35,15 @@ static CompressionTypePB return_compression_type_from_filename(const std::string
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
-    HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator,
+    HdfsScannerCSVReader(RandomAccessFile* file, const std::string& row_delimiter, const std::string& column_separator,
                          size_t file_length)
-            : CSVReader(row_delimiter, column_separator) {
+            : CSVReader(CSVParseOptions(row_delimiter, column_separator)) {
         _file = file;
         _offset = 0;
         _remain_length = file_length;
         _file_length = file_length;
         _row_delimiter_length = row_delimiter.size();
-        _column_separator_length = column_separator.size();
+        _column_delimiter_length = column_separator.size();
     }
 
     Status reset(size_t offset, size_t remain_length);
@@ -114,9 +114,10 @@ Status HdfsScannerCSVReader::_fill_buffer() {
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself, ONLY IF we have space.
         // But if we don't have any space, which means a single csv record size has exceed buffer max size.
-        if (n >= _row_delimiter_length && _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        if (n >= _row_delimiter_length &&
+            _buff.find(_parse_options.row_delimiter, n - _row_delimiter_length) == nullptr) {
             if (_buff.free_space() >= _row_delimiter_length) {
-                for (char ch : _row_delimiter) {
+                for (char ch : _parse_options.row_delimiter) {
                     _buff.append(ch);
                 }
             } else {
@@ -310,7 +311,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 Column* column = _column_raw_ptrs[index];
                 ColumnPtr partition_value = _scanner_ctx.partition_values[p];
                 DCHECK(partition_value->is_constant());
-                auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
+                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
                 const ColumnPtr& data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
                     column->append_nulls(1);
@@ -377,4 +378,4 @@ Status HdfsTextScanner::_get_hive_column_index(const std::string& column_name) {
     return Status::InvalidArgument("Can not get index of column name " + column_name);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

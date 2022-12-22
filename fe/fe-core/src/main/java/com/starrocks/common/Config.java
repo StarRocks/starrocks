@@ -681,7 +681,7 @@ public class Config extends ConfigBase {
     /**
      * The thrift server max worker threads
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
@@ -1094,7 +1094,7 @@ public class Config extends ConfigBase {
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
     @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
-    public static int tablet_sched_slot_num_per_path = 2;
+    public static int tablet_sched_slot_num_per_path = 4;
 
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
@@ -1119,9 +1119,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
-
-    @ConfField(aliases = {"tablet_balancer_strategy"})
-    public static String tablet_sched_balancer_strategy = "disk_and_tablet";
 
     // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
     // no more balance check
@@ -1769,6 +1766,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    /**
+     * empty shard group clean threshold (by create time).
+     */
+    @ConfField
+    public static long shard_group_clean_threshold_sec = 3600L;
+
+    /**
+     * ShardDeleter run interval in seconds
+     */
+    @ConfField
+    public static long shard_deleter_run_interval_sec = 600L;
+
     @ConfField
     public static String hdfs_url = "";
 
@@ -1781,12 +1790,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long lake_default_storage_cache_ttl_seconds = 2592000L;
-
-    /**
-     * default bucket number when create OLAP table without buckets info
-     */
-    @ConfField(mutable = true)
-    public static int default_bucket_num = 10;
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;

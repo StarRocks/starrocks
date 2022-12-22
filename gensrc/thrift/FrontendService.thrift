@@ -623,6 +623,14 @@ struct TStreamLoadPutRequest {
     31: optional string merge_condition
     // only valid when file type is CSV
     50: optional string rowDelimiter
+    // only valid when file type is CSV
+    51: optional i64 skipHeader
+    // only valid when file type is CSV
+    52: optional bool trimSpace
+    // only valid when file type is CSV
+    53: optional byte enclose
+    // only valid when file type is CSV
+    54: optional byte escape
 }
 
 struct TStreamLoadPutResult {

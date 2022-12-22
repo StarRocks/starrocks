@@ -21,9 +21,9 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -31,7 +31,7 @@
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoinerPtr>& read_only_join_probers)
         : _hash_join_node(param._hash_join_node),
@@ -464,4 +464,4 @@ Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

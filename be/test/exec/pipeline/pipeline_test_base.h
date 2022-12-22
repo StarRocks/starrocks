@@ -28,8 +28,8 @@ namespace starrocks::pipeline {
 
 class PipelineTestBase : public ::testing::Test {
 public:
-    static vectorized::ChunkPtr _create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num);
-    static vectorized::ChunkPtr _create_and_fill_chunk(size_t row_num);
+    static ChunkPtr _create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num);
+    static ChunkPtr _create_and_fill_chunk(size_t row_num);
 
 public:
     virtual void SetUp() final;

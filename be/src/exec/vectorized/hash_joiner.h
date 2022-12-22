@@ -24,7 +24,7 @@
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/join_hash_map.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/in_const_predicate.hpp"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -35,7 +35,6 @@ class DescriptorTbl;
 class RuntimeState;
 class ExprContext;
 
-namespace vectorized {
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
@@ -413,5 +412,4 @@ private:
     RuntimeProfile::Counter* _where_conjunct_evaluate_timer = nullptr;
 };
 
-} // namespace vectorized
 } // namespace starrocks

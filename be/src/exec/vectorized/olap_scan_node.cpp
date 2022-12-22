@@ -28,7 +28,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -43,7 +43,7 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {
@@ -61,6 +61,14 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
+    }
+
+    if (_olap_scan_node.__isset.bucket_exprs) {
+        const auto& bucket_exprs = _olap_scan_node.bucket_exprs;
+        _bucket_exprs.resize(bucket_exprs.size());
+        for (int i = 0; i < bucket_exprs.size(); ++i) {
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, bucket_exprs[i], &_bucket_exprs[i], state));
+        }
     }
 
     _estimate_scan_and_output_row_bytes();
@@ -822,4 +830,4 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

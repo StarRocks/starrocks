@@ -7,7 +7,7 @@ A Hive catalog is an external catalog supported in StarRocks 2.3 and later versi
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks supports querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY, MAP, and STRUCT. The following data types are not supported: INTERVAL, BINARY, and UNION.
+- StarRocks does not support querying data of the following types from Hive: INTERVAL, BINARY, and UNION.
 
     > **Note**
     >
@@ -141,7 +141,7 @@ The properties of the Hive catalog. This parameter is required. You can configur
     | aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
     | aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
-### Properties for update policies for cached metadata
+#### Properties for update policies for cached metadata
 
 StarRocks supports two policies to update cached metadata: asynchronous update and automatic incremental update. For more information, see [Update policies for cached metadata](#update-policies-for-cached-metadata).
 

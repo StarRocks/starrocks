@@ -63,7 +63,7 @@ Status EngineAlterTabletTask::execute() {
         lake::SchemaChangeHandler handler;
         res = handler.process_alter_tablet(_alter_tablet_req);
     } else {
-        vectorized::SchemaChangeHandler handler;
+        SchemaChangeHandler handler;
         res = handler.process_alter_tablet_v2(_alter_tablet_req);
     }
     if (!res.ok()) {

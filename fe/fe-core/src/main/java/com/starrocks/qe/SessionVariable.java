@@ -329,6 +329,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
 
+    public static final String SQL_DIALECT = "sql_dialect";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -810,6 +812,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Users need to set up according to their own scenario.
     @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
     private long bigQueryLogScanRowsThreshold = 1000000000L;
+
+    @VarAttr(name = SQL_DIALECT)
+    private String sqlDialect = "StarRocks";
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1515,6 +1520,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
         this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
+    }
+
+    public String getSqlDialect() {
+        return this.sqlDialect;
+    }
+
+    public void setSqlDialect(String dialect) {
+        this.sqlDialect = dialect;
     }
 
     // Serialize to thrift object

@@ -16,8 +16,8 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/column_ref.h"
+#include "exprs/cast_expr.h"
+#include "exprs/column_ref.h"
 #include "fs/fs_broker.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -25,7 +25,7 @@
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                                ScannerCounter* counter)
@@ -391,4 +391,4 @@ void ParquetScanner::close() {
     _pool.clear();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

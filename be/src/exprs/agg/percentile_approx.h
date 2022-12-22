@@ -22,7 +22,7 @@
 #include "util/percentile_value.h"
 #include "util/tdigest.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct PercentileApproxState {
 public:
@@ -179,4 +179,4 @@ public:
 
     std::string get_name() const override { return "percentile_approx"; }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

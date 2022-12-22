@@ -28,7 +28,7 @@
 
 //TODO: test multi thread
 //TODO: test runtime filter
-namespace starrocks::vectorized {
+namespace starrocks {
 class HdfsScanNodeTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -50,7 +50,7 @@ private:
     DescriptorTbl* _create_table_desc_for_filter_partition();
     std::vector<TScanRangeParams> _create_scan_ranges();
     std::vector<TScanRangeParams> _create_scan_ranges_for_filter_partition();
-    static vectorized::ChunkPtr _create_chunk();
+    static ChunkPtr _create_chunk();
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     HdfsTableDescriptor* _table_desc = nullptr;
@@ -65,17 +65,13 @@ private:
     int64_t _file_2_size = 850;
 };
 
-vectorized::ChunkPtr HdfsScanNodeTest::_create_chunk() {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr HdfsScanNodeTest::_create_chunk() {
+    ChunkPtr chunk = std::make_shared<Chunk>();
 
-    auto col1 =
-            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT), true);
-    auto col2 =
-            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT), true);
-    auto col3 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR),
-                                                        true);
-    auto col4 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME),
-                                                        true);
+    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT), true);
+    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT), true);
+    auto col3 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR), true);
+    auto col4 = ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME), true);
     chunk->append_column(col1, 0);
     chunk->append_column(col2, 1);
     chunk->append_column(col3, 2);
@@ -421,4 +417,4 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         ASSERT_TRUE(status.ok());
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

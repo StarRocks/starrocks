@@ -54,8 +54,6 @@ namespace starrocks {
 class Field;
 class Tablet;
 
-namespace vectorized {
-
 class ChunkAllocator {
 public:
     ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation);
@@ -189,5 +187,4 @@ private:
     DISALLOW_COPY(SchemaChangeHandler);
 };
 
-} // namespace vectorized
 } // namespace starrocks

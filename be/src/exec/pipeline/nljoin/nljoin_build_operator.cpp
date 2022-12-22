@@ -31,7 +31,7 @@ void NLJoinBuildOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> NLJoinBuildOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> NLJoinBuildOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from cross join right sink operator");
 }
 
@@ -42,7 +42,7 @@ Status NLJoinBuildOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-Status NLJoinBuildOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status NLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _cross_join_context->append_build_chunk(_driver_sequence, chunk);
 
     return Status::OK();

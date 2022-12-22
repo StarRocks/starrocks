@@ -19,7 +19,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/row_source_mask.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // new_heap_merge_iterator create a sorted iterator based on merge-sort algorithm.
 // the order of rows is determined by the key columns.
@@ -44,4 +44,4 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
                                          RowSourceMaskBuffer* mask_buffer);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

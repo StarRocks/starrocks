@@ -463,12 +463,14 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             droppedIndexes = visualiseShadowIndex(table);
         }
 
-        // Delete shards from StarOS
-        ShardDeleter shardDeleter = GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter();
+        // Delete tablet and shards
+        List<Long> unusedShards = new ArrayList<>();
         for (MaterializedIndex droppedIndex : droppedIndexes) {
-            Set<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toSet());
-            shardDeleter.addUnusedShardId(shards);
+            List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
+            unusedShards.addAll(shards);
         }
+        // TODO: what if unusedShards deletion is partially successful?
+        ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
 
         if (span != null) {
             span.end();

@@ -31,7 +31,7 @@
 #include "exec/vectorized/schema_scanner/schema_variables_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_views_scanner.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 StarRocksServer* SchemaScanner::_s_starrocks_server;
 
@@ -48,7 +48,7 @@ Status SchemaScanner::start(RuntimeState* state) {
     return Status::OK();
 }
 
-Status SchemaScanner::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
+Status SchemaScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
@@ -81,40 +81,40 @@ Status SchemaScanner::init(SchemaScannerParam* param, ObjectPool* pool) {
 std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type) {
     switch (type) {
     case TSchemaTableType::SCH_TABLES:
-        return std::make_unique<vectorized::SchemaTablesScanner>();
+        return std::make_unique<SchemaTablesScanner>();
     case TSchemaTableType::SCH_SCHEMATA:
-        return std::make_unique<vectorized::SchemaSchemataScanner>();
+        return std::make_unique<SchemaSchemataScanner>();
     case TSchemaTableType::SCH_COLUMNS:
-        return std::make_unique<vectorized::SchemaColumnsScanner>();
+        return std::make_unique<SchemaColumnsScanner>();
     case TSchemaTableType::SCH_CHARSETS:
-        return std::make_unique<vectorized::SchemaCharsetsScanner>();
+        return std::make_unique<SchemaCharsetsScanner>();
     case TSchemaTableType::SCH_COLLATIONS:
-        return std::make_unique<vectorized::SchemaCollationsScanner>();
+        return std::make_unique<SchemaCollationsScanner>();
     case TSchemaTableType::SCH_GLOBAL_VARIABLES:
-        return std::make_unique<vectorized::SchemaVariablesScanner>(TVarType::GLOBAL);
+        return std::make_unique<SchemaVariablesScanner>(TVarType::GLOBAL);
     case TSchemaTableType::SCH_SESSION_VARIABLES:
     case TSchemaTableType::SCH_VARIABLES:
-        return std::make_unique<vectorized::SchemaVariablesScanner>(TVarType::SESSION);
+        return std::make_unique<SchemaVariablesScanner>(TVarType::SESSION);
     case TSchemaTableType::SCH_USER_PRIVILEGES:
-        return std::make_unique<vectorized::SchemaUserPrivilegesScanner>();
+        return std::make_unique<SchemaUserPrivilegesScanner>();
     case TSchemaTableType::SCH_SCHEMA_PRIVILEGES:
-        return std::make_unique<vectorized::SchemaSchemaPrivilegesScanner>();
+        return std::make_unique<SchemaSchemaPrivilegesScanner>();
     case TSchemaTableType::SCH_TABLE_PRIVILEGES:
-        return std::make_unique<vectorized::SchemaTablePrivilegesScanner>();
+        return std::make_unique<SchemaTablePrivilegesScanner>();
     case TSchemaTableType::SCH_VIEWS:
-        return std::make_unique<vectorized::SchemaViewsScanner>();
+        return std::make_unique<SchemaViewsScanner>();
     case TSchemaTableType::SCH_TASKS:
-        return std::make_unique<vectorized::SchemaTasksScanner>();
+        return std::make_unique<SchemaTasksScanner>();
     case TSchemaTableType::SCH_TASK_RUNS:
-        return std::make_unique<vectorized::SchemaTaskRunsScanner>();
+        return std::make_unique<SchemaTaskRunsScanner>();
     case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
-        return std::make_unique<vectorized::SchemaMaterializedViewsScanner>();
+        return std::make_unique<SchemaMaterializedViewsScanner>();
     case TSchemaTableType::SCH_TABLES_CONFIG:
-        return std::make_unique<vectorized::SchemaTablesConfigScanner>();
+        return std::make_unique<SchemaTablesConfigScanner>();
     case TSchemaTableType::SCH_VERBOSE_SESSION_VARIABLES:
-        return std::make_unique<vectorized::SchemaVariablesScanner>(TVarType::VERBOSE);
+        return std::make_unique<SchemaVariablesScanner>(TVarType::VERBOSE);
     default:
-        return std::make_unique<vectorized::SchemaDummyScanner>();
+        return std::make_unique<SchemaDummyScanner>();
     }
 }
 
@@ -173,4 +173,4 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

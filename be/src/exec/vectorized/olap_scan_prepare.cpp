@@ -17,19 +17,19 @@
 #include <variant>
 
 #include "column/type_traits.h"
+#include "exprs/dictmapping_expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/dictmapping_expr.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/in_const_predicate.hpp"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
-#include "storage/vectorized_column_predicate.h"
 #include "types/date_value.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
     if (slot.type().is_date_type() && expr.type().is_date_type()) {
@@ -329,7 +329,7 @@ void OlapScanConjunctsManager::normalize_binary_predicate(const SlotDescriptor& 
             continue;
         }
 
-        using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
+        using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
         SQLFilterOp op;
         ValueType value;
@@ -387,7 +387,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
     for (const auto it : runtime_filters->descriptors()) {
         const RuntimeFilterProbeDescriptor* desc = it.second;
         const JoinRuntimeFilter* rf = desc->runtime_filter();
-        using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
+        using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
 
         // probe expr is slot ref and slot id matches.
@@ -425,7 +425,7 @@ void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const Slo
     DCHECK((SlotType == slot.type().type) || (SlotType == TYPE_VARCHAR && slot.type().type == TYPE_CHAR));
     const auto& conjunct_ctxs = (*conjunct_ctxs_ptr);
 
-    using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
+    using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
     // handle not equal.
     for (size_t i = 0; i < conjunct_ctxs.size(); i++) {
         if (normalized_conjuncts[i]) {
@@ -764,4 +764,4 @@ Status OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

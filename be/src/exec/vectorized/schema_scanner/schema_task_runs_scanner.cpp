@@ -19,7 +19,7 @@
 #include "runtime/string_value.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
@@ -238,4 +238,4 @@ Status SchemaTaskRunsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

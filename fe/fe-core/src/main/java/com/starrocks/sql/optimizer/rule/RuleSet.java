@@ -52,6 +52,7 @@ import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -128,6 +129,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
@@ -246,6 +248,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
+                PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
@@ -273,6 +276,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
+                PushDownPredicateScanRule.BINLOG_SCAN,
                 // Commented out because of UTs in `ExternalTableTest.java`
                 // PushDownPredicateScanRule.MYSQL_SCAN,
                 // PushDownPredicateScanRule.JDBC_SCAN,
@@ -325,7 +329,8 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
-                new RewriteDuplicateAggregateFnRule()
+                new RewriteDuplicateAggregateFnRule(),
+                new RewriteMinMaxAggToMetaScanRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
@@ -406,6 +411,7 @@ public class RuleSet {
     public void addRealtimeMVRules() {
         this.implementRules.add(StreamJoinImplementationRule.getInstance());
         this.implementRules.add(StreamAggregateImplementationRule.getInstance());
+        this.implementRules.add(StreamScanImplementationRule.getInstance());
     }
 
     public void addHashJoinImplementationRule() {

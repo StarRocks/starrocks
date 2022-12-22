@@ -102,6 +102,8 @@ import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
+import com.starrocks.privilege.FunctionPEntryObject;
+import com.starrocks.privilege.MaterializedViewPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
@@ -236,10 +238,12 @@ public class GsonUtils {
                     .registerSubtype(UserPEntryObject.class, UserPEntryObject.class.getSimpleName())
                     .registerSubtype(ResourcePEntryObject.class, ResourcePEntryObject.class.getSimpleName())
                     .registerSubtype(ViewPEntryObject.class, ViewPEntryObject.class.getSimpleName())
-                    .registerSubtype(CatalogPEntryObject.class,
-                            CatalogPEntryObject.class.getSimpleName())
+                    .registerSubtype(MaterializedViewPEntryObject.class,
+                                     MaterializedViewPEntryObject.class.getSimpleName())
+                    .registerSubtype(FunctionPEntryObject.class, FunctionPEntryObject.class.getSimpleName())
+                    .registerSubtype(CatalogPEntryObject.class, CatalogPEntryObject.class.getSimpleName())
                     .registerSubtype(ResourceGroupPEntryObject.class,
-                            ResourceGroupPEntryObject.class.getSimpleName());
+                                     ResourceGroupPEntryObject.class.getSimpleName());
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
@@ -264,6 +268,10 @@ public class GsonUtils {
 
     private static final JsonDeserializer<PrimitiveType> PRIMITIVE_TYPE_DESERIALIZER = new PrimitiveTypeDeserializer();
 
+    private static final JsonDeserializer<MapType> MAP_TYPE_JSON_DESERIALIZER = new MapType.MapTypeDeSerializer();
+
+    private static final JsonDeserializer<StructType> STRUCT_TYPE_JSON_DESERIALIZER = new StructType.StructTypeDeSerializer();
+
     // the builder of GSON instance.
     // Add any other adapters if necessary.
     private static final GsonBuilder GSON_BUILDER = new GsonBuilder()
@@ -272,6 +280,11 @@ public class GsonUtils {
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
             .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
+            // specified childcalss DeSerializer must be ahead of fatherclass,
+            // because when GsonBuilder::create() will reverse it,
+            // and gson::getDelegateAdapter will skip the factory ahead of father TypeAdapterFactory factory.
+            .registerTypeAdapter(MapType.class, MAP_TYPE_JSON_DESERIALIZER)
+            .registerTypeAdapter(StructType.class, STRUCT_TYPE_JSON_DESERIALIZER)
             .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)

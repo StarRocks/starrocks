@@ -14,7 +14,7 @@
 
 #include "exec/vectorized/meta_scan_node.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 MetaScanNode::MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
@@ -77,4 +77,4 @@ Status MetaScanNode::close(RuntimeState* state) {
     return ScanNode::close(state);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -135,8 +135,7 @@ void PipelineTestBase::_execute() {
     }
 }
 
-vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots,
-                                                              size_t row_num) {
+ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescriptor*>& slots, size_t row_num) {
     static std::default_random_engine e;
     static std::uniform_int_distribution<int8_t> u8;
     static std::uniform_int_distribution<int16_t> u16;
@@ -153,9 +152,9 @@ vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<
         auto* slot = slots[i];
         auto& column = chunk->columns()[i];
 
-        vectorized::Column* data_column = column.get();
+        Column* data_column = column.get();
         if (data_column->is_nullable()) {
-            auto* nullable_column = down_cast<vectorized::NullableColumn*>(data_column);
+            auto* nullable_column = down_cast<NullableColumn*>(data_column);
             data_column = nullable_column->data_column().get();
         }
 
@@ -190,12 +189,12 @@ vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<
                 data_column->append_datum(ud(e));
                 break;
             case TYPE_DATE: {
-                vectorized::DateValue value;
+                DateValue value;
                 data_column->append_datum(value);
                 break;
             }
             case TYPE_DATETIME: {
-                vectorized::TimestampValue value;
+                TimestampValue value;
                 data_column->append_datum(value);
                 break;
             }
@@ -222,7 +221,7 @@ vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<
     return chunk;
 }
 
-vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
+ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     // the following content is TDescriptorTable serialized in json format
     // CREATE TABLE IF NOT EXISTS `test_aggregate` (
     //   `id_int` INT(11) NOT NULL,

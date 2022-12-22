@@ -20,7 +20,7 @@
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
     _close();
@@ -136,13 +136,16 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     }
 }
 
+void AsyncDeltaWriter::cancel(const Status& st) {
+    _writer->cancel(st);
+}
+
 void AsyncDeltaWriter::abort(bool with_log) {
     Task task;
     task.abort = true;
     task.abort_with_log = with_log;
 
     bthread::TaskOptions options;
-    options.high_priority = true;
     int r = bthread::execution_queue_execute(_queue_id, task, &options);
     LOG_IF(WARNING, r != 0) << "Fail to execution_queue_execute: " << r;
 
@@ -172,4 +175,4 @@ void AsyncDeltaWriter::_close() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

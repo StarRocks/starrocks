@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
     return RUN_ALL_TESTS();
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define withHook(expr)                      \
     {                                       \
@@ -378,4 +378,4 @@ TEST(BytesTest, test_hook_posix_memalign) {
     ASSERT_EQ(before, after);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

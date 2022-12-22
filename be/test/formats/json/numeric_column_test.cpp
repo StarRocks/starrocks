@@ -19,7 +19,7 @@
 #include "column/fixed_length_column.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AddNumericColumnTest : public ::testing::Test {};
 
@@ -156,4 +156,4 @@ TEST_F(AddNumericColumnTest, test_add_int128_invalid) {
     ASSERT_TRUE(st.is_data_quality_error());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

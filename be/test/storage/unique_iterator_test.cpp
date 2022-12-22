@@ -25,7 +25,7 @@
 #include "common/config.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class UniqueIteratorTest : public testing::Test {
 protected:
@@ -200,4 +200,4 @@ TEST_F(UniqueIteratorTest, single_int) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -24,7 +24,7 @@
 #include "runtime/string_value.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanNode::SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
@@ -202,7 +202,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     bool scanner_eos = false;
     int row_num = 0;
 
-    ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk_src = std::make_shared<Chunk>();
     if (nullptr == chunk_src.get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     }
@@ -211,20 +211,19 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         DCHECK(dest_slot_descs[i]->is_materialized());
         int j = _index_map[i];
         SlotDescriptor* src_slot = src_slot_descs[j];
-        ColumnPtr column = vectorized::ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        ColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
         column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), src_slot->id());
     }
 
     // convert src chunk format to dest chunk format to process where clause
-    ChunkPtr chunk_dst = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk_dst = std::make_shared<Chunk>();
     if (nullptr == chunk_dst.get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     }
 
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column =
-                vectorized::ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 
@@ -314,4 +313,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompos
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

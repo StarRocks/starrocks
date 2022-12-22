@@ -23,7 +23,7 @@ class SequentialFile;
 class RandomAccessFile;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct ScannerCounter {
     int64_t num_rows_filtered = 0;
@@ -69,7 +69,7 @@ protected:
                                 int size);
     // materialize is used to transform source chunk depicted by src_slot_descriptors into destination
     // chunk depicted by dest_slot_descriptors
-    StatusOr<ChunkPtr> materialize(const starrocks::vectorized::ChunkPtr& src, starrocks::vectorized::ChunkPtr& cast);
+    StatusOr<ChunkPtr> materialize(const starrocks::ChunkPtr& src, starrocks::ChunkPtr& cast);
 
 protected:
     RuntimeState* _state;
@@ -94,4 +94,4 @@ protected:
     // value: source slot desc
     std::vector<SlotDescriptor*> _dest_slot_desc_mappings;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

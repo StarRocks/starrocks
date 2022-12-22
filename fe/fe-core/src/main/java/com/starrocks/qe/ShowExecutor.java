@@ -44,6 +44,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -103,6 +104,7 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -182,6 +184,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.JDBC;
@@ -350,6 +353,23 @@ public class ShowExecutor {
                         CaseSensibility.TABLE.getCaseSensibility());
             }
             for (MaterializedView mvTable : db.getMaterializedViews()) {
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
+                    mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
+                        if (!PrivilegeManager.checkTableAction(ctx, db.getFullName(),
+                                                               baseTableInfo.getTableName(),
+                                                               PrivilegeType.TableAction.SELECT)) {
+                            baseTableHasPrivilege.set(false);
+                        }
+                    });
+                    if (!baseTableHasPrivilege.get()) {
+                        continue;
+                    }
+                    if (!PrivilegeManager.checkAnyActionOnMaterializedView(ctx, db.getFullName(),
+                                                                           mvTable.getName())) {
+                        continue;
+                    }
+                }
                 if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
@@ -545,7 +565,7 @@ public class ShowExecutor {
 
             if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
                 if (CatalogMgr.isInternalCatalog(catalogName) &&
-                        !PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
+                        !PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
                     continue;
                 }
             } else {
@@ -640,7 +660,11 @@ public class ShowExecutor {
                     }
 
                     // check tbl privs
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), table.getName())) {
+                            continue;
+                        }
+                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                             db.getFullName(), table.getName(),
                             PrivPredicate.SHOW)) {
                         continue;
@@ -1516,6 +1540,24 @@ public class ShowExecutor {
         }
 
         BackupJob backupJob = (BackupJob) jobI;
+
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // check privilege
+            List<TableRef> tableRefs = backupJob.getTableRef();
+            AtomicBoolean privilegeDeny = new AtomicBoolean(false);
+            tableRefs.forEach(tableRef -> {
+                TableName tableName = tableRef.getName();
+                if (!PrivilegeManager.checkTableAction(ctx, tableName.getDb(), tableName.getTbl(),
+                                                       PrivilegeType.TableAction.EXPORT)) {
+                    privilegeDeny.set(true);
+                }
+            });
+            if (privilegeDeny.get()) {
+                resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
+                return;
+            }
+        }
+
         List<String> info = backupJob.getInfo();
         List<List<String>> infos = Lists.newArrayList();
         infos.add(info);

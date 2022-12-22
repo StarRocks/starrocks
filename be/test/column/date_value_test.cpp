@@ -25,11 +25,11 @@
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(DateValueTest, normalDate) {
-    ASSERT_EQ(1, std::is_pod_v<starrocks::vectorized::DateValue>);
-    ASSERT_EQ(1, std::is_pod_v<starrocks::vectorized::TimestampValue>);
+    ASSERT_EQ(1, std::is_pod_v<starrocks::DateValue>);
+    ASSERT_EQ(1, std::is_pod_v<starrocks::TimestampValue>);
 
     LOG(WARNING) << "0000-1-1: " << date::from_date(0000, 1, 1);
     LOG(WARNING) << "2000-1-1: " << date::from_date(2000, 1, 1);
@@ -259,4 +259,4 @@ TEST(DateValueTest, weekday) {
     ASSERT_EQ(0, dv.weekday()); // Sunday
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

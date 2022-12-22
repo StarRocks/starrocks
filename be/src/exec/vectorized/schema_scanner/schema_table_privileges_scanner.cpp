@@ -18,7 +18,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablePrivilegesScanner::_s_table_privs_columns[] = {
         //   name,       type,          size
@@ -139,4 +139,4 @@ Status SchemaTablePrivilegesScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

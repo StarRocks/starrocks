@@ -24,15 +24,15 @@
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int slot_index, int32_t start, int32_t count,
                                      int32_t step) {
@@ -358,4 +358,4 @@ TEST(SortingTest, merge_sorted_stream) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -26,8 +26,8 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/literal.h"
+#include "exprs/cast_expr.h"
+#include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
@@ -39,7 +39,7 @@
 #include "simd/simd.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors)
         : _src_slot_descriptors(std::move(src_slot_descriptors)),
@@ -1188,4 +1188,4 @@ int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
     return -1;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

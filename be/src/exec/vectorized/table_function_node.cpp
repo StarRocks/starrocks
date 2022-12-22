@@ -21,7 +21,7 @@
 #include "exec/pipeline/table_function_operator.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& desc)
         : ExecNode(pool, tnode, desc), _tnode(tnode) {}
 
@@ -71,10 +71,9 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (table_function_name == "unnest" && arg_types.size() > 1) {
-        _table_function = vectorized::get_table_function(table_function_name, {}, {}, table_fn.binary_type);
+        _table_function = get_table_function(table_function_name, {}, {}, table_fn.binary_type);
     } else {
-        _table_function =
-                vectorized::get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
+        _table_function = get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
     }
 
     if (_table_function == nullptr) {
@@ -303,4 +302,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TableFunctionNode::decom
     return operators;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

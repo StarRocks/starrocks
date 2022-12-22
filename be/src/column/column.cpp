@@ -16,7 +16,7 @@
 
 #include "common/statusor.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                              uint32_t max_one_row_size, uint8_t* null_masks, bool has_null) {
@@ -63,4 +63,4 @@ StatusOr<ColumnPtr> Column::upgrade_helper_func(ColumnPtr* col) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -848,6 +848,12 @@ build_aliyun_oss_jars() {
     cp -r $TP_SOURCE_DIR/$ALIYUN_OSS_JARS_SOURCE $TP_INSTALL_DIR/aliyun_oss_jars
 }
 
+build_tencent_cos_jars() {
+    check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
+    mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
+    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/*cos* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
+}
+
 build_aws_cpp_sdk() {
     OLD_CFLAGS=$CFLAGS
     export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -D_POSIX_C_SOURCE=200112L"
@@ -1009,6 +1015,7 @@ build_ragel
 build_hyperscan
 build_mariadb
 build_aliyun_oss_jars
+build_tencent_cos_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry

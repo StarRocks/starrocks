@@ -23,6 +23,7 @@ JSON query functions and processing functions are used to query and process JSON
 | [json_exists](./json-query-and-processing-functions/json_exists.md) | Checks whether a JSON object contains an element that can be located by a path expression. If the element exists, this function returns 1. If the element does not exist, the function returns 0. | SELECT JSON_EXISTS({"a": 1}, '$.a')                        | 1                                                          |
 | [json_each](./json-query-and-processing-functions/json_each.md) | Expands the top-level elements of a JSON object into key-value pairs. | SELECT * FROM JSON_EACH('{"a": 1, "b":{"c": 3, "d": null}} | key \| value -----+----  a \| 1  b \|  {"c": 3, "d": null} |
 | [cast](./json-query-and-processing-functions/cast.md) | Converts data between a JSON data type and an SQL data type. | SELECT CAST(PARSE_JSON('1') as INT);                       | 1                                                          |
+| [JSON_STRING](./json-query-and-processing-functions/json_string.md)   | Converts the JSON object to a JSON string      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
 
 ## JSON operators
 
@@ -49,6 +50,6 @@ You can use a JSON path expression to query an element in a JSON object. JSON pa
 | ---------------- | ------------------------------------------------------------ | --------------------- | ------------------------------------------------------------ |
 | $                | Denotes a root JSON object.                                  | '$'                   | { "people": [ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ] } |
 | .                | Denotes a child JSON object.                                 | ' $.people'           | [ { "name": "Daniel", "surname": "Smith" }, { "name": "Lily", "surname": Smith, "active": true } ] |
-| []               | Denotes one or more array indexes. [n] denotes the nth element in an array. Indexes start from 0. <br>**StarRocks 2.5 supports querying multi-dimensional arrays, for example, {["Lucy", "Daniel"], ["James", "Smith"]}. To query the "lucy" element, you can use `$.people[0][0]`.**| '$.people [0]'        | { "name": "Daniel", "surname": "Smith" }                     |
+| []               | Denotes one or more array indexes. [n] denotes the nth element in an array. Indexes start from 0. <br>**StarRocks 2.5 supports querying multi-dimensional arrays, for example, `["Lucy", "Daniel"], ["James", "Smith"]`. To query the "Lucy" element, you can use `$.people[0][0]`.**| '$.people [0]'        | { "name": "Daniel", "surname": "Smith" }                     |
 | [*]              | Denotes all elements in an array.                            | '$.people[*].name'    | ["Daniel", "Lily"]                                           |
 | [start: end]     | Denotes a subset of elements from an array. The subset is specified by the [start, end) interval, which excludes the element that is denoted by the end index. | '$.people[0: 1].name' | ["Daniel"]                                                   |

@@ -44,9 +44,9 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     bool _is_finished = false;
@@ -63,6 +63,9 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<LocalExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence, _exchanger);
     }
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<LocalExchanger> _exchanger;

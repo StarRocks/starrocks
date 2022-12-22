@@ -241,6 +241,14 @@ struct TBrokerScanRangeParams {
     21: optional string table_name
     22: optional string label
     23: optional i64 txn_id
+    // number of lines at the start of the file to skip
+    24: optional i64 skip_header
+    // specifies whether to remove white space from fields 
+    25: optional bool trim_space
+    // enclose character
+    26: optional i8 enclose
+    // escape character
+    27: optional i8 escape
 }
 
 // Broker scan range
@@ -309,6 +317,9 @@ struct THdfsScanRange {
     10: optional bool use_hudi_jni_reader;
 
     11: optional list<TIcebergDeleteFile> delete_files;
+
+    // number of lines at the start of the file to skip
+    12: optional i64 skip_header
 }
 
 struct TBinlogScanRange {
@@ -418,6 +429,8 @@ struct TOlapScanNode {
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
   25: optional bool sorted_by_keys_per_tablet = false
+
+  26: optional list<Exprs.TExpr> bucket_exprs
 }
 
 struct TJDBCScanNode {

@@ -22,7 +22,7 @@ namespace starrocks {
 class FunctionContext;
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using AggDataPtr = uint8_t*;
 using ConstAggDataPtr = const uint8_t*;
@@ -305,4 +305,4 @@ using AggregateFunctionPtr = std::shared_ptr<AggregateFunction>;
 
 struct AggregateFunctionEmptyState {};
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

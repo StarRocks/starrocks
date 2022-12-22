@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -44,7 +43,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -68,8 +66,11 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -85,6 +86,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.util.Strings;
 
@@ -136,6 +138,35 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+        static class SelectRelationCollector extends AstVisitor<Void, Void> {
+            private final List<SelectRelation> selectRelations = new ArrayList<>();
+
+            public static List<SelectRelation> collectBaseRelations(QueryRelation queryRelation) {
+                SelectRelationCollector collector = new SelectRelationCollector();
+                queryRelation.accept(collector, null);
+                return collector.selectRelations;
+            }
+
+            @Override
+            public Void visitRelation(Relation node, Void context) {
+                return null;
+            }
+
+            @Override
+            public Void visitSelect(SelectRelation node, Void context) {
+                selectRelations.add(node);
+                return null;
+            }
+
+            @Override
+            public Void visitSetOp(SetOperationRelation node, Void context) {
+                for (QueryRelation sub : node.getRelations()) {
+                    selectRelations.addAll(collectBaseRelations(sub));
+                }
+                return null;
+            }
+        }
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -149,24 +180,21 @@ public class MaterializedViewAnalyzer {
             }
             QueryStatement queryStatement = statement.getQueryStatement();
             // check query relation is select relation
-            if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
-                throw new SemanticException("Materialized view query statement only support select");
+            if (!(queryStatement.getQueryRelation() instanceof SelectRelation) &&
+                    !(queryStatement.getQueryRelation() instanceof SetOperationRelation)) {
+                throw new SemanticException("Materialized view query statement only support select or set operation");
             }
-            SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
 
-            // check alias except * and SlotRef
-            List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
-            for (SelectListItem selectListItem : selectListItems) {
-                if (selectListItem.isStar()) {
-                    throw new SemanticException("Select * is not supported in materialized view");
-                } else if (!(selectListItem.getExpr() instanceof SlotRef)
-                        && selectListItem.getAlias() == null) {
-                    throw new SemanticException("Materialized view query statement select item " +
-                            selectListItem.getExpr().toSql() + " must has an alias");
-                }
-                // check select item has nondeterministic function
-                checkNondeterministicFunction(selectListItem.getExpr());
+            List<SelectRelation> selectRelations =
+                    SelectRelationCollector.collectBaseRelations(queryStatement.getQueryRelation());
+            if (CollectionUtils.isEmpty(selectRelations)) {
+                throw new SemanticException("Materialized view query statement must contain at least one select");
             }
+            for (SelectRelation selectRelation : selectRelations) {
+                // check alias except * and SlotRef
+                validateSelectItem(selectRelation.getSelectList());
+            }
+
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
 
@@ -217,7 +245,7 @@ public class MaterializedViewAnalyzer {
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
-            genColumnAndSetIntoStmt(statement, selectRelation, columnExprMap);
+            genColumnAndSetIntoStmt(statement, selectRelations.get(0), columnExprMap);
             // some check if partition exp exists
             if (statement.getPartitionExpDesc() != null) {
                 // check partition expression all in column list and
@@ -233,6 +261,21 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
+        private void validateSelectItem(SelectList selectList) {
+            List<SelectListItem> selectListItems = selectList.getItems();
+            for (SelectListItem selectListItem : selectListItems) {
+                if (selectListItem.isStar()) {
+                    throw new SemanticException("Select * is not supported in materialized view");
+                } else if (!(selectListItem.getExpr() instanceof SlotRef)
+                        && selectListItem.getAlias() == null) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            selectListItem.getExpr().toSql() + " must has an alias");
+                }
+                // check select item has nondeterministic function
+                checkNondeterministicFunction(selectListItem.getExpr());
+            }
+        }
+
         // TODO(murphy) implement
         // Plan the query statement and store in memory
         private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
@@ -243,24 +286,25 @@ public class MaterializedViewAnalyzer {
                 return;
             }
 
-            QueryRelation queryRelation = query.getQueryRelation();
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
-            Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-            List<ColumnRefOperator> outputColumns = new ArrayList<>();
-            for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
-                ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
-                outputColumns.add(ref);
-                columnRefMap.put(ref, ref);
-            }
-
-            // Build logical plan for view query
-            OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
-            logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
-            Optimizer optimizer = new Optimizer();
-            PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
             try {
                 ctx.getSessionVariable().setMVPlanner(true);
+
+                QueryRelation queryRelation = query.getQueryRelation();
+                ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+                LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
+                Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+                List<ColumnRefOperator> outputColumns = new ArrayList<>();
+                for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
+                    ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
+                    outputColumns.add(ref);
+                    columnRefMap.put(ref, ref);
+                }
+
+                // Build logical plan for view query
+                OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
+                logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+                Optimizer optimizer = new Optimizer();
+                PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
                 OptExpression optimizedPlan = optimizer.optimize(
                         ctx,
                         logicalPlan.getRoot(),
@@ -275,7 +319,7 @@ public class MaterializedViewAnalyzer {
                 // TODO: store the plan in create-mv statement and persist it at executor
                 // TODO: refine the output fragment
                 boolean hasOutputFragment = false;
-                ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, ctx, logicalPlan.getOutputColumn(), columnRefFactory,
                         queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
                 createStmt.setMaintenancePlan(execPlan, columnRefFactory);
@@ -545,7 +589,7 @@ public class MaterializedViewAnalyzer {
             }
             if (distributionDesc == null) {
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
-                    distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
+                    distributionDesc = new HashDistributionDesc(0,
                             Lists.newArrayList(mvColumnItems.get(0).getName()));
                     statement.setDistributionDesc(distributionDesc);
                 } else {
@@ -665,7 +709,8 @@ public class MaterializedViewAnalyzer {
             } else if (partitionColumn.getType().isIntegerType()) {
                 validateNumberTypePartition(statement.getPartitionRangeDesc());
             } else {
-                throw new SemanticException("Unsupported batch partition build type:" + partitionColumn.getType() + ".");
+                throw new SemanticException(
+                        "Unsupported batch partition build type:" + partitionColumn.getType() + ".");
             }
             return null;
         }

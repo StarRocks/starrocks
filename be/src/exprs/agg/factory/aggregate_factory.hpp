@@ -51,7 +51,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // TODO(murphy) refactor the factory into a shim style
 class AggregateFactory {
@@ -315,4 +315,4 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return std::make_shared<PercentileContAggregateFunction<PT>>();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

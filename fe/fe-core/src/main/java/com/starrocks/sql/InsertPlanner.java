@@ -145,7 +145,7 @@ public class InsertPlanner {
             //7. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || insertStmt.getTargetTable() instanceof MysqlTable);
-            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+            ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
 

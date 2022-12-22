@@ -21,7 +21,7 @@
 #include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // this class is a helper for getting schema info from FE
 class SchemaHelper {
@@ -66,21 +66,21 @@ public:
 };
 
 template <LogicalType SlotType>
-void fill_data_column_with_slot(vectorized::Column* data_column, void* slot) {
-    using ColumnType = typename vectorized::RunTimeTypeTraits<SlotType>::ColumnType;
-    using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
+void fill_data_column_with_slot(Column* data_column, void* slot) {
+    using ColumnType = typename RunTimeTypeTraits<SlotType>::ColumnType;
+    using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
     ColumnType* result = down_cast<ColumnType*>(data_column);
-    if constexpr (vectorized::IsDate<ValueType>) {
+    if constexpr (IsDate<ValueType>) {
         auto* date_time_value = (DateTimeValue*)slot;
-        vectorized::DateValue date_value = vectorized::DateValue::create(
-                date_time_value->year(), date_time_value->month(), date_time_value->day());
+        DateValue date_value =
+                DateValue::create(date_time_value->year(), date_time_value->month(), date_time_value->day());
         result->append(date_value);
-    } else if constexpr (vectorized::IsTimestamp<ValueType>) {
+    } else if constexpr (IsTimestamp<ValueType>) {
         auto* date_time_value = (DateTimeValue*)slot;
-        vectorized::TimestampValue timestamp_value = vectorized::TimestampValue::create(
-                date_time_value->year(), date_time_value->month(), date_time_value->day(), date_time_value->hour(),
-                date_time_value->minute(), date_time_value->second());
+        TimestampValue timestamp_value =
+                TimestampValue::create(date_time_value->year(), date_time_value->month(), date_time_value->day(),
+                                       date_time_value->hour(), date_time_value->minute(), date_time_value->second());
         result->append(timestamp_value);
     } else {
         result->append(*(ValueType*)slot);
@@ -88,11 +88,11 @@ void fill_data_column_with_slot(vectorized::Column* data_column, void* slot) {
 }
 
 template <LogicalType SlotType>
-void fill_column_with_slot(vectorized::Column* result, void* slot) {
+void fill_column_with_slot(Column* result, void* slot) {
     if (result->is_nullable()) {
-        auto* nullable_column = down_cast<vectorized::NullableColumn*>(result);
-        vectorized::NullData& null_data = nullable_column->null_column_data();
-        vectorized::Column* data_column = nullable_column->data_column().get();
+        auto* nullable_column = down_cast<NullableColumn*>(result);
+        NullData& null_data = nullable_column->null_column_data();
+        Column* data_column = nullable_column->data_column().get();
         null_data.push_back(0);
         fill_data_column_with_slot<SlotType>(data_column, slot);
     } else {
@@ -100,6 +100,6 @@ void fill_column_with_slot(vectorized::Column* result, void* slot) {
     }
 }
 
-void fill_data_column_with_null(vectorized::Column* data_column);
+void fill_data_column_with_null(Column* data_column);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

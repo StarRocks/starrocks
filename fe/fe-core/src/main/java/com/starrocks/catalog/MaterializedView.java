@@ -179,7 +179,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     return db.getTable(tableId);
                 }
             } else {
+                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                    LOG.warn("catalog {} not exist", catalogName);
+                    return null;
+                }
                 Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+                if (table == null) {
+                    LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
+                    return null;
+                }
                 if (table.getTableIdentifier().equals(tableIdentifier)) {
                     return table;
                 }
@@ -223,6 +231,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public void setVersion(long version) {
             this.version = version;
+        }
+
+        @Override
+        public String toString() {
+            return "BasePartitionInfo{" +
+                    "id=" + id +
+                    ", version=" + version +
+                    '}';
         }
     }
 

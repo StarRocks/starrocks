@@ -31,13 +31,13 @@
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sorting.h"
-#include "exprs/vectorized/column_ref.h"
+#include "exprs/column_ref.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 inline int kTestChunkSize = 4096;
 
@@ -588,6 +588,6 @@ static void BM_find_zero_memchr(benchmark::State& state) {
 }
 BENCHMARK(BM_find_zero_memchr)->Range(8, 8 << 12);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 BENCHMARK_MAIN();

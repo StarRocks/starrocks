@@ -27,17 +27,22 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
-class CSVScannerTest : public ::testing::Test {
+using ::testing::TestWithParam;
+using ::testing::Values;
+
+class CSVScannerTest : public TestWithParam<bool> {
 protected:
-    void SetUp() override {}
+    virtual void SetUp() { _use_v2 = GetParam(); }
     void TearDown() override {}
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
                                                    const std::vector<TBrokerRangeDesc>& ranges,
                                                    const std::string& multi_row_delimiter = "\n",
-                                                   const std::string& multi_column_separator = "|") {
+                                                   const std::string& multi_column_separator = "|",
+                                                   const int64_t skip_header = 0, const bool trim_space = false,
+                                                   const char enclose = 0, const char escape = 0) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -65,6 +70,10 @@ protected:
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
+        params->__set_skip_header(skip_header);
+        params->__set_trim_space(trim_space);
+        params->__set_enclose(enclose);
+        params->__set_escape(escape);
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
             params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
@@ -90,12 +99,14 @@ protected:
         return std::make_unique<CSVScanner>(state, profile, *broker_scan_range, counter);
     }
 
+    bool _use_v2;
+
 private:
     RuntimeState _runtime_state;
     ObjectPool _obj_pool;
 };
 
-TEST_F(CSVScannerTest, test_scalar_types) {
+TEST_P(CSVScannerTest, test_scalar_types) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
     types.emplace_back(TYPE_DOUBLE);
@@ -124,6 +135,8 @@ TEST_F(CSVScannerTest, test_scalar_types) {
 
     auto st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
 
     auto res = scanner->get_next();
     ASSERT_TRUE(res.ok()) << res.status().to_string();
@@ -173,7 +186,7 @@ TEST_F(CSVScannerTest, test_scalar_types) {
     EXPECT_EQ(true, chunk->get(3)[4].is_null());
 }
 
-TEST_F(CSVScannerTest, test_multi_seprator) {
+TEST_P(CSVScannerTest, test_multi_seprator) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
     types.emplace_back(TYPE_DOUBLE);
@@ -196,6 +209,8 @@ TEST_F(CSVScannerTest, test_multi_seprator) {
 
     auto st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
 
     auto res = scanner->get_next();
     ASSERT_TRUE(res.ok()) << res.status().to_string();
@@ -221,7 +236,7 @@ TEST_F(CSVScannerTest, test_multi_seprator) {
     EXPECT_EQ("1998-09-01", chunk->get(1)[3].get_date().to_string());
 }
 
-TEST_F(CSVScannerTest, test_array_of_int) {
+TEST_P(CSVScannerTest, test_array_of_int) {
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
     t.children.emplace_back(TYPE_INT);
@@ -238,6 +253,8 @@ TEST_F(CSVScannerTest, test_array_of_int) {
 
     auto st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
 
     auto chunk = scanner->get_next().value();
     EXPECT_EQ(1, chunk->num_columns());
@@ -264,7 +281,7 @@ TEST_F(CSVScannerTest, test_array_of_int) {
     EXPECT_TRUE(chunk->get(4)[0].get_array()[1].is_null());
 }
 
-TEST_F(CSVScannerTest, test_array_of_string) {
+TEST_P(CSVScannerTest, test_array_of_string) {
     std::vector<TypeDescriptor> types;
     // ARRAY<VARCHAR(10)>
     TypeDescriptor t;
@@ -286,6 +303,7 @@ TEST_F(CSVScannerTest, test_array_of_string) {
 
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
+    scanner->use_v2(_use_v2);
     auto res = scanner->get_next();
     ASSERT_TRUE(res.ok()) << res.status().to_string();
     auto chunk = res.value();
@@ -319,7 +337,7 @@ TEST_F(CSVScannerTest, test_array_of_string) {
     EXPECT_EQ("", chunk->get(5)[0].get_array()[1].get_slice());
 }
 
-TEST_F(CSVScannerTest, test_array_of_date) {
+TEST_P(CSVScannerTest, test_array_of_date) {
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
     t.children.emplace_back(TYPE_DATE);
@@ -338,6 +356,7 @@ TEST_F(CSVScannerTest, test_array_of_date) {
 
     st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
+    scanner->use_v2(_use_v2);
     auto res = scanner->get_next();
     ASSERT_TRUE(res.ok()) << res.status().to_string();
     auto chunk = res.value();
@@ -365,7 +384,7 @@ TEST_F(CSVScannerTest, test_array_of_date) {
     EXPECT_TRUE(chunk->get(4)[0].get_array()[1].is_null());
 }
 
-TEST_F(CSVScannerTest, test_nested_array_of_int) {
+TEST_P(CSVScannerTest, test_nested_array_of_int) {
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_ARRAY);
     t.children.back().children.emplace_back(TYPE_INT);
@@ -382,6 +401,7 @@ TEST_F(CSVScannerTest, test_nested_array_of_int) {
 
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
+    scanner->use_v2(_use_v2);
     ChunkPtr chunk = scanner->get_next().value();
 
     EXPECT_EQ(8, chunk->num_rows());
@@ -436,7 +456,7 @@ TEST_F(CSVScannerTest, test_nested_array_of_int) {
     EXPECT_TRUE(chunk->get(7)[0].get_array()[0].get_array()[0].is_null());
 }
 
-TEST_F(CSVScannerTest, test_invalid_field_as_null) {
+TEST_P(CSVScannerTest, test_invalid_field_as_null) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -454,6 +474,8 @@ TEST_F(CSVScannerTest, test_invalid_field_as_null) {
     st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 
+    scanner->use_v2(_use_v2);
+
     ChunkPtr chunk = scanner->get_next().value();
     ASSERT_TRUE(st.ok()) << st.to_string();
     EXPECT_EQ(3, chunk->num_rows());
@@ -463,7 +485,7 @@ TEST_F(CSVScannerTest, test_invalid_field_as_null) {
     EXPECT_TRUE(chunk->get(2)[0].is_null());
 }
 
-TEST_F(CSVScannerTest, test_invalid_field_of_array_as_null) {
+TEST_P(CSVScannerTest, test_invalid_field_of_array_as_null) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_ARRAY)};
     types[0].children.emplace_back(TYPE_INT);
 
@@ -482,6 +504,8 @@ TEST_F(CSVScannerTest, test_invalid_field_of_array_as_null) {
     st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 
+    scanner->use_v2(_use_v2);
+
     ChunkPtr chunk = scanner->get_next().value();
     EXPECT_EQ(3, chunk->num_rows());
 
@@ -490,7 +514,7 @@ TEST_F(CSVScannerTest, test_invalid_field_of_array_as_null) {
     EXPECT_EQ(1, chunk->get(2)[0].is_null());
 }
 
-TEST_F(CSVScannerTest, test_start_offset) {
+TEST_P(CSVScannerTest, test_start_offset) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -505,6 +529,8 @@ TEST_F(CSVScannerTest, test_start_offset) {
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 
+    scanner->use_v2(_use_v2);
+
     ChunkPtr chunk = scanner->get_next().value();
     ASSERT_TRUE(st.ok()) << st.to_string();
     EXPECT_EQ(2, chunk->num_rows());
@@ -516,19 +542,20 @@ TEST_F(CSVScannerTest, test_start_offset) {
     EXPECT_EQ(8, chunk->get(1)[1].get_int32());
 }
 
-TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
+TEST_P(CSVScannerTest, test_skip_header) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
-    range.__set_start_offset(0);
-    range.__set_num_of_columns_from_file(types.size());
-    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file10");
+    range.__set_num_of_columns_from_file(2);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file15");
     ranges.push_back(range);
 
-    auto scanner = create_csv_scanner(types, ranges);
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 4);
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
 
     ChunkPtr chunk = scanner->get_next().value();
     EXPECT_EQ(5, chunk->num_rows());
@@ -546,7 +573,180 @@ TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
     EXPECT_EQ(0, chunk->get(4)[1].get_int32());
 }
 
-TEST_F(CSVScannerTest, test_large_record_size) {
+TEST_P(CSVScannerTest, test_trim_space) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(2);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file16");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(5, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(7, chunk->get(3)[0].get_int32());
+    EXPECT_EQ(9, chunk->get(4)[0].get_int32());
+
+    EXPECT_EQ("aa", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("bb", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("cc", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
+    EXPECT_EQ("ee", chunk->get(4)[1].get_slice());
+}
+
+TEST_P(CSVScannerTest, test_trim_space_with_ENCLOSE) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file19");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, true, '\'', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(2, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(4, chunk->get(3)[0].get_int32());
+
+    EXPECT_EQ("Lily,  asdf\n\n\nsafsdfaasfsdfa23'1111111", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("Ro se", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("Al  i   ce", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("Julia", chunk->get(3)[1].get_slice());
+
+    EXPECT_EQ(24, chunk->get(0)[2].get_int32());
+    EXPECT_EQ(23, chunk->get(1)[2].get_int32());
+    EXPECT_EQ(24, chunk->get(2)[2].get_int32());
+    EXPECT_EQ(25, chunk->get(3)[2].get_int32());
+}
+
+TEST_P(CSVScannerTest, test_ENCLOSE) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file17");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true, '"', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(7, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(5, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(7, chunk->get(3)[0].get_int32());
+    EXPECT_EQ(9, chunk->get(4)[0].get_int32());
+    EXPECT_EQ(11, chunk->get(5)[0].get_int32());
+    EXPECT_EQ(13, chunk->get(6)[0].get_int32());
+
+    EXPECT_EQ("aa", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("bb|BB", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("cc\nadf,1,3455", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
+    EXPECT_EQ("\"ee", chunk->get(4)[1].get_slice());
+    EXPECT_EQ("", chunk->get(5)[1].get_slice());
+    EXPECT_EQ("\"cd\"", chunk->get(6)[1].get_slice());
+
+    EXPECT_EQ("abc", chunk->get(0)[2].get_slice());
+    EXPECT_EQ("", chunk->get(1)[2].get_slice());
+    EXPECT_EQ("\"e", chunk->get(2)[2].get_slice());
+    EXPECT_EQ("abc|ef\ngh", chunk->get(3)[2].get_slice());
+    EXPECT_EQ("", chunk->get(4)[2].get_slice());
+    EXPECT_EQ("ab", chunk->get(5)[2].get_slice());
+    EXPECT_EQ("ab\"c", chunk->get(6)[2].get_slice());
+}
+
+TEST_P(CSVScannerTest, test_ESCAPE) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file18");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true, '"', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(5, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(7, chunk->get(3)[0].get_int32());
+    EXPECT_EQ(9, chunk->get(4)[0].get_int32());
+
+    EXPECT_EQ("\"aa\"", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("bb|BB", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("cc\nadf,1,3455", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
+    EXPECT_EQ("\\ee", chunk->get(4)[1].get_slice());
+
+    EXPECT_EQ("abc\"", chunk->get(0)[2].get_slice());
+    EXPECT_EQ("", chunk->get(1)[2].get_slice());
+    EXPECT_EQ("\"e", chunk->get(2)[2].get_slice());
+    EXPECT_EQ("abc|ef\ngh", chunk->get(3)[2].get_slice());
+    EXPECT_EQ("", chunk->get(4)[2].get_slice());
+}
+
+TEST_P(CSVScannerTest, TEST_Pile_not_ended_with_record_delimiter) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_start_offset(0);
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file10");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(5, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(7, chunk->get(3)[0].get_int32());
+    EXPECT_EQ(9, chunk->get(4)[0].get_int32());
+
+    EXPECT_EQ(2, chunk->get(0)[1].get_int32());
+    EXPECT_EQ(4, chunk->get(1)[1].get_int32());
+    EXPECT_EQ(6, chunk->get(2)[1].get_int32());
+    EXPECT_EQ(8, chunk->get(3)[1].get_int32());
+    EXPECT_EQ(0, chunk->get(4)[1].get_int32());
+}
+
+TEST_P(CSVScannerTest, test_large_record_size) {
     constexpr size_t record_length = 65533 * 5;
     constexpr size_t field_length = 65533;
     constexpr size_t field_count = (record_length + field_length - 1) / field_length;
@@ -586,6 +786,8 @@ TEST_F(CSVScannerTest, test_large_record_size) {
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 
+    scanner->use_v2(_use_v2);
+
     ChunkPtr chunk = scanner->get_next().value();
     EXPECT_EQ(kNumRecords, chunk->num_rows());
     EXPECT_EQ(field_count, chunk->num_columns());
@@ -601,7 +803,7 @@ TEST_F(CSVScannerTest, test_large_record_size) {
     }
 }
 
-TEST_F(CSVScannerTest, test_record_length_exceed_limit) {
+TEST_P(CSVScannerTest, test_record_length_exceed_limit) {
     constexpr size_t record_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
     constexpr size_t field_length = TypeDescriptor::MAX_VARCHAR_LENGTH;
     constexpr size_t field_count = (record_length + field_length - 1) / field_length;
@@ -635,11 +837,13 @@ TEST_F(CSVScannerTest, test_record_length_exceed_limit) {
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 
+    scanner->use_v2(_use_v2);
+
     auto res = scanner->get_next();
     EXPECT_TRUE(!res.ok());
 }
 
-TEST_F(CSVScannerTest, test_empty) {
+TEST_P(CSVScannerTest, test_empty) {
     auto run_test = [this](LogicalType pt) {
         std::vector<TypeDescriptor> types{TypeDescriptor(pt)};
         if (pt == TYPE_VARCHAR || pt == TYPE_CHAR) {
@@ -654,6 +858,7 @@ TEST_F(CSVScannerTest, test_empty) {
 
         auto scanner = create_csv_scanner(types, ranges);
         ASSERT_TRUE(scanner->open().ok());
+        scanner->use_v2(_use_v2);
         auto res = scanner->get_next();
         ASSERT_TRUE(res.status().is_end_of_file());
     };
@@ -664,4 +869,6 @@ TEST_F(CSVScannerTest, test_empty) {
     run_test(TYPE_DATETIME);
 }
 
-} // namespace starrocks::vectorized
+INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
+
+} // namespace starrocks

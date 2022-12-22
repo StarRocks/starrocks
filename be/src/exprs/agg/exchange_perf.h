@@ -24,7 +24,7 @@
 #include "gutil/casts.h"
 #include "util/time.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 enum AggExchangePerfType { BYTES = 0, SPEED = 1 };
 
@@ -125,4 +125,4 @@ public:
     std::string get_name() const override { return PerfType == BYTES ? "exchange_bytes" : "exchange_speed"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

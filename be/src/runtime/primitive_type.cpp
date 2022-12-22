@@ -206,7 +206,7 @@ LogicalType scalar_field_type_to_primitive_type(LogicalType field_type) {
 struct FixedLengthTypeGetter {
     template <LogicalType ptype>
     size_t operator()() {
-        return vectorized::RunTimeFixedTypeLength<ptype>::value;
+        return RunTimeFixedTypeLength<ptype>::value;
     }
 };
 

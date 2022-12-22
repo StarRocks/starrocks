@@ -22,35 +22,33 @@
 
 namespace starrocks {
 
-Status GlobalDictCodeColumnIterator::decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
-    const auto& code_data =
-            down_cast<const vectorized::Int32Column*>(vectorized::ColumnHelper::get_data_column(&codes))->get_data();
+Status GlobalDictCodeColumnIterator::decode_dict_codes(const Column& codes, Column* words) {
+    const auto& code_data = down_cast<const Int32Column*>(ColumnHelper::get_data_column(&codes))->get_data();
     const size_t size = code_data.size();
 
     LowCardDictColumn::Container* container =
-            &down_cast<LowCardDictColumn*>(vectorized::ColumnHelper::get_data_column(words))->get_data();
+            &down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(words))->get_data();
     bool output_nullable = words->is_nullable();
 
     auto& res_data = *container;
     res_data.resize(size);
 #ifndef NDEBUG
     for (size_t i = 0; i < size; ++i) {
-        DCHECK(code_data[i] <= vectorized::DICT_DECODE_MAX_SIZE);
+        DCHECK(code_data[i] <= DICT_DECODE_MAX_SIZE);
         if (code_data[i] < 0) {
             DCHECK(output_nullable);
         }
     }
 #endif
     {
-        using namespace vectorized;
         // res_data[i] = _local_to_global[code_data[i]];
         SIMDGather::gather(res_data.data(), _local_to_global, code_data.data(), DICT_DECODE_MAX_SIZE, size);
     }
 
     if (output_nullable) {
         // reserve null data
-        down_cast<vectorized::NullableColumn*>(words)->null_column_data().resize(size);
-        const auto& null_data = down_cast<const vectorized::NullableColumn&>(codes).immutable_null_column_data();
+        down_cast<NullableColumn*>(words)->null_column_data().resize(size);
+        const auto& null_data = down_cast<const NullableColumn&>(codes).immutable_null_column_data();
         if (codes.has_null()) {
             // assign code 0 if input data is null
             for (size_t i = 0; i < size; ++i) {
@@ -69,7 +67,7 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator
 
     int dict_size = file_column_iter->dict_size();
 
-    auto column = vectorized::BinaryColumn::create();
+    auto column = BinaryColumn::create();
 
     int dict_codes[dict_size];
     for (int i = 0; i < dict_size; ++i) {
@@ -96,10 +94,10 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator
     return Status::OK();
 }
 
-vectorized::ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(bool nullable) {
-    vectorized::ColumnPtr res = std::make_unique<vectorized::Int32Column>();
+ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(bool nullable) {
+    ColumnPtr res = std::make_unique<Int32Column>();
     if (nullable) {
-        res = vectorized::NullableColumn::create(std::move(res), vectorized::NullColumn::create());
+        res = NullableColumn::create(std::move(res), NullColumn::create());
     }
     return res;
 }
@@ -107,8 +105,8 @@ vectorized::ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(bool nul
 void GlobalDictCodeColumnIterator::_swap_null_columns(Column* src, Column* dst) {
     DCHECK_EQ(src->is_nullable(), dst->is_nullable());
     if (src->is_nullable()) {
-        auto src_column = down_cast<vectorized::NullableColumn*>(src);
-        auto dst_column = down_cast<vectorized::NullableColumn*>(dst);
+        auto src_column = down_cast<NullableColumn*>(src);
+        auto dst_column = down_cast<NullableColumn*>(dst);
         dst_column->null_column_data().swap(src_column->null_column_data());
         dst_column->set_has_null(src_column->has_null());
     }

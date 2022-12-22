@@ -21,8 +21,6 @@
 namespace starrocks {
 class ExprContext;
 
-namespace vectorized {
-
 class ChunksSorterFullSort : public ChunksSorter {
 public:
     /**
@@ -67,5 +65,4 @@ private:
     static constexpr size_t kMaxBufferedChunkBytes = 16 << 20; // Max buffer 16MB bytes
 };
 
-} // namespace vectorized
 } // namespace starrocks

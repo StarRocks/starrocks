@@ -18,7 +18,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaEventsScanner::_s_cols_events[] = {
         //   name,       type,          size,                     is_null
@@ -53,4 +53,4 @@ SchemaEventsScanner::SchemaEventsScanner()
 
 SchemaEventsScanner::~SchemaEventsScanner() = default;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -35,7 +35,7 @@ class PercentileValue;
 class JsonValue;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
@@ -62,6 +62,10 @@ public:
     template <typename T>
     Datum(T value) {
         set(value);
+    }
+
+    Datum(const DatumKey& datum_key) {
+        std::visit(overloaded{[this](auto& arg) { set<decltype(arg)>(arg); }}, datum_key);
     }
 
     int8_t get_int8() const { return get<int8_t>(); }
@@ -175,6 +179,15 @@ public:
                 _value);
     }
 
+    template <typename T>
+    bool is_equal(const T& val) const {
+        return get<T>() == val;
+    }
+
+    bool equal_datum_key(const DatumKey& key) const {
+        return std::visit([&](const auto& arg) { return is_equal(arg); }, key);
+    }
+
 private:
     using Variant =
             std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
@@ -187,4 +200,4 @@ static const Datum kNullDatum{};
 
 Datum convert2Datum(const DatumKey& key);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

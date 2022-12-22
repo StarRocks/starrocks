@@ -44,6 +44,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
@@ -793,6 +795,13 @@ public class LakeTableSchemaChangeJobTest {
 
             @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) {
+                // nothing to do
+            }
+        };
+
+        new MockUp<ShardDeleter>() {
+            @Mock
+            public void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
                 // nothing to do
             }
         };

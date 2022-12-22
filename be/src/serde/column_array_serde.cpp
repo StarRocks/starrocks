@@ -150,7 +150,7 @@ const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size)
 template <typename T, bool sorted>
 class FixedLengthColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::FixedLengthColumnBase<T>& column, const int encode_level) {
+    static int64_t max_serialized_size(const FixedLengthColumnBase<T>& column, const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
             return sizeof(uint32_t) + sizeof(uint64_t) +
@@ -160,8 +160,7 @@ public:
         }
     }
 
-    static uint8_t* serialize(const vectorized::FixedLengthColumnBase<T>& column, uint8_t* buff,
-                              const int encode_level) {
+    static uint8_t* serialize(const FixedLengthColumnBase<T>& column, uint8_t* buff, const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
         if (EncodeContext::enable_encode_integer(encode_level) && size >= ENCODE_SIZE_LIMIT) {
@@ -176,8 +175,7 @@ public:
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::FixedLengthColumnBase<T>* column,
-                                      const int encode_level) {
+    static const uint8_t* deserialize(const uint8_t* buff, FixedLengthColumnBase<T>* column, const int encode_level) {
         uint32_t size = 0;
         buff = read_little_endian_32(buff, &size);
         std::vector<T>& data = column->get_data();
@@ -198,11 +196,11 @@ public:
 class BinaryColumnSerde {
 public:
     template <typename T>
-    static int64_t max_serialized_size(const vectorized::BinaryColumnBase<T>& column, const int encode_level) {
+    static int64_t max_serialized_size(const BinaryColumnBase<T>& column, const int encode_level) {
         const auto& bytes = column.get_bytes();
         const auto& offsets = column.get_offset();
         int64_t res = sizeof(T) * 2;
-        int64_t offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
+        int64_t offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
         if (EncodeContext::enable_encode_integer(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) +
                    std::max((int64_t)offsets_size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(offsets_size)));
@@ -218,7 +216,7 @@ public:
     }
 
     template <typename T>
-    static uint8_t* serialize(const vectorized::BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
+    static uint8_t* serialize(const BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
         const auto& bytes = column.get_bytes();
         const auto& offsets = column.get_offset();
 
@@ -235,7 +233,7 @@ public:
         }
 
         //TODO: if T is uint32_t, `offsets_size` may be overflow
-        T offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
+        T offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
         if constexpr (std::is_same_v<T, uint32_t>) {
             buff = write_little_endian_32(offsets_size, buff);
         } else {
@@ -254,8 +252,7 @@ public:
     }
 
     template <typename T>
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::BinaryColumnBase<T>* column,
-                                      const int encode_level) {
+    static const uint8_t* deserialize(const uint8_t* buff, BinaryColumnBase<T>* column, const int encode_level) {
         T bytes_size = 0;
         if constexpr (std::is_same_v<T, uint32_t>) {
             buff = read_little_endian_32(buff, &bytes_size);
@@ -275,7 +272,7 @@ public:
         } else {
             buff = read_little_endian_64(buff, &offsets_size);
         }
-        raw::make_room(&column->get_offset(), offsets_size / sizeof(typename vectorized::BinaryColumnBase<T>::Offset));
+        raw::make_room(&column->get_offset(), offsets_size / sizeof(typename BinaryColumnBase<T>::Offset));
         if (EncodeContext::enable_encode_integer(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4) { // only support sorted 32-bit integers
                 buff = decode_integers<true>(buff, column->get_offset().data(), offsets_size);
@@ -292,7 +289,7 @@ public:
 template <typename T>
 class ObjectColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::ObjectColumn<T>& column) {
+    static int64_t max_serialized_size(const ObjectColumn<T>& column) {
         const std::vector<T>& pool = column.get_pool();
         int64_t size = sizeof(uint32_t);
         for (const auto& obj : pool) {
@@ -302,7 +299,7 @@ public:
         return size;
     }
 
-    static uint8_t* serialize(const vectorized::ObjectColumn<T>& column, uint8_t* buff) {
+    static uint8_t* serialize(const ObjectColumn<T>& column, uint8_t* buff) {
         buff = write_little_endian_32(column.get_pool().size(), buff);
         for (const auto& obj : column.get_pool()) {
             uint64_t actual = obj.serialize(buff + sizeof(uint64_t));
@@ -312,7 +309,7 @@ public:
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::ObjectColumn<T>* column) {
+    static const uint8_t* deserialize(const uint8_t* buff, ObjectColumn<T>* column) {
         uint32_t num_objects = 0;
         buff = read_little_endian_32(buff, &num_objects);
         column->reset_column();
@@ -333,7 +330,7 @@ public:
 // The header include a format_version field, indicting the layout of column encoding
 class JsonColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::JsonColumn& column) {
+    static int64_t max_serialized_size(const JsonColumn& column) {
         const std::vector<JsonValue>& pool = column.get_pool();
         int64_t size = 0;
         size += sizeof(uint32_t); // format_version
@@ -349,7 +346,7 @@ public:
     // uint32: format_version (currently is hard-coded)
     // uint32: number of datums
     // datums: [size1[payload1][size2][payload2]
-    static uint8_t* serialize(const vectorized::JsonColumn& column, uint8_t* buff) {
+    static uint8_t* serialize(const JsonColumn& column, uint8_t* buff) {
         buff = write_little_endian_32(kJsonMetaDefaultFormatVersion, buff);
         buff = write_little_endian_32(column.get_pool().size(), buff);
         for (const auto& obj : column.get_pool()) {
@@ -361,7 +358,7 @@ public:
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::JsonColumn* column) {
+    static const uint8_t* deserialize(const uint8_t* buff, JsonColumn* column) {
         uint32_t actual_version = 0;
         uint32_t num_objects = 0;
         buff = read_little_endian_32(buff, &actual_version);
@@ -383,18 +380,18 @@ public:
 
 class NullableColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::NullableColumn& column, const int encode_level) {
+    static int64_t max_serialized_size(const NullableColumn& column, const int encode_level) {
         return serde::ColumnArraySerde::max_serialized_size(*column.null_column(), encode_level) +
                serde::ColumnArraySerde::max_serialized_size(*column.data_column(), encode_level);
     }
 
-    static uint8_t* serialize(const vectorized::NullableColumn& column, uint8_t* buff, const int encode_level) {
+    static uint8_t* serialize(const NullableColumn& column, uint8_t* buff, const int encode_level) {
         buff = serde::ColumnArraySerde::serialize(*column.null_column(), buff, false, encode_level);
         buff = serde::ColumnArraySerde::serialize(*column.data_column(), buff, false, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::NullableColumn* column, const int encode_level) {
+    static const uint8_t* deserialize(const uint8_t* buff, NullableColumn* column, const int encode_level) {
         buff = serde::ColumnArraySerde::deserialize(buff, column->null_column().get(), false, encode_level);
         buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level);
         column->update_has_null();
@@ -404,18 +401,18 @@ public:
 
 class ArrayColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::ArrayColumn& column, const int encode_level) {
+    static int64_t max_serialized_size(const ArrayColumn& column, const int encode_level) {
         return serde::ColumnArraySerde::max_serialized_size(column.offsets(), encode_level) +
                serde::ColumnArraySerde::max_serialized_size(column.elements(), encode_level);
     }
 
-    static uint8_t* serialize(const vectorized::ArrayColumn& column, uint8_t* buff, const int encode_level) {
+    static uint8_t* serialize(const ArrayColumn& column, uint8_t* buff, const int encode_level) {
         buff = serde::ColumnArraySerde::serialize(column.offsets(), buff, true, encode_level);
         buff = serde::ColumnArraySerde::serialize(column.elements(), buff, false, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::ArrayColumn* column, const int encode_level) {
+    static const uint8_t* deserialize(const uint8_t* buff, ArrayColumn* column, const int encode_level) {
         buff = serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level);
         buff = serde::ColumnArraySerde::deserialize(buff, column->elements_column().get(), false, encode_level);
         return buff;
@@ -424,20 +421,20 @@ public:
 
 class MapColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::MapColumn& column, const int encode_level) {
+    static int64_t max_serialized_size(const MapColumn& column, const int encode_level) {
         return serde::ColumnArraySerde::max_serialized_size(column.offsets(), encode_level) +
                serde::ColumnArraySerde::max_serialized_size(column.keys(), encode_level) +
                serde::ColumnArraySerde::max_serialized_size(column.values(), encode_level);
     }
 
-    static uint8_t* serialize(const vectorized::MapColumn& column, uint8_t* buff, const int encode_level) {
+    static uint8_t* serialize(const MapColumn& column, uint8_t* buff, const int encode_level) {
         buff = serde::ColumnArraySerde::serialize(column.offsets(), buff, true, encode_level);
         buff = serde::ColumnArraySerde::serialize(column.keys(), buff, false, encode_level);
         buff = serde::ColumnArraySerde::serialize(column.values(), buff, false, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::MapColumn* column, const int encode_level) {
+    static const uint8_t* deserialize(const uint8_t* buff, MapColumn* column, const int encode_level) {
         buff = serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level);
         buff = serde::ColumnArraySerde::deserialize(buff, column->keys_column().get(), false, encode_level);
         buff = serde::ColumnArraySerde::deserialize(buff, column->values_column().get(), false, encode_level);
@@ -447,7 +444,7 @@ public:
 
 class StructColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::StructColumn& column, const int encode_level) {
+    static int64_t max_serialized_size(const StructColumn& column, const int encode_level) {
         int64_t size = 0;
         for (const auto& field : column.fields()) {
             size += serde::ColumnArraySerde::max_serialized_size(*field, encode_level);
@@ -455,14 +452,14 @@ public:
         return size;
     }
 
-    static uint8_t* serialize(const vectorized::StructColumn& column, uint8_t* buff, const int encode_level) {
+    static uint8_t* serialize(const StructColumn& column, uint8_t* buff, const int encode_level) {
         for (const auto& field : column.fields()) {
             buff = serde::ColumnArraySerde::serialize(*field, buff, false, encode_level);
         }
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::StructColumn* column, const int encode_level) {
+    static const uint8_t* deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
         for (const auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
@@ -472,18 +469,18 @@ public:
 
 class ConstColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::ConstColumn& column, const int encode_level) {
+    static int64_t max_serialized_size(const ConstColumn& column, const int encode_level) {
         return /*sizeof(uint64_t)=*/8 +
                serde::ColumnArraySerde::max_serialized_size(*column.data_column(), encode_level);
     }
 
-    static uint8_t* serialize(const vectorized::ConstColumn& column, uint8_t* buff, const int encode_level) {
+    static uint8_t* serialize(const ConstColumn& column, uint8_t* buff, const int encode_level) {
         buff = write_little_endian_64(column.size(), buff);
         buff = serde::ColumnArraySerde::serialize(*column.data_column(), buff, false, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::ConstColumn* column, const int encode_level) {
+    static const uint8_t* deserialize(const uint8_t* buff, ConstColumn* column, const int encode_level) {
         uint64_t size = 0;
         buff = read_little_endian_64(buff, &size);
         buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level);
@@ -497,50 +494,50 @@ public:
     explicit ColumnSerializedSizeVisitor(int64_t init_size, const int encode_level)
             : ColumnVisitorAdapter(this), _size(init_size), _encode_level(encode_level) {}
 
-    Status do_visit(const vectorized::NullableColumn& column) {
+    Status do_visit(const NullableColumn& column) {
         _size += NullableColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) {
+    Status do_visit(const ConstColumn& column) {
         _size += ConstColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ArrayColumn& column) {
+    Status do_visit(const ArrayColumn& column) {
         _size += ArrayColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::MapColumn& column) {
+    Status do_visit(const MapColumn& column) {
         _size += MapColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::StructColumn& column) {
+    Status do_visit(const StructColumn& column) {
         _size += StructColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
     template <typename T>
-    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumnBase<T>& column) {
         _size += BinaryColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
         _size += FixedLengthColumnSerde<T, false>::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
     template <typename T>
-    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+    Status do_visit(const ObjectColumn<T>& column) {
         _size += ObjectColumnSerde<T>::max_serialized_size(column);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::JsonColumn& column) {
+    Status do_visit(const JsonColumn& column) {
         _size += JsonColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
@@ -557,39 +554,39 @@ public:
     explicit ColumnSerializingVisitor(uint8_t* buff, bool sorted, const int encode_level)
             : ColumnVisitorAdapter(this), _buff(buff), _cur(buff), _sorted(sorted), _encode_level(encode_level) {}
 
-    Status do_visit(const vectorized::NullableColumn& column) {
+    Status do_visit(const NullableColumn& column) {
         _cur = NullableColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) {
+    Status do_visit(const ConstColumn& column) {
         _cur = ConstColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ArrayColumn& column) {
+    Status do_visit(const ArrayColumn& column) {
         _cur = ArrayColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::MapColumn& column) {
+    Status do_visit(const MapColumn& column) {
         _cur = MapColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::StructColumn& column) {
+    Status do_visit(const StructColumn& column) {
         _cur = StructColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
     template <typename T>
-    Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumnBase<T>& column) {
         _cur = BinaryColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
         if (_sorted) {
             _cur = FixedLengthColumnSerde<T, true>::serialize(column, _cur, _encode_level);
         } else {
@@ -599,12 +596,12 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+    Status do_visit(const ObjectColumn<T>& column) {
         _cur = ObjectColumnSerde<T>::serialize(column, _cur);
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::JsonColumn& column) {
+    Status do_visit(const JsonColumn& column) {
         _cur = JsonColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
@@ -629,39 +626,39 @@ public:
               _sorted(sorted),
               _encode_level(encode_level) {}
 
-    Status do_visit(vectorized::NullableColumn* column) {
+    Status do_visit(NullableColumn* column) {
         _cur = NullableColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(vectorized::ConstColumn* column) {
+    Status do_visit(ConstColumn* column) {
         _cur = ConstColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(vectorized::ArrayColumn* column) {
+    Status do_visit(ArrayColumn* column) {
         _cur = ArrayColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(vectorized::MapColumn* column) {
+    Status do_visit(MapColumn* column) {
         _cur = MapColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
-    Status do_visit(vectorized::StructColumn* column) {
+    Status do_visit(StructColumn* column) {
         _cur = StructColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
     template <typename T>
-    Status do_visit(vectorized::BinaryColumnBase<T>* column) {
+    Status do_visit(BinaryColumnBase<T>* column) {
         _cur = BinaryColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
     template <typename T>
-    Status do_visit(vectorized::FixedLengthColumnBase<T>* column) {
+    Status do_visit(FixedLengthColumnBase<T>* column) {
         if (_sorted) {
             _cur = FixedLengthColumnSerde<T, true>::deserialize(_cur, column, _encode_level);
         } else {
@@ -671,12 +668,12 @@ public:
     }
 
     template <typename T>
-    Status do_visit(vectorized::ObjectColumn<T>* column) {
+    Status do_visit(ObjectColumn<T>* column) {
         _cur = ObjectColumnSerde<T>::deserialize(_cur, column);
         return Status::OK();
     }
 
-    Status do_visit(vectorized::JsonColumn* column) {
+    Status do_visit(JsonColumn* column) {
         _cur = JsonColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
@@ -694,23 +691,21 @@ private:
 
 } // namespace
 
-int64_t ColumnArraySerde::max_serialized_size(const vectorized::Column& column, const int encode_level) {
+int64_t ColumnArraySerde::max_serialized_size(const Column& column, const int encode_level) {
     ColumnSerializedSizeVisitor visitor(0, encode_level);
     auto st = column.accept(&visitor);
     LOG_IF(WARNING, !st.ok()) << st;
     return st.ok() ? visitor.size() : 0;
 }
 
-uint8_t* ColumnArraySerde::serialize(const vectorized::Column& column, uint8_t* buff, bool sorted,
-                                     const int encode_level) {
+uint8_t* ColumnArraySerde::serialize(const Column& column, uint8_t* buff, bool sorted, const int encode_level) {
     ColumnSerializingVisitor visitor(buff, sorted, encode_level);
     auto st = column.accept(&visitor);
     LOG_IF(WARNING, !st.ok()) << st;
     return st.ok() ? visitor.cur() : nullptr;
 }
 
-const uint8_t* ColumnArraySerde::deserialize(const uint8_t* data, vectorized::Column* column, bool sorted,
-                                             const int encode_level) {
+const uint8_t* ColumnArraySerde::deserialize(const uint8_t* data, Column* column, bool sorted, const int encode_level) {
     ColumnDeserializingVisitor visitor(data, sorted, encode_level);
     auto st = column->accept_mutable(&visitor);
     LOG_IF(WARNING, !st.ok()) << st;

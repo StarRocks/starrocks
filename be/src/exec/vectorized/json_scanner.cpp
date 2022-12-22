@@ -25,9 +25,9 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/vectorized/json_parser.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/json_functions.h"
+#include "exprs/cast_expr.h"
+#include "exprs/column_ref.h"
+#include "exprs/json_functions.h"
 #include "formats/json/nullable_column.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
@@ -37,7 +37,7 @@
 #include "runtime/types.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const int64_t MAX_ERROR_LINES_IN_FILE = 50;
 const int64_t MAX_ERROR_LOG_LENGTH = 64;
@@ -301,7 +301,7 @@ Status JsonScanner::_open_next_reader() {
     return Status::OK();
 }
 
-StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chunk) {
+StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk) {
     SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
 
@@ -320,9 +320,8 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPt
     return cast_chunk;
 }
 
-JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::ScannerCounter* counter,
-                       JsonScanner* scanner, std::shared_ptr<SequentialFile> file, bool strict_mode,
-                       std::vector<SlotDescriptor*> slot_descs)
+JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter* counter, JsonScanner* scanner,
+                       std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs)
         : _state(state),
           _counter(counter),
           _scanner(scanner),
@@ -709,4 +708,4 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
     return add_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

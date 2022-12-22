@@ -26,6 +26,8 @@ public enum PrivilegeType {
     RESOURCE(5, ResourceAction.actionMap(), "RESOURCES"),
     VIEW(6, ViewAction.actionMap(), "VIEWS"),
     CATALOG(7, CatalogAction.actionMap(), "CATALOGS"),
+    MATERIALIZED_VIEW(8, MaterializedViewAction.actionMap(), "MATERIALIZED_VIEWS"),
+    FUNCTION(9, FunctionAction.actionMap(), "FUNCTIONS"),
     RESOURCE_GROUP(10, ResourceGroupAction.actionMap(), "RESOURCE_GROUPS");
 
     private final int id;
@@ -110,7 +112,8 @@ public enum PrivilegeType {
         BLACKLIST(6),
         OPERATE(7),
         CREATE_EXTERNAL_CATALOG(8),
-        CREATE_RESOURCE_GROUP(10);
+        REPOSITORY(9),
+        CREATE_RESOURCE_GROUP(10); // AND MORE...
 
         private final int id;
 
@@ -218,6 +221,45 @@ public enum PrivilegeType {
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
             for (ViewAction action : ViewAction.values()) {
+                ret.put(action.toString(), new Action((short) action.id, action.toString()));
+            }
+            return ret;
+        }
+    }
+
+    public enum MaterializedViewAction {
+        ALTER(1),
+        REFRESH(2),
+        DROP(3),
+        SELECT(4);
+
+        private final int id;
+
+        MaterializedViewAction(int id) {
+            this.id = id;
+        }
+
+        public static Map<String, Action> actionMap() {
+            Map<String, Action> ret = new HashMap<>();
+            for (MaterializedViewAction action : MaterializedViewAction.values()) {
+                ret.put(action.toString(), new Action((short) action.id, action.toString()));
+            }
+            return ret;
+        }
+    }
+
+    public enum FunctionAction {
+        USAGE(1),
+        DROP(2);
+        private final int id;
+
+        FunctionAction(int id) {
+            this.id = id;
+        }
+
+        public static Map<String, Action> actionMap() {
+            Map<String, Action> ret = new HashMap<>();
+            for (FunctionAction action : FunctionAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;

@@ -24,18 +24,17 @@
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
-using namespace vectorized;
 
 // ================================
 
-DataSourceProviderPtr ESConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr ESConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                const TPlanNode& plan_node) const {
     return std::make_unique<ESDataSourceProvider>(scan_node, plan_node);
 }
 
 // ================================
 
-ESDataSourceProvider::ESDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+ESDataSourceProvider::ESDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _es_scan_node(plan_node.es_scan_node) {}
 
 DataSourcePtr ESDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -214,7 +213,7 @@ void ESDataSource::_init_counter() {
     _materialize_timer = ADD_TIMER(_runtime_profile, "MaterializeTupleTime(*)");
 }
 
-Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status ESDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     // Notice that some variables are not initialized
     // if `_no_data == true` because of short-circuits logic.
     if (_no_data || (_line_eof && _batch_eof)) {
@@ -239,7 +238,7 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
             RETURN_IF_ERROR(_es_scroll_parser->fill_chunk(state, chunk, &_line_eof));
         }
 
-        vectorized::Chunk* ck = chunk->get();
+        Chunk* ck = chunk->get();
         if (ck != nullptr) {
             int64_t before = ck->num_rows();
             COUNTER_UPDATE(_rows_read_counter, before);
