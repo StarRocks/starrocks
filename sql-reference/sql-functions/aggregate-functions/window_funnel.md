@@ -30,7 +30,7 @@ BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, c
   - 默认值为 `0`，表示执行最一般的漏斗计算。
   - 模式为 `1` 时（bits 设置第 1 位）表示 `DEDUPLICATION` 模式，即筛选出的事件链不能有重复的事件。假设 `array` 参数为 `[event_type='A', event_type='B', event_type='C', event_type='D']`，原事件链为 "A-B-C-B-D"。由于事件 B 重复，那么筛选出的事件链只能是 "A-B-C"。
   - 模式为 `2` 时（bits 设置第 2 位）表示 `FIXED` 模式，即筛选出的事件链不能有跳跃的事件，假设 `array` 参数如上不变，原事件链为 "A-B-D-C"，由于事件 D 跳跃，那么筛选出的事件链只能是 "A-B"。
-  - 模式为 `4` 时（bits 设置第3位）表示 `INCREASE` 模式，即筛选出的事件链中，连续事件的时间戳必须严格递增。此模式自 2.5 版本开始支持。
+  - 模式为 `4` 时（bits 设置第3位）表示 `INCREASE` 模式，即筛选出的事件链中，连续事件的时间戳必须严格递增。**此模式自 2.5 版本开始支持。**
 
 - `array`：定义的事件链，类型为 ARRAY 。
 
@@ -45,7 +45,7 @@ BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, c
 假设有表 `action`，数据以 `uid` 排序：
 
 ```Plaintext
-select * from action;
+SELECT * FROM action;
 +------+------------+---------------------+
 | uid  | event_type | time                |
 +------+------------+---------------------+
@@ -73,9 +73,13 @@ select * from action;
 执行如下SQL语句计算最大连续事件数：
 
 ```Plaintext
-select uid, window_funnel(1800,time,0,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level
-from action group by uid order by uid; 
+SELECT uid,
+       window_funnel(1800,time,0,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action
+GROUP BY uid
+ORDER BY uid; 
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -125,8 +129,14 @@ mysql> select * from action1 order by time;
 执行如下 SQL 语句计算最大连续事件数：
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='浏览', 
-        event_type='点击', event_type='下单', event_type='支付']) AS level from action1 group by uid order by uid;
+SELECT uid,
+       window_funnel(1800,time,0,[event_type='浏览', 
+        event_type='点击', event_type='下单', event_type='支付'])
+        AS level
+FROM action1
+GROUP BY uid
+ORDER BY uid;
+
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -173,8 +183,13 @@ mysql> select * from action2 order by time;
 执行如下 SQL 语句：
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,0,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action2 group by uid order by uid;
+SELECT uid,
+       window_funnel(1900,time,0,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action2
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -189,8 +204,13 @@ mysql> select uid, window_funnel(1900,time,0,[event_type='浏览', event_type='�
 将 `mode` 改为 `2`，再次执行 SQL：
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,2,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action2 group by uid order by uid;
+SELECT uid,
+       window_funnel(1900,time,2,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action2
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -224,9 +244,13 @@ select * from action3 order by time;
 执行如下 SQL 语句：
 
 ```Plaintext
-select uid, window_funnel(1900,time,0,[event_type='浏览', event_type='点击',
-        event_type='下单']) AS level
-from action3 group by uid order by uid;
+SELECT uid,
+       window_funnel(1900,time,0,[event_type='浏览', event_type='点击',
+        event_type='下单'])
+        AS level
+FROM action3
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -240,9 +264,12 @@ from action3 group by uid order by uid;
 将 `mode` 改为 `4`，再次执行 SQL：
 
 ```Plaintext
-select uid, window_funnel(1900,time,4,[event_type='浏览', event_type='点击',
-        event_type='下单']) AS level
-from action3 group by uid order by uid;
+SELECT uid, window_funnel(1900,time,4,[event_type='浏览', event_type='点击',
+        event_type='下单'])
+        AS level
+FROM action3
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
