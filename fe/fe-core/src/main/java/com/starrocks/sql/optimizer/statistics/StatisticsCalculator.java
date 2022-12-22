@@ -120,11 +120,15 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -579,10 +583,50 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         olapTable::getPartition).collect(Collectors.toList());
             }
             long rowCount = 0;
-            for (Partition partition : selectedPartitions) {
-                rowCount += partition.getBaseIndex().getRowCount();
-                optimizerContext.getDumpInfo()
-                        .addPartitionRowCount(table, partition.getName(), partition.getBaseIndex().getRowCount());
+
+            BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+            if (basicStatsMeta != null && basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
+
+                // The basicStatsMeta.getUpdateRows() interface can get the number of
+                // loaded rows in the table since the last statistics update. But this number is at the table level.
+                // So here we can count the number of partitions that have changed since the last statistics update,
+                // and then evenly distribute the number of updated rows at the table level to the partition boundaries
+                // The purpose of this is to make the statistics of the number of rows more accurate.
+                // For example, a large amount of data LOAD may cause the number of rows to change greatly.
+                // This leads to very inaccurate row counts.
+                int partitionCountModifiedAfterLastAnalyze = 0;
+                for (Partition partition : table.getPartitions()) {
+                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                    if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
+                        partitionCountModifiedAfterLastAnalyze++;
+                    }
+                }
+
+                for (Partition partition : selectedPartitions) {
+                    long partitionRowCount;
+                    TableStatistic tableStatistic =
+                            GlobalStateMgr.getCurrentStatisticStorage().getTableStatistic(table.getId(), partition.getId());
+                    if (tableStatistic.equals(TableStatistic.unknown())) {
+                        partitionRowCount = partition.getRowCount();
+                    } else {
+                        partitionRowCount = tableStatistic.getRowCount();
+                    }
+                    if (partitionCountModifiedAfterLastAnalyze > 0) {
+                        LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                        if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
+                            partitionRowCount += basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
+                        }
+                    }
+                    rowCount += partitionRowCount;
+                    optimizerContext.getDumpInfo()
+                            .addPartitionRowCount(table, partition.getName(), partitionRowCount);
+                }
+            } else {
+                for (Partition partition : selectedPartitions) {
+                    rowCount += partition.getRowCount();
+                    optimizerContext.getDumpInfo()
+                            .addPartitionRowCount(table, partition.getName(), partition.getRowCount());
+                }
             }
             // Currently, after FE just start, the row count of table is always 0.
             // Explicitly set table row count to 1 to make our cost estimate work.

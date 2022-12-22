@@ -79,7 +79,7 @@ public class PlanTestBase {
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
+
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
@@ -1076,6 +1076,8 @@ public class PlanTestBase {
                 ");");
 
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
+        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
     @AfterClass
