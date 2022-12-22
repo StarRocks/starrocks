@@ -32,10 +32,10 @@ StarRocks 支持如下两种数据分布方式：
 
 ```SQL
 CREATE TABLE site_access(
-site_id INT DEFAULT '10',
-city_code SMALLINT,
-user_name VARCHAR(32) DEFAULT '',
-pv BIGINT SUM DEFAULT '0'
+    site_id INT DEFAULT '10',
+    city_code SMALLINT,
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
@@ -45,31 +45,39 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ```SQL
 CREATE TABLE site_access(
-event_day DATE,
-site_id INT DEFAULT '10',
-city_code VARCHAR(100),
-user_name VARCHAR(32) DEFAULT '',
-pv BIGINT SUM DEFAULT '0'
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY RANGE(event_day)
 (
-PARTITION p1 VALUES LESS THAN ("2020-01-31"),
-PARTITION p2 VALUES LESS THAN ("2020-02-29"),
-PARTITION p3 VALUES LESS THAN ("2020-03-31")
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
 
 #### 分区
 
-分区用于将数据划分成不同的区间。分区的主要作用是将一张表按照分区键拆分成不同的管理单元，针对每一个管理单元选择相应的存储策略，比如副本数、冷热策略和存储介质等。StarRocks 支持在一个集群内使用多种存储介质，您可以将新数据所在分区放在 SSD 盘上，利用 SSD 的优秀的随机读写性能来提高查询性能，将旧数据存放在 SATA 盘上，以节省数据存储的成本。
+分区用于将数据划分成不同的区间。分区的主要作用是将一张表按照分区键拆分成不同的管理单元，针对每一个管理单元选择相应的存储策略，比如副本数、分桶数、冷热策略和存储介质等。StarRocks 支持在一个集群内使用多种存储介质，您可以将新数据所在分区放在 SSD 盘上，利用 SSD 的优秀的随机读写性能来提高查询性能，将旧数据存放在 SATA 盘上，以节省数据存储的成本。
 
 业务系统中⼀般会选择根据时间进行分区，以优化大量删除过期数据带来的性能问题，同时也方便冷热数据分级存储。
 
 StarRocks 支持动态分区。您可以按需为新数据动态创建分区，同时 StarRocks 会自动删除过期分区，从而确保数据的实效性，实现对分区的生命周期管理（Time to Life，简称 “TTL”），大幅减少运维管理的成本。
 
 StarRocks 还支持手动创建分区和批量创建分区。
+
+分区单位的选择，需要综合考虑数据量、查询特点、数据管理粒度等因素。
+
+实例1: 表单月数据量很小，可以按月分区，相比于按天分区，可以减少元数据数量，从而减少元数据管理和调度的资源消耗。
+
+实例2: 表单月数据量很大，而大部分查询条件精确到天，如果按天分区，可以做有效的分区裁减，减少查询扫描的数据量。
+
+实例3: 数据要求按天过期，可以按天分区。
 
 #### 分桶
 
@@ -85,22 +93,22 @@ StarRocks 还支持手动创建分区和批量创建分区。
 
 ### 手动创建分区
 
-选择合理的分区键可以有效的裁剪扫描的数据量。**目前仅支持分区键的数据类型为日期和整数类型**。在实际业务场景中，一般从数据管理的角度选择分区键，常见的分区键为时间或者区域。按照分区键划分数据后，单个分区原始数据量建议不要超过 100 GB。
+选择合理的分区键可以有效的裁剪扫描的数据量。**目前仅支持分区键的数据类型为日期和整数类型**。在实际业务场景中，一般从数据管理的角度选择分区键，常见的分区键为时间或者区域。
 
 ```SQL
 CREATE TABLE site_access(
-event_day DATE,
-site_id INT DEFAULT '10',
-city_code VARCHAR(100),
-user_name VARCHAR(32) DEFAULT '',
-pv BIGINT SUM DEFAULT '0'
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY RANGE(event_day)
 (
-PARTITION p1 VALUES LESS THAN ("2020-01-31"),
-PARTITION p2 VALUES LESS THAN ("2020-02-29"),
-PARTITION p3 VALUES LESS THAN ("2020-03-31")
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
@@ -140,9 +148,9 @@ PROPERTIES (
 
 ```SQL
 PARTITION BY RANGE (datekey) (
-PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
-PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
-PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
+    PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
+    PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
+    PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
 )
 ```
 
@@ -175,15 +183,15 @@ PROPERTIES (
 
 ```SQL
 PARTITION BY RANGE (datekey) (
-PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
+    PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
+    PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
+    PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
+    PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
+    PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
+    PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
+    PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
+    PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
+    PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
 )
 ```
 
@@ -218,10 +226,10 @@ PROPERTIES (
 
 ```SQL
 PARTITION BY RANGE (datekey) (
-PARTITION p1 VALUES [("1"), ("2")),
-PARTITION p2 VALUES [("2"), ("3")),
-PARTITION p3 VALUES [("3"), ("4")),
-PARTITION p4 VALUES [("4"), ("5"))
+    PARTITION p1 VALUES [("1"), ("2")),
+    PARTITION p2 VALUES [("2"), ("3")),
+    PARTITION p3 VALUES [("3"), ("4")),
+    PARTITION p4 VALUES [("4"), ("5"))
 )
 ```
 
@@ -298,18 +306,18 @@ SHOW PARTITIONS FROM site_access;
 
 ```SQL
 CREATE TABLE site_access(
-event_day DATE,
-site_id INT DEFAULT '10',
-city_code VARCHAR(100),
-user_name VARCHAR(32) DEFAULT '',
-pv BIGINT SUM DEFAULT '0'
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY RANGE(event_day)
 (
-PARTITION p1 VALUES LESS THAN ("2020-01-31"),
-PARTITION p2 VALUES LESS THAN ("2020-02-29"),
-PARTITION p3 VALUES LESS THAN ("2020-03-31")
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
@@ -327,10 +335,10 @@ where site_id = 54321;
 ```SQL
 CREATE TABLE site_access
 (
-site_id INT DEFAULT '10',
-city_code SMALLINT,
-user_name VARCHAR(32) DEFAULT '',
-pv BIGINT SUM DEFAULT '0'
+    site_id INT DEFAULT '10',
+    city_code SMALLINT,
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
@@ -381,3 +389,7 @@ DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分桶数量
 - **高吞吐**
   
   尽量把数据打散，让集群以更高的并发扫描数据，完成相应计算。
+
+- **元数据管理**
+
+  Tablet 过多会增加 FE/BE 的元数据管理和调度的资源消耗。
