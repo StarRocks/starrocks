@@ -1669,11 +1669,18 @@ public class ShowExecutor {
                         dynamicPartitionScheduler.removeRuntimeInfo(olapTable.getName());
                         continue;
                     }
-                    // check tbl privs
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), olapTable.getName(),
-                            PrivPredicate.SHOW)) {
-                        continue;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
+                                db.getFullName(), olapTable.getName())) {
+                            continue;
+                        }
+                    } else {
+                        // check tbl privs
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                                db.getFullName(), olapTable.getName(),
+                                PrivPredicate.SHOW)) {
+                            continue;
+                        }
                     }
                     DynamicPartitionProperty dynamicPartitionProperty =
                             olapTable.getTableProperty().getDynamicPartitionProperty();

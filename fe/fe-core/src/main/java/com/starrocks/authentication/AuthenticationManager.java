@@ -224,11 +224,11 @@ public class AuthenticationManager {
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         UserIdentity userIdentity = stmt.getUserIdent();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
-        upgradeUserWithAuthenticationInfoUnlocked(userIdentity, info);
+        updateUserWithAuthenticationInfo(userIdentity, info);
     }
 
-    public void upgradeUserWithAuthenticationInfoUnlocked(UserIdentity userIdentity,
-                                                          UserAuthenticationInfo info) throws DdlException {
+    public void updateUserWithAuthenticationInfo(UserIdentity userIdentity,
+                                                 UserAuthenticationInfo info) throws DdlException {
         writeLock();
         try {
             updateUserNoLock(userIdentity, info, true);
