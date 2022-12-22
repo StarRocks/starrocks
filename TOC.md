@@ -316,7 +316,9 @@
       + [utc_timestamp](/sql-reference/sql-functions/date-time-functions/utc_timestamp.md)
       + [week](/sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](/sql-reference/sql-functions/date-time-functions/weekofyear.md)
+      + [weeks_add](/sql-reference/sql-functions/date-time-functions/weeks_add.md)
       + [weeks_diff](/sql-reference/sql-functions/date-time-functions/weeks_diff.md)
+      + [weeks_sub](/sql-reference/sql-functions/date-time-functions/weeks_sub.md)
       + [year](/sql-reference/sql-functions/date-time-functions/year.md)
       + [years_add](/sql-reference/sql-functions/date-time-functions/years_add.md)
       + [years_diff](/sql-reference/sql-functions/date-time-functions/years_diff.md)
@@ -377,6 +379,7 @@
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
       + [substr](/sql-reference/sql-functions/string-functions/substr.md)
+      + [ucase](/sql-reference/sql-functions/string-functions/ucase.md)
       + [unhex](/sql-reference/sql-functions/string-functions/unhex.md)
     + JSON 函数
       + [JSON 函数概述](/sql-reference/sql-functions/json-functions/json-functions-and-operators.md)

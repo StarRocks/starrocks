@@ -72,8 +72,13 @@ mysql> select * from action;
 执行如下SQL语句计算最大连续事件数：
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action group by uid order by uid; 
+SELECT uid,
+       window_funnel(1800,time,0,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action
+GROUP BY uid
+ORDER BY uid; 
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -123,8 +128,14 @@ mysql> select * from action1 order by time;
 执行如下SQL语句计算最大连续事件数：
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='浏览', 
-        event_type='点击', event_type='下单', event_type='支付']) AS level from action1 group by uid order by uid;
+SELECT uid,
+       window_funnel(1800,time,0,[event_type='浏览', 
+        event_type='点击', event_type='下单', event_type='支付'])
+        AS level
+FROM action1
+GROUP BY uid
+ORDER BY uid;
+
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -171,8 +182,13 @@ mysql> select * from action2 order by time;
 执行如下SQL语句：
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,0,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action2 group by uid order by uid;
+SELECT uid,
+       window_funnel(1900,time,0,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action2
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -187,8 +203,13 @@ mysql> select uid, window_funnel(1900,time,0,[event_type='浏览', event_type='�
 将`mode`改为`2`，再次执行SQL：
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,2,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action2 group by uid order by uid;
+SELECT uid,
+       window_funnel(1900,time,2,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action2
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
