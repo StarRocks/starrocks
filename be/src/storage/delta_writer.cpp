@@ -441,7 +441,7 @@ Status DeltaWriter::commit() {
     if (auto res = _rowset_writer->build(); res.ok()) {
         _cur_rowset = std::move(res).value();
     } else {
-        LOG(WARNING) << res.status();
+        LOG(WARNING) << "Failed to build rowset. tablet_id: " << _opt.tablet_id << " err: " << res.status();
         _set_state(kAborted, res.status());
         return res.status();
     }
