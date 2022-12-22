@@ -23,10 +23,33 @@ PROPERTIES ("key"="value", ...)
 
 | **参数**            | **说明**                                                     |
 | ------------------- | ------------------------------------------------------------ |
-| READ ONLY           | 创建只读仓库。请注意只读仓库只可进行恢复操作。               |
+| READ ONLY           | 创建只读仓库。请注意只读仓库只可进行恢复操作。当为两个集群创建相同仓库，用以迁移数据时，可以为新集群创建只读仓库，仅赋予其恢复的权限。|
 | repository_name     | 仓库名。                                                     |
 | repository_location | 远端存储系统路径。                                           |
-| PROPERTIES          | 访问远端存储系统的节点及密钥或用户名及密码。具体使用方式见示例。 |
+| PROPERTIES          | 访问远端存储系统的节点及密钥或用户名及密码。具体使用方式见以下说明。 |
+
+**PROPERTIES**:
+
+StarRocks 支持在 HDFS、S3、OSS 以及 COS 中创建仓库。
+
+- HDFS：
+  - "username"：登陆 HDFS 的用户名。
+  - "password"：登陆 HDFS 的密码。
+
+- S3：
+  - "fs.s3a.access.key"：登陆 S3 的 Access Key。
+  - "fs.s3a.secret.key"：登陆 S3 的 Secret Key。
+  - "fs.s3a.endpoint"：S3 存储端点。
+
+- For OSS：
+  - "fs.oss.accessKeyId"：登陆 OSS 的 Access Key ID。
+  - "fs.oss.accessKeySecret"：登陆 OSS 的 Access Key Secret。
+  - "fs.oss.endpoint"：OSS 存储端点。
+
+- For COS：
+  - "fs.cosn.userinfo.secretId"：登陆 COS 的 Secret ID。
+  - "fs.cosn.userinfo.secretKey"：登陆 COS 的 Secret Key。
+  - "fs.cosn.bucket.endpoint_suffix"：COS 存储端点后缀。
 
 ## 示例
 
