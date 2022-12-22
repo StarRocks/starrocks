@@ -1766,6 +1766,18 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    /**
+     * empty shard group clean threshold (by create time).
+     */
+    @ConfField
+    public static long shard_group_clean_threshold_sec = 3600L;
+
+    /**
+     * ShardDeleter run interval in seconds
+     */
+    @ConfField
+    public static long shard_deleter_run_interval_sec = 600L;
+
     @ConfField
     public static String hdfs_url = "";
 
