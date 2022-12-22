@@ -719,6 +719,10 @@ set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
 
+if (NOT $ENV{STARROCKS_LINKER} STREQUAL "")
+    add_link_options("-fuse-ld=$ENV{STARROCKS_LINKER}")
+endif ()
+
 if (${MAKE_TEST} STREQUAL "ON")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")
     add_definitions(-DBE_TEST)
