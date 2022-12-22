@@ -382,6 +382,7 @@
       + [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
       + [grouping](/sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](/sql-reference/sql-functions/aggregate-functions/grouping_id.md)
+      + [hll_union](/sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](/sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [hll_empty](/sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [max](/sql-reference/sql-functions/aggregate-functions/max.md)
