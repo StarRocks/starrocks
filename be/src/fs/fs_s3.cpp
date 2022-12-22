@@ -149,11 +149,11 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
-    const std::shared_ptr<CloudConfiguration> cloud_configuration = CloudConfigurationFactory::create(t_cloud_configuration);
+    const std::shared_ptr<CloudConfiguration> cloud_configuration =
+            CloudConfigurationFactory::create(t_cloud_configuration);
     DCHECK(cloud_configuration != nullptr);
     // S3 sdk can only use AWSCloudCredential
-    const auto* aws_cloud_configuration =
-            down_cast<const AWSCloudConfiguration*>(cloud_configuration.get());
+    const auto* aws_cloud_configuration = down_cast<const AWSCloudConfiguration*>(cloud_configuration.get());
 
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     std::shared_ptr<AWSCloudCredential> aws_cloud_credential = aws_cloud_configuration->aws_cloud_credential;

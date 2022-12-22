@@ -65,8 +65,10 @@ public:
         DCHECK(false) << "Unreachable";
         return nullptr;
     }
+
 private:
-   static const std::shared_ptr<AWSCloudConfiguration> create_aws(const std::unordered_map<std::string, std::string>& properties) {
+    static const std::shared_ptr<AWSCloudConfiguration> create_aws(
+            const std::unordered_map<std::string, std::string>& properties) {
         std::shared_ptr<AWSCloudConfiguration> aws_cloud_configuration = std::make_shared<AWSCloudConfiguration>();
         std::shared_ptr<AWSCloudCredential> aws_cloud_credential = std::make_shared<AWSCloudCredential>();
 

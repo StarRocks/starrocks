@@ -102,8 +102,12 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void setupCloudCredential() {
+        String catalogName = srIcebergTable.getCatalog();
+        if (catalogName == null) {
+            return;
+        }
         IcebergConnector connector = (IcebergConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(srIcebergTable.getCatalog());
+                getConnector(catalogName);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

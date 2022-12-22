@@ -84,8 +84,12 @@ public class HdfsScanNode extends ScanNode {
     }
 
     private void setupCloudCredential() {
+        String catalog = hiveTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
         HiveConnector connector = (HiveConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(hiveTable.getCatalogName());
+                getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

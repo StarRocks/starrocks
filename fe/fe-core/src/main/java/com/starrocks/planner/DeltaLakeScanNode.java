@@ -86,8 +86,12 @@ public class DeltaLakeScanNode extends ScanNode {
     }
 
     private void setupCloudCredential() {
+        String catalog = deltaLakeTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
         DeltaLakeConnector connector = (DeltaLakeConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(deltaLakeTable.getCatalogName());
+                getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

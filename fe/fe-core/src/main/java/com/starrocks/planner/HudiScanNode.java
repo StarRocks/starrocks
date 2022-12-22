@@ -69,8 +69,12 @@ public class HudiScanNode extends ScanNode {
     }
 
     private void setupCloudCredential() {
+        String catalog = hudiTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
         HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(hudiTable.getCatalogName());
+                getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }
