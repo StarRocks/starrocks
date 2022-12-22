@@ -26,4 +26,10 @@ public class StarRocksConnectorException extends RuntimeException {
         return getErrorMessage();
     }
 
+    public static void check(boolean test, String message, Object... args) {
+        if (!test) {
+            throw new StarRocksConnectorException(message, args);
+        }
+    }
+
 }
