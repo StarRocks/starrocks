@@ -19,7 +19,7 @@ The following bugs are fixed:
 - If only JRE is installed on the environment and JDK is not installed, queries fail after FE restarts. After the bug is fixed, FE cannot restart in that environment and it returns error `JAVA_HOME can not be jre`. To successfully restart FE, you need to install JDK on the environment. [#14332](https://github.com/StarRocks/starrocks/pull/14332)
 - Queries cause BE crashes. [#14221](https://github.com/StarRocks/starrocks/pull/14221)
 - `exec_mem_limit` cannot be set to an expression. [#13647](https://github.com/StarRocks/starrocks/pull/13647)
-- You cannot create a syn refreshed materialized view based on subquery results. [#13507](https://github.com/StarRocks/starrocks/pull/13507)
+- You cannot create a sync refreshed materialized view based on subquery results. [#13507](https://github.com/StarRocks/starrocks/pull/13507)
 - The comments for columns are deleted after you refresh the Hive external table. [#13742](https://github.com/StarRocks/starrocks/pull/13742)
 - During a correlated JOIN, the right table is processed before the left table and the right table is very large. If compaction is performed on the left table while the right table is being processed, the BE node crashes. [#14070](https://github.com/StarRocks/starrocks/pull/14070)
 - If the Parquet file column names are case-sensitive, and the query condition uses upper-case column names from the Parquet file, the query returns no result. [#13860](https://github.com/StarRocks/starrocks/pull/13860) [#14773](https://github.com/StarRocks/starrocks/pull/14773)
@@ -45,7 +45,10 @@ The following bugs are fixed:
 
 - When a view is created based directly on the result of UNION ALL, and the UNION ALL operator's input columns include NULL values, the schema of the view is incorrect since the data type of columns is NULL_TYPE rather than UNION ALL's input columns. [#13917](https://github.com/StarRocks/starrocks/pull/13917)
 - The query result of `SELECT * FROM ...` and `SELECT * FROM ... LIMIT ...`  is inconsistent. [#13585](https://github.com/StarRocks/starrocks/pull/13585)
-- External tablet metadata synchronized to FE may overwrite local tablet metadata, which causes data loading from Flink to fail. [#12579](https://github.com/StarRocks/starrocks/pull/12579)
+- External tablet metadata 
+
+
+chronized to FE may overwrite local tablet metadata, which causes data loading from Flink to fail. [#12579](https://github.com/StarRocks/starrocks/pull/12579)
 - BE nodes crash when null filter in Runtime Filter handles literal constants. [#13526](https://github.com/StarRocks/starrocks/pull/13526)
 - An error is returned when you execute CTAS. [#12388](https://github.com/StarRocks/starrocks/pull/12388)
 - The metrics `ScanRows` collected by pipeline engine in audit log may be wrong. [#12185](https://github.com/StarRocks/starrocks/pull/12185)
