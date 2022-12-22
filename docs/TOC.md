@@ -555,9 +555,13 @@
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
+<<<<<<< HEAD
       + [version](./sql-reference/sql-functions/utility-functions/version.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
+=======
+      + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
+>>>>>>> 44c1743b3 (Add function isnull (#15652))
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
