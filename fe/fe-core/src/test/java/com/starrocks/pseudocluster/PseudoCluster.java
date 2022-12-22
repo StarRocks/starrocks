@@ -318,8 +318,6 @@ public class PseudoCluster {
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
             LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);
         }
