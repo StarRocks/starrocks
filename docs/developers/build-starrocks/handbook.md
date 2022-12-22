@@ -27,17 +27,17 @@ and, only build FE by
 
 Unit tests of BE and FE are separted. In general, you can run BE test by
 ```
-./run-ut.sh --run
+./run-be-ut.sh
 ```
 
 run FE test by 
 ```
-./run-fe-ut.sh --run
+./run-fe-ut.sh
 ```
 
 ## How to run BE UT in command line
 
-Now, BE UT needs some dependency to run, and `./run-ut.sh` helps it. But it is not flexible enough. When you want to run UT in the command-line, you can execute
+Now, BE UT needs some dependency to run, and `./run-be-ut.sh` helps it. But it is not flexible enough. When you want to run UT in the command-line, you can execute
 
 ```
 UDF_RUNTIME_DIR=./ STARROCKS_HOME=./ LD_LIBRARY_PATH=/usr/lib/jvm/java-18-openjdk-amd64/lib/server ./be/ut_build_ASAN/test/starrocks_test
