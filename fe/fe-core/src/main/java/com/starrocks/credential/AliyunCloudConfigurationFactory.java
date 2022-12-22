@@ -24,18 +24,6 @@ public class AliyunCloudConfigurationFactory extends CloudConfigurationFactory {
     }
 
     @Override
-    public CloudCredential buildCloudCredential() {
-        // TODO
-        return null;
-    }
-
-    @Override
-    protected CloudConfiguration buildSDKConfiguration() {
-        // TODO
-        return null;
-    }
-
-    @Override
     protected CloudConfiguration buildForStorage() {
         // TODO
         return null;

@@ -29,7 +29,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
 
     private boolean enableSSL = true;
 
-    public void setAWSCloudCredential(AWSCloudCredential awsCloudCredential) {
+    public AWSCloudConfiguration(AWSCloudCredential awsCloudCredential) {
         this.awsCloudCredential = awsCloudCredential;
     }
 

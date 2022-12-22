@@ -33,8 +33,4 @@ public abstract class CloudConfigurationFactory {
     }
 
     protected abstract CloudConfiguration buildForStorage();
-
-    public abstract CloudCredential buildCloudCredential();
-
-    protected abstract CloudConfiguration buildSDKConfiguration();
 }

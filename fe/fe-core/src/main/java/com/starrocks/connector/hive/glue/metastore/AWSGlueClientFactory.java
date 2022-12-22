@@ -48,7 +48,7 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
     @Override
     public AWSGlue newClient() throws MetaException {
         AWSCloudConfigurationFactory factory = new AWSCloudConfigurationFactory(conf);
-        CloudCredential cloudCredential = factory.buildCloudCredential();
+        CloudCredential cloudCredential = factory.buildGlueCloudCredential();
         try {
             AWSGlueClientBuilder glueClientBuilder = null;
             if (cloudCredential != null) {

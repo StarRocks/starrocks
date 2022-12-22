@@ -35,40 +35,7 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
         this.hiveConf = hiveConf;
     }
 
-    @Override
-    public CloudCredential buildCloudCredential() {
-        if (properties != null) {
-            return buildCloudCredentialFromProperties();
-        }
-
-        if (hiveConf != null) {
-            return buildCloudCredentialFromHiveConf();
-        }
-        return null;
-    }
-
-    private CloudCredential buildCloudCredentialFromProperties() {
-        Preconditions.checkNotNull(properties);
-        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
-                Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
-                                "false")),
-                Boolean.parseBoolean(
-                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false")),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_SECRET_KEY, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, ""),
-                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, "")
-        );
-        if (!awsCloudCredential.validate()) {
-            return null;
-        }
-        return awsCloudCredential;
-    }
-
-    private CloudCredential buildCloudCredentialFromHiveConf() {
+    public CloudCredential buildGlueCloudCredential() {
         Preconditions.checkNotNull(hiveConf);
         AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
                 hiveConf.getBoolean(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, false),
@@ -87,8 +54,26 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
     }
 
     @Override
-    protected CloudConfiguration buildSDKConfiguration() {
-        AWSCloudConfiguration awsCloudConfiguration = new AWSCloudConfiguration();
+    protected CloudConfiguration buildForStorage() {
+        Preconditions.checkNotNull(properties);
+        AWSCloudCredential awsCloudCredential = new AWSCloudCredential(
+                Boolean.parseBoolean(
+                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR,
+                                "false")),
+                Boolean.parseBoolean(
+                        properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false")),
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, ""),
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_SECRET_KEY, ""),
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, ""),
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, ""),
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, ""),
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, "")
+        );
+        if (!awsCloudCredential.validate()) {
+            return null;
+        }
+
+        AWSCloudConfiguration awsCloudConfiguration = new AWSCloudConfiguration(awsCloudCredential);
         // put cloud configuration
         if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS)) {
             awsCloudConfiguration.setEnablePathStyleAccess(
@@ -103,19 +88,5 @@ public class AWSCloudConfigurationFactory extends CloudConfigurationFactory {
         }
 
         return awsCloudConfiguration;
-    }
-
-    @Override
-    protected CloudConfiguration buildForStorage() {
-        CloudCredential cloudCredential = buildCloudCredential();
-        if (cloudCredential == null) {
-            return null;
-        }
-        CloudConfiguration cloudConfiguration = buildSDKConfiguration();
-        if (cloudConfiguration == null) {
-            return null;
-        }
-        ((AWSCloudConfiguration) cloudConfiguration).setAWSCloudCredential((AWSCloudCredential) cloudCredential);
-        return cloudConfiguration;
     }
 }
