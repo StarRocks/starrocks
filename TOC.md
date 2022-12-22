@@ -421,6 +421,7 @@
       + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [count](/sql-reference/sql-functions/aggregate-functions/count.md)
+      + [multi_distinct_count](/sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [grouping](/sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [hll_union_agg](/sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [max](/sql-reference/sql-functions/aggregate-functions/max.md)
