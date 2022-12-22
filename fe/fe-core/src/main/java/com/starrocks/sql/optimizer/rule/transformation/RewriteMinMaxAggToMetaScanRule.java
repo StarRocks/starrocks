@@ -106,6 +106,14 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
         if (table.getKeysType() != KeysType.DUP_KEYS) {
             return false;
         }
+        // no limit
+        if (scanOperator.getLimit() != -1) {
+            return false;
+        }
+        // no filter
+        if (scanOperator.getPredicate() != null) {
+            return false;
+        }
         List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
         if (groupingKeys != null && !groupingKeys.isEmpty()) {
             return false;
@@ -144,14 +152,6 @@ public class RewriteMinMaxAggToMetaScanRule extends TransformationRule {
         );
         // all agg columns have zonemap index
         if (!allCanUseZonemapIndex) {
-            return false;
-        }
-        // no limit
-        if (scanOperator.getLimit() != -1) {
-            return false;
-        }
-        // no filter
-        if (scanOperator.getPredicate() != null) {
             return false;
         }
         return true;
