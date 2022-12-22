@@ -1748,7 +1748,12 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
     }
 #endif
     if constexpr (trim_single) {
-        for (; p < end && *p == remove[0]; ++p) {
+        if (remove[0] == ' ') {
+            for (; p < end && *p == ' '; ++p) {
+            }
+        } else {
+            for (; p < end && *p == remove[0]; ++p) {
+            }
         }
     } else {
         for (; p < end && remove.find(*p) != remove.npos; ++p) {
@@ -1782,7 +1787,12 @@ static const char* skip_trailing_spaces(const char* begin, const char* end, cons
     }
 #endif
     if constexpr (trim_single) {
-        for (--p; p >= begin && *p == remove[0]; --p) {
+        if (remove[0] == ' ') {
+            for (--p; p >= begin && *p == ' '; --p) {
+            }
+        } else {
+            for (--p; p >= begin && *p == remove[0]; --p) {
+            }
         }
     } else {
         for (--p; p >= begin && remove.find(*p) != remove.npos; --p) {
@@ -1834,7 +1844,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
 template <TrimType trim_type, size_t simd_threshold, bool trim_single>
 struct AdaptiveTrimFunction {
     template <LogicalType Type, LogicalType ResultType, typename Args>
-    static ColumnPtr evaluate(const ColumnPtr& column, Args remove) {
+    static ColumnPtr evaluate(const ColumnPtr& column, Args&& remove) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
