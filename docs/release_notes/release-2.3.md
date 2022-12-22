@@ -22,7 +22,7 @@ The following bugs are fixed:
 - You cannot create a syn refreshed materialized view based on subquery results. [#13507](https://github.com/StarRocks/starrocks/pull/13507)
 - The comments for columns are deleted after you refresh the Hive external table. [#13742](https://github.com/StarRocks/starrocks/pull/13742)
 - During a correlated JOIN, the right table is processed before the left table and the right table is very large. If compaction is performed on the left table while the right table is being processed, the BE node crashes. [#14070](https://github.com/StarRocks/starrocks/pull/14070)
-- If the Parquet file column names are case-sensitive, and the query condition uses upper-case column names from the Parquet file, the query returns no result. [#13860](https://github.com/StarRocks/starrocks/pull/13860) 、[#14773](https://github.com/StarRocks/starrocks/pull/14773)
+- If the Parquet file column names are case-sensitive, and the query condition uses upper-case column names from the Parquet file, the query returns no result. [#13860](https://github.com/StarRocks/starrocks/pull/13860) [#14773](https://github.com/StarRocks/starrocks/pull/14773)
 - During bulk loading, if the number of connections to Broker exceeds the default maximum number of connections, Broker is disconnected and the loading job fails with an error message `list path error`. [#13911](https://github.com/StarRocks/starrocks/pull/13911)
 - When BEs are highly loaded, the metric for resource groups `starrocks_be_resource_group_running_queries` may be incorrect. [#14043](https://github.com/StarRocks/starrocks/pull/14043)
 - If the query statement uses OUTER JOIN, it may cause the BE node to crash. [#14840](https://github.com/StarRocks/starrocks/pull/14840)
