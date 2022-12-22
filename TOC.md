@@ -277,7 +277,7 @@
       + [date_add](/sql-reference/sql-functions/date-time-functions/date_add.md)
       + [date_format](/sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_slice](/sql-reference/sql-functions/date-time-functions/date_slice.md)
-      + [date_sub](/sql-reference/sql-functions/date-time-functions/date_sub.md)
+      + [date_sub, subdate](/sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [datediff](/sql-reference/sql-functions/date-time-functions/datediff.md)
       + [date_trunc](/sql-reference/sql-functions/date-time-functions/date_trunc.md)
       + [day](/sql-reference/sql-functions/date-time-functions/day.md)
@@ -445,7 +445,7 @@
       + [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)
       + [stddev](/sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](/sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
-      + [variance](/sql-reference/sql-functions/aggregate-functions/variance.md)
+      + [variance, variance_pop, var_pop](/sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](/sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Bitmap 函数
