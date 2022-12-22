@@ -363,6 +363,7 @@
       + [lpad](/sql-reference/sql-functions/string-functions/lpad.md)
       + [ltrim](/sql-reference/sql-functions/string-functions/ltrim.md)
       + [rtrim](/sql-reference/sql-functions/string-functions/rtrim.md)
+      + [trim](/sql-reference/sql-functions/string-functions/trim.md)
       + [money_format](/sql-reference/sql-functions/string-functions/money_format.md)
       + [null_or_empty](/sql-reference/sql-functions/string-functions/null_or_empty.md)
       + [parse_url](/sql-reference/sql-functions/string-functions/parse_url.md)
