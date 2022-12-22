@@ -415,6 +415,7 @@
     + 工具函数
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)
+      + [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](/sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](/sql-reference/sql-functions/utility-functions/uuid.md)
@@ -435,6 +436,7 @@
       + [max_by](/sql-reference/sql-functions/aggregate-functions/max_by.md)
       + [min](/sql-reference/sql-functions/aggregate-functions/min.md)
       + [multi_distinct_count](/sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
+      + [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
       + [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [percentile_cont](/sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
       + [retention](/sql-reference/sql-functions/aggregate-functions/retention.md)
@@ -444,7 +446,6 @@
       + [variance](/sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](/sql-reference/sql-functions/aggregate-functions/window_funnel.md)
-      + [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
     + Bitmap 函数
       + [bitmap_and](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](/sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
