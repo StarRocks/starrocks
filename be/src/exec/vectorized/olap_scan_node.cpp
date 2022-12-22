@@ -55,7 +55,7 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         const auto& bucket_exprs = _olap_scan_node.bucket_exprs;
         _bucket_exprs.resize(bucket_exprs.size());
         for (int i = 0; i < bucket_exprs.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, bucket_exprs[i], &_bucket_exprs[i], state));
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, bucket_exprs[i], &_bucket_exprs[i]));
         }
     }
 
