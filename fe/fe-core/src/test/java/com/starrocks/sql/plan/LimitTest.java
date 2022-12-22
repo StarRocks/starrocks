@@ -147,7 +147,8 @@ public class LimitTest extends PlanTestBase {
     public void testCountStarWithLimitForOneAggStage() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(*) from (select v1 from t0 order by v2 limit 10,20) t;";
-        assertPlanContains(sql, "4:AGGREGATE (update finalize)");
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:AGGREGATE (update finalize)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -623,7 +624,7 @@ public class LimitTest extends PlanTestBase {
                         "WHERE CAST(coalesce(true, true) AS BOOLEAN) < true\n" +
                         "LIMIT 157";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, ("11:SELECT\n" +
+        assertContains(plan, ("10:SELECT\n" +
                 "  |  predicates: coalesce(TRUE, TRUE) < TRUE\n" +
                 "  |  limit: 157"));
     }

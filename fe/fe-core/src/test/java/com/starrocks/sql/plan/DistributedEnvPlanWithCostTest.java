@@ -250,15 +250,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE not in ('1998-04-10', '1994-04-11', '1994-04-12');";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(39: count)\n" +
-                "  |  group by: ");
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(*)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 3> : 3: LO_LINENUMBER");
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
+        assertContains(plan, "1:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -268,15 +261,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(39: count)\n" +
-                "  |  group by: ");
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(*)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 3> : 3: LO_LINENUMBE");
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
+        assertContains(plan, "1:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -637,16 +623,17 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         // eval predicate cardinality in scan node
-        assertContains(plan, "0:OlapScanNode\n" +
+        assertContains(plan, "4:OlapScanNode\n" +
                 "     table: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
+                "     Predicates: 18: N_NATIONKEY IN (1, 2)\n" +
                 "     partitionsRatio=1/1, tabletsRatio=1/1");
         // eval predicate cardinality in join node
-        assertContains(plan, "3:NESTLOOP JOIN\n" +
+        assertContains(plan, "6:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
-                "  |  cardinality: 2");
+                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) " +
+                "OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
+                "  |  cardinality: 1");
     }
 
     @Test
@@ -1205,11 +1192,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select * from t0 j0 join " +
                 "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v3 = j1.v3 and j0.v2 = j1.x2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 05\n" +
-                "    UNPARTITIONED\n" +
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    HASH_PARTITIONED: 6: v3, 7: sum\n" +
                 "\n" +
-                "  4:AGGREGATE (merge finalize)");
+                "  5:AGGREGATE (merge finalize)");
     }
 
     @Test
