@@ -6,7 +6,7 @@
 
 该函数遵循如下规则：
 
-- 从事件链中的第一个条件开始判断。如果数据中包含符合条件的事件，则向计数器加1，并以此事件对应的时间作为滑动窗口的起始时间。如果未能找到符合第一个条件的数据，则返回为0.
+- 从事件链中的第一个条件开始判断。如果数据中包含符合条件的事件，则向计数器加1，并以此事件对应的时间作为滑动窗口的起始时间。如果未能找到符合第一个条件的数据，则返回为 0.
 
 - 在滑动窗口内，如果事件链中的事件按顺序发生，则计数器递增；如果超出了时间窗口，则计数器不再增加。
 
@@ -22,16 +22,16 @@ BIGINT output window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[c
 
 ## 参数说明
 
-- `window`：滑动窗口的大小，类型为BIGINT。单位取决于`time`参数，如果`time`的取值类型为DATE，窗口单位为天；如果`time`的取值类型为DATETIME，窗口单位为秒。
+- `window`：滑动窗口的大小，类型为BIGINT。单位取决于 `time` 参数，如果 `time` 的取值类型为DATE，窗口单位为天；如果 `time` 的取值类型为DATETIME，窗口单位为秒。
 
 - `time`：包含时间戳的列。目前支持DATE和DATETIME类型。
 
 - `mode`：事件链的筛选模式，类型为INT。取值范围：0，1，2。
-  - 默认值为`0`，表示执行最一般的漏斗计算。
-  - 取值为1时表示`DEDUPLICATION`模式，即筛选出的事件链不能有重复的事件。假设`array`参数为`[event_type='A', event_type='B', event_type='C', event_type='D']`，原事件链为"A-B-C-B-D"，由于事件B重复，那么筛选出的事件链只能是"A-B-C"。
-  - 取值为2时表示`FIXED`模式，即筛选出的事件链不能有跳跃的事件，假设`array`参数如上不变，原事件链为"A-B-D-C"，由于事件D跳跃，那么筛选出的事件链只能是"A-B"。
+  - 默认值为 `0`，表示执行最一般的漏斗计算。
+  - 取值为1时表示 `DEDUPLICATION` 模式，即筛选出的事件链不能有重复的事件。假设 `array` 参数为 `[event_type='A', event_type='B', event_type='C', event_type='D']`，原事件链为 "A-B-C-B-D"，由于事件B重复，那么筛选出的事件链只能是 "A-B-C"。
+  - 取值为 2 时表示 `FIXED` 模式，即筛选出的事件链不能有跳跃的事件，假设 `array` 参数如上不变，原事件链为 "A-B-D-C"，由于事件 D 跳跃，那么筛选出的事件链只能是 "A-B"。
 
-- `array`：定义的事件链，类型为ARRAY。
+- `array`：定义的事件链，类型为 ARRAY。
 
 ## 返回值说明
 
@@ -44,7 +44,7 @@ BIGINT output window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[c
 假设有表`action`，数据以`uid`排序：
 
 ```Plaintext
-mysql> select * from action;
+SELECT * FROM action;
 +------+------------+---------------------+
 | uid  | event_type | time                |
 +------+------------+---------------------+
@@ -72,8 +72,13 @@ mysql> select * from action;
 执行如下SQL语句计算最大连续事件数：
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action group by uid order by uid; 
+SELECT uid,
+       window_funnel(1800,time,0,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action
+GROUP BY uid
+ORDER BY uid; 
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -123,8 +128,14 @@ mysql> select * from action1 order by time;
 执行如下SQL语句计算最大连续事件数：
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='浏览', 
-        event_type='点击', event_type='下单', event_type='支付']) AS level from action1 group by uid order by uid;
+SELECT uid,
+       window_funnel(1800,time,0,[event_type='浏览', 
+        event_type='点击', event_type='下单', event_type='支付'])
+        AS level
+FROM action1
+GROUP BY uid
+ORDER BY uid;
+
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -171,8 +182,13 @@ mysql> select * from action2 order by time;
 执行如下SQL语句：
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,0,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action2 group by uid order by uid;
+SELECT uid,
+       window_funnel(1900,time,0,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action2
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -187,8 +203,13 @@ mysql> select uid, window_funnel(1900,time,0,[event_type='浏览', event_type='�
 将`mode`改为`2`，再次执行SQL：
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,2,[event_type='浏览', event_type='点击', 
-        event_type='下单', event_type='支付']) AS level from action2 group by uid order by uid;
+SELECT uid,
+       window_funnel(1900,time,2,[event_type='浏览', event_type='点击', 
+        event_type='下单', event_type='支付'])
+        AS level
+FROM action2
+GROUP BY uid
+ORDER BY uid;
 +------+-------+
 | uid  | level |
 +------+-------+
