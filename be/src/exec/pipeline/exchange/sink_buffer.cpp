@@ -25,12 +25,11 @@
 namespace starrocks::pipeline {
 
 SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
-                       bool is_dest_merge, size_t num_sinkers)
+                       bool is_dest_merge)
         : _fragment_ctx(fragment_ctx),
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
-          _is_dest_merge(is_dest_merge),
-          _num_uncancelled_sinkers(num_sinkers) {
+          _is_dest_merge(is_dest_merge) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -40,8 +39,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
 
         auto it = _num_sinkers.find(instance_id.lo);
         if (it == _num_sinkers.end()) {
-            _num_sinkers[instance_id.lo] = num_sinkers;
-
+            _num_sinkers[instance_id.lo] = 0;
             _request_seqs[instance_id.lo] = -1;
             _max_continuous_acked_seqs[instance_id.lo] = -1;
             _discontinuous_acked_seqs[instance_id.lo] = std::unordered_set<int64_t>();
@@ -57,8 +55,6 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _instance_id2finst_id[instance_id.lo] = std::move(finst_id);
         }
     }
-
-    _num_remaining_eos = _num_sinkers.size() * num_sinkers;
 }
 
 SinkBuffer::~SinkBuffer() {
@@ -69,6 +65,16 @@ SinkBuffer::~SinkBuffer() {
     DCHECK(is_finished());
 
     _buffers.clear();
+}
+
+Status SinkBuffer::prepare(RuntimeState* state) {
+    _num_uncancelled_sinkers++;
+    for (auto& [_, num_sinkers_per_instance] : _num_sinkers) {
+        num_sinkers_per_instance++;
+    }
+    _num_remaining_eos += _num_sinkers.size();
+
+    return Status::OK();
 }
 
 Status SinkBuffer::add_request(TransmitChunkInfo& request) {

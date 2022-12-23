@@ -113,28 +113,24 @@ Status SortContext::_init_merger() {
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
-                                       int64_t offset, int64_t limit, int32_t num_right_sinkers,
-                                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
-                                       const std::vector<bool>& is_null_first)
+                                       int64_t offset, int64_t limit, std::vector<ExprContext*> sort_exprs,
+                                       const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
         : _state(state),
           _topn_type(topn_type),
           _is_merging(is_merging),
-          _sort_contexts(is_merging ? 1 : num_right_sinkers),
           _offset(offset),
           _limit(limit),
-          _num_right_sinkers(num_right_sinkers),
           _sort_exprs(std::move(sort_exprs)),
           _sort_descs(is_asc_order, is_null_first) {}
 
 SortContextPtr SortContextFactory::create(int32_t idx) {
     size_t actual_idx = _is_merging ? 0 : idx;
-    int32_t num_sinkers = _is_merging ? _num_right_sinkers : 1;
-
-    DCHECK_LE(actual_idx, _sort_contexts.size());
-    if (!_sort_contexts[actual_idx]) {
-        _sort_contexts[actual_idx] = std::make_shared<SortContext>(_state, _topn_type, _offset, _limit, num_sinkers,
-                                                                   _sort_exprs, _sort_descs);
+    if (auto it = _sort_contexts.find(actual_idx); it != _sort_contexts.end()) {
+        return it->second;
     }
-    return _sort_contexts[actual_idx];
+
+    auto ctx = std::make_shared<SortContext>(_state, _topn_type, _offset, _limit, _sort_exprs, _sort_descs);
+    _sort_contexts[actual_idx] = ctx;
+    return ctx;
 }
 } // namespace starrocks::pipeline

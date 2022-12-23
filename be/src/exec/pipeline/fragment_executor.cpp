@@ -700,7 +700,7 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     }
 
     std::shared_ptr<SinkBuffer> sink_buffer =
-            std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge, dop);
+            std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge);
 
     auto exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
             context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),

@@ -79,7 +79,7 @@ struct TimeTrace {
 class SinkBuffer {
 public:
     SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
-               bool is_dest_merge, size_t num_sinkers);
+               bool is_dest_merge);
     ~SinkBuffer();
 
     Status add_request(TransmitChunkInfo& request);
@@ -94,6 +94,8 @@ public:
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
     // the rest chunk request and EOS request needn't be sent anymore.
     void cancel_one_sinker(RuntimeState* const state);
+
+    Status prepare(RuntimeState* state);
 
 private:
     using Mutex = bthread::Mutex;
@@ -139,7 +141,7 @@ private:
     phmap::flat_hash_map<int64_t, int64_t> _max_continuous_acked_seqs;
     phmap::flat_hash_map<int64_t, std::unordered_set<int64_t>> _discontinuous_acked_seqs;
     std::atomic<int32_t> _total_in_flight_rpc = 0;
-    std::atomic<int32_t> _num_uncancelled_sinkers;
+    std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
 
     // The request needs the reference to the allocated finst id,
