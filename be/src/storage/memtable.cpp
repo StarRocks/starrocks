@@ -18,7 +18,7 @@
 
 #include "column/json_column.h"
 #include "common/logging.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"

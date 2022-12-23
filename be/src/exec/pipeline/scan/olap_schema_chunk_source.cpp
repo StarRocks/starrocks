@@ -16,7 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "exec/vectorized/schema_scanner.h"
+#include "exec/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
 
 namespace starrocks::pipeline {

@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
-#include "exec/vectorized/olap_scan_node.h"
+#include "exec/olap_scan_node.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {

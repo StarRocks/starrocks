@@ -14,11 +14,11 @@
 
 #include "exec/pipeline/sort/local_partition_topn_context.h"
 
-#include <exec/vectorized/partition/chunks_partitioner.h>
+#include <exec/partition/chunks_partitioner.h>
 
 #include <utility>
 
-#include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/chunks_sorter_topn.h"
 
 namespace starrocks::pipeline {
 

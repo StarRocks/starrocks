@@ -17,7 +17,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "exec/vectorized/arrow_type_traits.h"
+#include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
 #include "runtime/large_int_value.h"
 #include "util/raw_container.h"

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/vectorized/schema_scanner/schema_columns_scanner.h"
+#include "exec/schema_scanner/schema_columns_scanner.h"
 
 #include <gtest/gtest.h>
 

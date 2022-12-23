@@ -21,7 +21,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {

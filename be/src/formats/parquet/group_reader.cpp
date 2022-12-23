@@ -17,7 +17,7 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"

@@ -35,7 +35,7 @@ DIAGNOSTIC_POP
 #include <arrow/pretty_print.h>
 #include <column/chunk.h>
 #include <column/type_traits.h>
-#include <exec/vectorized/arrow_type_traits.h>
+#include <exec/arrow_type_traits.h>
 
 #include "column/column_helper.h"
 #include "runtime/large_int_value.h"
