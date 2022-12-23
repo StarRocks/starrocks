@@ -40,8 +40,7 @@ import com.starrocks.mysql.privilege.Role;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.SystemInfoService;
 
-public class
-FeNameFormat {
+public class FeNameFormat {
     private FeNameFormat() {}
 
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";

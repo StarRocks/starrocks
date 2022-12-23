@@ -96,7 +96,7 @@ import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
-import com.starrocks.persist.ModifyWarehousePropertyOperationLog;
+import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.OperationType;
@@ -216,7 +216,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_ALTER_WH_MOD_PROP: {
-                data = ModifyWarehousePropertyOperationLog.read(in);
+                data = AlterWhPropertyOplog.read(in);
                 isRead = true;
                 break;
             }

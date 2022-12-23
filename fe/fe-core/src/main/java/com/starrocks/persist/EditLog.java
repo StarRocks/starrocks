@@ -169,7 +169,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ALTER_WH_MOD_PROP: {
-                    ModifyWarehousePropertyOperationLog log = (ModifyWarehousePropertyOperationLog) journal.getData();
+                    AlterWhPropertyOplog log = (AlterWhPropertyOplog) journal.getData();
                     String warehouseName = log.getWhName();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
@@ -1103,7 +1103,7 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_WH_REMOVE_CLUSTER, log);
     }
 
-    public void logModifyWhProperty(ModifyWarehousePropertyOperationLog log) {
+    public void logModifyWhProperty(AlterWhPropertyOplog log) {
         logEdit(OperationType.OP_ALTER_WH_MOD_PROP, log);
     }
 

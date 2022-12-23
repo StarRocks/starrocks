@@ -28,14 +28,14 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ModifyWarehousePropertyOperationLog implements Writable {
+public class AlterWhPropertyOplog implements Writable {
     @SerializedName(value = "whName")
     private String whName;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties = new HashMap<>();
 
-    public ModifyWarehousePropertyOperationLog(String whName, Map<String, String> properties) {
+    public AlterWhPropertyOplog(String whName, Map<String, String> properties) {
         this.whName = whName;
         this.properties = properties;
     }
@@ -53,7 +53,7 @@ public class ModifyWarehousePropertyOperationLog implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static ModifyWarehousePropertyOperationLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), ModifyWarehousePropertyOperationLog.class);
+    public static AlterWhPropertyOplog read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), AlterWhPropertyOplog.class);
     }
 }

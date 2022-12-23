@@ -27,7 +27,7 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.persist.ModifyWarehousePropertyOperationLog;
+import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
@@ -254,7 +254,7 @@ public class WarehouseManager implements Writable {
         }
 
         if (isChanged) {
-            ModifyWarehousePropertyOperationLog log = new ModifyWarehousePropertyOperationLog(warehouseName, properties);
+            AlterWhPropertyOplog log = new AlterWhPropertyOplog(warehouseName, properties);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyWhProperty(log);
         }
 
