@@ -40,7 +40,8 @@ import com.starrocks.mysql.privilege.Role;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.SystemInfoService;
 
-public class FeNameFormat {
+public class
+FeNameFormat {
     private FeNameFormat() {}
 
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
@@ -65,13 +66,6 @@ public class FeNameFormat {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_CLUSTER_NAME, clusterName);
         }
     }
-
-    public static void checkWhName(String whName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(whName) || !whName.matches(COMMON_NAME_REGEX)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_WH_NAME, whName);
-        }
-    }
-
 
     public static void checkDbName(String dbName) throws AnalysisException {
         if (Strings.isNullOrEmpty(dbName) || !dbName.matches(COMMON_NAME_REGEX)) {

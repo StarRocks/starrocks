@@ -28,7 +28,7 @@ import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
-import com.starrocks.persist.OpClusterLog;
+import com.starrocks.persist.AlterWhClusterOplog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -262,8 +262,8 @@ public class Warehouse implements Writable {
                 long clusterId = GlobalStateMgr.getCurrentState().getNextId();
                 Cluster cluster = new Cluster(clusterId, workerGroupId);
                 clusters.put(clusterId, cluster);
-                OpClusterLog opClusterLog = new OpClusterLog(this.getFullName(), cluster);
-                GlobalStateMgr.getCurrentState().getEditLog().logAddCluster(opClusterLog);
+                AlterWhClusterOplog log = new AlterWhClusterOplog(this.getFullName(), cluster);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddCluster(log);
 
                 this.state = WarehouseState.RUNNING;
 
@@ -285,8 +285,8 @@ public class Warehouse implements Writable {
                 Cluster cluster = clusters.get(clusterId);
                 GlobalStateMgr.getCurrentStarOSAgent().deleteWorkerGroup(cluster.getWorkerGroupId());
                 clusters.remove(clusterId);
-                OpClusterLog opClusterLog = new OpClusterLog(this.getFullName(), cluster);
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveCluster(opClusterLog);
+                AlterWhClusterOplog log = new AlterWhClusterOplog(this.getFullName(), cluster);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveCluster(log);
 
                 // for debug
                 LOG.info("remove cluster {} for warehouse {} ", clusterId, name);
@@ -298,7 +298,7 @@ public class Warehouse implements Writable {
         }
     }
 
-    public void replayAddCluster(OpClusterLog log) {
+    public void replayAddCluster(AlterWhClusterOplog log) {
         writeLock();
         try {
             Cluster cluster = log.getCluster();
@@ -311,7 +311,7 @@ public class Warehouse implements Writable {
         }
     }
 
-    public void replayRemoveCluster(OpClusterLog log)  {
+    public void replayRemoveCluster(AlterWhClusterOplog log)  {
         writeLock();
         try {
             Cluster cluster = log.getCluster();

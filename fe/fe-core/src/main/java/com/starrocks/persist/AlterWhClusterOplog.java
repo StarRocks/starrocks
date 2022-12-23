@@ -24,7 +24,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class OpClusterLog implements Writable {
+public class AlterWhClusterOplog implements Writable {
     @SerializedName(value = "warehouseName")
     private String warehouseName;
 
@@ -39,7 +39,7 @@ public class OpClusterLog implements Writable {
         return cluster;
     }
 
-    public OpClusterLog(String warehouseName, Cluster cluster) {
+    public AlterWhClusterOplog(String warehouseName, Cluster cluster) {
         this.warehouseName = warehouseName;
         this.cluster = cluster;
     }
@@ -49,8 +49,8 @@ public class OpClusterLog implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static OpClusterLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), OpClusterLog.class);
+    public static AlterWhClusterOplog read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), AlterWhClusterOplog.class);
     }
 
 }

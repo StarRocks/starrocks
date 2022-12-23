@@ -806,19 +806,6 @@ partitionRenameClause
     : RENAME PARTITION parName=identifier newParName=identifier
     ;
 
-// ---------Alter warehouse clause---------
-
-addClusterClause
-    : ADD CLUSTER name=identifier
-    ;
-
-removeClusterClause
-    : DROP CLUSTER name=identifier
-    ;
-
-modifyWarehouseClause
-    : MODIFY WAREHOUSE identifier SET propertyList
-    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 

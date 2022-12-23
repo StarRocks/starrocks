@@ -70,6 +70,7 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.AlterWhClusterOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -97,7 +98,6 @@ import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.ModifyWarehousePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
-import com.starrocks.persist.OpClusterLog;
 import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
@@ -209,13 +209,13 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_CLUSTER:
-            case OperationType.OP_REMOVE_CLUSTER: {
-                data = OpClusterLog.read(in);
+            case OperationType.OP_ALTER_WH_ADD_CLUSTER:
+            case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
+                data = AlterWhClusterOplog.read(in);
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MODIFY_WAREHOUSE_PROPERTY: {
+            case OperationType.OP_ALTER_WH_MOD_PROP: {
                 data = ModifyWarehousePropertyOperationLog.read(in);
                 isRead = true;
                 break;

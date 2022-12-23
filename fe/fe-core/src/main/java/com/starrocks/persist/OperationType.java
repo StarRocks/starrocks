@@ -305,9 +305,9 @@ public class OperationType {
     // warehouse
     public static final short OP_CREATE_WH = 12000;
     public static final short OP_DROP_WH = 12001;
-    public static final short OP_ADD_CLUSTER = 12002;
-    public static final short OP_REMOVE_CLUSTER = 12003;
-    public static final short OP_MODIFY_WAREHOUSE_PROPERTY = 12004;
+    public static final short OP_ALTER_WH_ADD_CLUSTER = 12002;
+    public static final short OP_ALTER_WH_REMOVE_CLUSTER = 12003;
+    public static final short OP_ALTER_WH_MOD_PROP = 12004;
     public static final short OP_SUSPEND_WH = 12005;
     public static final short OP_RESUME_WH = 12006;
 }
