@@ -233,6 +233,23 @@ public class PrivilegeCheckerV2 {
         }
     }
 
+    public static void checkMvAction(ConnectContext context,
+                                     TableName tableName,
+                                     PrivilegeType.MaterializedViewAction action) {
+        String catalogName = tableName.getCatalog();
+        if (catalogName == null) {
+            catalogName = context.getCurrentCatalog();
+        }
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+        }
+        String actionStr = action.toString();
+        if (!PrivilegeManager.checkMaterializedViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_MV_ACCESS_DENIED_ERROR,
+                    actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
+        }
+    }
+
     static String getTableNameByRoutineLoadLabel(ConnectContext context,
                                                  String dbName, String labelName) {
         RoutineLoadJob job = null;
@@ -339,7 +356,7 @@ public class PrivilegeCheckerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null && !db.isInfoSchemaDb()) {
                 Table table = db.getTable(tableId);
-                if (table != null) {
+                if (table != null && table.isOlapOrLakeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
                 }
@@ -360,6 +377,9 @@ public class PrivilegeCheckerV2 {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
         if (db != null && !db.isInfoSchemaDb()) {
             for (Table table : db.getTables()) {
+                if (table == null || !table.isOlapOrLakeTable()) {
+                    continue;
+                }
                 TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         db.getFullName(), table.getName());
                 tableNames.add(tableNameNew);
@@ -641,7 +661,11 @@ public class PrivilegeCheckerV2 {
 
             @Override
             public Void visitTable(TableRelation node, Void context) {
-                checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
+                if (node.getTable().isMaterializedView()) {
+                    checkMvAction(session, node.getName(), PrivilegeType.MaterializedViewAction.SELECT);
+                } else {
+                    checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
+                }
                 return null;
             }
         }
