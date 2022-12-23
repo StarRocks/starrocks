@@ -385,7 +385,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
-    RETURN_IF_ERROR(_buffer->prepare(state));
+    _buffer->incr_sinker(state);
 
     _be_number = state->be_number();
     if (state->query_options().__isset.transmission_encode_level) {

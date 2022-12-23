@@ -45,7 +45,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    void incr_partition_sinker() { ++_num_partition_sinkers; }
+    void incr_sinker() { ++_num_partition_sinkers; }
     void add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter);
 
     void finish_partition(uint64_t partition_rows);

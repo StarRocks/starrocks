@@ -95,7 +95,7 @@ public:
     // the rest chunk request and EOS request needn't be sent anymore.
     void cancel_one_sinker(RuntimeState* const state);
 
-    Status prepare(RuntimeState* state);
+    void incr_sinker(RuntimeState* state);
 
 private:
     using Mutex = bthread::Mutex;

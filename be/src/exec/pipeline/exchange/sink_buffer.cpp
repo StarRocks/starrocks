@@ -67,14 +67,12 @@ SinkBuffer::~SinkBuffer() {
     _buffers.clear();
 }
 
-Status SinkBuffer::prepare(RuntimeState* state) {
+void SinkBuffer::incr_sinker(RuntimeState* state) {
     _num_uncancelled_sinkers++;
     for (auto& [_, num_sinkers_per_instance] : _num_sinkers) {
         num_sinkers_per_instance++;
     }
     _num_remaining_eos += _num_sinkers.size();
-
-    return Status::OK();
 }
 
 Status SinkBuffer::add_request(TransmitChunkInfo& request) {

@@ -158,7 +158,7 @@ LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driv
             std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _sort_exprs, _is_asc_order, _is_null_first,
                                                         _sort_keys, _offset, _partition_limit, _topn_type);
     auto* ctx_raw_ptr = ctx.get();
-    _ctxs[driver_sequence] = std::move(ctx);
+    _ctxs.emplace(driver_sequence, std::move(ctx));
     return ctx_raw_ptr;
 }
 
