@@ -41,7 +41,7 @@ SHOW BACKENDS;
 | Version               | The StarRocks version of cluster.                            |
 | Status                | The last time when the BE node reports the tablet number to the FE node. Displayed in JSON format. |
 | DataTotalCapacity     | It is equivalent to `DataUsedCapacity` + `AvailCapacity`. It indicates the sum of the storage capacity occupied by the data file and the available storage capacity in the BE node. |
-| DataUsedPct           |  It is equivalent to `DataUsedCapacity`/`DataTotalCapacity`. It indicates the proportion of the storage capacity occupied by the data file to the sum of the storage capacity occupied by the data file and the available storage capacity in the BE node. |
+| DataUsedPct           |  It is equivalent to `DataUsedCapacity`/`DataTotalCapacity`. It indicates the proportion of the storage capacity occupied by the data file to the sum of the data-occupied storage capacity and the available storage capacity. |
 | CpuCores              | The number of CPU cores in the BE node.                      |
 
 ## Example
