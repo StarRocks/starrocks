@@ -157,6 +157,10 @@ vectorized_functions = [
 
     [10312, "hex", "VARCHAR", ['BIGINT'], "StringFunctions::hex_int"],
     [10313, "hex", "VARCHAR", ['VARCHAR'], "StringFunctions::hex_string"],
+<<<<<<< HEAD
+=======
+    [10323, "hex", "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
+>>>>>>> 4b2b10069 ([BugFix] fix duplicated function id  (#15690))
     [10314, "unhex", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
 
@@ -519,11 +523,19 @@ vectorized_functions = [
     [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array", False],
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
+<<<<<<< HEAD
     [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
     [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
     [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
+=======
+    [110020, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
+    [110021, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length",
+      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110030, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
+    [110031, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
+>>>>>>> 4b2b10069 ([BugFix] fix duplicated function id  (#15690))
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
