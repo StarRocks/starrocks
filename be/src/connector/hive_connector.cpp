@@ -17,10 +17,10 @@
 #include <filesystem>
 
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner_orc.h"
-#include "exec/vectorized/hdfs_scanner_parquet.h"
-#include "exec/vectorized/hdfs_scanner_text.h"
-#include "exec/vectorized/jni_scanner.h"
+#include "exec/hdfs_scanner_orc.h"
+#include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_text.h"
+#include "exec/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 

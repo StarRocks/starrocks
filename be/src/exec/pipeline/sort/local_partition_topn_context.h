@@ -16,8 +16,8 @@
 
 #include <queue>
 
-#include "exec/vectorized/chunks_sorter.h"
-#include "exec/vectorized/partition/chunks_partitioner.h"
+#include "exec/chunks_sorter.h"
+#include "exec/partition/chunks_partitioner.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

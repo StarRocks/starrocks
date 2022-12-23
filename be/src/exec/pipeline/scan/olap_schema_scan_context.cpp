@@ -16,7 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "exec/vectorized/schema_scanner.h"
+#include "exec/schema_scanner.h"
 #include "exprs/expr.h"
 
 namespace starrocks::pipeline {

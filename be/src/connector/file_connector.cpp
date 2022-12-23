@@ -14,11 +14,11 @@
 
 #include "connector/file_connector.h"
 
+#include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/csv_scanner.h"
-#include "exec/vectorized/json_scanner.h"
-#include "exec/vectorized/orc_scanner.h"
-#include "exec/vectorized/parquet_scanner.h"
+#include "exec/json_scanner.h"
+#include "exec/orc_scanner.h"
+#include "exec/parquet_scanner.h"
 #include "exprs/expr.h"
 
 namespace starrocks::connector {

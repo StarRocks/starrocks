@@ -15,7 +15,7 @@
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 
 #include "exec/pipeline/sort/sort_context.h"
-#include "exec/vectorized/sorted_streaming_aggregator.h"
+#include "exec/sorted_streaming_aggregator.h"
 
 namespace starrocks::pipeline {
 SortedAggregateStreamingSourceOperator::SortedAggregateStreamingSourceOperator(

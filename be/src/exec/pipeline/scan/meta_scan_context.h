@@ -16,9 +16,9 @@
 
 #include <unordered_map>
 
+#include "exec/meta_scan_node.h"
+#include "exec/meta_scanner.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exec/vectorized/meta_scan_node.h"
-#include "exec/vectorized/meta_scanner.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {

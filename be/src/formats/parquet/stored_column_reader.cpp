@@ -17,7 +17,7 @@
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/status.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "simd/simd.h"

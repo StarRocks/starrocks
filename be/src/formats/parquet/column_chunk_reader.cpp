@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "common/status.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/page_reader.h"

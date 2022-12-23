@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #include "exec/vectorized/file_scan_node.h"
+// #include "exec/file_scan_node.h"
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -30,7 +31,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/vectorized/connector_scan_node.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "gutil/map_util.h"

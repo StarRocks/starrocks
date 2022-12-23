@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
