@@ -209,10 +209,12 @@ public class StmtExecutor {
 
         profile.addChild(summaryProfile);
         if (coord != null) {
-            coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-            coord.endProfile();
-            coord.mergeIsomorphicProfiles();
-            profile.addChild(coord.getQueryProfile());
+            if (coord.getQueryProfile() != null) {
+                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.endProfile();
+                coord.mergeIsomorphicProfiles();
+                profile.addChild(coord.getQueryProfile());
+            }
             coord = null;
         }
     }
