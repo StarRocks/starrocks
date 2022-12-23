@@ -19,6 +19,7 @@
 #include "column/hash_set.h"
 #include "column/stream_chunk.h"
 #include "column/type_traits.h"
+#include "exec/pipeline/operator.h"
 
 namespace starrocks::stream {
 
@@ -33,9 +34,12 @@ using DatumRowPtr = std::shared_ptr<DatumRow>;
 using DatumRowOpt = std::optional<DatumRow>;
 using Chunk = Chunk;
 using ChunkPtr = ChunkPtr;
+
 using StreamChunk = StreamChunk;
 using StreamChunkPtr = StreamChunkPtr;
-using StreamChunkConverter = StreamChunkConverter;
 using StreamRowOp = StreamRowOp;
+using StreamChunkConverter = StreamChunkConverter;
+using Operator = pipeline::Operator;
+using OperatorPtr = pipeline::OperatorPtr;
 
 } // namespace starrocks::stream

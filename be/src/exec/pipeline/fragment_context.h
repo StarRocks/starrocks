@@ -88,6 +88,8 @@ public:
 
     bool is_canceled() const { return _runtime_state->is_cancelled(); }
 
+    MVEpochManager* epoch_manager() { return _runtime_state->epoch_manager(); }
+
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
     Status prepare_all_pipelines() {

@@ -178,6 +178,7 @@ set(EXEC_FILES
     pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
+    pipeline/stream_pipeline_driver.cpp
     pipeline/aggregate/aggregate_blocking_sink_operator.cpp
     pipeline/aggregate/aggregate_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_streaming_sink_operator.cpp

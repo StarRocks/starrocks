@@ -182,7 +182,7 @@ Status MemStateTable::flush(RuntimeState* state, StreamChunk* chunk) {
                 continue;
             }
             auto k = _make_datum_key_row(chunk, 0, _k_num, i);
-            if (ops[i] == StreamRowOp::DELETE) {
+            if (ops[i] == StreamRowOp::OP_DELETE) {
                 _kv_mapping.erase(k);
                 continue;
             }
