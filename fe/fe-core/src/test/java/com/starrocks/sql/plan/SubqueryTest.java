@@ -1789,7 +1789,7 @@ public class SubqueryTest extends PlanTestBase {
 
         sql = "select * from t0 where exists (select * from t1 where t0.v1 = (select v7 from t2));";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "10:HASH JOIN\n" +
+        assertContains(plan, "11:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 10: v7");

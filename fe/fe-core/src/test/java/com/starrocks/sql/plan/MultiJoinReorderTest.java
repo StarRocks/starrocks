@@ -465,7 +465,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
     public void testMultiCrossJoinReorder() throws Exception {
         // check multi cross join reorder without exception
         String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
-        assertPlanContains(sql, "18:NESTLOOP JOIN");
+        assertPlanContains(sql, "21:NESTLOOP JOIN");
     }
 
     @Test
@@ -480,17 +480,17 @@ public class MultiJoinReorderTest extends PlanTestBase {
     @Test
     public void testPruneColsWithMultiJoin() throws Exception {
         String sql = "select true from t1, (select v10, v11, v12, 3 from t3) subt3 inner join (select v3, v1, 4 from t0) " +
-                "subt0 on subt3.v10 =subt0.v1 and subt0.v1 = 1 and subt3.v10 != subt0.v3, " +
-                "(select v7, v8, 'aa' from t2) subv0 inner join t2 on subv0.v7 = t2.v7 group by 'abc';";
-        String plan = getCostExplain(sql);
-        assertContains(plan, "14:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [4: v10, BIGINT, true] = [8: v1, BIGINT, true]\n" +
-                "  |  other predicates: [4: v10, BIGINT, true] != [10: v3, BIGINT, true]");
-        assertContains(plan, "|----13:EXCHANGE\n" +
-                "  |       cardinality: 900000\n" +
+                "subt0 on subt3.v10 =subt0.v1 and subt0.v1 = 1 and subt3.v10 != subt0.v3 join t2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "10:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----9:EXCHANGE\n" +
                 "  |    \n" +
-                "  0:OlapScanNode\n" +
-                "     table: t3, rollup: t3");
+                "  2:Project\n" +
+                "  |  <slot 21> : 1\n" +
+                "  |  \n" +
+                "  1:OlapScanNode");
     }
 }
