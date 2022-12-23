@@ -82,11 +82,32 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
-
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int k = 0; k < 4096; ++k) {
         ASSERT_EQ("cd" + std::to_string(k), v->get_data()[k].to_string());
+    }
+
+    {
+        // Trim utf-8 characters
+        for (int i = 0; i < 10; i++) {
+            auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("🙂🐶e", 1);
+            auto str_col = BinaryColumn::create();
+            std::string str = "abc🐱🐷";
+            for (int j = 0; j < i; j++) {
+                str += "e🙂🐶";
+                str = "🙂🐶e" + str;
+            }
+            str_col->append(str);
+            Columns columns{str_col, remove_col};
+            ctx->set_constant_columns(columns);
+            Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+            ASSERT_OK(st);
+            auto maybe_result = StringFunctions::trim(ctx.get(), columns);
+            ASSERT_OK(maybe_result.status());
+            Slice result = *ColumnHelper::get_cpp_data<TYPE_VARCHAR>(maybe_result.value());
+            ASSERT_EQ("abc🐱🐷", std::string(result));
+        }
     }
 
     {
