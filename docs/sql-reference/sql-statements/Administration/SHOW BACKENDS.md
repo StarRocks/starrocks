@@ -28,8 +28,8 @@ SHOW BACKENDS;
 | BrpcPort              | BRPC port of the BE node. It is used for communication across BE nodes. |
 | LastStartTime         | The last time when the BE node is started.                   |
 | LastHeartbeat         | The last time when the FE node sends a heartbeat and the BE responds.|
-| Alive                 | If the BE node is alive.<ul><li>`true`: the BE node is alive.</li><li>`false`: the BE node is not alive. </li></ul> |
-| SystemDecommissioned  | If the BE node is decommissioned. Before it is decommissioned, the BE node migrates the data to other BE nodes. Data loading and queries are not affected during migration.<ul><li>`true`: the cluster has marked the BE node as decommissioned. The data could be successfully migrated or migrating.</li><li>`false`: the BE node is running.</li></ul> |
+| Alive                 | Whether the BE node is alive or not.<ul><li>`true`: the BE node is alive.</li><li>`false`: the BE node is not alive. </li></ul> |
+| SystemDecommissioned  | Whether the BE node is decommissioned or not. Before it is decommissioned, the BE node migrates the data to other BE nodes. Data loading and queries are not affected during migration.<ul><li>`true`: the cluster has marked the BE node as decommissioned. The data could be successfully migrated or migrating.</li><li>`false`: the BE node is running.</li></ul> |
 | ClusterDecommissioned | This parameter is used for system compatibility.             |
 | TabletNum             | The number of tablets on the BE node.                        |
 | DataUsedCapacity      | The storage capacity occupied by the data file.              |
