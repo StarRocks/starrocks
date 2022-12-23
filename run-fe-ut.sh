@@ -33,13 +33,14 @@ Usage: $0 <options>
      --test [TEST_NAME]         run specific test
      --dry-run                  dry-run unit tests
      --coverage                 run coverage statistic tasks
+     --dumpcase [PATH]          run dump case and save to path
 
   Eg.
     $0                                          run all unit tests
     $0 --test com.starrocks.utframe.Demo        run demo test
     $0 --dry-run                                dry-run unit tests
     $0 --coverage                               run coverage statistic tasks
-    $0 --dumpcase path                          run dump case
+    $0 --dumpcase /home/disk1/                  run dump case and save to path
   "
   exit 1
 }
@@ -87,7 +88,7 @@ if [ ${HELP} -eq 1 ]; then
 fi
 
 echo "*********************************"
-echo " Starting to Running FE Unittest "
+echo "  Starting to Run FE Unit Tests  "
 echo "*********************************"
 
 cd ${STARROCKS_HOME}/fe/

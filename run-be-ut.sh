@@ -56,7 +56,7 @@ Usage: $0 <options>
 OPTS=$(getopt \
   -n $0 \
   -o '' \
-  -l "test:" \
+  -l 'test:' \
   -l 'dry-run' \
   -l 'clean' \
   -l 'with-gcov' \
@@ -67,7 +67,7 @@ OPTS=$(getopt \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
-  -l "gtest_filter:" \
+  -l 'gtest_filter:' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -160,7 +160,11 @@ else
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 fi
-#${BUILD_SYSTEM} -j${PARALLEL}
+${BUILD_SYSTEM} -j${PARALLEL}
+
+echo "*********************************"
+echo "  Starting to Run BE Unit Tests  "
+echo "*********************************"
 
 cd ${STARROCKS_HOME}
 export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}
