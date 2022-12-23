@@ -368,6 +368,7 @@ void GroupReader::_init_read_chunk() {
     }
     size_t chunk_size = _param.chunk_size;
     _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
+    _dict_filter_ctx.init_chunk(_param, &_read_chunk);
 }
 
 Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk) {
