@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -40,9 +39,8 @@ public class HdfsEnvironment {
             if (tmp != null) {
                 this.hdfsConfiguration.applyToCloudConfiguration(tmp);
             }
-        } else {
-            Preconditions.checkArgument(false, "Unreachable");
         }
+        // If both is null, we just create a default HdfsEnvironment
     }
 
     public Configuration getConfiguration() {
