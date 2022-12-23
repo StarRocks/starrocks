@@ -21,11 +21,13 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
-namespace starrocks::pipeline {
 
-class Pipeline;
-using PipelinePtr = std::shared_ptr<Pipeline>;
-using Pipelines = std::vector<PipelinePtr>;
+namespace starrocks {
+
+class RuntimeState;
+
+namespace pipeline {
+
 class Pipeline {
 public:
     Pipeline() = delete;
@@ -36,7 +38,6 @@ public:
     uint32_t get_id() const { return _id; }
 
     OpFactories& get_op_factories() { return _op_factories; }
-
     void add_op_factory(const OpFactoryPtr& op) { _op_factories.emplace_back(op); }
 
     Operators create_operators(int32_t degree_of_parallelism, int32_t i) {
@@ -46,13 +47,25 @@ public:
         }
         return operators;
     }
+    void create_drivers(RuntimeState* state);
+    Drivers& drivers();
+    const Drivers& drivers() const;
+    bool count_down_driver();
+    void clear_drivers();
 
     SourceOperatorFactory* source_operator_factory() {
         DCHECK(!_op_factories.empty());
         return down_cast<SourceOperatorFactory*>(_op_factories[0].get());
     }
+    const SourceOperatorFactory* source_operator_factory() const {
+        DCHECK(!_op_factories.empty());
+        return down_cast<SourceOperatorFactory*>(_op_factories[0].get());
+    }
+    size_t degree_of_parallelism() const;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
+    void setup_pipeline_profile(RuntimeState* runtime_state);
+    void setup_drivers_profile(const DriverPtr& driver);
 
     Status prepare(RuntimeState* state) {
         for (auto& op : _op_factories) {
@@ -60,7 +73,6 @@ public:
         }
         return Status::OK();
     }
-
     void close(RuntimeState* state) {
         for (auto& op : _op_factories) {
             op->close(state);
@@ -85,6 +97,9 @@ private:
     uint32_t _id = 0;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     OpFactories _op_factories;
+    Drivers _drivers;
+    std::atomic<size_t> _num_finished_drivers = 0;
 };
 
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

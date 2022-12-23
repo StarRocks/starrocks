@@ -409,7 +409,10 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
-    if (_fragment_ctx->count_down_drivers()) {
+    if (_pipeline->count_down_driver() && _fragment_ctx->count_down_pipeline()) {
+        // The pipeline created later should be placed in the front
+        runtime_state->runtime_profile()->reverse_childs();
+
         if (config::pipeline_print_profile) {
             std::stringstream ss;
             // Print profile for this fragment
@@ -484,8 +487,11 @@ const workgroup::WorkGroup* PipelineDriver::workgroup() const {
 }
 
 void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
-    this->_workgroup = std::move(wg);
-    this->_workgroup->incr_num_running_drivers();
+    _workgroup = std::move(wg);
+    if (_workgroup == nullptr) {
+        return;
+    }
+    _workgroup->incr_num_running_drivers();
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {

@@ -346,7 +346,7 @@ void QueryContextManager::report_fragments_with_same_host(
         if (reported[i] == false) {
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->num_drivers() == 0) {
+            if (fragment_ctx->all_pipelines_finished()) {
                 reported[i] = true;
                 continue;
             }
@@ -444,7 +444,7 @@ void QueryContextManager::report_fragments(
 
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->num_drivers() == 0) {
+            if (fragment_ctx->all_pipelines_finished()) {
                 continue;
             }
 
