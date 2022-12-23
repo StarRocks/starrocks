@@ -1119,7 +1119,11 @@ public class StmtExecutor {
             }
             context.setState(e.getQueryState());
         } catch (Throwable e) {
+<<<<<<< HEAD
             // Maybe our bug
+=======
+            // Maybe our bug or wrong input parameters
+>>>>>>> db5669af4 ([BugFix] Fix bug view inferred nullable is wrong (#15650))
             String sql = AstToStringBuilder.toString(parsedStmt);
             if (sql == null) {
                 sql = originStmt.originStmt;
