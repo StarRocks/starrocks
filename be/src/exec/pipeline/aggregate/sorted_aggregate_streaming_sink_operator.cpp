@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
 
-#include "exec/vectorized/sorted_streaming_aggregator.h"
+#include "exec/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {

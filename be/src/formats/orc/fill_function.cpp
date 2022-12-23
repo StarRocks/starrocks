@@ -20,7 +20,7 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner_orc.h"
+#include "exec/hdfs_scanner_orc.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "fs/fs.h"

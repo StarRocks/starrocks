@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"

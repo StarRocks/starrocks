@@ -17,7 +17,9 @@
 #include <unordered_map>
 
 #include "common/config.h"
+#include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
+#include "exec/olap_scan_node.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -35,8 +37,6 @@
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
-#include "exec/vectorized/cross_join_node.h"
-#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"

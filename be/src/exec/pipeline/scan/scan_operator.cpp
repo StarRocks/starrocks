@@ -17,11 +17,11 @@
 #include <util/time.h>
 
 #include "column/chunk.h"
+#include "exec/olap_scan_node.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"

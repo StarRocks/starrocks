@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
 

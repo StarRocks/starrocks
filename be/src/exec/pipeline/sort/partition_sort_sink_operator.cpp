@@ -14,10 +14,10 @@
 
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 
-#include "exec/vectorized/chunks_sorter.h"
-#include "exec/vectorized/chunks_sorter_full_sort.h"
-#include "exec/vectorized/chunks_sorter_heap_sort.h"
-#include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/chunks_sorter.h"
+#include "exec/chunks_sorter_full_sort.h"
+#include "exec/chunks_sorter_heap_sort.h"
+#include "exec/chunks_sorter_topn.h"
 #include "exprs/expr.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

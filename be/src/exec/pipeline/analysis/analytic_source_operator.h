@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "exec/analytor.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/analytor.h"
 
 namespace starrocks::pipeline {
 class AnalyticSourceOperator : public SourceOperator {

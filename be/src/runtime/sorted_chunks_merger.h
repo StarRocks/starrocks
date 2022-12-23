@@ -17,8 +17,8 @@
 #include <queue>
 
 #include "column/column_helper.h"
-#include "exec/vectorized/sorting/merge.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/merge.h"
+#include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 #include "util/runtime_profile.h"
 

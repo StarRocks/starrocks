@@ -17,10 +17,10 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "exec/chunks_sorter.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/vectorized/chunks_sorter.h"
 
 namespace starrocks {
 class BufferControlBlock;
