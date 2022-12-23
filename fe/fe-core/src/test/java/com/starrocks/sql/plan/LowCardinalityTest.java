@@ -794,34 +794,34 @@ public class LowCardinalityTest extends PlanTestBase {
         // Test Predicate with if predicate
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', true, false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(
-                plan.contains("PREDICATES: DictExpr(10: S_ADDRESS,[if(<place-holder> = 'kks', TRUE, FALSE)])"));
+        Assert.assertTrue(plan,
+                plan.contains("PREDICATES: DictExpr(12: S_ADDRESS,[if(<place-holder> = 'kks', TRUE, FALSE)])"));
 
         // Test single input Expression
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', cast(S_ADDRESS as boolean), false)";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: DictExpr(10: S_ADDRESS,[if(<place-holder> = 'kks', CAST(<place-holder> AS BOOLEAN), FALSE)])"));
+                "PREDICATES: DictExpr(12: S_ADDRESS,[if(<place-holder> = 'kks', CAST(<place-holder> AS BOOLEAN), FALSE)])"));
 
         // Test multi input Expression with DictColumn
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), " +
-                        "DictExpr(11: S_COMMENT,[CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
+        Assert.assertTrue(plan, plan.contains(
+                "PREDICATES: if(DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), " +
+                        "DictExpr(13: S_COMMENT,[CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
 
         // Test multi input Expression with No-String Column
         sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_NAME as boolean), false)";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
+                "PREDICATES: if(DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
 
         // Test Two input column. one could apply the other couldn't apply
         // The first expression that can accept a full rewrite. the second couldn't apply
         sql = "select count(*) from supplier where S_ADDRESS = 'kks' and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), NOT (7: S_COMMENT LIKE '%kks%')"));
+                "PREDICATES: DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), NOT (7: S_COMMENT LIKE '%kks%')"));
 
         // Test Two input column. one could apply the other couldn't apply
         // Two Predicate, The first expression that can accept a partial rewrite.
@@ -829,7 +829,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "and S_COMMENT not like '%kks%'";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), " +
+                "PREDICATES: if(DictExpr(12: S_ADDRESS,[<place-holder> = 'kks']), " +
                         "CAST(7: S_COMMENT AS BOOLEAN), FALSE), NOT (7: S_COMMENT LIKE '%kks%')"));
 
     }
