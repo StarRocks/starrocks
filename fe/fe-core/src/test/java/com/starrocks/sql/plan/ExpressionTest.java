@@ -1329,7 +1329,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testInPredicate() throws Exception {
         String sql = "select * from t0 where v1 in (v2, v3, 3, 4, 5) ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: ((1: v1 = 2: v2) OR (1: v1 = 3: v3)) OR (1: v1 IN (3, 4, 5))");
+        assertContains(plan, "PREDICATES: ((1: v1 IN (3, 4, 5)) OR (1: v1 = 2: v2)) OR (1: v1 = 3: v3)");
     }
 
 }
