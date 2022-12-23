@@ -63,6 +63,8 @@ public:
     // These local exchange sink operators and the source operator share a passthrough exchanger.
     OpFactories maybe_gather_pipelines_to_one(RuntimeState* state, std::vector<OpFactories>& pred_operators_list);
 
+    OpFactories maybe_interpolate_collect_stats(RuntimeState* state, OpFactories& pred_operators);
+
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
 
     uint32_t next_operator_id() { return _next_operator_id++; }

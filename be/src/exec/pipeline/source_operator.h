@@ -40,6 +40,7 @@ public:
     virtual bool with_morsels() const { return false; }
     // Set the DOP(degree of parallelism) of the SourceOperator, SourceOperator's DOP determine the Pipeline's DOP.
     void set_degree_of_parallelism(size_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
+    void set_max_dop(size_t max_dop) { _degree_of_parallelism = std::min(max_dop, _degree_of_parallelism); }
     virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
     MorselQueueFactory* morsel_queue_factory() { return _morsel_queue_factory; }
@@ -58,6 +59,9 @@ public:
     virtual TPartitionType::type partition_type() const { return _partition_type; }
     void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; };
     virtual const std::vector<ExprContext*>& partition_exprs() const { return _empty_partition_exprs; }
+
+    enum class State { NOT_READY, READY, INHERIT };
+    virtual State state() const { return State::INHERIT; }
 
 protected:
     size_t _degree_of_parallelism = 1;

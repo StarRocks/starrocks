@@ -83,6 +83,8 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
+    SourceOperatorFactory::State state() const override { return State::READY; }
+
 private:
     const std::vector<SlotDescriptor*>& _dst_slots;
 

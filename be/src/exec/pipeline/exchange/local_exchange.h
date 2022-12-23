@@ -128,6 +128,8 @@ public:
 
     void incr_sinker() override;
 
+    void incr_sinker() override;
+
 private:
     // Used for local shuffle exchanger.
     // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner.

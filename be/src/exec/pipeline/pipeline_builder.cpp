@@ -15,6 +15,9 @@
 #include "exec/pipeline/pipeline_builder.h"
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/adaptive/collect_stats_context.h"
+#include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
+#include "exec/pipeline/adaptive/collect_stats_source_operator.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
@@ -196,6 +199,35 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
 
     return operators_source_with_local_exchange;
+}
+
+OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState* state, OpFactories& pred_operators) {
+    if (!_fragment_context->enable_adaptive_dop()) {
+        return pred_operators;
+    }
+
+    if (pred_operators.empty()) {
+        return pred_operators;
+    }
+
+    auto* pred_source_op = source_operator(pred_operators);
+    size_t dop = pred_source_op->degree_of_parallelism();
+    if (dop <= 1) {
+        return pred_operators;
+    }
+
+    CollectStatsContextPtr collect_stats_ctx = std::make_shared<CollectStatsContext>(state, dop);
+
+    auto last_plan_node_id = pred_operators[pred_operators.size() - 1]->plan_node_id();
+    pred_operators.emplace_back(std::make_shared<CollectStatsSinkOperatorFactory>(next_operator_id(), last_plan_node_id,
+                                                                                  collect_stats_ctx));
+    add_pipeline(std::move(pred_operators));
+
+    auto downstream_source_op = std::make_shared<CollectStatsSourceOperatorFactory>(
+            next_operator_id(), last_plan_node_id, std::move(collect_stats_ctx));
+    downstream_source_op->set_could_local_shuffle(pred_source_op->could_local_shuffle());
+    downstream_source_op->set_partition_type(pred_source_op->partition_type());
+    return {std::move(downstream_source_op)};
 }
 
 size_t PipelineBuilderContext::dop_of_source_operator(int source_node_id) {

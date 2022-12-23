@@ -191,6 +191,8 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
+    SourceOperatorFactory::State state() const override { return State::READY; }
+
 protected:
     ScanNode* const _scan_node;
 };

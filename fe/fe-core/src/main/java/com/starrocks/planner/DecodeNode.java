@@ -54,6 +54,11 @@ public class DecodeNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseAdaptiveDop);
+    }
+
+    @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.DECODE_NODE;
         msg.decode_node = new TDecodeNode();

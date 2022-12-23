@@ -44,6 +44,8 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<EmptySetOperator>(this, _id, _plan_node_id, driver_sequence);
     }
+
+    SourceOperatorFactory::State state() const override { return State::READY; }
 };
 
 } // namespace starrocks::pipeline

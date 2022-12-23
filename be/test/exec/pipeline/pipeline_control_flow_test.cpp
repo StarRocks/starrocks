@@ -250,6 +250,7 @@ public:
         return std::make_shared<TestSourceOperator>(this, _id, _plan_node_id, driver_sequence, _chunk_num, _chunk_size,
                                                     _counter, _pending_finish_cnt);
     }
+    SourceOperatorFactory::State state() const override { return State::READY; }
 
 private:
     size_t _chunk_num;

@@ -18,6 +18,7 @@
 
 #include "common/config.h"
 #include "exec/exchange_node.h"
+#include "exec/pipeline/adaptive/lazy_create_drivers_operator.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -148,6 +149,8 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
+    _fragment_ctx->set_enable_adaptive_dop(request.common().__isset.enable_adaptive_dop &&
+                                           request.common().enable_adaptive_dop);
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(fragment_instance_id) << " backend_num=" << request.backend_num();
@@ -469,6 +472,24 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
+Status create_lazy_create_drivers_pipeline(RuntimeState* state, PipelineBuilderContext* ctx, QueryContext* query_ctx,
+                                           FragmentContext* fragment_ctx,
+                                           std::vector<Pipelines>&& unready_pipeline_groups, Drivers& drivers) {
+    int32_t first_plan_node_id = unready_pipeline_groups[0][0]->source_operator_factory()->plan_node_id();
+    OpFactories ops;
+    ops.emplace_back(std::make_shared<LazyCreateDriversOperatorFactory>(ctx->next_operator_id(), first_plan_node_id,
+                                                                        std::move(unready_pipeline_groups)));
+    ops.emplace_back(std::make_shared<NoopSinkOperatorFactory>(ctx->next_operator_id(), first_plan_node_id));
+
+    auto pipe = std::make_shared<Pipeline>(ctx->next_pipe_id(), ops);
+    fragment_ctx->pipelines().emplace_back(pipe);
+
+    RETURN_IF_ERROR(pipe->prepare(state));
+    pipe->create_drivers(state);
+
+    return Status::OK();
+}
+
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
@@ -516,8 +537,42 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         }
     }
 
+    std::vector<Pipelines> unready_pipeline_groups;
+    Pipelines unready_pipeline_group;
     for (const auto& pipeline : pipelines) {
+        switch (pipeline->source_operator_factory()->state()) {
+        case SourceOperatorFactory::State::READY:
+            if (!unready_pipeline_group.empty()) {
+                unready_pipeline_groups.emplace_back(std::move(unready_pipeline_group));
+                unready_pipeline_group.clear();
+            }
+            break;
+        case SourceOperatorFactory::State::NOT_READY:
+            if (!unready_pipeline_group.empty()) {
+                unready_pipeline_groups.emplace_back(std::move(unready_pipeline_group));
+                unready_pipeline_group.clear();
+            }
+            unready_pipeline_group.emplace_back(pipeline);
+            continue;
+        case SourceOperatorFactory::State::INHERIT:
+            // The previous pipeline is not ready, so this pipeline is not ready.
+            if (!unready_pipeline_group.empty()) {
+                unready_pipeline_group.emplace_back(pipeline);
+                continue;
+            }
+            // The previous pipeline is ready, so this pipeline is ready.
+            break;
+        }
+
         pipeline->create_drivers(runtime_state);
+    }
+
+    if (!unready_pipeline_group.empty()) {
+        unready_pipeline_groups.emplace_back(std::move(unready_pipeline_group));
+    }
+    if (!unready_pipeline_groups.empty()) {
+        RETURN_IF_ERROR(create_lazy_create_drivers_pipeline(runtime_state, &context, _query_ctx, _fragment_ctx.get(),
+                                                            std::move(unready_pipeline_groups), drivers));
     }
 
     // Acquire driver token to avoid overload

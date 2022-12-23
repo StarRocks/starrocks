@@ -121,6 +121,9 @@ public:
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
+    void set_enable_adaptive_dop(bool val) { _enable_adaptive_dop = val; }
+    bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
+
     size_t next_driver_id() { return _next_driver_id++; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -165,6 +168,8 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
+
+    bool _enable_adaptive_dop = false;
 };
 
 class FragmentContextManager {

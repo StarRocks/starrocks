@@ -285,6 +285,11 @@ public class SortNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseAdaptiveDop);
+    }
+
+    @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalSortNode sortNode = new TNormalSortNode();
         TNormalSortInfo sortInfo = new TNormalSortInfo();

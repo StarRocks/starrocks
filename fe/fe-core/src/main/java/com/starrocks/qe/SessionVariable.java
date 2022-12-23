@@ -1203,7 +1203,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine;
     }
 
-    public boolean isPipelineDopAdaptionEnabled() {
+    public boolean isEnablePipelineAdaptiveDop() {
         return enablePipelineEngine && pipelineDop <= 0;
     }
 

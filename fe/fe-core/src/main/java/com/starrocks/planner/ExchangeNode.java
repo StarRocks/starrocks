@@ -220,6 +220,11 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
+    public boolean canUseAdaptiveDop() {
+        return true;
+    }
+
+    @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;

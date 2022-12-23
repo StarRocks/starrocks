@@ -97,6 +97,8 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
+    SourceOperatorFactory::State state() const override { return State::READY; }
+
 private:
     int32_t _num_sender;
     const RowDescriptor& _row_desc;
