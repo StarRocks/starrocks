@@ -388,6 +388,7 @@
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
+      + [substring](./sql-reference/sql-functions/string-functions/substring.md)
     + JSON Functions
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
