@@ -79,7 +79,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
 
-        int null_count = ColumnHelper::count_nulls(lhs);
+        auto null_count = ColumnHelper::count_nulls(lhs);
         if (null_count == 0) {
             return lhs->clone();
         }
@@ -166,7 +166,7 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto bhs, _children[0]->evaluate_checked(context, ptr));
-        int true_count = ColumnHelper::count_true_with_notnull(bhs);
+        auto true_count = ColumnHelper::count_true_with_notnull(bhs);
 
         ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
@@ -222,7 +222,7 @@ public:
     }
 
 private:
-    ColumnPtr get_null_column(int num_rows, ColumnPtr& input_col) {
+    ColumnPtr get_null_column(size_t num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
             auto res = UInt8Column::create(num_rows);
             res->get_data().assign(num_rows, 1);
@@ -233,7 +233,7 @@ private:
             return UInt8Column::create(num_rows);
         }
     }
-    ColumnPtr get_data_column(int num_rows, ColumnPtr& input_col) {
+    ColumnPtr get_data_column(size_t num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
             auto res = ColumnHelper::create_column(type(), false);
             res->resize(num_rows);
@@ -325,8 +325,8 @@ public:
         }
 
         // choose not null
-        int size = columns[0]->size();
-        int col_size = viewers.size();
+        auto size = columns[0]->size();
+        auto col_size = viewers.size();
         ColumnBuilder<Type> builder(size, this->type().precision, this->type().scale);
 
         for (int row = 0; row < size; ++row) {

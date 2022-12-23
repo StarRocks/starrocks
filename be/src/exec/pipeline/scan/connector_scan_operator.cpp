@@ -29,7 +29,7 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
                                                            ChunkBufferLimiterPtr buffer_limiter)
         : ScanOperatorFactory(id, scan_node),
           _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
-                        dop, std::move(buffer_limiter)) {}
+                        static_cast<int>(dop), std::move(buffer_limiter)) {}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
@@ -69,14 +69,14 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
                                                   std::move(morsel), this, scan_node, factory->get_chunk_buffer());
 }
 
-void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
+void ConnectorScanOperator::attach_chunk_source(size_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
     auto key = std::make_pair(_driver_sequence, source_index);
     active_inputs.emplace(key);
 }
 
-void ConnectorScanOperator::detach_chunk_source(int32_t source_index) {
+void ConnectorScanOperator::detach_chunk_source(size_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
     auto key = std::make_pair(_driver_sequence, source_index);

@@ -239,7 +239,7 @@ void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
 
     if (_unreported_error_idx < _error_log.size()) {
         new_errors->assign(_error_log.begin() + _unreported_error_idx, _error_log.end());
-        _unreported_error_idx = _error_log.size();
+        _unreported_error_idx = static_cast<int>(_error_log.size());
     }
 }
 
@@ -384,8 +384,8 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
         DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
         GlobalDictMap dict_map;
         RGlobalDictMap rdict_map;
-        int dict_sz = global_dict.ids.size();
-        for (int i = 0; i < dict_sz; ++i) {
+        const auto dict_sz = global_dict.ids.size();
+        for (auto i = 0; i < dict_sz; ++i) {
             const std::string& dict_key = global_dict.strings[i];
             auto* data = _instance_mem_pool->allocate(dict_key.size());
             RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));

@@ -336,7 +336,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
 void PipelineDriver::check_short_circuit() {
     int last_finished = -1;
-    for (int i = _first_unfinished; i < _operators.size() - 1; i++) {
+    for (int i = static_cast<int>(_first_unfinished); i < _operators.size() - 1; i++) {
         if (_operators[i]->is_finished()) {
             last_finished = i;
         }

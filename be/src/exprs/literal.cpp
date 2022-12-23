@@ -24,12 +24,13 @@
 
 namespace starrocks {
 
-#define CASE_TYPE_COLUMN(NODE_TYPE, CHECK_TYPE, LITERAL_VALUE)                              \
-    case NODE_TYPE: {                                                                       \
-        DCHECK_EQ(node.node_type, TExprNodeType::CHECK_TYPE);                               \
-        DCHECK(node.__isset.LITERAL_VALUE);                                                 \
-        _value = ColumnHelper::create_const_column<NODE_TYPE>(node.LITERAL_VALUE.value, 1); \
-        break;                                                                              \
+#define CASE_TYPE_COLUMN(NODE_TYPE, CHECK_TYPE, LITERAL_VALUE)                                                    \
+    case NODE_TYPE: {                                                                                             \
+        DCHECK_EQ(node.node_type, TExprNodeType::CHECK_TYPE);                                                     \
+        DCHECK(node.__isset.LITERAL_VALUE);                                                                       \
+        using CppType = RunTimeCppType<NODE_TYPE>;                                                                \
+        _value = ColumnHelper::create_const_column<NODE_TYPE>(static_cast<CppType>(node.LITERAL_VALUE.value), 1); \
+        break;                                                                                                    \
     }
 
 template <LogicalType PT>
@@ -85,7 +86,8 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
 
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         auto data = StringParser::string_to_int<__int128>(node.large_int_literal.value.c_str(),
-                                                          node.large_int_literal.value.size(), &parse_result);
+                                                          static_cast<int>(node.large_int_literal.value.size()),
+                                                          &parse_result);
         if (parse_result != StringParser::PARSE_SUCCESS) {
             data = MAX_INT128;
         }

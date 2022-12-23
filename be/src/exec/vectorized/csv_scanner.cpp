@@ -335,15 +335,15 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     CSVReader::Record record;
     CSVReader::Fields fields;
 
-    int num_columns = chunk->num_columns();
+    const auto num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
-    for (int i = 0; i < num_columns; i++) {
+    for (auto i = 0; i < num_columns; i++) {
         _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
 
-    for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+    for (auto num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         status = _curr_reader->next_record(&record);
         if (status.is_end_of_file()) {
             break;

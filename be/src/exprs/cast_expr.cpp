@@ -133,7 +133,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToBoolean, value) {
     return value.to_timestamp_literal() != 0;
 }
 DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
-    return timestamp::time_to_literal(value);
+    return static_cast<ResultType>(timestamp::time_to_literal(value));
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
@@ -153,14 +153,14 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
             constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
-            value = JsonValue::from_int(viewer.value(row));
+            value = static_cast<typeof(value)>(JsonValue::from_int(viewer.value(row)));
         } else if constexpr (pt_is_float<FromType>) {
             constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
             constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
-            value = JsonValue::from_double(viewer.value(row));
+            value = static_cast<typeof(value)>(JsonValue::from_double(viewer.value(row)));
         } else if constexpr (pt_is_boolean<FromType>) {
-            value = JsonValue::from_bool(viewer.value(row));
+            value = static_cast<typeof(value)>(JsonValue::from_bool(viewer.value(row)));
         } else if constexpr (pt_is_string<FromType>) {
             auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
             if (maybe.ok()) {
@@ -212,15 +212,15 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
             if constexpr (pt_is_integer<ToType>) {
                 auto res = json->get_int();
                 ok = res.ok() && min <= res.value() && res.value() <= max;
-                cpp_value = ok ? res.value() : cpp_value;
+                cpp_value = static_cast<typeof(cpp_value)>(ok ? res.value() : cpp_value);
             } else if constexpr (pt_is_float<ToType>) {
                 auto res = json->get_double();
                 ok = res.ok() && min <= res.value() && res.value() <= max;
-                cpp_value = ok ? res.value() : cpp_value;
+                cpp_value = static_cast<typeof(cpp_value)>(ok ? res.value() : cpp_value);
             } else if constexpr (pt_is_boolean<ToType>) {
                 auto res = json->get_bool();
                 ok = res.ok();
-                cpp_value = ok ? res.value() : cpp_value;
+                cpp_value = static_cast<typeof(cpp_value)>(ok ? res.value() : cpp_value);
             } else {
                 if constexpr (AllowThrowException) {
                     THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
@@ -296,10 +296,10 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
             auto value = viewer.value(row);
-            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, static_cast<int>(value.size), &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
-                bool b = StringParser::string_to_bool(value.data, value.size, &result);
+                bool b = StringParser::string_to_bool(value.data, static_cast<int>(value.size), &result);
                 if constexpr (AllowThrowException) {
                     if (result != StringParser::PARSE_SUCCESS) {
                         THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
@@ -318,10 +318,10 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
             }
 
             auto value = viewer.value(row);
-            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, static_cast<int>(value.size), &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
-                bool b = StringParser::string_to_bool(value.data, value.size, &result);
+                bool b = StringParser::string_to_bool(value.data, static_cast<int>(value.size), &result);
                 if constexpr (AllowThrowException) {
                     if (result != StringParser::PARSE_SUCCESS) {
                         THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
@@ -394,7 +394,7 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_OBJECT, cast_from_string_to_bitmap_fn);
 
 // all int(tinyint, smallint, int, bigint, largeint) cast implements
 DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
-    return value;
+    return static_cast<ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
@@ -402,7 +402,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
     // finite value y where y < x.
     // This is different from std::numeric_limits<T>::min() for floating-point types.
     // So we use lowest instead of min for lower bound of all types.
-    return (value < (Type)std::numeric_limits<ResultType>::lowest()) |
+    return (value < (Type)std::numeric_limits<ResultType>::lowest()) ||
            (value > (Type)std::numeric_limits<ResultType>::max());
 }
 
@@ -426,28 +426,28 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
         }
         throw std::runtime_error(ss.str());
     }
-    return result;
+    return static_cast<ResultType>(result);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(DateToNumber, value) {
-    return value.to_date_literal();
+    return static_cast<ResultType>(value.to_date_literal());
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
-    return value.to_timestamp_literal();
+    return static_cast<ResultType>(value.to_timestamp_literal());
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     StringParser::ParseResult result;
-    int sz = column.get()->size();
+    auto sz = column.get()->size();
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(sz);
     }
     if (column->is_constant()) {
         auto* input = ColumnHelper::get_binary_column(column.get());
         auto slice = input->get_slice(0);
-        auto r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+        auto r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, static_cast<int>(slice.size), &result);
         if (result != StringParser::PARSE_SUCCESS) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
@@ -464,10 +464,11 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
         NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
         auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
         auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
-        for (int i = 0; i < sz; ++i) {
+        for (auto i = 0; i < sz; ++i) {
             if (!null_data[i]) {
                 auto slice = data_column->get_slice(i);
-                res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+                res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(
+                        slice.data, static_cast<int>(slice.size), &result);
                 if constexpr (AllowThrowException) {
                     if (result != StringParser::PARSE_SUCCESS) {
                         THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
@@ -483,9 +484,10 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
         auto* data_column = down_cast<BinaryColumn*>(column.get());
 
         bool has_null = false;
-        for (int i = 0; i < sz; ++i) {
+        for (auto i = 0; i < sz; ++i) {
             auto slice = data_column->get_slice(i);
-            res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+            res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, static_cast<int>(slice.size),
+                                                                              &result);
             null_data[i] = (result != StringParser::PARSE_SUCCESS);
             if constexpr (AllowThrowException) {
                 if (result != StringParser::PARSE_SUCCESS) {
@@ -515,7 +517,8 @@ ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
         }
 
         auto value = viewer.value(row);
-        auto r = StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
+        auto r = StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, static_cast<int>(value.size),
+                                                                       &result);
 
         bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
         if constexpr (AllowThrowException) {
@@ -679,7 +682,7 @@ CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_DOUBLE, cast_from_json_fn);
 
 // decimal
 DEFINE_UNARY_FN_WITH_IMPL(NumberToDecimal, value) {
-    return DecimalV2Value(value, 0);
+    return DecimalV2Value(static_cast<int64_t>(value), 0);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(FloatToDecimal, value) {
@@ -702,7 +705,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToDecimal, value) {
     return DecimalV2Value(value.to_timestamp_literal(), 0);
 }
 DEFINE_UNARY_FN_WITH_IMPL(TimeToDecimal, value) {
-    return DecimalV2Value(timestamp::time_to_literal(value), 0);
+    return DecimalV2Value(static_cast<int64_t>(timestamp::time_to_literal(value)), 0);
 }
 
 SELF_CAST(TYPE_DECIMALV2);
@@ -737,7 +740,7 @@ static ColumnPtr cast_from_string_to_decimalv2_fn(ColumnPtr& column) {
             builder.append(v, ret);
         }
     } else {
-        for (int row = 0; row < viewer.size(); ++row) {
+        for (auto row = 0; row < viewer.size(); ++row) {
             if (viewer.is_null(row)) {
                 builder.append_null();
                 continue;
@@ -936,7 +939,7 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATETIME, cast_from_string_to_datetime_fn);
 // time
 DEFINE_UNARY_FN_WITH_IMPL(DatetimeToTime, value) {
     Timestamp timestamp = timestamp::to_time(value.timestamp());
-    return timestamp / USECS_PER_SEC;
+    return static_cast<ResultType>(timestamp / USECS_PER_SEC);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(DateToTime, value) {
@@ -944,11 +947,11 @@ DEFINE_UNARY_FN_WITH_IMPL(DateToTime, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberToTime, value) {
-    uint64_t data = value;
+    uint64_t data = static_cast<uint64_t>(value);
     uint64_t hour = data / 10000;
     uint64_t min = (data / 100) % 100;
     uint64_t sec = data % 100;
-    return (hour * 60 + min) * 60 + sec;
+    return static_cast<ResultType>((hour * 60 + min) * 60 + sec);
 }
 
 SELF_CAST(TYPE_TIME);
@@ -992,7 +995,8 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                 } else {
                     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
                     auto int_value = StringParser::string_to_unsigned_int<uint64_t>(
-                            reinterpret_cast<char*>(first_char), first_colon - first_char, &parse_result);
+                            reinterpret_cast<char*>(first_char), static_cast<int>(first_colon - first_char),
+                            &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
                         if constexpr (AllowThrowException) {
                             THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
@@ -1000,11 +1004,12 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                         builder.append_null();
                         continue;
                     } else {
-                        hour = int_value;
+                        hour = static_cast<typeof(hour)>(int_value);
                     }
 
                     int_value = StringParser::string_to_unsigned_int<uint64_t>(
-                            reinterpret_cast<char*>(first_colon + 1), second_colon - first_colon - 1, &parse_result);
+                            reinterpret_cast<char*>(first_colon + 1), static_cast<int>(second_colon - first_colon - 1),
+                            &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
                         if constexpr (AllowThrowException) {
                             THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
@@ -1012,11 +1017,12 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                         builder.append_null();
                         continue;
                     } else {
-                        minute = int_value;
+                        minute = static_cast<typeof(minute)>(int_value);
                     }
 
                     int_value = StringParser::string_to_unsigned_int<uint64_t>(
-                            reinterpret_cast<char*>(second_colon + 1), end_char - second_colon - 1, &parse_result);
+                            reinterpret_cast<char*>(second_colon + 1), static_cast<int>(end_char - second_colon - 1),
+                            &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
                         if constexpr (AllowThrowException) {
                             THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
@@ -1024,7 +1030,7 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                         builder.append_null();
                         continue;
                     } else {
-                        second = int_value;
+                        second = static_cast<typeof(second)>(int_value);
                     }
 
                     if (minute >= 60 || second >= 60) {
@@ -1119,7 +1125,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDate, date, time) {
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
     TimestampValue v;
-    v.set_timestamp(timestamp::from_julian_and_time(date.julian(), time * USECS_PER_SEC));
+    v.set_timestamp(timestamp::from_julian_and_time(date.julian(), static_cast<Timestamp>(time) * USECS_PER_SEC));
     return v;
 }
 
@@ -1221,11 +1227,11 @@ struct CastToString {
         offset.resize(v1->size() + 1);                                                                      \
         auto& bytes = result->get_bytes();                                                                  \
         bytes.reserve(sizeof(RunTimeColumnType<FROM_TYPE>) * v1->size());                                   \
-        int size = v1->size();                                                                              \
-        for (int i = 0; i < size; ++i) {                                                                    \
+        auto size = v1->size();                                                                             \
+        for (auto i = 0; i < size; ++i) {                                                                   \
             auto f = fmt::format_int(r1[i]);                                                                \
             bytes.insert(bytes.end(), (uint8_t*)f.data(), (uint8_t*)f.data() + f.size());                   \
-            offset[i + 1] = bytes.size();                                                                   \
+            offset[i + 1] = static_cast<typeof(offset[0])>(bytes.size());                                   \
         }                                                                                                   \
         return result;                                                                                      \
     }

@@ -230,11 +230,11 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
             } else if constexpr (pt_is_time<NonDecimalType>) {
                 double datumf;
                 DecimalV3Cast::to_float<DecimalCppType, NonDecimalCppType>(data[i], scale_factor, &datumf);
-                uint64_t datum = datumf;
+                uint64_t datum = static_cast<uint64_t>(datumf);
                 uint64_t hour = datum / 10000;
                 uint64_t min = (datum / 100) % 100;
                 uint64_t sec = datum % 100;
-                result_data[i] = (hour * 60 + min) * 60 + sec;
+                result_data[i] = static_cast<NonDecimalCppType>((hour * 60 + min) * 60 + sec);
                 if constexpr (check_overflow) {
                     overflow = overflow || (min > 59 || sec > 59);
                 }
@@ -359,7 +359,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, StringType, DecimalPTG
             auto s = DecimalV3Cast::to_string<DecimalCppType>(data[i], precision, scale);
             strings::memcpy_inlined(bytes_data + bytes_off, s.data(), s.size());
             bytes_off += s.size();
-            offsets[i + 1] = bytes_off;
+            offsets[i + 1] = static_cast<typename StringColumnType::Offset>(bytes_off);
         }
         bytes.resize(bytes_off);
         return result;

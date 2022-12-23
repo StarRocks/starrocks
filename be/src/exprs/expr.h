@@ -97,7 +97,7 @@ public:
     // clear children
     void clear_children() { _children.clear(); }
     Expr* get_child(int i) const { return _children[i]; }
-    int get_num_children() const { return _children.size(); }
+    size_t get_num_children() const { return _children.size(); }
 
     const TypeDescriptor& type() const { return _type; }
     const std::vector<Expr*>& children() const { return _children; }

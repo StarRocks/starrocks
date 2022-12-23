@@ -284,7 +284,7 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
     return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
-void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
+void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, size_t chunk_source_index) {
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
         _chunk_sources[chunk_source_index] = nullptr;
@@ -292,7 +292,7 @@ void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_s
     }
 }
 
-void ScanOperator::_close_chunk_source(RuntimeState* state, int chunk_source_index) {
+void ScanOperator::_close_chunk_source(RuntimeState* state, size_t chunk_source_index) {
     std::lock_guard guard(_task_mutex);
     _close_chunk_source_unlocked(state, chunk_source_index);
 }

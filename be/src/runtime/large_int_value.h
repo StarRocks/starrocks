@@ -64,7 +64,7 @@ public:
             --d;
             *d = '-';
         }
-        *len = (buffer + *len) - d;
+        *len = static_cast<int>((buffer + *len) - d);
         return d;
     }
 

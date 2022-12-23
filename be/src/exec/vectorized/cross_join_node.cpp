@@ -239,7 +239,8 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             dest_col->append_nulls(copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
+            dest_col->append_value_multiple_times(*src_col.get(), static_cast<uint32_t>(start_row),
+                                                  static_cast<uint32_t>(copy_number));
         }
     } else {
         if (src_col->is_constant()) {
@@ -247,10 +248,12 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             auto* const_col = ColumnHelper::as_raw_column<ConstColumn>(src_col);
             // repeat the constant value from probe table for copy_number times
             _buf_selective.assign(copy_number, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
+            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0,
+                                       static_cast<uint32_t>(copy_number));
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
+            dest_col->append_value_multiple_times(*src_col.get(), static_cast<uint32_t>(start_row),
+                                                  static_cast<uint32_t>(copy_number));
         }
     }
 }
@@ -271,7 +274,8 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, 
             auto* const_col = ColumnHelper::as_raw_column<ConstColumn>(src_col);
             // repeat the constant value from probe table for copy_number times
             _buf_selective.assign(copy_number, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
+            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0,
+                                       static_cast<uint32_t>(copy_number));
         } else {
             // repeat the value from probe table for copy_number times
             dest_col->append(*src_col.get(), start_row, copy_number);
@@ -287,7 +291,8 @@ void CrossJoinNode::_copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, 
             auto* const_col = ColumnHelper::as_raw_column<ConstColumn>(src_col);
             // repeat the constant value for copy_number times
             _buf_selective.assign(row_count, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
+            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0,
+                                       static_cast<uint32_t>(row_count));
         } else {
             dest_col->append(*src_col.get(), start_row, row_count);
         }
@@ -309,16 +314,19 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
             auto* const_col = ColumnHelper::as_raw_column<ConstColumn>(src_col);
             // repeat the constant value for copy_number times
             _buf_selective.assign(row_count, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
+            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0,
+                                       static_cast<uint32_t>(row_count));
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
+            dest_col->append_value_multiple_times(*src_col.get(), static_cast<uint32_t>(start_row),
+                                                  static_cast<uint32_t>(row_count));
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
+            dest_col->append_value_multiple_times(*src_col.get(), static_cast<uint32_t>(start_row),
+                                                  static_cast<uint32_t>(row_count));
         }
     }
 }
@@ -653,8 +661,8 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
 
     NLJoinContextParams context_params;
-    context_params.num_left_probers = left_source->degree_of_parallelism();
-    context_params.num_right_sinkers = right_source->degree_of_parallelism();
+    context_params.num_left_probers = static_cast<int32_t>(left_source->degree_of_parallelism());
+    context_params.num_right_sinkers = static_cast<int32_t>(right_source->degree_of_parallelism());
     context_params.plan_node_id = _id;
     context_params.rf_hub = context->fragment_context()->runtime_filter_hub();
     context_params.rf_descs = std::move(_build_runtime_filters);

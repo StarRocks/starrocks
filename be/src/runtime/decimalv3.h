@@ -116,7 +116,7 @@ public:
     template <typename T>
     static inline bool from_string(DecimalType<T>* value, int precision, int scale, const char* s, size_t n) {
         StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
-        *value = StringParser::string_to_decimal<T>(s, n, precision, scale, &result);
+        *value = StringParser::string_to_decimal<T>(s, static_cast<int>(n), precision, scale, &result);
         return result == StringParser::PARSE_FAILURE || result == StringParser::PARSE_OVERFLOW;
     }
 
@@ -129,12 +129,12 @@ public:
     template <typename T>
     static inline bool from_string_with_overflow_allowed(DecimalType<T>* value, int scale, const char* s, size_t n) {
         StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
-        *value = StringParser::string_to_decimal<T>(s, n, decimal_precision_limit<T>, scale, &result);
+        *value = StringParser::string_to_decimal<T>(s, static_cast<int>(n), decimal_precision_limit<T>, scale, &result);
         if (UNLIKELY(StringParser::PARSE_FAILURE == result)) {
             return true;
         }
         if (UNLIKELY(StringParser::PARSE_OVERFLOW == result)) {
-            auto double_value = StringParser::string_to_float<double>(s, n, &result);
+            auto double_value = StringParser::string_to_float<double>(s, static_cast<int>(n), &result);
             if (result != StringParser::PARSE_SUCCESS) {
                 return true;
             }
@@ -159,7 +159,7 @@ public:
         std::string s;
         raw::make_room(&s, str_decimal_max_len);
         char* str_decimal = s.data();
-        int len = 0;
+        size_t len = 0;
 
         T abs_value = value;
 
@@ -213,7 +213,7 @@ public:
     template <typename From, typename To>
     static inline bool from_float(FloatType<From> value, DecimalType<To> const& scale_factor,
                                   DecimalType<To>* dec_value) {
-        *dec_value = static_cast<To>(scale_factor * static_cast<double>(value));
+        *dec_value = static_cast<To>(static_cast<double>(scale_factor) * static_cast<double>(value));
         if constexpr (is_decimal32<To> || is_decimal64<To>) {
             // Depending on the compiler implement, std::numeric_limits<T>::max() or std::numeric_limits<T>::max() both could be returned,
             // when overflow is happenning in casting.

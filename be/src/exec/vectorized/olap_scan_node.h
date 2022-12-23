@@ -85,7 +85,7 @@ public:
     int estimated_max_concurrent_chunks() const;
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
-    static int compute_priority(int32_t num_submitted_tasks);
+    static int compute_priority(int64_t num_submitted_tasks);
 
     int io_tasks_per_scan_operator() const override {
         if (_sorted_by_keys_per_tablet) {
@@ -141,7 +141,7 @@ private:
     void _update_status(const Status& status);
     Status _get_status();
 
-    void _fill_chunk_pool(int count, bool force_column_pool);
+    void _fill_chunk_pool(size_t count, bool force_column_pool);
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
 

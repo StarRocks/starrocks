@@ -70,15 +70,16 @@ private:
     void exchange_shuffle(std::vector<uint32_t>& shuffle_channel_ids, const std::vector<uint32_t>& hash_values,
                           size_t num_rows) {
         for (size_t i = 0; i < num_rows; ++i) {
-            size_t channel_id = ReduceOp()(hash_values[i], _num_channels);
+            size_t channel_id = ReduceOp()(hash_values[i], static_cast<uint32_t>(_num_channels));
             size_t shuffle_id;
             if constexpr (!two_level_shuffle) {
                 shuffle_id = channel_id;
             } else {
-                uint32_t driver_sequence = ReduceOp()(HashUtil::xorshift32(hash_values[i]), _num_shuffles_per_channel);
+                uint32_t driver_sequence = ReduceOp()(HashUtil::xorshift32(hash_values[i]),
+                                                      static_cast<uint32_t>(_num_shuffles_per_channel));
                 shuffle_id = channel_id * _num_shuffles_per_channel + driver_sequence;
             }
-            shuffle_channel_ids[i] = shuffle_id;
+            shuffle_channel_ids[i] = static_cast<uint32_t>(shuffle_id);
         }
     }
 
@@ -93,7 +94,8 @@ private:
     void local_exchange_shuffle(std::vector<uint32_t>& shuffle_channel_ids, std::vector<uint32_t>& hash_values,
                                 size_t num_rows) {
         for (int32_t i = 0; i < num_rows; ++i) {
-            uint32_t driver_sequence = ReduceOp()(HashUtil::xorshift32(hash_values[i]), _num_channels);
+            uint32_t driver_sequence =
+                    ReduceOp()(HashUtil::xorshift32(hash_values[i]), static_cast<uint32_t>(_num_channels));
             shuffle_channel_ids[i] = driver_sequence;
         }
     }

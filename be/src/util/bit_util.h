@@ -135,7 +135,9 @@ public:
     static inline uint64_t byte_swap(uint64_t value) { return static_cast<uint64_t>(__builtin_bswap64(value)); }
     static inline int32_t byte_swap(int32_t value) { return __builtin_bswap32(value); }
     static inline uint32_t byte_swap(uint32_t value) { return static_cast<uint32_t>(__builtin_bswap32(value)); }
-    static inline int16_t byte_swap(int16_t value) { return (((value >> 8) & 0xff) | ((value & 0xff) << 8)); }
+    static inline int16_t byte_swap(int16_t value) {
+        return static_cast<int16_t>((((value >> 8) & 0xff) | ((value & 0xff) << 8)));
+    }
     static inline uint16_t byte_swap(uint16_t value) {
         return static_cast<uint16_t>(byte_swap(static_cast<int16_t>(value)));
     }

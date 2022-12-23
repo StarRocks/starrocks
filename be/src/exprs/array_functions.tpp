@@ -854,7 +854,7 @@ protected:
 
     static void _init_sort_index(std::vector<uint32_t>* sort_index, size_t count) {
         sort_index->resize(count);
-        for (size_t i = 0; i < count; i++) {
+        for (uint32_t i = 0; i < count; i++) {
             (*sort_index)[i] = i;
         }
     }

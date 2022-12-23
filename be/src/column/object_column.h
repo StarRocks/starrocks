@@ -205,12 +205,12 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        int size = this->size();
-        for (int i = 0; i < size - 1; ++i) {
+        auto size = this->size();
+        for (uint32_t i = 0; i + 1 < size; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {
-            ss << debug_item(size - 1);
+            ss << debug_item(static_cast<uint32_t>(size - 1));
         }
         ss << "]";
         return ss.str();

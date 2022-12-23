@@ -19,6 +19,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/raw_container.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 // two-digit years < this are 20..; >= this are 19..
@@ -599,3 +600,4 @@ int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

@@ -45,7 +45,8 @@ StatusOr<ColumnPtr> BitmapFunctions::to_bitmap(FunctionContext* context, const s
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
 
         auto slice = viewer.value(row);
-        auto value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
+        auto value =
+                StringParser::string_to_unsigned_int<uint64_t>(slice.data, static_cast<int>(slice.size), &parse_result);
 
         if (parse_result != StringParser::PARSE_SUCCESS) {
             context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
@@ -77,7 +78,8 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_hash(FunctionContext* context, const
 
         if (!viewer.is_null(row)) {
             auto slice = viewer.value(row);
-            uint32_t hash_value = HashUtil::murmur_hash3_32(slice.data, slice.size, HashUtil::MURMUR3_32_SEED);
+            uint32_t hash_value =
+                    HashUtil::murmur_hash3_32(slice.data, static_cast<int>(slice.size), HashUtil::MURMUR3_32_SEED);
 
             bitmap.add(hash_value);
         }
@@ -329,7 +331,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
     array_bigint_column->reserve(data_size);
 
     //Array Offset
-    int offset = 0;
+    uint32_t offset = 0;
     if (columns[0]->has_null()) {
         for (int row = 0; row < size; ++row) {
             array_offsets->append(offset);
@@ -338,15 +340,21 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
             }
 
             auto& bitmap = *lhs.value(row);
+            auto card = bitmap.cardinality();
+            RETURN_IF(offset + card > std::numeric_limits<typeof(offset)>::max(),
+                      Status::InternalError("Too large cardinality of bitmap"));
             bitmap.to_array(&array_bigint_column->get_data());
-            offset += bitmap.cardinality();
+            offset += static_cast<typeof(offset)>(card);
         }
     } else {
         for (int row = 0; row < size; ++row) {
             array_offsets->append(offset);
             auto& bitmap = *lhs.value(row);
+            auto card = bitmap.cardinality();
+            RETURN_IF(offset + card > std::numeric_limits<typeof(offset)>::max(),
+                      Status::InternalError("Too large cardinality of bitmap"));
             bitmap.to_array(&array_bigint_column->get_data());
-            offset += bitmap.cardinality();
+            offset += static_cast<typeof(offset)>(card);
         }
     }
     array_offsets->append(offset);
@@ -460,17 +468,17 @@ StatusOr<ColumnPtr> BitmapFunctions::base64_to_bitmap(FunctionContext* context, 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
     std::unique_ptr<char[]> p;
-    int last_len = 0;
-    int curr_len = 0;
+    size_t last_len = 0;
+    size_t curr_len = 0;
 
-    for (int row = 0; row < size; ++row) {
+    for (auto row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
             continue;
         }
 
         auto src_value = viewer.value(row);
-        int ssize = src_value.size;
+        auto ssize = src_value.size;
         if (ssize == 0) {
             builder.append_null();
             continue;
@@ -482,7 +490,7 @@ StatusOr<ColumnPtr> BitmapFunctions::base64_to_bitmap(FunctionContext* context, 
             last_len = curr_len;
         }
 
-        int decode_res = base64_decode2(src_value.data, ssize, p.get());
+        auto decode_res = base64_decode2(src_value.data, ssize, p.get());
         if (decode_res < 0) {
             builder.append_null();
             continue;
@@ -546,25 +554,24 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_base64(FunctionContext* context, 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> builder(size);
 
-    for (int row = 0; row < size; ++row) {
+    for (auto row = 0; row < size; ++row) {
         BitmapValue* bitmap = viewer.value(row);
-        int byteSize = bitmap->getSizeInBytes();
+        auto byteSize = bitmap->getSizeInBytes();
+        if (byteSize <= 0) {
+            builder.append_null();
+            continue;
+        }
         std::unique_ptr<char[]> buf;
         buf.reset(new char[byteSize]);
 
-        int len = (size_t)(4.0 * ceil((double)byteSize / 3.0)) + 1;
+        auto len = (size_t)(4.0 * ceil((double)byteSize / 3.0)) + 1;
         std::unique_ptr<char[]> p;
         p.reset(new char[len]);
         memset(p.get(), 0, len);
 
         bitmap->write((char*)buf.get());
 
-        int resLen = base64_encode2((unsigned char*)buf.get(), byteSize, (unsigned char*)p.get());
-
-        if (resLen < 0) {
-            builder.append_null();
-            continue;
-        }
+        auto resLen = base64_encode2((unsigned char*)buf.get(), byteSize, (unsigned char*)p.get());
         builder.append(Slice(p.get(), resLen));
     }
     return builder.build(ColumnHelper::is_all_const(columns));

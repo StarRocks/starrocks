@@ -31,7 +31,7 @@ using std::vector;
 #include "gutil/strings/ascii_ctype.h"
 #include "gutil/strings/charset.h"
 #include "gutil/strings/stringpiece.h"
-
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace strings {
 
 // ----------------------------------------------------------------------
@@ -646,3 +646,4 @@ using strings::ShellEscapeCommandLine;
 using strings::ByteStringFromAscii;
 using strings::ByteStringToAscii;
 using strings::CleanStringLineEndings;
+#pragma GCC diagnostic pop

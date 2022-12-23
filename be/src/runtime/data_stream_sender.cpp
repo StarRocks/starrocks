@@ -108,8 +108,7 @@ public:
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
-    Status add_rows_selective(RuntimeState* state, Chunk* chunk, const uint32_t* row_indexes, uint32_t from,
-                              uint32_t size);
+    Status add_rows_selective(RuntimeState* state, Chunk* chunk, const uint32_t* row_indexes, size_t from, size_t size);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than backend, *is_real_sent will
@@ -301,7 +300,7 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
 }
 
 Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, Chunk* chunk, const uint32_t* indexes,
-                                                     uint32_t from, uint32_t size) {
+                                                     size_t from, size_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
         _chunk = chunk->clone_empty_with_tuple();
@@ -468,7 +467,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
     _channel_indices.resize(_channels.size());
     std::iota(_channel_indices.begin(), _channel_indices.end(), 0);
-    srand(reinterpret_cast<uint64_t>(this));
+    srand(static_cast<uint32_t>(reinterpret_cast<uintptr_t>(this)));
     std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
 
     _bytes_sent_counter = ADD_COUNTER(profile(), "BytesSent", TUnit::BYTES);
@@ -514,7 +513,7 @@ Status DataStreamSender::open(RuntimeState* state) {
 
 Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
     SCOPED_TIMER(_profile->total_time_counter());
-    uint16_t num_rows = chunk->num_rows();
+    const auto num_rows = chunk->num_rows();
     if (num_rows == 0) {
         return Status::OK();
     }
@@ -524,7 +523,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
         // 1. create a new chunk PB to serialize
         ChunkPB* pchunk = _chunk_request.add_chunks();
         // 2. serialize input chunk to pchunk
-        RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
+        RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, static_cast<int>(_channels.size())));
         _current_request_bytes += pchunk->data().size();
         // 3. if request bytes exceed the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
@@ -544,13 +543,14 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
         bool real_sent = false;
         RETURN_IF_ERROR(channel->send_one_chunk(chunk, false, &real_sent));
         if (real_sent) {
-            _current_channel_idx = (_current_channel_idx + 1) % _channels.size();
+            _current_channel_idx =
+                    static_cast<typeof(_current_channel_idx)>((_current_channel_idx + 1) % _channels.size());
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         SCOPED_TIMER(_shuffle_dispatch_timer);
         // hash-partition batch's rows across channels
-        int num_channels = _channels.size();
+        const auto num_channels = _channels.size();
 
         {
             SCOPED_TIMER(_shuffle_hash_timer);
@@ -576,10 +576,10 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
             // compute row indexes for each channel
             _channel_row_idx_start_points.assign(num_channels + 1, 0);
 
-            for (uint16_t i = 0; i < num_rows; ++i) {
-                uint16_t channel_index = _hash_values[i] % num_channels;
+            for (auto i = 0; i < num_rows; ++i) {
+                auto channel_index = _hash_values[i] % num_channels;
                 _channel_row_idx_start_points[channel_index]++;
-                _hash_values[i] = channel_index;
+                _hash_values[i] = static_cast<typeof(_hash_values[0])>(channel_index);
             }
 
             // NOTE:
@@ -588,7 +588,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
                 _channel_row_idx_start_points[i] += _channel_row_idx_start_points[i - 1];
             }
 
-            for (int i = num_rows - 1; i >= 0; --i) {
+            for (int i = static_cast<int>(num_rows - 1); i >= 0; --i) {
                 _row_indexes[_channel_row_idx_start_points[_hash_values[i]] - 1] = i;
                 _channel_row_idx_start_points[_hash_values[i]]--;
             }
@@ -683,7 +683,7 @@ Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* i
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                                       &_compression_scratch));
         } else {
-            int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+            auto max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
             if (_compression_scratch.size() < max_compressed_size) {
                 _compression_scratch.resize(max_compressed_size);
@@ -696,7 +696,8 @@ Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* i
             _compression_scratch.resize(compressed_slice.size);
         }
 
-        double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
+        double compress_ratio =
+                static_cast<double>(uncompressed_size) / static_cast<double>(_compression_scratch.size());
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);

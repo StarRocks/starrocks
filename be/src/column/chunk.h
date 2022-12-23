@@ -190,12 +190,12 @@ public:
     //      from: 2
     //      size: 2
     // This function will copy the [3, 2] row of src to this chunk.
-    void append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+    void append_selective(const Chunk& src, const uint32_t* indexes, size_t from, size_t size);
 
     // This function will append data from src according to the input indexes.
     // The columns of src chunk will be destroyed after append。
     // Peak memory usage can be reduced when src chunk has a large number of rows and columns
-    void rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+    void rolling_append_selective(Chunk& src, const uint32_t* indexes, size_t from, size_t size);
 
     // Remove rows from this chunk according to the vector |selection|.
     // The n-th row will be removed if selection[n] is zero.
@@ -262,7 +262,7 @@ public:
 #define DCHECK_CHUNK(chunk_ptr)
 #endif
 
-    std::string debug_row(uint32_t index) const;
+    std::string debug_row(size_t index) const;
 
     std::string debug_columns() const;
 

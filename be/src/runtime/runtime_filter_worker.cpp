@@ -98,7 +98,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
         if (filter == nullptr) continue;
         state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
     }
-    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
+    int timeout_ms = static_cast<int>(config::send_rpc_runtime_filter_timeout_ms);
     if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
         timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
     }
@@ -318,7 +318,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     size_t actual_size =
             RuntimeFilterHelper::serialize_runtime_filter(out, reinterpret_cast<uint8_t*>(send_data->data()));
     send_data->resize(actual_size);
-    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
+    int timeout_ms = static_cast<int>(config::send_rpc_runtime_filter_timeout_ms);
     if (_query_options.__isset.runtime_filter_send_timeout_ms) {
         timeout_ms = _query_options.runtime_filter_send_timeout_ms;
     }
@@ -604,7 +604,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     // copy modified fields out.
     std::vector<PTransmitRuntimeFilterForwardTarget> targets;
     size_t size = request.forward_targets_size();
-    for (size_t i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
         const auto& fwd = request.forward_targets(i);
         targets.emplace_back(fwd);
     }
@@ -619,7 +619,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
-        for (size_t i = 0; i < t.probe_finst_ids_size(); i++) {
+        for (int i = 0; i < t.probe_finst_ids_size(); i++) {
             PUniqueId* frag_inst_id = request.add_probe_finst_ids();
             *frag_inst_id = t.probe_finst_ids(i);
         }
@@ -638,7 +638,8 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
 
         index += (1 + half);
         _exec_env->add_rf_event({request.query_id(), request.filter_id(), addr.hostname, "FORWARD"});
-        send_rpc_runtime_filter(stub, rpc_closure, config::send_rpc_runtime_filter_timeout_ms, request);
+        send_rpc_runtime_filter(stub, rpc_closure, static_cast<int>(config::send_rpc_runtime_filter_timeout_ms),
+                                request);
     }
 }
 

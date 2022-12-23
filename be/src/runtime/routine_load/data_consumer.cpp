@@ -215,7 +215,8 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         // consume 1 message at a time
         consumer_watch.start();
         int64_t consume_timeout = std::min<int64_t>(left_time, config::routine_load_kafka_timeout_second * 1000);
-        std::unique_ptr<RdKafka::Message> msg(_k_consumer->consume(consume_timeout /* timeout, ms */));
+        std::unique_ptr<RdKafka::Message> msg(
+                _k_consumer->consume(static_cast<int>(consume_timeout) /* timeout, ms */));
         consumer_watch.stop();
         switch (msg->err()) {
         case RdKafka::ERR_NO_ERROR:

@@ -145,8 +145,8 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
         for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
             uint32_t start_offset;
             if (has_remain_repeat_times) {
-                start_offset =
-                        _table_function_result.second->get(_input_chunk_index + 1).get_int32() - _remain_repeat_times;
+                start_offset = static_cast<uint32_t>(
+                        _table_function_result.second->get(_input_chunk_index + 1).get_int32() - _remain_repeat_times);
             } else {
                 start_offset = _table_function_result.second->get(_input_chunk_index).get_int32();
             }

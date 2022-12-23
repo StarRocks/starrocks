@@ -87,6 +87,8 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wfloat-conversion"
 namespace starrocks {
 
 // Calculate the total memory limit of all load tasks on this BE
@@ -139,7 +141,6 @@ static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
 Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths) {
     return env->_init(store_paths);
 }
-
 Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
@@ -525,7 +526,9 @@ int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
     }
 
     // Default dop is a half of the number of hardware threads.
-    return std::max<int32_t>(1, _max_executor_threads / 2);
+    return std::max<int32_t>(1, static_cast<int32_t>(_max_executor_threads) / 2);
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop

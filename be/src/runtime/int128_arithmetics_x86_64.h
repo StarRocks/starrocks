@@ -284,7 +284,7 @@ static inline uint128_t udivmodti4(uint128_t a, uint128_t b, uint128_t* rem) {
         //    carry = 1;
         // }
         const int128_t s = (int128_t)(divisor.u128 - dividend.u128 - 1) >> (n_utword_bits - 1);
-        quotient.u.low |= s & 1;
+        quotient.u.low |= static_cast<uint64_t>(s & 1);
         dividend.u128 -= divisor.u128 & s;
         divisor.u128 >>= 1;
     }

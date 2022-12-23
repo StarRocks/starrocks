@@ -204,7 +204,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
-    for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
+    for (int i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
         if (it != global_dict.end()) {
@@ -331,7 +331,7 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                                       &_compression_scratch));
         } else {
-            int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+            auto max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
             if (_compression_scratch.size() < max_compressed_size) {
                 _compression_scratch.resize(max_compressed_size);
@@ -344,7 +344,8 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             _compression_scratch.resize(compressed_slice.size);
         }
 
-        double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
+        double compress_ratio =
+                static_cast<double>(uncompressed_size) / static_cast<double>(_compression_scratch.size());
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
@@ -437,7 +438,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         SCOPED_TIMER(_parent->_pack_chunk_timer);
         // 1. append data
         _cur_chunk->append_selective(*input, indexes.data(), from, size);
-        for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
+        for (int index_i = 0; index_i < tablet_ids.size(); ++index_i) {
             auto req = _rpc_request.mutable_requests(index_i);
             for (size_t i = 0; i < size; ++i) {
                 req->add_tablet_ids(tablet_ids[index_i][indexes[from + i]]);
@@ -455,7 +456,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
             _mem_tracker->consume(_cur_chunk->memory_usage());
             _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
             _cur_chunk = input->clone_empty_with_slot();
-            for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
+            for (int index_i = 0; index_i < tablet_ids.size(); ++index_i) {
                 _rpc_request.mutable_requests(index_i)->clear_tablet_ids();
             }
         }
@@ -1129,7 +1130,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
             _validate_data(state, chunk);
         }
         {
-            uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
+            auto num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
             int invalid_row_index = 0;
             RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                 &_validate_selection, &invalid_row_index));
@@ -1268,7 +1269,8 @@ Status OlapTableSink::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel, s
             }
         }
         NodeChannel* node = it.second.get();
-        auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size(), false /* eos */);
+        auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0,
+                                  static_cast<uint32_t>(_node_select_idx.size()), false /* eos */);
 
         if (!st.ok()) {
             LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
@@ -1664,7 +1666,7 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
                 from += len; // no copy data will be 0
             }
 
-            for (size_t j = 1; j <= num_rows; ++j) {
+            for (uint32_t j = 1; j <= num_rows; ++j) {
                 new_offset[j] = len * j;
             }
 

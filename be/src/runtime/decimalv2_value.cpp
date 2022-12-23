@@ -44,6 +44,7 @@
 #include "util/raw_container.h"
 #include "util/string_parser.hpp"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 DecimalV2Value DecimalV2Value::ZERO = DecimalV2Value();
@@ -272,7 +273,7 @@ DecimalV2Value& DecimalV2Value::operator-=(const DecimalV2Value& other) {
     return *this;
 }
 
-int DecimalV2Value::parse_from_str(const char* decimal_str, int32_t length) {
+int DecimalV2Value::parse_from_str(const char* decimal_str, size_t length) {
     int32_t error = E_DEC_OK;
     StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
 
@@ -492,3 +493,4 @@ bool DecimalV2Value::greater_than_scale(int scale) {
 }
 
 } // end namespace starrocks
+#pragma GCC diagnostic pop

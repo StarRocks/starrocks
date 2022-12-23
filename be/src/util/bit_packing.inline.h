@@ -37,7 +37,7 @@
 #include <boost/preprocessor/repetition/repeat_from_to.hpp>
 
 #include "util/bit_packing.h"
-
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 template <typename OutType>
@@ -215,3 +215,4 @@ const uint8_t* BitPacking::UnpackUpTo31Values(const uint8_t* __restrict__ in, in
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

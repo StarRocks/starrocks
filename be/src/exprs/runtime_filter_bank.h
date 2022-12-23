@@ -211,7 +211,7 @@ public:
     void set_wait_timeout_ms(int v) { _wait_timeout_ms = v; }
     int wait_timeout_ms() const { return _wait_timeout_ms; }
     void set_scan_wait_timeout_ms(int v) { _scan_wait_timeout_ms = v; }
-    long scan_wait_timeout_ms() const { return _scan_wait_timeout_ms; }
+    int scan_wait_timeout_ms() const { return _scan_wait_timeout_ms; }
     // wait for all runtime filters are ready.
     void wait(bool on_scan_node);
 
@@ -230,7 +230,7 @@ private:
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;
-    long _scan_wait_timeout_ms = 0L;
+    int _scan_wait_timeout_ms = 0L;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeBloomFilterEvalContext _eval_context;
     int _plan_node_id = -1;

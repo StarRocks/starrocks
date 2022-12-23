@@ -205,7 +205,7 @@ void LoadChannelMgr::_start_load_channels_clean() {
     {
         std::lock_guard l(_lock);
         for (auto it = _load_channels.begin(); it != _load_channels.end(); /**/) {
-            if (difftime(now, it->second->last_updated_time()) >= it->second->timeout()) {
+            if (difftime(now, it->second->last_updated_time()) >= static_cast<double>(it->second->timeout())) {
                 timeout_channels.emplace_back(std::move(it->second));
                 it = _load_channels.erase(it);
             } else {

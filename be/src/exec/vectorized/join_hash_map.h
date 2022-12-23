@@ -255,7 +255,9 @@ struct JoinKeyHash<int32_t> {
 template <>
 struct JoinKeyHash<Slice> {
     static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const Slice& slice) const { return crc_hash_32(slice.data, slice.size, CRC_SEED); }
+    std::size_t operator()(const Slice& slice) const {
+        return crc_hash_32(slice.data, static_cast<int32_t>(slice.size), CRC_SEED);
+    }
 };
 
 class JoinHashMapHelper {
@@ -269,20 +271,20 @@ public:
         if (expect_bucket_size >= MAX_BUCKET_SIZE) {
             return MAX_BUCKET_SIZE;
         }
-        return phmap::priv::NormalizeCapacity(expect_bucket_size) + 1;
+        return static_cast<uint32_t>(phmap::priv::NormalizeCapacity(expect_bucket_size) + 1);
     }
 
     template <typename CppType>
     static uint32_t calc_bucket_num(const CppType& value, uint32_t bucket_size) {
         using HashFunc = JoinKeyHash<CppType>;
 
-        return HashFunc()(value) & (bucket_size - 1);
+        return static_cast<uint32_t>(HashFunc()(value) & (bucket_size - 1));
     }
 
     template <typename CppType>
     static void calc_bucket_nums(const Buffer<CppType>& data, uint32_t bucket_size, Buffer<uint32_t>* buckets,
-                                 uint32_t start, uint32_t count) {
-        for (size_t i = 0; i < count; i++) {
+                                 size_t start, size_t count) {
+        for (auto i = 0; i < count; i++) {
             (*buckets)[i] = calc_bucket_num<CppType>(data[start + i], bucket_size);
         }
     }
@@ -297,8 +299,8 @@ public:
 
     // combine keys into fixed size key by column.
     template <LogicalType PT>
-    static void serialize_fixed_size_key_column(const Columns& key_columns, Column* fixed_size_key_column,
-                                                uint32_t start, uint32_t count) {
+    static void serialize_fixed_size_key_column(const Columns& key_columns, Column* fixed_size_key_column, size_t start,
+                                                size_t count) {
         using CppType = typename RunTimeTypeTraits<PT>::CppType;
         using ColumnType = typename RunTimeTypeTraits<PT>::ColumnType;
 
@@ -468,7 +470,7 @@ public:
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
         case TJoinOp::LEFT_OUTER_JOIN: {
-            _probe_state->count = (*probe_chunk)->num_rows();
+            _probe_state->count = static_cast<uint32_t>((*probe_chunk)->num_rows());
             _probe_output(probe_chunk, chunk);
             _build_output(chunk);
             _probe_state->count = 0;

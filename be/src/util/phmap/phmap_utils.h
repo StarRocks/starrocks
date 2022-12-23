@@ -302,7 +302,7 @@ public:
 template <typename H>
 template <typename T, typename... Ts>
 H HashStateBase<H>::combine(H seed, const T& v, const Ts&... vs) {
-    return HashStateBase<H>::combine(Combiner<H, sizeof(H)>()(seed, phmap::Hash<T>()(v)), vs...);
+    return HashStateBase<H>::combine(Combiner<H, static_cast<int>(sizeof(H))>()(seed, phmap::Hash<T>()(v)), vs...);
 }
 
 using HashState = HashStateBase<size_t>;

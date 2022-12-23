@@ -53,7 +53,7 @@ public:
 
     bool current_page_is_dict();
 
-    uint32_t num_values() const { return _num_values; }
+    size_t num_values() const { return _num_values; }
 
     // Try to decode n definition levels into 'levels'
     // return number of decoded levels.

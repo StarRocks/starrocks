@@ -30,7 +30,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
           _is_dest_merge(is_dest_merge),
-          _num_uncancelled_sinkers(num_sinkers) {
+          _num_uncancelled_sinkers(static_cast<int>(num_sinkers)) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -58,7 +58,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
         }
     }
 
-    _num_remaining_eos = _num_sinkers.size() * num_sinkers;
+    _num_remaining_eos = static_cast<int32_t>(_num_sinkers.size() * num_sinkers);
 }
 
 SinkBuffer::~SinkBuffer() {
@@ -182,8 +182,8 @@ int64_t SinkBuffer::_network_time() {
     for (auto& [_, time_trace] : _network_times) {
         double average_concurrency =
                 static_cast<double>(time_trace.accumulated_concurrency) / std::max(1, time_trace.times);
-        int64_t average_accumulated_time =
-                static_cast<int64_t>(time_trace.accumulated_time / std::max(1.0, average_concurrency));
+        int64_t average_accumulated_time = static_cast<int64_t>(static_cast<double>(time_trace.accumulated_time) /
+                                                                std::max(1.0, average_concurrency));
         if (average_accumulated_time > max) {
             max = average_accumulated_time;
         }

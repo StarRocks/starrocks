@@ -33,7 +33,7 @@
 // under the License.
 
 #include "runtime/stream_load/stream_load_context.h"
-
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Status& st) const {
@@ -229,3 +229,4 @@ std::string StreamLoadContext::brief(bool detail) const {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

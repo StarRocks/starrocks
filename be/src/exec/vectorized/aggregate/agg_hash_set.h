@@ -360,7 +360,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         }
 
         for (const auto& key_column : key_columns) {
-            key_column->serialize_batch(_buffer, slice_sizes, chunk_size, max_one_row_size);
+            key_column->serialize_batch(_buffer, slice_sizes, chunk_size, static_cast<uint32_t>(max_one_row_size));
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -463,7 +463,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
 
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                key[i].u.size = slice_sizes[i];
+                key[i].u.size = static_cast<typeof((*key).u.size)>(slice_sizes[i]);
             }
         }
 

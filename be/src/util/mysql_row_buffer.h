@@ -73,7 +73,7 @@ public:
 
     void separator(char c);
 
-    int length() const { return _data.size(); }
+    auto length() const { return _data.size(); }
 
     // move content into |dst| and clear this buffer.
     void move_content(std::string* dst) {

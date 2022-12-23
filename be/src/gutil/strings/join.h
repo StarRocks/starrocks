@@ -39,6 +39,7 @@ using std::vector;
 #include "gutil/strings/stringpiece.h"
 #include "gutil/template_util.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 // ----------------------------------------------------------------------
 // JoinUsing()
 //    This concatenates a vector of strings "components" into a new char[]
@@ -315,3 +316,4 @@ template <class CONTAINER>
 inline string JoinInts(const CONTAINER& components, const char* delim) {
     return JoinElements(components, delim);
 }
+#pragma GCC diagnostic pop

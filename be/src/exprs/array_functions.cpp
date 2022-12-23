@@ -223,7 +223,7 @@ private:
                 }
             }
 
-            result_offset += array_size - total_found;
+            result_offset += static_cast<typeof(result_offset)>(array_size - total_found);
             result_offsets.push_back(result_offset);
         }
 
@@ -432,7 +432,7 @@ private:
                 cum_sum += element_data[offset];
             }
 
-            for (int j = offset + 1; j < offset + array_size; ++j) {
+            for (auto j = offset + 1; j < offset + array_size; ++j) {
                 if constexpr (element_nullable) {
                     if (element_null_data[j]) {
                         // skip null
@@ -543,7 +543,8 @@ private:
                     break;
                 }
             }
-            result_ptr[i] = PositionEnabled ? position : found;
+            using ResultType = typename std::remove_pointer<typeof(result_ptr)>::type;
+            result_ptr[i] = static_cast<ResultType>(PositionEnabled ? position : found);
         }
         return result;
     }
@@ -1032,7 +1033,7 @@ public:
                 } else if constexpr (pt_is_date<value_type>) {
                     sum += value.julian();
                 } else {
-                    sum += value;
+                    sum += static_cast<ResultType>(value);
                 }
             }
 
@@ -1047,7 +1048,7 @@ public:
                     if constexpr (type == ArithmeticType::SUM) {
                         result_column->append(sum);
                     } else {
-                        result_column->append(sum / array_size);
+                        result_column->append(static_cast<ResultType>(sum) / static_cast<ResultType>(array_size));
                     }
                 } else if constexpr (pt_is_datetime<value_type>) {
                     static_assert(type == ArithmeticType::AVG);

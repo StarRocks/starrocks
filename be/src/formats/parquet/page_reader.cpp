@@ -45,7 +45,7 @@ Status PageReader::next_header() {
         nbytes = std::min(nbytes, remaining);
         RETURN_IF_ERROR(_stream->get_bytes(&page_buf, _offset, &nbytes, true));
 
-        header_length = nbytes;
+        header_length = static_cast<typeof(header_length)>(nbytes);
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
         if (st.ok()) {
             break;

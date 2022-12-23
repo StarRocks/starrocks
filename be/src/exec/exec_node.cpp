@@ -180,7 +180,8 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
     }
     if (state != nullptr && state->query_options().__isset.runtime_filter_scan_wait_time_ms) {
-        _runtime_filter_collector.set_scan_wait_timeout_ms(state->query_options().runtime_filter_scan_wait_time_ms);
+        _runtime_filter_collector.set_scan_wait_timeout_ms(
+                static_cast<int>(state->query_options().runtime_filter_scan_wait_time_ms));
     }
     if (tnode.__isset.filter_null_value_columns) {
         _filter_null_value_columns = tnode.filter_null_value_columns;
@@ -582,15 +583,15 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* 
     // so we don't expect pruned chunk size is too small. and if prune_ratio > 0.5
     // there is at most one prune process. according to my observation to running tpch 100g
     // in many cases, chunk is sparse enough.
-    const float prune_ratio = 0.8;
+    const double prune_ratio = 0.8;
     const int prune_min_size = 1024;
 
-    int prune_threshold = std::max(int(chunk->num_rows() * prune_ratio), prune_min_size);
-    int zero_count = 0;
+    int prune_threshold = std::max(int(static_cast<double>(chunk->num_rows()) * prune_ratio), prune_min_size);
+    size_t zero_count = 0;
 
     for (auto* ctx : ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
-        size_t true_count = ColumnHelper::count_true_with_notnull(column);
+        auto true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
             // all hit, skip
@@ -603,7 +604,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* 
             ColumnHelper::merge_two_filters(column, raw_filter, nullptr);
             zero_count = SIMD::count_zero(*raw_filter);
             if (zero_count > prune_threshold) {
-                int rows = chunk->filter(*raw_filter, true);
+                auto rows = chunk->filter(*raw_filter, true);
                 if (rows == 0) {
                     // When all rows in chunk is filtered, direct return
                     // No need to execute the following predicate
@@ -654,7 +655,7 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* ch
 
     for (auto* ctx : ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
-        size_t true_count = ColumnHelper::count_true_with_notnull(column);
+        auto true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
             // all hit, skip
@@ -697,7 +698,7 @@ StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprCont
     }
     for (auto* ctx : ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()));
-        size_t true_count = ColumnHelper::count_true_with_notnull(column);
+        auto true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
             // all hit, skip
@@ -757,7 +758,7 @@ void ExecNode::eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& 
         const uint8_t* nulls = nullable_column->null_column()->raw_data();
         uint8_t* sel = selection.data();
         for (size_t i = 0; i < before_size; i++) {
-            sel[i] &= !nulls[i];
+            sel[i] = static_cast<uint8_t>(sel[i] & (!nulls[i]));
         }
     }
     if (selection.size() == 0) return;

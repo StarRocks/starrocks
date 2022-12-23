@@ -43,6 +43,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/type_utils.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 size_t TabletColumn::estimate_field_size(size_t variable_length) const {
@@ -425,7 +426,7 @@ size_t TabletSchema::row_size() const {
     return size;
 }
 
-size_t TabletSchema::field_index(std::string_view field_name) const {
+int TabletSchema::field_index(std::string_view field_name) const {
     int ordinal = -1;
     for (auto& column : _cols) {
         ordinal++;
@@ -521,3 +522,4 @@ std::string TabletSchema::debug_string() const {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

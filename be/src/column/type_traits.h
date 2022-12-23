@@ -347,8 +347,8 @@ struct RunTimeTypeLimits<ptype, StringPTGuard<ptype>> {
     static constexpr value_type max_value() { return Slice(&_max, 1); }
 
 private:
-    static inline char _min = 0x00;
-    static inline char _max = 0xff;
+    static inline char _min = '\x00';
+    static inline char _max = '\xff';
 };
 
 template <>

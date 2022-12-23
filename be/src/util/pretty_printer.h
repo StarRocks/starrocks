@@ -80,7 +80,7 @@ public:
 
         case TUnit::CPU_TICKS: {
             if (value < CpuInfo::cycles_per_ms()) {
-                ss << std::setprecision(PRECISION) << (value / 1000.) << "K clock cycles";
+                ss << std::setprecision(PRECISION) << (static_cast<double>(value) / 1000.) << "K clock cycles";
             } else {
                 value /= CpuInfo::cycles_per_ms();
                 print_timems(value, &ss);
@@ -101,7 +101,7 @@ public:
                 /// if the time is over a microsecond, print it using unit microsecond
                 ss << DOUBLE_TRUNCATE(static_cast<double>(value) / 1000, TIME_NS_PRECISION) << "us";
             } else {
-                ss << DOUBLE_TRUNCATE(value, TIME_NS_PRECISION) << "ns";
+                ss << DOUBLE_TRUNCATE(static_cast<double>(value), TIME_NS_PRECISION) << "ns";
             }
             break;
         }
@@ -200,38 +200,40 @@ private:
 
     template <typename T>
     static double get_byte_unit(T value, std::string* unit) {
+        auto double_value = static_cast<double>(value);
         if (value == 0) {
             *unit = "";
-            return value;
+            return double_value;
         } else if (value >= GIGABYTE) {
             *unit = "GB";
-            return value / (double)GIGABYTE;
+            return double_value / (double)GIGABYTE;
         } else if (value >= MEGABYTE) {
             *unit = "MB";
-            return value / (double)MEGABYTE;
+            return double_value / (double)MEGABYTE;
         } else if (value >= KILOBYTE) {
             *unit = "KB";
-            return value / (double)KILOBYTE;
+            return double_value / (double)KILOBYTE;
         } else {
             *unit = "B";
-            return value;
+            return double_value;
         }
     }
 
     template <typename T>
     static double get_unit(T value, std::string* unit) {
+        auto double_value = static_cast<double>(value);
         if (value >= BILLION) {
             *unit = "B";
-            return value / (1. * BILLION);
+            return double_value / (1. * BILLION);
         } else if (value >= MILLION) {
             *unit = "M";
-            return value / (1. * MILLION);
+            return double_value / (1. * MILLION);
         } else if (value >= THOUSAND) {
             *unit = "K";
-            return value / (1. * THOUSAND);
+            return double_value / (1. * THOUSAND);
         } else {
             *unit = "";
-            return value;
+            return double_value;
         }
     }
 

@@ -103,7 +103,7 @@ public:
         result_null->get_data().swap(null_flags);
 
         if (!array_elements_data->empty()) {
-            result_data->append_selective(*array_elements_data, selection.data(), 0, num_rows);
+            result_data->append_selective(*array_elements_data, selection.data(), 0, static_cast<uint32_t>(num_rows));
         } else {
             result_data->append_default(num_rows);
         }

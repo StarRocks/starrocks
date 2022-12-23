@@ -38,6 +38,7 @@ using std::vector;
 #endif
 #endif
 
+#pragma GCC diagnostic ignored "-Wconversion"
 // Use this instead of gmtime_r if you want to build for Windows.
 // Windows doesn't have a 'gmtime_r', but it has the similar 'gmtime_s'.
 // TODO(user): Probably belongs in //base:time_support.{cc|h}.
@@ -1178,3 +1179,4 @@ size_t lcpyT(CHAR* dst, const CHAR* src, size_t dst_size) {
 size_t strings::strlcpy(char* dst, const char* src, size_t dst_size) {
     return lcpyT<char>(dst, src, dst_size);
 }
+#pragma GCC diagnostic pop

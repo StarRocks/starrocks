@@ -127,7 +127,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     // check whether we have requested columns in src_slot_descs.
     const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
-    int slot_num = dest_slot_descs.size();
+    auto slot_num = dest_slot_descs.size();
     if (src_slot_descs.empty()) {
         slot_num = 0;
     } else {
@@ -200,7 +200,7 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
 
     bool scanner_eos = false;
-    int row_num = 0;
+    size_t row_num = 0;
 
     ChunkPtr chunk_src = std::make_shared<Chunk>();
     if (nullptr == chunk_src.get()) {
@@ -304,7 +304,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompos
     size_t dop = 1;
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    int64_t mem_limit = static_cast<int64_t>(static_cast<double>(runtime_state()->query_mem_tracker_ptr()->limit()) *
+                                             config::scan_use_query_mem_ratio);
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
 

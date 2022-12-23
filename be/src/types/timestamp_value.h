@@ -167,7 +167,7 @@ void TimestampValue::floor_to_second_period(int period) {
         seconds += period;
     }
 
-    JulianDate day = seconds / SECS_PER_DAY + date::AD_EPOCH_JULIAN;
+    JulianDate day = static_cast<JulianDate>(seconds / SECS_PER_DAY + date::AD_EPOCH_JULIAN);
     Timestamp s = seconds % SECS_PER_DAY;
     _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC);
 }
@@ -191,7 +191,7 @@ void TimestampValue::floor_to_day_period(int period) {
     if constexpr (end) {
         days += period;
     }
-    _timestamp = timestamp::from_julian_and_time(days, 0);
+    _timestamp = timestamp::from_julian_and_time(static_cast<JulianDate>(days), 0);
 }
 
 template <bool end>

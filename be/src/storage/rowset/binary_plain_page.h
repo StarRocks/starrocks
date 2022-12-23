@@ -58,6 +58,7 @@
 #include "util/coding.h"
 #include "util/faststring.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 class Column;
 }
@@ -95,7 +96,8 @@ public:
             return false;
         }
         DCHECK_EQ(_buffer.size(), _reserved_head_size + _next_offset);
-        _offsets.push_back(_next_offset);
+        DCHECK(_next_offset <= std::numeric_limits<uint32_t>::max());
+        _offsets.push_back(static_cast<uint32_t>(_next_offset));
         _buffer.append(s.data, s.size);
 
         _next_offset += s.size;
@@ -288,3 +290,4 @@ private:
 };
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

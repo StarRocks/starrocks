@@ -476,7 +476,7 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
         filter->evaluate(column.get(), &eval_context.running_context);
         auto true_count = SIMD::count_nonzero(selection);
         eval_context.run_filter_nums += 1;
-        double selectivity = true_count * 1.0 / chunk_size;
+        double selectivity = static_cast<double>(true_count) * 1.0 / static_cast<double>(chunk_size);
         if (selectivity <= 0.5) {     // useful filter
             if (selectivity < 0.05) { // very useful filter, could early return
                 seletivity_map.clear();

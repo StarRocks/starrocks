@@ -499,7 +499,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     const bool c0_is_const = c0->is_constant();
     const bool c1_is_const = c1->is_constant();
 
-    const int size = c0->size();
+    const auto size = c0->size();
     // Unpack const
     c0 = FunctionHelper::get_data_column_of_const(c0);
     c1 = FunctionHelper::get_data_column_of_const(c1);
@@ -648,9 +648,9 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
         bool negative = data_ptr[digit_start_offset] == '-';
         digit_start_offset += negative;
         StringParser::ParseResult parse_res;
-        auto decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
-                                                                   string_value.size - digit_start_offset,
-                                                                   std::abs(src_base_value), &parse_res);
+        auto decimal64_num = StringParser::string_to_int<uint64_t>(
+                data_ptr + digit_start_offset, static_cast<int>(string_value.size - digit_start_offset),
+                std::abs(src_base_value), &parse_res);
         if (parse_res == StringParser::PARSE_SUCCESS) {
             if (is_signed) {
                 if (negative && decimal64_num > 0ull - std::numeric_limits<int64_t>::min()) {
@@ -729,7 +729,7 @@ StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns&
     void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
 
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
-    int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
+    int64_t res = generate_randoms(&result, num_rows, static_cast<uint32_t>(reinterpret_cast<intptr_t>(state)));
     state = reinterpret_cast<void*>(res);
     context->set_function_state(FunctionContext::THREAD_LOCAL, state);
 

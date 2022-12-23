@@ -106,7 +106,9 @@ struct UniqueId {
     }
 
     // std::unordered_map need this api
-    size_t hash(size_t seed = 0) const { return starrocks::HashUtil::hash(this, sizeof(*this), seed); }
+    size_t hash(size_t seed = 0) const {
+        return starrocks::HashUtil::hash(this, sizeof(*this), static_cast<uint32_t>(seed));
+    }
 
     // std::unordered_map need this api
     bool operator==(const UniqueId& rhs) const { return hi == rhs.hi && lo == rhs.lo; }

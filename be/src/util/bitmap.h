@@ -39,6 +39,7 @@
 
 namespace starrocks {
 
+#pragma GCC diagnostic ignored "-Wconversion"
 // Return the number of bytes necessary to store the given number of bits.
 inline size_t BitmapSize(size_t num_bits) {
     return (num_bits + 7) / 8;
@@ -255,5 +256,5 @@ private:
     static const int64_t NUM_OFFSET_BITS = 6;
     static const int64_t BIT_INDEX_MASK = 63;
 };
-
+#pragma GCC diagnostic pop
 } // namespace starrocks

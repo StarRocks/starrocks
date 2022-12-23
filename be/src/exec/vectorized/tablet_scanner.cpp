@@ -140,7 +140,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.use_page_cache = !config::disable_storage_page_cache;
     // Improve for select * from table limit x, x is small
     if (_parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
-        _params.chunk_size = _parent->_limit;
+        _params.chunk_size = static_cast<typeof(_params.chunk_size)>(_parent->_limit);
     } else {
         _params.chunk_size = runtime_state()->chunk_size();
     }
@@ -179,7 +179,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     if (_skip_aggregation) {
         _reader_columns = _scanner_columns;
     } else {
-        for (size_t i = 0; i < _tablet->num_key_columns(); i++) {
+        for (uint32_t i = 0; i < _tablet->num_key_columns(); i++) {
             _reader_columns.push_back(i);
         }
         for (auto index : _scanner_columns) {
@@ -200,7 +200,7 @@ Status TabletScanner::_init_return_columns() {
         if (!slot->is_materialized()) {
             continue;
         }
-        int32_t index = _tablet->field_index(slot->col_name());
+        auto index = _tablet->field_index(slot->col_name());
         if (index < 0) {
             auto msg = strings::Substitute("Invalid column name: $0", slot->col_name());
             LOG(WARNING) << msg;
@@ -275,7 +275,8 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            _predicates.evaluate(chunk, _selection.data(), 0, nrows);
+            DCHECK(nrows <= std::numeric_limits<uint16_t>::max());
+            _predicates.evaluate(chunk, _selection.data(), 0, static_cast<uint16_t>(nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }

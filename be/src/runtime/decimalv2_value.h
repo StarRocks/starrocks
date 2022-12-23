@@ -88,7 +88,9 @@ public:
     inline const int128_t& value() const { return _value; }
     inline int128_t& value() { return _value; }
 
-    explicit DecimalV2Value(const std::string& decimal_str) { parse_from_str(decimal_str.c_str(), decimal_str.size()); }
+    explicit DecimalV2Value(const std::string& decimal_str) {
+        parse_from_str(decimal_str.c_str(), static_cast<int32_t>(decimal_str.size()));
+    }
 
     explicit DecimalV2Value(const decimal12_t& decimal12) { from_olap_decimal(decimal12.integer, decimal12.fraction); }
 
@@ -165,7 +167,7 @@ public:
     // NOTE: return a negative value if decimal is negative.
     // ATTN: the max length of fraction part in OLAP is 9, so the 'big digits' except the first one
     // will be truncated.
-    int32_t frac_value() const { return static_cast<int64_t>(_value % ONE_BILLION); }
+    int32_t frac_value() const { return static_cast<int64_t>(static_cast<int32_t>(_value % ONE_BILLION)); }
 
     bool operator==(const DecimalV2Value& other) const { return _value == other.value(); }
 
@@ -211,7 +213,7 @@ public:
     // (to make error handling easier)
     //
     // e.g. "1.2"  ".2"  "1.2e-3"  "1.2e3"
-    int parse_from_str(const char* decimal_str, int32_t length);
+    int parse_from_str(const char* decimal_str, size_t length);
 
     std::string get_debug_info() const { return to_string(); }
 

@@ -141,7 +141,7 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
 void OlapChunkSource::_decide_chunk_size() {
     if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
-        _params.chunk_size = _limit;
+        _params.chunk_size = static_cast<typeof(_params.chunk_size)>(_limit);
     } else {
         _params.chunk_size = _runtime_state->chunk_size();
     }
@@ -202,7 +202,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (skip_aggregation) {
         reader_columns = scanner_columns;
     } else {
-        for (size_t i = 0; i < _tablet->num_key_columns(); i++) {
+        for (uint32_t i = 0; i < _tablet->num_key_columns(); i++) {
             reader_columns.push_back(i);
         }
         for (auto index : scanner_columns) {

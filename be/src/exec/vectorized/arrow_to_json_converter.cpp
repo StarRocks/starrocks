@@ -129,7 +129,7 @@ static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output)
     }
     return Status::OK();
 }
-
+#pragma GCC diagnostic ignored "-Wconversion"
 static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* output) {
     auto type_id = array->type_id();
 
@@ -185,6 +185,7 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
 
     return Status::OK();
 }
+#pragma diagnostic pop
 
 static Status convert_single_arrow_list(const ListArray* array, int offset, vpack::Builder* builder) {
     std::shared_ptr<Array> slice = array->value_slice(offset);

@@ -44,6 +44,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 using boost::algorithm::join;
 
@@ -616,3 +617,4 @@ std::string DescriptorTbl::debug_string() const {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

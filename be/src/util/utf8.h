@@ -18,6 +18,7 @@
 
 #include "util/slice.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 // SIZE: 256 * uint8_t
@@ -153,3 +154,4 @@ static int utf8_len(const char* begin, const char* end) {
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

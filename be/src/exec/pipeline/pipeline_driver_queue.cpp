@@ -45,7 +45,7 @@ void QuerySharedDriverQueue::close() {
 }
 
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
-    int level = _compute_driver_level(driver);
+    auto level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
@@ -58,12 +58,12 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
 
 void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
     std::vector<int> levels(drivers.size());
-    for (int i = 0; i < drivers.size(); i++) {
-        levels[i] = _compute_driver_level(drivers[i]);
+    for (auto i = 0; i < drivers.size(); i++) {
+        levels[i] = static_cast<int>(_compute_driver_level(drivers[i]));
         drivers[i]->set_driver_queue_level(levels[i]);
     }
     std::lock_guard<std::mutex> lock(_global_mutex);
-    for (int i = 0; i < drivers.size(); i++) {
+    for (auto i = 0; i < drivers.size(); i++) {
         _queues[levels[i]].put(drivers[i]);
         drivers[i]->set_in_ready_queue(true);
         _cv.notify_one();
@@ -125,7 +125,7 @@ void QuerySharedDriverQueue::cancel(DriverRawPtr driver) {
     if (!driver->is_in_ready_queue()) {
         return;
     }
-    int level = driver->get_driver_queue_level();
+    auto level = driver->get_driver_queue_level();
     _queues[level].cancel(driver);
     _cv.notify_one();
 }
@@ -142,9 +142,9 @@ void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_driver_queue_level()].update_accu_time(driver);
 }
 
-int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) const {
-    int time_spent = driver->driver_acct().get_accumulated_time_spent();
-    for (int i = driver->get_driver_queue_level(); i < QUEUE_SIZE; ++i) {
+size_t QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) const {
+    auto time_spent = driver->driver_acct().get_accumulated_time_spent();
+    for (auto i = driver->get_driver_queue_level(); i < QUEUE_SIZE; ++i) {
         if (time_spent < _level_time_slices[i]) {
             return i;
         }

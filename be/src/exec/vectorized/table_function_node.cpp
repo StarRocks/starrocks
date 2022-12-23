@@ -107,8 +107,8 @@ Status TableFunctionNode::open(RuntimeState* state) {
 Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_CANCELLED(state);
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    int chunk_size = runtime_state()->chunk_size();
-    int reserve_chunk_size = chunk_size;
+    auto chunk_size = runtime_state()->chunk_size();
+    auto reserve_chunk_size = chunk_size;
     std::vector<ColumnPtr> output_columns;
 
     if (reached_limit()) {
@@ -133,7 +133,7 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
 
     //If _outer_column_remain_repeat_times > 0, first use the remaining data of the previous chunk to construct this data
     if (_outer_column_remain_repeat_times > 0) {
-        size_t repeat_times = std::min(_outer_column_remain_repeat_times, chunk_size);
+        auto repeat_times = std::min(_outer_column_remain_repeat_times, chunk_size);
         //Build outer data, repeat multiple times
         for (int outer_idx = 0; outer_idx < _outer_slots.size(); ++outer_idx) {
             ColumnPtr& input_column_ptr = _input_chunk_ptr->get_column_by_slot_id(_outer_slots[outer_idx]);

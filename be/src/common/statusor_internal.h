@@ -174,10 +174,12 @@ public:
         }
     }
 
+#pragma GCC diagnostic ignored "-Wconversion"
     template <typename... Args>
     explicit StatusOrData(std::in_place_t, Args&&... args) : data_(std::forward<Args>(args)...) {
         MakeStatus();
     }
+#pragma GCC diagnostic pop
 
     explicit StatusOrData(const T& value) : data_(value) { MakeStatus(); }
     explicit StatusOrData(T&& value) : data_(std::move(value)) { MakeStatus(); }

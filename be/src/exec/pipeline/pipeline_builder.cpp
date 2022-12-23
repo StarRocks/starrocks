@@ -61,7 +61,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(RuntimeState* state,
                                                                                  OpFactories& pred_operators,
-                                                                                 int num_receivers, bool force) {
+                                                                                 size_t num_receivers, bool force) {
     // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
     // streams and produce one output stream piping into the sort operator.
@@ -72,9 +72,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
     }
 
     auto pseudo_plan_node_id = next_pseudo_plan_node_id();
-    int buffer_size =
-            std::max(num_receivers, static_cast<int>(source_op->degree_of_parallelism())) * kLocalExchangeBufferChunks;
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(state->chunk_size() * buffer_size);
+    int buffer_size = std::max(num_receivers, source_op->degree_of_parallelism()) * kLocalExchangeBufferChunks;
+    auto mem_mgr =
+            std::make_shared<LocalExchangeMemoryManager>(static_cast<int32_t>(state->chunk_size() * buffer_size));
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);

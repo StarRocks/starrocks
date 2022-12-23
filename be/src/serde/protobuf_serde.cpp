@@ -26,7 +26,7 @@
 #include "util/raw_container.h"
 
 namespace starrocks::serde {
-
+#pragma GCC diagnostic ignored "-Wconversion"
 EncodeContext::EncodeContext(const int col_num, const int encode_level) : _session_encode_level(encode_level) {
     for (auto i = 0; i < col_num; ++i) {
         _column_encode_level.emplace_back(_session_encode_level);
@@ -339,3 +339,4 @@ StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_d
 }
 
 } // namespace starrocks::serde
+#pragma GCC diagnostic pop

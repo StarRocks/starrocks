@@ -22,6 +22,7 @@
 #include "column/column_viewer.h"
 #include "exprs/string_functions.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 const void* _memchr(const void* big, size_t big_len, const void* little, size_t little_len) {
@@ -206,3 +207,4 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

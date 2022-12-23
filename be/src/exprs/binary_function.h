@@ -54,8 +54,8 @@ public:
         auto* data1 = r1.data();
         auto* data2 = r2.data();
         auto* data3 = r3.data();
-        const int s = std::min(v1->size(), v2->size());
-        for (int i = 0; i < s; ++i) {
+        const auto s = std::min(v1->size(), v2->size());
+        for (auto i = 0; i < s; ++i) {
             data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     data1[i], data2[i]);
         }
@@ -76,8 +76,8 @@ public:
         auto* data2 = r2.data();
         auto* data3 = r3.data();
 
-        int size = v2->size();
-        for (int i = 0; i < size; ++i) {
+        auto size = v2->size();
+        for (auto i = 0; i < size; ++i) {
             data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     data1, data2[i]);
         }
@@ -98,8 +98,8 @@ public:
         auto data2 = r2[0];
         auto* data3 = r3.data();
 
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        auto size = v1->size();
+        for (auto i = 0; i < size; ++i) {
             data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     data1[i], data2);
         }
@@ -236,9 +236,10 @@ public:
 
             for (size_t i = 0; i < size; ++i) {
                 // DO NOT overwrite null flag if it is already set
-                null_flags->get_data()[i] |=
-                        NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<TYPE_BOOLEAN>>(
-                                real_data->get_data()[i]);
+                auto& null_flag = null_flags->get_data()[i];
+                null_flag = static_cast<typeof(null_flag)>(
+                        null_flag |
+                        NULL_OP::template apply<RunTimeCppType<ResultType>, bool>(real_data->get_data()[i]));
             }
 
             if (data->is_nullable()) {
@@ -370,14 +371,14 @@ public:
         auto* lnd = ln->get_data().data();
         auto* rnd = rn->get_data().data();
 
-        int size = std::min(lv->size(), rv->size());
+        auto size = std::min(lv->size(), rv->size());
 
         auto null_column = NullColumn::create();
         null_column->resize_uninitialized(size);
 
         auto* nd = null_column->get_data().data();
 
-        for (int i = 0; i < size; ++i) {
+        for (auto i = 0; i < size; ++i) {
             nd[i] = NULL_FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     lvd[i], lnd[i], rvd[i], rnd[i]);
         }
@@ -386,7 +387,7 @@ public:
         data_column->resize_uninitialized(size);
         auto* dd = data_column->get_data().data();
 
-        for (int i = 0; i < size; ++i) {
+        for (auto i = 0; i < size; ++i) {
             dd[i] = FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     lvd[i], rvd[i]);
         }
@@ -403,14 +404,14 @@ public:
         auto* lnd = ln->get_data().data();
         auto* rnd = rn->get_data().data();
 
-        int size = rv->size();
+        const auto size = rv->size();
 
         auto null_column = NullColumn::create();
         null_column->resize_uninitialized(size);
 
         auto* nd = null_column->get_data().data();
 
-        for (int i = 0; i < size; ++i) {
+        for (auto i = 0; i < size; ++i) {
             nd[i] = NULL_FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     lvd[0], lnd[0], rvd[i], rnd[i]);
         }
@@ -419,7 +420,7 @@ public:
         data_column->resize_uninitialized(size);
         auto* dd = data_column->get_data().data();
 
-        for (int i = 0; i < size; ++i) {
+        for (auto i = 0; i < size; ++i) {
             dd[i] = FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     lvd[0], rvd[i]);
         }
@@ -436,14 +437,14 @@ public:
         auto* lnd = ln->get_data().data();
         auto* rnd = rn->get_data().data();
 
-        int size = lv->size();
+        const auto size = lv->size();
 
         auto null_column = NullColumn::create();
         null_column->resize_uninitialized(size);
 
         auto* nd = null_column->get_data().data();
 
-        for (int i = 0; i < size; ++i) {
+        for (auto i = 0; i < size; ++i) {
             nd[i] = NULL_FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     lvd[i], lnd[i], rvd[0], rnd[0]);
         }
@@ -452,7 +453,7 @@ public:
         data_column->resize_uninitialized(size);
         auto* dd = data_column->get_data().data();
 
-        for (int i = 0; i < size; ++i) {
+        for (auto i = 0; i < size; ++i) {
             dd[i] = FN::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     lvd[i], rvd[0]);
         }

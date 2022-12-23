@@ -207,7 +207,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         AsyncDeltaWriterRequest req;
         req.chunk = chunk;
         req.indexes = row_indexes + from;
-        req.indexes_size = size;
+        req.indexes_size = static_cast<uint32_t>(size);
         req.commit_after_write = false;
 
         // The reference count of context is increased in the constructor of WriteCallback
@@ -367,7 +367,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     for (auto& slot : params.schema().slot_descs()) {
         GlobalDictMap global_dict;
         if (slot.global_dict_words_size()) {
-            for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
+            for (int i = 0; i < slot.global_dict_words_size(); i++) {
                 const std::string& dict_word = slot.global_dict_words(i);
                 auto* data = _mem_pool->allocate(dict_word.size());
                 RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));

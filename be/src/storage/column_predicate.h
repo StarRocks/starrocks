@@ -123,15 +123,15 @@ public:
     uint32_t column_id() const { return _column_id; }
 
     Status evaluate(const Column* column, uint8_t* selection) const {
-        return evaluate(column, selection, 0, column->size());
+        return evaluate(column, selection, 0, static_cast<uint16_t>(column->size()));
     }
 
     Status evaluate_and(const Column* column, uint8_t* selection) const {
-        return evaluate_and(column, selection, 0, column->size());
+        return evaluate_and(column, selection, 0, static_cast<uint16_t>(column->size()));
     }
 
     Status evaluate_or(const Column* column, uint8_t* selection) const {
-        return evaluate_or(column, selection, 0, column->size());
+        return evaluate_or(column, selection, 0, static_cast<uint16_t>(column->size()));
     }
 
     virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;

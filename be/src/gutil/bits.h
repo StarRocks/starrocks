@@ -31,7 +31,7 @@ public:
 #if defined(__x86_64__)
         n -= (n >> 1) & 0x5555555555555555ULL;
         n = ((n >> 2) & 0x3333333333333333ULL) + (n & 0x3333333333333333ULL);
-        return (((n + (n >> 4)) & 0xF0F0F0F0F0F0F0FULL) * 0x101010101010101ULL) >> 56;
+        return static_cast<int>((((n + (n >> 4)) & 0xF0F0F0F0F0F0F0FULL) * 0x101010101010101ULL) >> 56);
 #else
         return CountOnes(n >> 32) + CountOnes(n & 0xffffffff);
 #endif
@@ -44,7 +44,7 @@ public:
 #if defined(__x86_64__) && defined __GNUC__
         int64 count = 0;
         asm("popcnt %1,%0" : "=r"(count) : "rm"(n) : "cc");
-        return count;
+        return static_cast<int>(count);
 #else
         return CountOnes64(n);
 #endif
@@ -170,9 +170,9 @@ inline int Bits::CountOnesInByte(unsigned char n) {
 }
 
 inline uint8 Bits::ReverseBits8(unsigned char n) {
-    n = ((n >> 1) & 0x55) | ((n & 0x55) << 1);
-    n = ((n >> 2) & 0x33) | ((n & 0x33) << 2);
-    return ((n >> 4) & 0x0f) | ((n & 0x0f) << 4);
+    n = static_cast<unsigned char>(((n >> 1) & 0x55) | ((n & 0x55) << 1));
+    n = static_cast<unsigned char>(((n >> 2) & 0x33) | ((n & 0x33) << 2));
+    return static_cast<uint8>(((n >> 4) & 0x0f) | ((n & 0x0f) << 4));
 }
 
 inline uint32 Bits::ReverseBits32(uint32 n) {

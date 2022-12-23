@@ -85,7 +85,8 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_from_sink();
 
                     int64_t num_selected_rows = ctx->number_total_rows - ctx->number_unselected_rows;
-                    if ((double)ctx->number_filtered_rows / num_selected_rows > ctx->max_filter_ratio) {
+                    if (static_cast<double>(ctx->number_filtered_rows) / static_cast<double>(num_selected_rows) >
+                        ctx->max_filter_ratio) {
                         // NOTE: Do not modify the error message here, for historical
                         // reasons,
                         // some users may rely on this error message.

@@ -45,6 +45,7 @@
 #include "util/time.h"
 #include "util/uid_util.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 StatusOr<ColumnPtr> UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
@@ -265,3 +266,4 @@ StatusOr<ColumnPtr> UtilityFunctions::host_name(FunctionContext* context, const 
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

@@ -100,12 +100,12 @@ ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t c
                                              std::move(morsel), olap_scan_node, _ctx.get());
 }
 
-void OlapScanOperator::attach_chunk_source(int32_t source_index) {
-    _ctx->attach_shared_input(_driver_sequence, source_index);
+void OlapScanOperator::attach_chunk_source(size_t source_index) {
+    _ctx->attach_shared_input(_driver_sequence, static_cast<int32_t>(source_index));
 }
 
-void OlapScanOperator::detach_chunk_source(int32_t source_index) {
-    _ctx->detach_shared_input(_driver_sequence, source_index);
+void OlapScanOperator::detach_chunk_source(size_t source_index) {
+    _ctx->detach_shared_input(_driver_sequence, static_cast<int32_t>(source_index));
 }
 
 bool OlapScanOperator::has_shared_chunk_source() const {

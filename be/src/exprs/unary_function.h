@@ -48,8 +48,8 @@ public:
         result->resize(v1->size());
         auto* r3 = result->get_data().data();
 
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        const auto size = v1->size();
+        for (auto i = 0; i < size; ++i) {
             r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
         }
 
@@ -58,14 +58,16 @@ public:
         auto* ns = nulls->get_data().data();
 
         if constexpr (!std::is_same<INPUT_NULL_OP, NopCheck>::value) {
-            for (int i = 0; i < size; ++i) {
-                ns[i] = INPUT_NULL_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
+            for (auto i = 0; i < size; ++i) {
+                ns[i] = static_cast<uint8_t>(
+                        INPUT_NULL_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]));
             }
         }
 
         if constexpr (!std::is_same<OUTPUT_NULL_OP, NopCheck>::value) {
-            for (int i = 0; i < size; ++i) {
-                ns[i] = OUTPUT_NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(r3[i]);
+            for (auto i = 0; i < size; ++i) {
+                ns[i] = static_cast<uint8_t>(
+                        OUTPUT_NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(r3[i]));
             }
         }
 
@@ -98,8 +100,8 @@ public:
         result->resize(v1->size());
         auto* r3 = result->get_data().data();
 
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        const auto size = v1->size();
+        for (auto i = 0; i < size; ++i) {
             r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
         }
 
@@ -122,8 +124,8 @@ public:
 
         auto& offset = result->get_offset();
         auto& bytes = result->get_bytes();
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        const auto size = v1->size();
+        for (auto i = 0; i < size; ++i) {
             std::string ret = OP::template apply<RunTimeCppType<Type>, std::string>(r1[i], std::forward<Args>(args)...);
             bytes.reserve(ret.size());
             bytes.insert(bytes.end(), (uint8_t*)ret.data(), (uint8_t*)ret.data() + ret.size());
@@ -269,7 +271,7 @@ using VectorizedOutputCheckUnaryFunction = DealNullableColumnUnaryFunction<
     struct NAME {                                       \
         template <typename Type, typename ResultType>   \
         static inline ResultType apply(const Type& l) { \
-            return FN(l);                               \
+            return static_cast<ResultType>(FN(l));      \
         }                                               \
     };
 

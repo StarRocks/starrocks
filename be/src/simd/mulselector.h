@@ -24,6 +24,7 @@
 #include <immintrin.h>
 #endif
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 template <LogicalType TYPE>
@@ -34,13 +35,13 @@ public:
     using SelectVec = uint8_t*;
 
     // a normal implements
-    static void multi_select_if(SelectVec select_vec[], int select_vec_size, Container& dst, Container* select_list[],
-                                int select_list_size) {
+    static void multi_select_if(SelectVec select_vec[], size_t select_vec_size, Container& dst,
+                                Container* select_list[], size_t select_list_size) {
         DCHECK_GT(select_list_size, 0);
         DCHECK_EQ(select_vec_size + 1, select_list_size);
 
-        int row_sz = select_list[0]->size();
-        int processed_rows = 0;
+        auto row_sz = select_list[0]->size();
+        auto processed_rows = 0;
 
 #ifdef __AVX2__
         // SIMD multi select if Algorithm
@@ -60,12 +61,12 @@ public:
         if constexpr (sizeof(RunTimeCppType<TYPE>) == 1) {
             SelectVec handle_select_vec[select_vec_size];
             // copy select vector pointer
-            for (int i = 0; i < select_vec_size; ++i) {
+            for (auto i = 0; i < select_vec_size; ++i) {
                 handle_select_vec[i] = select_vec[i];
             }
 
             CppType* handle_select_data[select_list_size];
-            for (int i = 0; i < select_list_size; ++i) {
+            for (auto i = 0; i < select_list_size; ++i) {
                 handle_select_data[i] = select_list[i]->data();
             }
 
@@ -81,17 +82,17 @@ public:
                 __m256i selected_dst = _mm256_undefined_si256();
 
                 // load select vector
-                for (int i = 0; i < select_vec_size; ++i) {
+                for (auto i = 0; i < select_vec_size; ++i) {
                     loaded_masks[i] = _mm256_loadu_si256(reinterpret_cast<__m256i*>(handle_select_vec[i]));
                     loaded_masks[i] = _mm256_cmpgt_epi8(loaded_masks[i], _mm256_setzero_si256());
                 }
 
                 // load select data
-                for (int i = 0; i < select_list_size; ++i) {
+                for (auto i = 0; i < select_list_size; ++i) {
                     loaded_datas[i] = _mm256_loadu_si256(reinterpret_cast<__m256i*>(handle_select_data[i]));
                 }
 
-                for (int i = 0; i < select_list_size; ++i) {
+                for (auto i = 0; i < select_list_size; ++i) {
                     // get will select vector in this loop
                     __m256i not_selected_vec = ~selected_vec;
                     __m256i will_select = not_selected_vec & loaded_masks[i];
@@ -107,11 +108,11 @@ public:
                 _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst.data() + processed_rows), selected_dst);
 
                 // update handle_select_vec
-                for (int i = 0; i < select_vec_size; ++i) {
+                for (auto i = 0; i < select_vec_size; ++i) {
                     handle_select_vec[i] += 32;
                 }
 
-                for (int i = 0; i < select_list_size; ++i) {
+                for (auto i = 0; i < select_list_size; ++i) {
                     handle_select_data[i] += 32;
                 }
                 processed_rows += 32;
@@ -125,13 +126,14 @@ public:
                     return i;
                 }
             }
-            return select_vec_size;
+            return static_cast<int>(select_vec_size);
         };
 
-        for (int i = processed_rows; i < row_sz; ++i) {
+        for (auto i = processed_rows; i < row_sz; ++i) {
             int index = get_select_index(i);
             dst[i] = (*select_list[index])[i];
         }
     }
 };
 } // namespace starrocks
+#pragma GCC diagnostic pop

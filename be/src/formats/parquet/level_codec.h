@@ -47,7 +47,7 @@ public:
             // it must be ensured that the incoming parameters cannot exceed the boundary.
             n = std::min((size_t)_num_levels, n);
             auto num_decoded = _rle_decoder.GetBatch(levels, n);
-            _num_levels -= num_decoded;
+            _num_levels -= static_cast<typeof(_num_levels)>(num_decoded);
             return num_decoded;
         } else if (_encoding == tparquet::Encoding::BIT_PACKED) {
         }

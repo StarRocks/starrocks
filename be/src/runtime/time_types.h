@@ -286,7 +286,7 @@ Timestamp date::to_timestamp(JulianDate date) {
 // if it is then set the digit to v, and return true;
 // else return false;
 bool date::char_to_digit(const char* value, int i, uint8_t* v) {
-    *v = *(value + i) - '0';
+    *v = static_cast<uint8_t>(*(value + i) - '0');
     if (*v > 9) {
         return true;
     } else {
@@ -301,7 +301,7 @@ Timestamp timestamp::to_time(Timestamp timestamp) {
 }
 
 JulianDate timestamp::to_julian(Timestamp timestamp) {
-    return static_cast<uint64_t>(timestamp) >> TIMESTAMP_BITS;
+    return static_cast<JulianDate>(static_cast<uint64_t>(timestamp) >> TIMESTAMP_BITS);
 }
 
 void timestamp::to_date(Timestamp timestamp, int* year, int* month, int* day) {
@@ -334,12 +334,12 @@ bool timestamp::check(int year, int month, int day, int hour, int minute, int se
 inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {
     Timestamp time = to_time(timestamp);
 
-    *hour = time / USECS_PER_HOUR;
+    *hour = static_cast<int>(time / USECS_PER_HOUR);
     time -= (*hour) * USECS_PER_HOUR;
-    *minute = time / USECS_PER_MINUTE;
+    *minute = static_cast<int>(time / USECS_PER_MINUTE);
     time -= (*minute) * USECS_PER_MINUTE;
-    *second = time / USECS_PER_SEC;
-    *microsecond = time - (*second * USECS_PER_SEC);
+    *second = static_cast<int>(time / USECS_PER_SEC);
+    *microsecond = static_cast<int>(time - (*second * USECS_PER_SEC));
 }
 
 template <TimeUnit UNIT>
@@ -356,7 +356,7 @@ Timestamp timestamp::add(Timestamp timestamp, int count) {
         JulianDate days = timestamp::to_julian(timestamp);
         Timestamp microseconds = timestamp::to_time(timestamp) + USECS_PER_UNIT[static_cast<int>(UNIT)] * count;
 
-        days += microseconds / USECS_PER_DAY;
+        days += static_cast<JulianDate>(microseconds / USECS_PER_DAY);
 
         microseconds %= USECS_PER_DAY;
         if (microseconds < 0) {
@@ -369,11 +369,11 @@ Timestamp timestamp::add(Timestamp timestamp, int count) {
 }
 
 double timestamp::time_to_literal(double time) {
-    uint64_t t = time;
+    uint64_t t = static_cast<uint64_t>(time);
     uint64_t hour = t / 3600;
     uint64_t minute = t / 60 % 60;
     uint64_t second = t % 60;
-    return hour * 10000 + minute * 100 + second;
+    return static_cast<double>(hour * 10000 + minute * 100 + second);
 }
 
 Timestamp timestamp::of_epoch_second(int seconds, int nanoseconds) {

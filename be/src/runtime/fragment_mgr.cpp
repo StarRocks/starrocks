@@ -67,6 +67,7 @@
 #include "util/uid_util.h"
 #include "util/url_coding.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -899,3 +900,4 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
 }
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

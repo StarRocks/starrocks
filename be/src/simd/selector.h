@@ -27,6 +27,7 @@
 #include "runtime/primitive_type.h"
 #include "simd/simd_utils.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 
 #ifdef __AVX2__
@@ -334,3 +335,4 @@ public:
 };
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

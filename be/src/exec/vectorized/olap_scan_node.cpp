@@ -6,8 +6,8 @@
 //
 //     https://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+// an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
@@ -145,9 +145,9 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     {
         std::unique_lock<std::mutex> l(_mtx);
-        const int32_t num_closed = _closed_scanners.load(std::memory_order_acquire);
-        const int32_t num_pending = _pending_scanners.size();
-        const int32_t num_running = _num_scanners - num_pending - num_closed;
+        const auto num_closed = _closed_scanners.load(std::memory_order_acquire);
+        const auto num_pending = _pending_scanners.size();
+        const auto num_running = _num_scanners - num_pending - num_closed;
         if ((num_pending > 0) && (num_running < kMaxConcurrency)) {
             // before we submit a new scanner to run, check whether it can fetch
             // at least _chunks_per_scanner chunks from _chunk_pool.
@@ -238,9 +238,9 @@ OlapScanNode::~OlapScanNode() {
     DCHECK(is_closed());
 }
 
-void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
+void OlapScanNode::_fill_chunk_pool(size_t count, bool force_column_pool) {
     const size_t capacity = runtime_state()->chunk_size();
-    for (int i = 0; i < count; i++) {
+    for (auto i = 0; i < count; i++) {
         ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool));
         {
             std::lock_guard<std::mutex> l(_mtx);
@@ -537,7 +537,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 }
 
 // The more tasks you submit, the less priority you get.
-int OlapScanNode::compute_priority(int32_t num_submitted_tasks) {
+int OlapScanNode::compute_priority(int64_t num_submitted_tasks) {
     // int nice = 20;
     // while (nice > 0 && num_submitted_tasks > (22 - nice) * (20 - nice) * 6) {
     //     --nice;
@@ -601,8 +601,8 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
 
     _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
 
-    int tablet_count = _scan_ranges.size();
-    for (int k = 0; k < tablet_count; ++k) {
+    auto tablet_count = _scan_ranges.size();
+    for (auto k = 0; k < tablet_count; ++k) {
         auto& scan_range = _scan_ranges[k];
         auto& tablet_rowset = _tablet_rowsets[k];
 
@@ -610,11 +610,11 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
         for (const auto& rowset : tablet_rowset) {
             segment_nums += rowset->num_segments();
         }
-        int scanners_per_tablet = std::min(segment_nums, kMaxScannerPerRange / _scan_ranges.size());
-        scanners_per_tablet = std::max(1, scanners_per_tablet);
+        auto scanners_per_tablet = std::min(segment_nums, kMaxScannerPerRange / _scan_ranges.size());
+        scanners_per_tablet = std::max(1UL, scanners_per_tablet);
 
-        int num_ranges = key_ranges.size();
-        int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
+        auto num_ranges = key_ranges.size();
+        auto ranges_per_scanner = std::max(1UL, num_ranges / scanners_per_tablet);
         for (int i = 0; i < num_ranges;) {
             std::vector<OlapScanRange*> agg_key_ranges;
             agg_key_ranges.push_back(key_ranges[i].get());
@@ -644,13 +644,13 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
         }
     }
     _pending_scanners.reverse();
-    _num_scanners = _pending_scanners.size();
+    _num_scanners = static_cast<uint32_t>(_pending_scanners.size());
     _chunks_per_scanner = config::scanner_row_num / runtime_state()->chunk_size();
     _chunks_per_scanner += (config::scanner_row_num % runtime_state()->chunk_size() != 0);
     // TODO: dynamic submit stragety
-    int concurrency = _scanner_concurrency();
-    COUNTER_SET(_task_concurrency, (int64_t)concurrency);
-    int chunks = _chunks_per_scanner * concurrency;
+    auto concurrency = _scanner_concurrency();
+    COUNTER_SET(_task_concurrency, static_cast<int64_t>(concurrency));
+    auto chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
     TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
     std::lock_guard<std::mutex> l(_mtx);
@@ -666,7 +666,7 @@ StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* sca
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!tablet) {
         std::stringstream ss;
-        SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+        SchemaHash schema_hash = static_cast<SchemaHash>(strtoul(scan_range->schema_hash.c_str(), nullptr, 10));
         ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
            << ", reason=" << err;
         LOG(WARNING) << ss.str();
@@ -686,9 +686,11 @@ int OlapScanNode::estimated_max_concurrent_chunks() const {
     DCHECK_GT(chunk_mem_usage, 0);
 
     // limit scan memory usage not greater than 1/4 query limit
-    int concurrency = std::max<int>(query_limit * config::scan_use_query_mem_ratio / chunk_mem_usage, 1);
+    auto concurrency = std::max<double>(
+            static_cast<double>(query_limit) * config::scan_use_query_mem_ratio / static_cast<double>(chunk_mem_usage),
+            1.0);
 
-    return concurrency;
+    return static_cast<int>(concurrency);
 }
 
 Status OlapScanNode::_capture_tablet_rowsets() {
@@ -801,7 +803,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, estimated_max_concurrent_chunks());
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    int64_t mem_limit = static_cast<int64_t>(static_cast<double>(runtime_state()->query_mem_tracker_ptr()->limit()) *
+                                             config::scan_use_query_mem_ratio);
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
 

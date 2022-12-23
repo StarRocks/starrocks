@@ -731,7 +731,7 @@ Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Fi
 
     for (auto* ctx : _other_join_conjunct_ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()));
-        size_t true_count = ColumnHelper::count_true_with_notnull(column);
+        auto true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
             // all hit, skip
@@ -752,7 +752,7 @@ Status HashJoinNode::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Column::Fi
     }
 
     if (!filter_all) {
-        int zero_count = SIMD::count_zero(filter.data(), filter.size());
+        auto zero_count = SIMD::count_zero(filter.data(), filter.size());
         if (zero_count == 0) {
             hit_all = true;
         }

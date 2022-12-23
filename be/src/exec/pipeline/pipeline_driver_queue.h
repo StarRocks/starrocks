@@ -74,7 +74,7 @@ public:
         _accu_consume_time.fetch_add(driver->driver_acct().get_last_time_spent());
     }
 
-    double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
+    double accu_time_after_divisor() { return static_cast<double>(_accu_consume_time.load()) / factor_for_normal; }
 
     void put(const DriverRawPtr driver);
     void cancel(const DriverRawPtr driver);
@@ -123,7 +123,7 @@ public:
 private:
     // When the driver at the i-th level costs _level_time_slices[i],
     // it will move to (i+1)-th level.
-    int _compute_driver_level(const DriverRawPtr driver) const;
+    size_t _compute_driver_level(const DriverRawPtr driver) const;
 
 private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,

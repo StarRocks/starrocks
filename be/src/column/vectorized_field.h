@@ -38,8 +38,8 @@ public:
               _name(name),
               _type(std::move(type)),
               _sub_fields(nullptr),
-              _short_key_length(short_key_length),
-              _flags((is_key << kIsKeyShift) | (nullable << kNullableShift)) {}
+              _short_key_length(static_cast<uint8_t>(short_key_length)),
+              _flags(static_cast<uint8_t>((is_key << kIsKeyShift) | (nullable << kNullableShift))) {}
 
     // Non-key field of any type except for ARRAY
     VectorizedField(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
@@ -184,9 +184,9 @@ inline bool VectorizedField::is_nullable() const {
 
 inline void VectorizedField::set_nullable(bool nullable) {
     if (nullable) {
-        _flags |= (1 << kNullableShift);
+        _flags |= static_cast<uint8_t>(1 << kNullableShift);
     } else {
-        _flags &= ~(1 << kNullableShift);
+        _flags &= static_cast<uint8_t>(~(1 << kNullableShift));
     }
 }
 
@@ -196,9 +196,9 @@ inline bool VectorizedField::is_key() const {
 
 inline void VectorizedField::set_is_key(bool is_key) {
     if (is_key) {
-        _flags |= (1 << kIsKeyShift);
+        _flags |= static_cast<uint8_t>((1 << kIsKeyShift));
     } else {
-        _flags &= ~(1 << kIsKeyShift);
+        _flags &= static_cast<uint8_t>(~(1 << kIsKeyShift));
     }
 }
 

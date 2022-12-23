@@ -49,7 +49,7 @@ namespace starrocks {
 template <typename T>
 class BlockingPriorityQueue {
 public:
-    explicit BlockingPriorityQueue(size_t max_elements) : _max_element(max_elements) {}
+    explicit BlockingPriorityQueue(int max_elements) : _max_element(max_elements) {}
     ~BlockingPriorityQueue() { shutdown(); }
 
     // Return false iff has been shutdown.
@@ -162,7 +162,7 @@ public:
     }
 
     size_t get_capacity() const { return _max_element; }
-    uint32_t get_size() const {
+    size_t get_size() const {
         std::unique_lock<std::mutex> l(_lock);
         return _heap.size();
     }

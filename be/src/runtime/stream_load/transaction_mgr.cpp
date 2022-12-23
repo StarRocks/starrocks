@@ -281,8 +281,8 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     if (!req->header(HTTP_TIMEOUT).empty()) {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         const auto& timeout = req->header(HTTP_TIMEOUT);
-        auto timeout_second =
-                StringParser::string_to_unsigned_int<int32_t>(timeout.c_str(), timeout.length(), &parse_result);
+        auto timeout_second = StringParser::string_to_unsigned_int<int32_t>(
+                timeout.c_str(), static_cast<int>(timeout.length()), &parse_result);
         if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             return Status::InvalidArgument("Invalid timeout format");
         }
@@ -291,8 +291,8 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     if (!req->header(HTTP_IDLE_TRANSACTION_TIMEOUT).empty()) {
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
         const auto& timeout = req->header(HTTP_IDLE_TRANSACTION_TIMEOUT);
-        auto timeout_second =
-                StringParser::string_to_unsigned_int<int32_t>(timeout.c_str(), timeout.length(), &parse_result);
+        auto timeout_second = StringParser::string_to_unsigned_int<int32_t>(
+                timeout.c_str(), static_cast<int>(timeout.length()), &parse_result);
         if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             return Status::InvalidArgument("Invalid timeout format");
         }

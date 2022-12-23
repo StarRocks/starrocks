@@ -46,7 +46,7 @@ bool NumericConverter<T>::read_string(Column* column, Slice s, const Options& op
         return true;
     } else if (r != StringParser::PARSE_OVERFLOW && r != StringParser::PARSE_UNDERFLOW) {
         if constexpr (sizeof(DataType) <= sizeof(int32_t)) {
-            auto d = StringParser::string_to_float<double>(s.data, s.size, &r);
+            auto d = StringParser::string_to_float<double>(s.data, static_cast<int>(s.size), &r);
             if (r == StringParser::PARSE_SUCCESS) {
                 d = std::trunc(d);
                 // Implicit cast.

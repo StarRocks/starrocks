@@ -80,7 +80,8 @@ void MemInfo::init() {
         }
 
         StringParser::ParseResult result;
-        auto mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
+        auto mem_total_kb =
+                StringParser::string_to_int<int64_t>(fields[1].data(), static_cast<int>(fields[1].size()), &result);
 
         if (result == StringParser::PARSE_SUCCESS) {
             // Entries in /proc/meminfo are in KB.

@@ -42,7 +42,7 @@ struct RowSourceMask {
 
     void set_source_num(uint16_t source_num) { data = (data & MASK_FLAG) | (source_num & MASK_NUMBER); }
 
-    void set_agg_flag(bool agg_flag) { data = agg_flag ? data | MASK_FLAG : data & ~MASK_FLAG; }
+    void set_agg_flag(bool agg_flag) { data = static_cast<uint16_t>(agg_flag ? data | MASK_FLAG : data & ~MASK_FLAG); }
 
     uint16_t data = 0;
 

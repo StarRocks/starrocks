@@ -343,8 +343,8 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        [[maybe_unused]] auto ret =
-                dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
+        [[maybe_unused]] auto ret = dst->append_continuous_fixed_length_strings(_data.data + _offset, count,
+                                                                                static_cast<int>(_type_length));
         _offset += count * _type_length;
         return Status::OK();
     }

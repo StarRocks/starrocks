@@ -24,6 +24,7 @@
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
 
+#pragma GCC diagnostic ignored "-Wconversion"
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
 static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
@@ -2037,3 +2038,4 @@ std::string TimeFunctions::info_reported_by_time_slice = "time used with time_sl
 #undef DEFINE_TIME_UNARY_FN_EXTEND
 
 } // namespace starrocks
+#pragma GCC diagnostic pop
