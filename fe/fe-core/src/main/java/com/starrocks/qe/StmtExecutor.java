@@ -950,6 +950,7 @@ public class StmtExecutor {
                 LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             }
             context.setState(e.getQueryState());
+<<<<<<< HEAD
         } catch (UserException e) {
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             // Return message to info client what happened.
@@ -957,6 +958,15 @@ public class StmtExecutor {
         } catch (Exception e) {
             // Maybe our bug
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+=======
+        } catch (Throwable e) {
+            // Maybe our bug or wrong input parameters
+            String sql = AstToStringBuilder.toString(parsedStmt);
+            if (sql == null || sql.isEmpty()) {
+                sql = originStmt.originStmt;
+            }
+            LOG.warn("DDL statement (" + sql + ") process failed.", e);
+>>>>>>> db5669af4 ([BugFix] Fix bug view inferred nullable is wrong (#15650))
             context.getState().setError("Unexpected exception: " + e.getMessage());
         }
     }

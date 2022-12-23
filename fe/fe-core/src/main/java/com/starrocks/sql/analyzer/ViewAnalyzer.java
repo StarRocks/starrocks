@@ -27,7 +27,13 @@ public  class ViewAnalyzer {
         // field.outputExpression.type(NULL) and the latter is incorrect. Wrong plans would be produced
         // from such views, so we always adopts of field.type instead of field.outputExpression.type
         List<Column> viewColumns = queryRelation.getScope().getRelationFields().getAllFields().stream()
+<<<<<<< HEAD
                 .map(f -> new Column(f.getName(), f.getType())).collect(Collectors.toList());
+=======
+                .map(f -> new Column(f.getName(), f.getType(), f.getOriginExpression().isNullable()))
+                .collect(Collectors.toList());
+
+>>>>>>> db5669af4 ([BugFix] Fix bug view inferred nullable is wrong (#15650))
         // When user-specified view's columns are present, we set names of comments of viewColumns according
         // to user-specified column information.
         if (stmt.getCols() != null) {
