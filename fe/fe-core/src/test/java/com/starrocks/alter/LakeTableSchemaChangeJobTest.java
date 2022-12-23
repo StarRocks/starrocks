@@ -88,9 +88,9 @@ public class LakeTableSchemaChangeJobTest {
 
     @Before
     public void before() throws Exception {
-        new MockUp<LakeTableAlterJobV2Builder>() {
+        new MockUp<StarOSAgent>() {
             @Mock
-            public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId)
+            public List<Long> createShards(int shardCount, int replicaNum, FilePathInfo path, FileCacheInfo cache, long groupId)
                 throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
@@ -104,6 +104,8 @@ public class LakeTableSchemaChangeJobTest {
         final long partitionId = GlobalStateMgr.getCurrentState().getNextId();
         final long tableId = GlobalStateMgr.getCurrentState().getNextId();
         final long indexId = GlobalStateMgr.getCurrentState().getNextId();
+
+        GlobalStateMgr.getCurrentState().setStarOSAgent(new StarOSAgent());
 
         KeysType keysType = KeysType.DUP_KEYS;
         db = new Database(dbId, "db0");
