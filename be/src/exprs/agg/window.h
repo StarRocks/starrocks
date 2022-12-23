@@ -301,7 +301,6 @@ template <LogicalType PT, typename = guard::Guard>
 struct FirstValueState {
     using T = RunTimeCppType<PT>;
     T value;
-    bool has_value = false;
     bool is_null = false;
 };
 
@@ -309,7 +308,6 @@ struct FirstValueState {
 template <LogicalType PT>
 struct FirstValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
-    bool has_value = false;
     bool is_null = false;
 
     Slice slice() const { return {buffer.data(), buffer.size()}; }
@@ -321,28 +319,16 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value = {};
-        this->data(state).has_value = false;
         this->data(state).is_null = false;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if constexpr (ignoreNulls) {
-            if (!this->data(state).is_null && this->data(state).has_value) {
-                return;
-            }
-        } else {
-            if (this->data(state).has_value) {
-                return;
-            }
-        }
-
         // For cases like: rows between 2 preceding and 1 preceding
         // If frame_start ge frame_end, means the frame is empty
         if (frame_start >= frame_end) {
             this->data(state).is_null = true;
-            this->data(state).has_value = true;
             return;
         }
 
@@ -356,7 +342,6 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
             this->data(state).is_null = false;
             this->data(state).value = column->get_data()[value_index];
         }
-        this->data(state).has_value = true;
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -495,28 +480,16 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         : public WindowFunction<FirstValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
-        this->data(state).has_value = false;
         this->data(state).is_null = false;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if constexpr (ignoreNulls) {
-            if (!this->data(state).is_null && this->data(state).has_value) {
-                return;
-            }
-        } else {
-            if (this->data(state).has_value) {
-                return;
-            }
-        }
-
         // For cases like: rows between 2 preceding and 1 preceding
         // If frame_start ge frame_end, means the frame is empty
         if (frame_start >= frame_end) {
             this->data(state).is_null = true;
-            this->data(state).has_value = true;
             return;
         }
 
@@ -532,7 +505,6 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
             this->data(state).is_null = false;
         }
-        this->data(state).has_value = true;
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,

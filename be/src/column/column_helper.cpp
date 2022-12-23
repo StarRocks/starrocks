@@ -204,7 +204,7 @@ size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {
     DCHECK_LE(start, end);
 
     if (!col->has_null()) {
-        return end;
+        return 0;
     }
     auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
     return SIMD::find_zero(null, start, end - start);
@@ -215,14 +215,14 @@ size_t ColumnHelper::last_nonnull(const Column* col, size_t start, size_t end) {
     DCHECK_LE(end, col->size());
 
     if (!col->has_null()) {
-        return end;
+        return end - 1;
     }
     auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
-    for (size_t i = end - 1; i >= start;) {
+    for (size_t i = end - 1;;) {
         if (null[i] == 0) {
             return i;
         }
-        if (i == 0) {
+        if (i == start) {
             break;
         }
         i--;
