@@ -97,7 +97,7 @@ using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
 
 class LocalPartitionTopnContextFactory {
 public:
-    LocalPartitionTopnContextFactory(const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
+    LocalPartitionTopnContextFactory(const std::vector<TExpr>& t_partition_exprs,
                                      const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
                                      std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
                                      int64_t partition_limit, const TTopNType::type topn_type,
@@ -110,7 +110,7 @@ public:
     LocalPartitionTopnContext* create(int32_t driver_sequence);
 
 private:
-    std::vector<LocalPartitionTopnContextPtr> _ctxs;
+    std::unordered_map<int32_t, LocalPartitionTopnContextPtr> _ctxs;
 
     const std::vector<TExpr>& _t_partition_exprs;
 

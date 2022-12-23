@@ -34,12 +34,11 @@ public:
     LocalMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                  SortContext* sort_context)
             : SourceOperator(factory, id, "local_merge_source", plan_node_id, driver_sequence),
-              _sort_context(sort_context) {
-        _sort_context->ref();
-    }
+              _sort_context(sort_context) {}
 
     ~LocalMergeSortSourceOperator() override = default;
 
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     bool has_output() const override;

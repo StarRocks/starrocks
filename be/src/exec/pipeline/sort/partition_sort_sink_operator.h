@@ -47,9 +47,7 @@ public:
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
-              _sort_context(sort_context) {
-        _sort_context->ref();
-    }
+              _sort_context(sort_context) {}
 
     ~PartitionSortSinkOperator() override = default;
 
