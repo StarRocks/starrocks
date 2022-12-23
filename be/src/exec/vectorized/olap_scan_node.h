@@ -222,9 +222,6 @@ private:
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _block_seek_timer = nullptr;
     RuntimeProfile::Counter* _block_seek_counter = nullptr;
     RuntimeProfile::Counter* _block_load_timer = nullptr;
@@ -232,8 +229,23 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
+
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _bf_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _zm_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _sk_filter_timer = nullptr;
+
+    RuntimeProfile::Counter* _ordinal_index_load_timer = nullptr;
+    RuntimeProfile::Counter* _ordinal_index_load_count = nullptr;
+    RuntimeProfile::Counter* _dict_load_timer = nullptr;
+
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;

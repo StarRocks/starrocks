@@ -279,7 +279,7 @@ StatusOr<bool> ZoneMapIndexReader::load(FileSystem* fs, const std::string& filen
 Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
                                     bool use_page_cache, bool kept_in_memory) {
     IndexedColumnReader reader(fs, filename, meta.page_zone_maps());
-    RETURN_IF_ERROR(reader.load(use_page_cache, kept_in_memory));
+    RETURN_IF_ERROR(reader.load(use_page_cache, kept_in_memory, 1));
     std::unique_ptr<IndexedColumnIterator> iter;
     RETURN_IF_ERROR(reader.new_iterator(&iter));
 
@@ -288,7 +288,7 @@ Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename,
     auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
-        RETURN_IF_ERROR(iter->seek_to_ordinal(i));
+        RETURN_IF_ERROR(iter->seek_to_ordinal(i, 5));
         size_t num_to_read = 1;
         size_t num_read = num_to_read;
         RETURN_IF_ERROR(iter->next_batch(&num_read, column.get()));

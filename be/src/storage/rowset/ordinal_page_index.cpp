@@ -123,6 +123,7 @@ Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename,
     PageHandle page_handle;
     Slice body;
     PageFooterPB footer;
+    std::cout<<"ORDINAL:"<<opts.page_pointer.size<<std::endl;
     RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &page_handle, &body, &footer));
 
     // parse and save all (ordinal, pp) from index page

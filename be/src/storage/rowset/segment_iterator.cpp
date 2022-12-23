@@ -484,6 +484,7 @@ void SegmentIterator::_init_column_predicates() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
+    SCOPED_RAW_TIMER(&_opts.stats->sk_filter_timer);
     StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
 
     if (!_opts.short_key_ranges.empty()) {
@@ -492,7 +493,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         RETURN_IF_ERROR(_get_row_ranges_by_key_ranges());
     }
 
-    _opts.stats->rows_key_range_filtered += num_rows() - _scan_range.span_size();
+    _opts.stats->rows_sk_filtered += num_rows() - _scan_range.span_size();
     StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
     return Status::OK();
 }
@@ -573,6 +574,7 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
+    SCOPED_RAW_TIMER(&_opts.stats->zm_filter_timer);
     SparseRange zm_range(0, num_rows());
 
     // -------------------------------------------------------------
@@ -619,7 +621,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     StarRocksMetrics::instance()->segment_rows_read_by_zone_map.increment(zm_range.span_size());
     size_t prev_size = _scan_range.span_size();
     _scan_range = _scan_range.intersection(zm_range);
-    _opts.stats->rows_stats_filtered += (prev_size - _scan_range.span_size());
+    _opts.stats->rows_zm_filtered += (prev_size - _scan_range.span_size());
     return Status::OK();
 }
 
@@ -1478,6 +1480,7 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_init_bitmap_index_iterators() {
+    SCOPED_RAW_TIMER(&_opts.stats->bi_filter_timer);
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
     for (const auto& pair : _opts.predicates) {
@@ -1495,7 +1498,7 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
 Status SegmentIterator::_apply_bitmap_index() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     RETURN_IF(!_has_bitmap_index, Status::OK());
-    SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
+    SCOPED_RAW_TIMER(&_opts.stats->bi_filter_timer);
 
     // ---------------------------------------------------------
     // Seek bitmap index.
@@ -1529,7 +1532,7 @@ Status SegmentIterator::_apply_bitmap_index() {
             }
         }
         if (selected.empty()) {
-            _opts.stats->rows_bitmap_index_filtered += _scan_range.span_size();
+            _opts.stats->rows_bi_filtered += _scan_range.span_size();
             _scan_range.clear();
             return Status::OK();
         }
@@ -1581,7 +1584,7 @@ Status SegmentIterator::_apply_bitmap_index() {
         pred_list.erase(std::find(pred_list.begin(), pred_list.end(), pred));
     }
 
-    _opts.stats->rows_bitmap_index_filtered += (input_rows - _scan_range.span_size());
+    _opts.stats->rows_bi_filtered += (input_rows - _scan_range.span_size());
     return Status::OK();
 }
 
@@ -1598,6 +1601,7 @@ Status SegmentIterator::_apply_del_vector() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
+    SCOPED_RAW_TIMER(&_opts.stats->bf_filter_timer);
     RETURN_IF(_opts.predicates.empty(), Status::OK());
     size_t prev_size = _scan_range.span_size();
     for (const auto& [cid, preds] : _opts.predicates) {

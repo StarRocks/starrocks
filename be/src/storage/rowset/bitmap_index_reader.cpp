@@ -83,8 +83,8 @@ Status BitmapIndexReader::_do_load(FileSystem* fs, const std::string& filename, 
     _has_null = meta.has_null();
     _dict_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, dict_meta);
     _bitmap_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, bitmap_meta);
-    RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory));
-    RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory));
+    RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory, 3));
+    RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory, 4));
     return Status::OK();
 }
 
@@ -107,7 +107,7 @@ Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     DCHECK(0 <= ordinal && ordinal < _reader->bitmap_nums());
 
     auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-    RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal));
+    RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal, 6));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;
     RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, column.get()));

@@ -44,7 +44,7 @@ namespace starrocks {
 
 using strings::Substitute;
 
-Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
+Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory, int flag) {
     _use_page_cache = use_page_cache;
     _kept_in_memory = kept_in_memory;
 
@@ -130,7 +130,7 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0);
 }
 
-Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
+Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx, int flag) {
     DCHECK(idx >= 0 && idx <= _reader->num_values());
 
     if (!_reader->support_ordinal_seek()) {

@@ -75,7 +75,7 @@ Status BloomFilterIndexReader::_do_load(FileSystem* fs, const std::string& filen
     _hash_strategy = meta.hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
     _bloom_filter_reader = std::make_unique<IndexedColumnReader>(fs, filename, bf_index_meta);
-    RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory));
+    RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory, 2));
     return Status::OK();
 }
 
@@ -95,7 +95,7 @@ Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIter
 
 Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_ptr<BloomFilter>* bf) {
     auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-    RETURN_IF_ERROR(_bloom_filter_iter->seek_to_ordinal(ordinal));
+    RETURN_IF_ERROR(_bloom_filter_iter->seek_to_ordinal(ordinal, 2));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;
     RETURN_IF_ERROR(_bloom_filter_iter->next_batch(&num_read, column.get()));
