@@ -47,11 +47,30 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
+import org.spark_project.guava.collect.ImmutableMap;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 
 public class ArithmeticExpr extends Expr {
+    private static final Map<String, Operator> SUPPORT_FUNCTIONS = ImmutableMap.<String, Operator>builder()
+            .put(Operator.MULTIPLY.name().toLowerCase(), Operator.MULTIPLY)
+            .put(Operator.DIVIDE.name().toLowerCase(), Operator.DIVIDE)
+            .put(Operator.MOD.name().toLowerCase(), Operator.MOD)
+            .put(Operator.INT_DIVIDE.name().toLowerCase(), Operator.INT_DIVIDE)
+            .put(Operator.ADD.name().toLowerCase(), Operator.ADD)
+            .put(Operator.SUBTRACT.name().toLowerCase(), Operator.SUBTRACT)
+            .put(Operator.BITAND.name().toLowerCase(), Operator.BITAND)
+            .put(Operator.BITOR.name().toLowerCase(), Operator.BITOR)
+            .put(Operator.BITXOR.name().toLowerCase(), Operator.BITXOR)
+            .put(Operator.BITNOT.name().toLowerCase(), Operator.BITNOT)
+            .put(Operator.FACTORIAL.name().toLowerCase(), Operator.FACTORIAL)
+            .put(Operator.BIT_SHIFT_LEFT.name().toLowerCase(), Operator.BIT_SHIFT_LEFT)
+            .put(Operator.BIT_SHIFT_RIGHT.name().toLowerCase(), Operator.BIT_SHIFT_RIGHT)
+            .put(Operator.BIT_SHIFT_RIGHT_LOGICAL.name().toLowerCase(), Operator.BIT_SHIFT_RIGHT_LOGICAL)
+            .build();
+
     private final Operator op;
 
     public enum OperatorPosition {
@@ -132,6 +151,14 @@ public class ArithmeticExpr extends Expr {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Lists.newArrayList(t, Type.BIGINT), t));
         }
+    }
+
+    public static boolean isArithmeticExpr(String functionName) {
+        return SUPPORT_FUNCTIONS.containsKey(functionName.toLowerCase());
+    }
+
+    public static Operator getArithmeticOperator(String functionName) {
+        return SUPPORT_FUNCTIONS.get(functionName.toLowerCase());
     }
 
     // cast int128 into decimal128(38, 0).

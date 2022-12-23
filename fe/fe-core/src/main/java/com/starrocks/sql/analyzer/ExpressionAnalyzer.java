@@ -211,6 +211,12 @@ public class ExpressionAnalyzer {
     }
 
     static class Visitor extends AstVisitor<Void, Scope> {
+        private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
+                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
+        private static final List<String> SUB_DATE_FUNCTIONS =
+                Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
+                        FunctionSet.DAYS_SUB);
+
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
 
@@ -246,6 +252,7 @@ public class ExpressionAnalyzer {
             node.setType(structField.getType());
             return null;
         }
+
         @Override
         public Void visitSlot(SlotRef node, Scope scope) {
             ResolvedField resolvedField = scope.resolveField(node);
@@ -406,7 +413,8 @@ public class ExpressionAnalyzer {
                 if (!type.isBoolean() && !type.isNull()) {
                     throw new SemanticException("Operand '%s' part of predicate " +
                             "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)), type.toSql());
+                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)),
+                            type.toSql());
                 }
             }
 
@@ -570,9 +578,9 @@ public class ExpressionAnalyzer {
 
             String funcOpName;
             if (node.getFuncName() != null) {
-                if (addDateFunctions.contains(node.getFuncName())) {
+                if (ADD_DATE_FUNCTIONS.contains(node.getFuncName())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "add");
-                } else if (subDateFunctions.contains(node.getFuncName())) {
+                } else if (SUB_DATE_FUNCTIONS.contains(node.getFuncName())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "sub");
                 } else {
                     node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
@@ -667,7 +675,8 @@ public class ExpressionAnalyzer {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
-                    throw new SemanticException("Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
+                    throw new SemanticException(
+                            "Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
                 }
             }
 
@@ -682,7 +691,8 @@ public class ExpressionAnalyzer {
             for (Expr expr : node.getChildren()) {
                 if (expr.getType().isOnlyMetricType() ||
                         (expr.getType().isComplexType() && !(node instanceof IsNullPredicate))) {
-                    throw new SemanticException("HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
+                    throw new SemanticException(
+                            "HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
                 }
             }
         }
@@ -718,7 +728,13 @@ public class ExpressionAnalyzer {
             Function fn;
             String fnName = node.getFnName().getFunction();
 
-            if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
+            if (ArithmeticExpr.isArithmeticExpr(fnName)) {
+                Expr l = node.getChild(0);
+                Expr r = node.getChildren().size() > 1 ? node.getChild(1) : null;
+                ArithmeticExpr arithmetic = new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName), l, r);
+                visitArithmeticExpr(arithmetic, scope);
+                fn = arithmetic.getFn();
+            } else if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},

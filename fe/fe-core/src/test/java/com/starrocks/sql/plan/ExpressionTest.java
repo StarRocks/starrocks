@@ -1324,4 +1324,12 @@ public class ExpressionTest extends PlanTestBase {
             assertContains(plan, "<slot 2> : 8190");
         }
     }
+
+    @Test
+    public void testArithmeticExpressions() throws Exception {
+        String sql = "select multiply(400, 500);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 200000");
+    }
 }
