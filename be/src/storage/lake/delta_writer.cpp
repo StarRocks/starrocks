@@ -113,7 +113,7 @@ public:
     [[nodiscard]] Status flush_async();
 
     Status handle_partial_update();
-    Status build_schema();
+    Status build_schema_and_writer();
 
 private:
     Status reset_memtable();
@@ -143,17 +143,26 @@ private:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
 };
 
-Status DeltaWriterImpl::build_schema() {
+Status DeltaWriterImpl::build_schema_and_writer() {
     if (_tablet_schema == nullptr) {
+        DCHECK(_tablet_writer == nullptr);
         ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
+        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+            _rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
+            ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(_rowset_txn_meta.get(), _tablet_schema));
+        } else {
+            ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
+        }
+        RETURN_IF_ERROR(_tablet_writer->open());
+        _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
     }
     return Status::OK();
 }
 
 inline Status DeltaWriterImpl::reset_memtable() {
-    RETURN_IF_ERROR(build_schema());
+    RETURN_IF_ERROR(build_schema_and_writer());
     if (!_schema_initialized) {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
@@ -187,15 +196,6 @@ inline Status DeltaWriterImpl::flush() {
 // in a bthread.
 Status DeltaWriterImpl::open() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    RETURN_IF_ERROR(build_schema());
-
-    DCHECK(_tablet_writer == nullptr);
-    // TODO: remove the dependency |ExecEnv::GetInstance()|
-    _rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
-    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(_rowset_txn_meta.get(), _tablet_schema));
-    RETURN_IF_ERROR(_tablet_writer->open());
-    _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
     _flush_token = StorageEngine::instance()->memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
@@ -259,6 +259,7 @@ Status DeltaWriterImpl::handle_partial_update() {
 
 Status DeltaWriterImpl::finish() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(build_schema_and_writer());
 
     // TODO: move file type checking to a common place
     auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
