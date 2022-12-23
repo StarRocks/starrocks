@@ -48,6 +48,9 @@ wget http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz
 tar xzf broker_thirdparty_jars.tar.gz
 mv broker_thirdparty_jars/*.jar ${BROKER_OUTPUT}/lib/
 rm -r broker_thirdparty_jars broker_thirdparty_jars.tar.gz
+# rm hadoop-aliyun-2.7.2.jar for tbds
+# Base64 in hadoop-aliyun-2.7.2.jar has compatibility issues with tbds
+rm ${BROKER_OUTPUT}/lib/hadoop-aliyun-2.7.2.jar
 
 cp -r -p ${BROKER_HOME}/bin/*.sh ${BROKER_OUTPUT}/bin/
 cp -r -p ${BROKER_HOME}/conf/*.conf ${BROKER_OUTPUT}/conf/
