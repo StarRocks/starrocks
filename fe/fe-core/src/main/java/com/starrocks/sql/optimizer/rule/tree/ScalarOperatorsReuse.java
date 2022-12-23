@@ -280,7 +280,7 @@ public class ScalarOperatorsReuse {
             }
 
             return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
-                    argument.accept(this, context)).reduce(Math::max).get() + 1, scalarOperator);
+                    argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
         }
 
         // when called this function without reuseLambda, here get rid of the expressions with lambda arguments,

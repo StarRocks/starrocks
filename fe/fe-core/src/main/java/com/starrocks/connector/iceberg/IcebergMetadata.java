@@ -88,6 +88,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             return icebergCatalog.getDB(dbName);
         } catch (InterruptedException | TException e) {
             LOG.error("Failed to get iceberg database " + dbName, e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return null;
         }
     }

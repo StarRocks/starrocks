@@ -322,7 +322,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // change single partition name
         if (this.partitionInfo != null && this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             if (getPartitions().stream().findFirst().isPresent()) {
-                Partition partition = getPartitions().stream().findFirst().get();
+                Optional<Partition> optPartition = getPartitions().stream().findFirst();
+                Preconditions.checkState(optPartition.isPresent());
+                Partition partition = optPartition.get();
                 partition.setName(newName);
                 nameToPartition.clear();
                 nameToPartition.put(newName, partition);
@@ -460,7 +462,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public List<MaterializedIndex> getVisibleIndex() {
         Optional<Partition> firstPartition = idToPartition.values().stream().findFirst();
         if (firstPartition.isPresent()) {
-            Partition partition = idToPartition.values().stream().findFirst().get();
+            Partition partition = firstPartition.get();
             return partition.getMaterializedIndices(IndexExtState.VISIBLE);
         }
         return Lists.newArrayList();
@@ -1402,7 +1404,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex =
-                    copied.getPartitions().stream().findFirst().get().getMaterializedIndices(IndexExtState.SHADOW);
+                    copied.getPartitions().stream().findFirst()
+                            .map(p -> p.getMaterializedIndices(IndexExtState.SHADOW)).orElse(Lists.newArrayList());
             for (MaterializedIndex deleteIndex : shadowIndex) {
                 LOG.debug("copied table delete shadow index : {}", deleteIndex.getId());
                 copied.deleteIndexInfo(copied.getIndexNameById(deleteIndex.getId()));
