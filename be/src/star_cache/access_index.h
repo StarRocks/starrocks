@@ -6,7 +6,7 @@
 #include "common/status.h"
 #include "star_cache/cache_item.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 class AccessIndex {
 public:
@@ -20,4 +20,4 @@ public:
     virtual bool remove(const CacheId& id) = 0;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

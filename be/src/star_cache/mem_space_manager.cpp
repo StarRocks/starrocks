@@ -4,10 +4,9 @@
 
 #include <fmt/format.h>
 #include "common/logging.h"
-#include "common/config.h"
 #include "star_cache/block_item.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 void MemSpaceManager::add_cache_zone(void* base_addr, size_t size) {
     // TODO: Add availble shared memory areas, and then we will allocate segment
@@ -32,4 +31,4 @@ void MemSpaceManager::free_segment(BlockSegment* segment) {
     delete segment;
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

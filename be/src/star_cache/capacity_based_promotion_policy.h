@@ -4,7 +4,7 @@
 
 #include "star_cache/promotion_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 // The class to decide the block location based on the memory capacity
 class CapacityBasedPromotionPolicy : public PromotionPolicy {
@@ -34,4 +34,4 @@ private:
     double _mem_cap_threshold;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

@@ -2,21 +2,26 @@
 
 #include "star_cache/mem_cache.h"
 
+#include <limits.h>
 #include "common/logging.h"
 #include "star_cache/util.h"
 #include "star_cache/block_item.h"
 #include "star_cache/mem_space_manager.h"
 #include "star_cache/lru_eviction_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 Status MemCache::init(const MemCacheOptions& options) {
     _space_manager = MemSpaceManager::GetInstance();
     _space_manager->add_cache_zone(nullptr, options.mem_quota_bytes);
     // TODO: This capacity is not accurate because we usually don't cache the whole block in memory
+    // size_t capacity = _space_manager->quota_bytes() / config::FLAGS_block_size * 2;
+
     // In fact, we can provide an big enough capacity because we need to hold all items and evict 
     // them manully.
-    size_t capacity = _space_manager->quota_bytes() / config::star_cache_block_size * 2;
+    // The maximum of `int32_t` is big enought, so we choose it instead of maximum of `size_t`, to
+    // avoid overflow in some cases.
+    size_t capacity = std::numeric_limits<int32_t>::max();
     _eviction_policy = new LruEvictionPolicy<BlockKey>(capacity);
     return Status::OK();
 }
@@ -119,4 +124,4 @@ void MemCache::evict_for(const BlockKey& key, size_t count, std::vector<BlockKey
     _eviction_policy->evict_for(key, count, evicted);
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

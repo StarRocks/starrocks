@@ -6,11 +6,10 @@
 #include "common/status.h"
 #include "star_cache/types.h"
 #include "star_cache/cache_item.h"
-#include "star_cache/thread_safe_hash_map.h"
 #include "star_cache/mem_cache.h"
 #include "star_cache/disk_cache.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 struct CacheOptions {
     // Cache Space (Required)
@@ -84,4 +83,4 @@ private:
     PromotionPolicy* _promotion_policy = nullptr;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

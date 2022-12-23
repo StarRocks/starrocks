@@ -5,7 +5,7 @@
 #include "common/logging.h"
 #include "common/statusor.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 bool HashTableAccessIndex::insert(const CacheId& id, const CacheItemPtr& item) {
     _cache_items.update(id, item);
@@ -22,4 +22,4 @@ bool HashTableAccessIndex::remove(const CacheId& id) {
     return _cache_items.remove(id);
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

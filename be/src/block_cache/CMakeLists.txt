@@ -9,6 +9,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 set(CACHE_FILES
   block_cache.cpp
   fb_cachelib.cpp
+  star_cachelib.cpp
 )
 
 add_library(BlockCache STATIC

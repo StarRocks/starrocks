@@ -289,7 +289,7 @@ private:
     void _lru_remove(LRUHandle* e);
     void _lru_append(LRUHandle* list, LRUHandle* e);
     bool _unref(LRUHandle* e);
-    void _evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted);
+    void _evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted, bool force=false);
     void _evict_one_entry(LRUHandle* e);
 
     // Initialized before use.
@@ -310,7 +310,8 @@ private:
     uint64_t _hit_count{0};
 };
 
-static const int kNumShardBits = 5;
+//static const int kNumShardBits = 5;
+static const int kNumShardBits = 1;
 static const int kNumShards = 1 << kNumShardBits;
 
 class ShardedLRUCache : public Cache {

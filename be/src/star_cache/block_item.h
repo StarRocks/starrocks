@@ -4,10 +4,9 @@
 
 #include <atomic>
 #include <butil/iobuf.h>
-#include "common/config.h"
 #include "star_cache/util.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 enum class BlockState : uint8_t {
     CLEAN,
@@ -82,4 +81,4 @@ struct BlockItem {
     }
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

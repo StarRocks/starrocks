@@ -6,32 +6,12 @@
 #include <cstring>
 #include "common/logging.h"
 #include "common/statusor.h"
-#include "common/config.h"
+#include "util/logging.h"
 #include "fs/fs_util.h"
 #include "star_cache/types.h"
+#include "star_cache/common/config.h"
 
-#include "butil/file_util.h"
-#include "column/column_helper.h"
-#include "column/column_pool.h"
-#include "common/config.h"
-#include "exec/pipeline/query_context.h"
-#include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/memory/chunk_allocator.h"
-#include "runtime/time_types.h"
-#include "runtime/user_function_cache.h"
-#include "storage/options.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
-#include "storage/update_manager.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
-#include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
-
-namespace starrocks {
+namespace starrocks::starcache {
 
 IOBuf gen_iobuf(size_t size, char ch) {
     IOBuf buf;
@@ -55,7 +35,7 @@ TEST_F(StarCacheTest, hybrid_cache) {
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
-    const size_t obj_size = 4 * config::star_cache_block_size;
+    const size_t obj_size = 4 * config::FLAGS_block_size;
     const size_t rounds = 10;
     const std::string cache_key = "test_file";
 
@@ -78,8 +58,8 @@ TEST_F(StarCacheTest, hybrid_cache) {
     }
 
     // read cache
-    size_t batch_size = 2 * config::star_cache_block_size;
-    off_t offset = config::star_cache_block_size;
+    size_t batch_size = 2 * config::FLAGS_block_size;
+    off_t offset = config::FLAGS_block_size;
     for (size_t i = 0; i < rounds; ++i) {
         char ch = 'a' + i % 26;
         IOBuf expect_buf = gen_iobuf(batch_size, ch);
@@ -98,8 +78,19 @@ TEST_F(StarCacheTest, hybrid_cache) {
     status = cache->get(key_to_remove, &buf);
     ASSERT_TRUE(status.is_not_found());
 }
-} // namespace starrocks
+} // namespace starrocks::starcache
 
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);    
+    starrocks::init_glog("starcache_test", true);
+
+    int r = RUN_ALL_TESTS();
+
+    //starrocks::shutdown_logging();
+    return r;
+}
+
+/*
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);    
     if (getenv("STARROCKS_HOME") == nullptr) {
@@ -171,3 +162,4 @@ int main(int argc, char** argv) {
 
     return r;
 }
+*/

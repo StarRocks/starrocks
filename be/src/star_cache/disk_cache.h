@@ -8,7 +8,7 @@
 #include "star_cache/cache_item.h"
 #include "star_cache/eviction_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 struct DiskCacheOptions {
     // Cache Space (Required)
@@ -45,7 +45,7 @@ public:
 
     void evict_track(const CacheId& id) const;
     void evict_untrack(const CacheId& id) const;
-    Status evict_for(const CacheId& id, size_t count, std::vector<CacheId>* evicted) const;
+    void evict_for(const CacheId& id, size_t count, std::vector<CacheId>* evicted) const;
 
 private:
     void _update_block_checksum(DiskBlockItem* block, off_t offset_in_block, const IOBuf& buf) const;
@@ -56,4 +56,4 @@ private:
     EvictionPolicy<CacheId>* _eviction_policy = nullptr;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

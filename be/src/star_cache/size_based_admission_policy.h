@@ -5,7 +5,7 @@
 #include <random>
 #include "star_cache/admission_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 // The class to handle admission control logic based on object size
 class SizeBasedAdmissionPolicy : public AdmissionPolicy {
@@ -30,4 +30,4 @@ private:
     std::minstd_rand _rand_generator;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

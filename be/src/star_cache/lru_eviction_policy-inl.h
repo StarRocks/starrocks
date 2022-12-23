@@ -2,7 +2,7 @@
 
 #include "star_cache/lru_eviction_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 template <typename T>
 LruEvictionPolicy<T>::~LruEvictionPolicy() {
@@ -84,4 +84,4 @@ void LruEvictionPolicy<T>::clear() {
     _lru_cache->prune();
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

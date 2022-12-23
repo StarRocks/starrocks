@@ -7,7 +7,7 @@
 #include "star_cache/block_item.h"
 #include "star_cache/eviction_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 struct MemCacheOptions {
     // Cache Space (Required)
@@ -52,4 +52,4 @@ private:
     EvictionPolicy<BlockKey>* _eviction_policy = nullptr;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

@@ -5,9 +5,8 @@
 #include <atomic>
 #include <fmt/format.h>
 #include <butil/iobuf.h>
-#include "common/config.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 using IOBuf = butil::IOBuf;
 using CacheId = uint64_t;
@@ -49,4 +48,4 @@ const size_t KB = 1024;
 const size_t MB = KB * 1024;
 const size_t GB = MB * 1024;
     
-} // namespace starrocks
+} // namespace starrocks::starcache

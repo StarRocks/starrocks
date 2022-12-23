@@ -6,7 +6,7 @@
 #include <butil/iobuf.h>
 #include <butil/memory/singleton.h>
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 class BlockSegment;
 
@@ -38,4 +38,4 @@ private:
     std::atomic<size_t> _used_bytes = 0;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

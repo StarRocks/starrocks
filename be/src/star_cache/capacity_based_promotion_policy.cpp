@@ -1,10 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-
+ 
 #include "star_cache/capacity_based_promotion_policy.h"
 
+#include "common/compiler_util.h"
 #include "star_cache/mem_space_manager.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 CapacityBasedPromotionPolicy::CapacityBasedPromotionPolicy(const Config& config)
     : _mem_cap_threshold(config.mem_cap_threshold) {}
@@ -25,7 +26,8 @@ bool CapacityBasedPromotionPolicy::check_promote(const CacheItemPtr& cache_item,
     if (UNLIKELY(_is_mem_overload())) {
         return true;
     }
-    return false;
+    return true;
+    //return false;
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

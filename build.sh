@@ -118,7 +118,7 @@ if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
 fi
 
 if [[ -z ${WITH_BLOCK_CACHE} ]]; then
-	WITH_BLOCK_CACHE=OFF
+	WITH_BLOCK_CACHE=ON
 fi
 
 if [[ -z ${WITH_STAR_CACHE} ]]; then

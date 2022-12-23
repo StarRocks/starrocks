@@ -3,16 +3,20 @@
 #include "star_cache/block_file.h"
 
 #include "common/logging.h"
-#include "common/config.h"
 #include "io/io_error.h"
 #include "star_cache/types.h"
+#include "star_cache/util.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 Status BlockFile::open(bool pre_allocate) {
     // TODO: use direct io (the buffer memory should be aligned)
-    //_fd = ::open(_file_path.c_str(), O_RDWR | O_CREAT | O_DIRECT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-    _fd = ::open(_file_path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+    // _fd = ::open(_file_path.c_str(), O_RDWR | O_CREAT | O_DIRECT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+    int oflag = O_RDWR | O_CREAT;
+    if (!config::FLAGS_enable_os_page_cache) {
+        oflag |= O_DIRECT;
+    }
+    _fd = ::open(_file_path.c_str(), oflag, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
     if (_fd < 0) {
         return io::io_error(_file_path, errno);
     }
@@ -32,15 +36,27 @@ Status BlockFile::close() {
     return Status::OK();
 }
 
-static void deleter(void* buf) {
+[[maybe_unused]] static void deleter(void* buf) {
     delete[] reinterpret_cast<char*>(buf);
 }
 
 Status BlockFile::write(off_t offset, const IOBuf& buf) {
     ssize_t ret = 0;
     size_t block_num = buf.backing_block_num();
+
     if (block_num == 1) {
-        ret = ::write(_fd, buf.backing_block(0).data(), buf.size()); 
+        auto data = buf.backing_block(0).data();
+        if (mem_need_align(data)) {
+            void* aligned_data = align_buf(buf);
+            ret = ::write(_fd, aligned_data, buf.size()); 
+            free(aligned_data);
+        } else {
+            ret = ::write(_fd, buf.backing_block(0).data(), buf.size()); 
+        }
+    } else if (!config::FLAGS_enable_os_page_cache) {
+        void* aligned_data = align_buf(buf);
+        ret = ::write(_fd, aligned_data, buf.size()); 
+        free(aligned_data);
     } else {
         struct iovec iov[block_num];
         for (size_t i = 0; i < block_num; ++i) {
@@ -56,13 +72,18 @@ Status BlockFile::write(off_t offset, const IOBuf& buf) {
 }
 
 Status BlockFile::read(off_t offset, size_t size, IOBuf* buf) {
-    char* data = new char[size];
+    void* data = nullptr;
+    if (config::FLAGS_enable_os_page_cache) {
+        data = malloc(size);
+    } else {
+        posix_memalign(&data, config::FLAGS_io_align_unit_size, size);
+    }
     int ret = ::pread(_fd, data, size, offset);
     if (ret < 0) {
         return io::io_error(_file_path, errno);
     }
 
-    buf->append_user_data(data, size, deleter);
+    buf->append_user_data(data, size, /*deleter*/nullptr);
     return Status::OK();
 }
 
@@ -90,7 +111,7 @@ Status BlockFile::writev(off_t offset, const std::vector<IOBuf*>& bufv) {
 Status BlockFile::readv(off_t offset, const std::vector<size_t>& sizev, std::vector<IOBuf*>* bufv) {
     struct iovec iov[sizev.size()];
     for (size_t i = 0; i < sizev.size(); ++i) {
-        char* data = new char[sizev[i]];
+        void* data = malloc(sizev[i]);
         iov[i] = { data, sizev[i] };
     }
     int ret = ::preadv(_fd, iov, sizev.size(), offset);
@@ -99,9 +120,9 @@ Status BlockFile::readv(off_t offset, const std::vector<size_t>& sizev, std::vec
     }
 
     for (size_t i = 0; i < sizev.size(); ++i) {
-        (*bufv)[i]->append_user_data(iov[i].iov_base, iov[i].iov_len, deleter);
+        (*bufv)[i]->append_user_data(iov[i].iov_base, iov[i].iov_len, /*deleter*/nullptr);
     }
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

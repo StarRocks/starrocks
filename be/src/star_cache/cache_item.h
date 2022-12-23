@@ -6,7 +6,7 @@
 #include <shared_mutex>
 #include "star_cache/block_item.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 enum CacheState {
     IN_MEM,
@@ -114,4 +114,4 @@ private:
 
 using CacheItemPtr = std::shared_ptr<CacheItem>;
 
-} // namespace starrocks
+} // namespace starrocks::starcache

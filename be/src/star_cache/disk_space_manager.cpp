@@ -4,10 +4,9 @@
 
 #include <fmt/format.h>
 #include "common/logging.h"
-#include "common/config.h"
 #include "star_cache/types.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 const std::string CacheDir::BLOCK_FILE_PREFIX = "blockfile";
 const size_t CacheDir::BLOCK_COUNT_IN_SPACE = 1024;
@@ -101,12 +100,12 @@ Status CacheDir::init_free_space_list() {
 
 Status CacheDir::init_block_files() {
     size_t free_bytes = _quota_bytes;
-    size_t file_count = free_bytes / config::star_cache_block_file_size;
+    size_t file_count = free_bytes / config::FLAGS_block_file_size;
     for (size_t i = 0; i < file_count; ++i) {
         std::string file_path = fmt::format("{}/{}_{}", _path, BLOCK_FILE_PREFIX, i);
-        size_t file_size = std::min(free_bytes, static_cast<size_t>(config::star_cache_block_file_size));
+        size_t file_size = std::min(free_bytes, static_cast<size_t>(config::FLAGS_block_file_size));
         BlockFilePtr file(new BlockFile(file_path, file_size));
-        RETURN_IF_ERROR(file->open(config::star_cache_block_file_pre_allocate));
+        RETURN_IF_ERROR(file->open(config::FLAGS_pre_allocate_block_file));
         _block_files.push_back(file);
         free_bytes -= file_size;
     }
@@ -115,7 +114,7 @@ Status CacheDir::init_block_files() {
     if (free_bytes > 0) {
         std::string file_path = fmt::format("{}/{}_{}", _path, BLOCK_FILE_PREFIX, file_count);
         BlockFilePtr file(new BlockFile(file_path, free_bytes));
-        RETURN_IF_ERROR(file->open(config::star_cache_block_file_pre_allocate));
+        RETURN_IF_ERROR(file->open(config::FLAGS_pre_allocate_block_file));
         _block_files.push_back(file);
     }
     return Status::OK();
@@ -188,7 +187,7 @@ Status DiskSpaceManager::alloc_block(BlockId* block_id) {
         if (block_index != -1) {
             block_id->dir_index = dir_index;
             block_id->block_index = block_index;
-            _used_bytes += config::star_cache_block_size;
+            _used_bytes += config::FLAGS_block_size;
             return Status::OK();
         }
         _cache_dir_router.remove_dir(dir_index);
@@ -200,7 +199,7 @@ Status DiskSpaceManager::alloc_block(BlockId* block_id) {
 Status DiskSpaceManager::free_block(BlockId block_id) {
     auto& dir = _cache_dirs[block_id.dir_index];
     dir->free_block(block_id.block_index);
-    _used_bytes -= config::star_cache_block_size;
+    _used_bytes -= config::FLAGS_block_size;
     return Status::OK();
 }
 
@@ -226,4 +225,4 @@ Status DiskSpaceManager::readv_block(BlockId block_id, off_t offset_in_block, co
     return dir->readv_block(block_id.block_index, offset_in_block, sizev, bufv);
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

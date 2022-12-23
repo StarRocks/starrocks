@@ -4,11 +4,10 @@
 
 #include <fcntl.h>
 #include <sys/uio.h>
-#include "common/config.h"
 #include "star_cache/types.h"
 #include "common/status.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 class BlockFile {
 public:
@@ -38,4 +37,4 @@ private:
 };
 
 
-} // namespace starrocks
+} // namespace starrocks::starcache

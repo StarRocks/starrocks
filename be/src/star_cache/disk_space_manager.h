@@ -11,7 +11,7 @@
 #include "star_cache/util.h"
 #include "star_cache/block_file.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 class CacheDir {
 public:
@@ -29,7 +29,7 @@ public:
         : _index(index)
         , _quota_bytes(quota_bytes)
         , _path(path)
-        , _total_block_count(quota_bytes / config::star_cache_block_size)
+        , _total_block_count(quota_bytes / config::FLAGS_block_size)
         , _used_block_count(0)
     {}
 
@@ -45,7 +45,7 @@ public:
 
     off_t get_block_file_offset(uint32_t block_index, off_t offset_in_block) const {
         uint32_t block_index_in_file = block_index % file_block_count();
-        off_t offset = block_index_in_file * config::star_cache_block_size + offset_in_block;
+        off_t offset = block_index_in_file * config::FLAGS_block_size + offset_in_block;
         return offset;
     }
 
@@ -143,4 +143,4 @@ private:
     CacheDirRouter _cache_dir_router;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

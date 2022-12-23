@@ -5,7 +5,7 @@
 #include <atomic>
 #include "common/status.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 template <typename T>
 class EvictionPolicy {
@@ -34,4 +34,4 @@ public:
 
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

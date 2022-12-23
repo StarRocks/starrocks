@@ -5,10 +5,10 @@
 #include <shared_mutex>
 #include <atomic>
 #include "common/status.h"
-#include "star_cache/thread_safe_hash_map.h"
+#include "star_cache/common/thread_safe_hash_map.h"
 #include "star_cache/access_index.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 class HashTableAccessIndex : public AccessIndex {
 public:
@@ -20,4 +20,4 @@ private:
     ThreadSafeHashMap<CacheId, CacheItemPtr> _cache_items;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

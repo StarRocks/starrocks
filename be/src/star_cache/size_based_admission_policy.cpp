@@ -2,7 +2,7 @@
 
 #include "star_cache/size_based_admission_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 SizeBasedAdmissionPolicy::SizeBasedAdmissionPolicy(const Config& config) 
     : _max_check_size(config.max_check_size)
@@ -27,4 +27,4 @@ BlockAdmission SizeBasedAdmissionPolicy::check_admission(const CacheItemPtr& cac
     return BlockAdmission::SKIP;
 }
 
-} // namespace starrocks
+} // namespace starrocks::starcache

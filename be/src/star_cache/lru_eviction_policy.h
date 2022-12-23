@@ -6,7 +6,7 @@
 #include "util/lru_cache.h"
 #include "star_cache/eviction_policy.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 template <typename T>
 class LruEvictionPolicy : public EvictionPolicy<T> {
@@ -31,7 +31,7 @@ private:
     std::unique_ptr<Cache> _lru_cache = nullptr;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache
 
 #include "star_cache/lru_eviction_policy-inl.h"
   

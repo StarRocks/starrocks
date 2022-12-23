@@ -17,6 +17,7 @@ set(CACHE_FILES
   util.cpp
   size_based_admission_policy.cpp
   capacity_based_promotion_policy.cpp
+  common/config.cpp
 )
 
 add_library(StarCache STATIC

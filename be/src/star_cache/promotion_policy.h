@@ -4,7 +4,7 @@
 
 #include "star_cache/cache_item.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 enum class BlockLocation: uint8_t {
     NONE,
@@ -25,4 +25,4 @@ public:
 	virtual bool check_promote(const CacheItemPtr& cache_item, const BlockKey& block_key) = 0;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

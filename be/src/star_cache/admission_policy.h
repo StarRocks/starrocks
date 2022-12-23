@@ -4,7 +4,7 @@
 
 #include "star_cache/cache_item.h"
 
-namespace starrocks {
+namespace starrocks::starcache {
 
 enum class BlockAdmission : uint8_t {
     FLUSH,
@@ -22,4 +22,4 @@ public:
     virtual BlockAdmission check_admission(const CacheItemPtr& cache_item, const BlockKey& block_key) = 0;
 };
 
-} // namespace starrocks
+} // namespace starrocks::starcache

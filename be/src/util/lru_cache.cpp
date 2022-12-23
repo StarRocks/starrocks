@@ -263,10 +263,10 @@ void LRUCache::release(Cache::Handle* handle) {
     }
 }
 
-void LRUCache::_evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted) {
+void LRUCache::_evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted, bool force) {
     LRUHandle* cur = &_lru;
     // 1. evict normal cache entries
-    while (_usage + charge > _capacity && cur->next != &_lru) {
+    while ((force || _usage + charge > _capacity) && cur->next != &_lru) {
         LRUHandle* old = cur->next;
         if (old->priority == CachePriority::DURABLE) {
             cur = cur->next;
@@ -276,7 +276,7 @@ void LRUCache::_evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted) 
         deleted->push_back(old);
     }
     // 2. evict durable cache entries if need
-    while (_usage + charge > _capacity && _lru.next != &_lru) {
+    while ((force || _usage + charge > _capacity) && _lru.next != &_lru) {
         LRUHandle* old = _lru.next;
         DCHECK(old->priority == CachePriority::DURABLE);
         _evict_one_entry(old);
@@ -369,7 +369,7 @@ void LRUCache::evict(size_t charge, std::vector<Cache::Handle*>* deleted) {
     std::vector<LRUHandle*> handles;
     {
         std::lock_guard l(_mutex);
-        _evict_from_lru(charge, &handles);
+        _evict_from_lru(charge, &handles, true);
     }
     for (auto h : handles) {
         deleted->push_back(reinterpret_cast<Cache::Handle*>(h));
@@ -458,7 +458,7 @@ void ShardedLRUCache::erase(const CacheKey& key) {
     _shards[_shard(hash)].erase(key, hash);
 }
 
-void ShardedLRUCache::evict( size_t charge, std::vector<Handle*>* deleted) {
+void ShardedLRUCache::evict(size_t charge, std::vector<Handle*>* deleted) {
     for (auto& _shard : _shards) {
         _shard.evict(charge, deleted);
     }
