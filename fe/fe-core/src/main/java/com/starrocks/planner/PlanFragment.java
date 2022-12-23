@@ -267,7 +267,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
         root.fillLocalRfWaitingSet(runtimeFilterBuildNodeIds);
-        if (root instanceof RuntimeFilterBuildNode) {
+        // TopN Filter should't wait
+        if (root instanceof RuntimeFilterBuildNode && !(root instanceof SortNode)) {
             runtimeFilterBuildNodeIds.add(root.getId().asInt());
         }
         if (clearGlobalRuntimeFilter) {

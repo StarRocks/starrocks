@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotId;
@@ -131,7 +132,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                     List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, planNodename);
-//        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
         Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
@@ -171,7 +171,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator) {
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
@@ -220,7 +220,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 // push down rf to left child node, and build it only when it
                 // can be accepted by left child node.
                 rf.setBuildExpr(left);
-                if (getChild(0).pushDownRuntimeFilters(rf, right, probePartitionByExprs)) {
+                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, right, probePartitionByExprs)) {
                     buildRuntimeFilters.add(rf);
                 }
             } else {
@@ -236,7 +236,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 rf.setBuildExpr(right);
                 rf.setOnlyLocal(true);
-                if (getChild(0).pushDownRuntimeFilters(rf, left, probePartitionByExprs)) {
+                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
@@ -273,19 +273,22 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             return Optional.empty();
         }
         List<List<Expr>> candidatesOfSlotExprs =
-                exprs.stream().map(expr -> candidatesOfSlotExprForChild(expr, childIdx).get()).collect(Collectors.toList());
+                exprs.stream().map(expr -> candidatesOfSlotExprForChild(expr, childIdx).get())
+                        .collect(Collectors.toList());
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
-    public boolean pushDownRuntimeFiltersForChild(RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFiltersForChild(DescriptorTable descTbl, RuntimeFilterDescription description,
                                                   Expr probeExpr,
                                                   List<Expr> partitionByExprs, int childIdx) {
-        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExprForChild(probeExpr, childIdx),
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+                candidatesOfSlotExprForChild(probeExpr, childIdx),
                 partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -297,12 +300,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             // SlotRef(b) are equivalent.
             boolean isInnerOrSemiJoin = joinOp.isSemiJoin() || joinOp.isInnerJoin();
             if ((probeExpr instanceof SlotRef) && isInnerOrSemiJoin) {
-                hasPushedDown |= pushDownRuntimeFiltersForChild(description, probeExpr, partitionByExprs, 0);
-                hasPushedDown |= pushDownRuntimeFiltersForChild(description, probeExpr, partitionByExprs, 1);
+                hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, description, probeExpr, partitionByExprs, 0);
+                hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, description, probeExpr, partitionByExprs, 1);
             }
             // fall back to PlanNode.pushDownRuntimeFilters for HJ if rf cannot be pushed down via equivalent
             // equalJoinConjuncts
-            if (hasPushedDown || super.pushDownRuntimeFilters(description, probeExpr, partitionByExprs)) {
+            if (hasPushedDown || super.pushDownRuntimeFilters(descTbl, description, probeExpr, partitionByExprs)) {
                 return true;
             }
 

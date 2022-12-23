@@ -14,11 +14,14 @@
 
 #pragma once
 
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr_context.h"
+#include "exprs/runtime_filter.h"
 #include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
@@ -111,6 +114,8 @@ public:
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
+    virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
+
     // Return sorted data in multiple runs(Avoid merge them into a big chunk)
     virtual SortedRuns get_sorted_runs() = 0;
 
@@ -143,5 +148,36 @@ protected:
 
     std::atomic<bool> _is_sink_complete = false;
 };
+
+namespace detail {
+struct SortRuntimeFilterBuilder {
+    template <LogicalType ptype>
+    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc) {
+        auto data_column = ColumnHelper::get_data_column(column.get());
+        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto data = runtime_data_column->get_data()[rid];
+        if (asc) {
+            return RuntimeBloomFilter<ptype>::template create_with_range<false>(pool, data);
+        } else {
+            return RuntimeBloomFilter<ptype>::template create_with_range<true>(pool, data);
+        }
+    }
+};
+
+struct SortRuntimeFilterUpdater {
+    template <LogicalType ptype>
+    std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc) {
+        auto data_column = ColumnHelper::get_data_column(column.get());
+        auto runtime_data_column = down_cast<RunTimeColumnType<ptype>*>(data_column);
+        auto data = runtime_data_column->get_data()[rid];
+        if (asc) {
+            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<false>(data);
+        } else {
+            down_cast<RuntimeBloomFilter<ptype>*>(filter)->template update_min_max<true>(data);
+        }
+        return nullptr;
+    }
+};
+} // namespace detail
 
 } // namespace starrocks
