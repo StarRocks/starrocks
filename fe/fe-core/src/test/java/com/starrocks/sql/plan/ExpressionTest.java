@@ -1296,17 +1296,17 @@ public class ExpressionTest extends PlanTestBase {
         {
             String sql = "select BIT_SHIFT_LEFT(cast(-100 as largeint), 3)";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : -100 BITSHIFTLEFT 3");
+            assertContains(plan, "<slot 2> : -800");
         }
         {
             String sql = "select BIT_SHIFT_RIGHT(cast(-100 as largeint), 3)";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : -100 BITSHIFTRIGHT 3");
+            assertContains(plan, "<slot 2> : -13");
         }
         {
             String sql = "select BIT_SHIFT_RIGHT_LOGICAL(cast(-100 as largeint), 3)";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : -100 BITSHIFTRIGHTLOGICAL 3");
+            assertContains(plan, "<slot 2> : 42535295865117307932921825928971026419");
         }
         {
             String sql = "select cast(-11 as smallint) BITSHIFTLEFT 3";

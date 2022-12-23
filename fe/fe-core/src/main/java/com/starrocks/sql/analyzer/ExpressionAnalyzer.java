@@ -488,37 +488,43 @@ public class ExpressionAnalyzer {
                     return null;
                 }
                 // Find result type of this operator
-                Type commonType;
+                Type lhsType;
+                Type rhsType;
                 switch (op) {
                     case MULTIPLY:
                     case ADD:
                     case SUBTRACT:
                         // numeric ops must be promoted to highest-resolution type
                         // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                        commonType = ArithmeticExpr.getBiggerType(ArithmeticExpr.getCommonType(t1, t2));
+                        lhsType = ArithmeticExpr.getBiggerType(ArithmeticExpr.getCommonType(t1, t2));
+                        rhsType = lhsType;
                         break;
                     case MOD:
-                        commonType = ArithmeticExpr.getCommonType(t1, t2);
+                        lhsType = ArithmeticExpr.getCommonType(t1, t2);
+                        rhsType = lhsType;
                         break;
                     case DIVIDE:
-                        commonType = ArithmeticExpr.getCommonType(t1, t2);
-                        if (commonType.isFixedPointType()) {
-                            commonType = Type.DOUBLE;
+                        lhsType = ArithmeticExpr.getCommonType(t1, t2);
+                        if (lhsType.isFixedPointType()) {
+                            lhsType = Type.DOUBLE;
                         }
+                        rhsType = lhsType;
                         break;
                     case INT_DIVIDE:
                     case BITAND:
                     case BITOR:
                     case BITXOR:
-                        commonType = ArithmeticExpr.getCommonType(t1, t2);
-                        if (!commonType.isFixedPointType()) {
-                            commonType = Type.BIGINT;
+                        lhsType = ArithmeticExpr.getCommonType(t1, t2);
+                        if (!lhsType.isFixedPointType()) {
+                            lhsType = Type.BIGINT;
                         }
+                        rhsType = lhsType;
                         break;
                     case BIT_SHIFT_LEFT:
                     case BIT_SHIFT_RIGHT:
                     case BIT_SHIFT_RIGHT_LOGICAL:
-                        commonType = t1;
+                        lhsType = t1;
+                        rhsType = Type.BIGINT;
                         break;
                     default:
                         // the programmer forgot to deal with a case
@@ -526,22 +532,23 @@ public class ExpressionAnalyzer {
                 }
 
                 if (node.getChild(0).getType().equals(Type.NULL) && node.getChild(1).getType().equals(Type.NULL)) {
-                    commonType = Type.NULL;
+                    lhsType = Type.NULL;
+                    rhsType = Type.NULL;
                 }
 
-                if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, commonType)) {
+                if (!Type.NULL.equals(node.getChild(0).getType()) && !Type.canCastTo(t1, lhsType)) {
                     throw new SemanticException(
-                            "cast type " + node.getChild(0).getType().toSql() + " with type " + commonType.toSql()
+                            "cast type " + node.getChild(0).getType().toSql() + " with type " + lhsType.toSql()
                                     + " is invalid.");
                 }
 
-                if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, commonType)) {
+                if (!Type.NULL.equals(node.getChild(1).getType()) && !Type.canCastTo(t2, rhsType)) {
                     throw new SemanticException(
-                            "cast type " + node.getChild(1).getType().toSql() + " with type " + commonType.toSql()
+                            "cast type " + node.getChild(1).getType().toSql() + " with type " + rhsType.toSql()
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
