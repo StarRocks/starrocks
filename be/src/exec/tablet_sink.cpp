@@ -1348,9 +1348,7 @@ bool OlapTableSink::is_close_done() {
 
 void OlapTableSink::cancel() {
     Status st = Status::Cancelled("cancel");
-    for_each_index_channel([&st](NodeChannel* ch) {
-        ch->cancel(st);
-    });
+    for_each_index_channel([&st](NodeChannel* ch) { ch->cancel(st); });
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
