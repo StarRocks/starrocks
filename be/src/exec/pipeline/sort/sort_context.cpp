@@ -130,7 +130,7 @@ SortContextPtr SortContextFactory::create(int32_t idx) {
     }
 
     auto ctx = std::make_shared<SortContext>(_state, _topn_type, _offset, _limit, _sort_exprs, _sort_descs);
-    _sort_contexts[actual_idx] = ctx;
+    _sort_contexts.emplace(actual_idx, ctx);
     return ctx;
 }
 } // namespace starrocks::pipeline
