@@ -25,24 +25,6 @@
 
 namespace starrocks {
 
-// Old version StarRocks use `TColumnType` to save type info, convert it into `TTypeDesc`.
-static void convert_to_new_version(TColumn* tcolumn) {
-    if (!tcolumn->__isset.type_desc) {
-        tcolumn->__set_index_len(tcolumn->column_type.index_len);
-
-        TScalarType scalar_type;
-        scalar_type.__set_type(tcolumn->column_type.type);
-        scalar_type.__set_len(tcolumn->column_type.len);
-        scalar_type.__set_precision(tcolumn->column_type.precision);
-        scalar_type.__set_scale(tcolumn->column_type.scale);
-
-        tcolumn->type_desc.types.resize(1);
-        tcolumn->type_desc.types.back().__set_type(TTypeNodeType::SCALAR);
-        tcolumn->type_desc.types.back().__set_scalar_type(scalar_type);
-        tcolumn->__isset.type_desc = true;
-    }
-}
-
 static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggregationType::type agg_type) {
     switch (agg_type) {
     case TAggregationType::NONE:
@@ -221,7 +203,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     uint32_t col_ordinal = 0;
     bool has_bf_columns = false;
     for (TColumn tcolumn : tablet_schema.columns) {
-        convert_to_new_version(&tcolumn);
         uint32_t col_unique_id = col_ordinal_to_unique_id.at(col_ordinal++);
         ColumnPB* column = schema->add_column();
 
