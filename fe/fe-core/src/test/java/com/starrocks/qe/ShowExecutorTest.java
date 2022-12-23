@@ -34,6 +34,8 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -63,6 +65,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
@@ -103,10 +106,7 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
@@ -956,5 +956,32 @@ public class ShowExecutorTest {
                 " partitioned_by = ARRAY [ year, dt ]\n" +
                 ")\n" +
                 "LOCATION 'hdfs://hadoop/hive/warehouse/test.db/test'", resultSet.getResultRows().get(0).get(1));
+    }
+
+
+    @Test
+    public void testShowTablesFromExternalCatalog() throws AnalysisException, DdlException {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+
+            @Mock
+            public List<String> listTableNames(String catalogName, String dbName) {
+                List<String> tableNames = Lists.newArrayList();
+                tableNames.add("hive_test");
+                return tableNames;
+            }
+        };
+
+        ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("hive_test", resultSet.getString(0));
+        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
+        Assert.assertFalse(resultSet.next());
     }
 }

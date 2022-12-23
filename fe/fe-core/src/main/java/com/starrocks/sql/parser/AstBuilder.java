@@ -778,6 +778,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean isVerbose = context.FULL() != null;
         String database = null;
         String catalog = null;
+        // catalog.db
         if (context.qualifiedName() != null) {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             List<String> parts = qualifiedName.getParts();
