@@ -86,7 +86,7 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
     ++(*index);
     switch (curr_type_node.type) {
     case TTypeNodeType::SCALAR: {
-        TScalarType scalar = curr_type_node.scalar_type;
+        auto& scalar = curr_type_node.scalar_type;
 
         LogicalType field_type = thrift_to_type(scalar.type);
         column_pb->set_type(logical_type_to_string(field_type));
@@ -172,6 +172,19 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         auto agg_method = t_aggregation_type_to_field_aggregation_method(t_column.aggregation_type);
         column_pb->set_aggregation(get_string_by_aggregation_type(agg_method));
     }
+
+    if (types[0].type == TTypeNodeType::SCALAR && types[0].scalar_type.type == TPrimitiveType::VARCHAR) {
+        int32_t index_len = t_column.__isset.index_len ? t_column.index_len : 10;
+        column_pb->set_index_length(index_len);
+    }
+    // Default value
+    if (t_column.__isset.default_value) {
+        column_pb->set_default_value(t_column.default_value);
+    }
+    if (t_column.__isset.is_bloom_filter_column) {
+        column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
+    }
+
     return Status::OK();
 }
 
