@@ -1003,9 +1003,9 @@ build_leveldb
 build_brpc
 build_rocksdb
 build_librdkafka
-build_pulsar
 build_flatbuffers
 build_arrow
+build_pulsar
 build_s2
 build_bitshuffle
 build_croaringbitmap
