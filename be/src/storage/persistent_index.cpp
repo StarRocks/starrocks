@@ -464,7 +464,6 @@ ImmutableIndexWriter::~ImmutableIndexWriter() {
 Status ImmutableIndexWriter::init(const string& idx_file_path, const EditVersion& version) {
     _version = version;
     _idx_file_path = idx_file_path;
-    //_idx_file_path = strings::Substitute("$0/index.l1.$1.$2", dir, version.major(), version.minor());
     _idx_file_path_tmp = _idx_file_path + ".tmp";
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_idx_file_path_tmp));
     WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -621,8 +620,6 @@ public:
             if (iter == _map.end()) {
                 values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
             } else {
                 values[idx] = iter->second;
                 nfound += iter->second.get_value() != NullIndexValue;
@@ -641,8 +638,6 @@ public:
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
             } else {
                 auto old_value = it->second;
                 old_values[idx] = old_value;
@@ -899,8 +894,6 @@ public:
             if (iter == _set.end()) {
                 values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
             } else {
                 const auto& composite_key = *iter;
                 auto value = UNALIGNED_LOAD64(composite_key.data() + composite_key.size() - kIndexValueSize);
@@ -925,8 +918,6 @@ public:
             uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
                 _total_kv_pairs_usage += composite_key.size();
             } else {
                 const auto& old_compose_key = *it;
@@ -954,8 +945,6 @@ public:
             uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
                 _total_kv_pairs_usage += composite_key.size();
             } else {
                 const auto& old_compose_key = *it;
@@ -1006,8 +995,6 @@ public:
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 old_values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
                 _total_kv_pairs_usage += composite_key.size();
             } else {
                 auto& old_compose_key = *it;

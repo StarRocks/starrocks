@@ -60,8 +60,6 @@ static_assert(sizeof(IndexValue) == kIndexValueSize);
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
-    //std::vector<uint32_t> key_idxes;
-    //std::vector<uint64_t> hashes;
     std::vector<std::pair<uint32_t, uint64_t>> key_infos;
     size_t size() const { return key_infos.size(); }
 
@@ -333,8 +331,6 @@ public:
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
     // |key_size|: the key size of keys array
-    //Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
-    //           size_t key_size) const;
     Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
                size_t key_size) const;
 
@@ -590,7 +586,6 @@ private:
     // _l1_version is used to get l1 file name, update in on_committed
     EditVersion _l1_version;
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
-    //std::unique_ptr<ImmutableIndex> _l1;
     // add all l1 into vector
     std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
     bool _has_l1 = false;
