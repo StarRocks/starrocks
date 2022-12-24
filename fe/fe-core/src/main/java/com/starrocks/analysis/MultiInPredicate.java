@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -23,7 +24,7 @@ import java.util.List;
 /**
  * Represents an IN subquery with multiple columns.
  */
-public class MultiInPredicate extends Predicate{
+public class MultiInPredicate extends Predicate {
     private final boolean isNotIn;
     // Expressions involved on the left side of the IN predicate (outside the subquery).
     private List<Expr> outerExprs;
@@ -89,6 +90,11 @@ public class MultiInPredicate extends Predicate{
             return isNotIn == expr.isNotIn && numberOfColumns == expr.numberOfColumns;
         }
         return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(super.hashCode(), isNotIn);
     }
 
     @Override
