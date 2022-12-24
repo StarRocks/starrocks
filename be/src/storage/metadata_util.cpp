@@ -134,6 +134,7 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
 }
 
 static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb) {
+    DCHECK(t_column.__isset.type_desc);
     const std::vector<TTypeNode>& types = t_column.type_desc.types;
     int index = 0;
     RETURN_IF_ERROR(type_desc_to_pb(types, &index, column_pb));
