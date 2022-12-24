@@ -34,8 +34,6 @@
 
 package com.starrocks.qe;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -65,7 +63,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
