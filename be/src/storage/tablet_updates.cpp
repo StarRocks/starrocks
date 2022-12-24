@@ -1587,12 +1587,16 @@ void TabletUpdates::_erase_expired_versions(int64_t expire_time,
         LOG(WARNING) << "tablet deleted when erase_expired_versions tablet:" << _tablet.tablet_id();
         return;
     }
-    for (int i = 0; i < _apply_version_idx; i++) {
-        if (_edit_version_infos[i]->creation_time <= expire_time) {
-            expire_list->emplace_back(std::move(_edit_version_infos[i]));
-        } else {
+    // only keep at most one version which is before expire_time
+    int keep_index_min = _apply_version_idx;
+    while (keep_index_min > 0) {
+        if (_edit_version_infos[keep_index_min]->creation_time <= expire_time) {
             break;
         }
+        keep_index_min--;
+    }
+    for (int i = 0; i < keep_index_min; i++) {
+        expire_list->emplace_back(std::move(_edit_version_infos[i]));
     }
     auto n = expire_list->size();
     _edit_version_infos.erase(_edit_version_infos.begin(), _edit_version_infos.begin() + n);
