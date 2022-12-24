@@ -101,12 +101,12 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
             str_col->append(str);
             Columns columns{str_col, remove_col};
             ctx->set_constant_columns(columns);
-            Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-            ASSERT_OK(st);
+            ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
             auto maybe_result = StringFunctions::trim(ctx.get(), columns);
             ASSERT_OK(maybe_result.status());
             Slice result = *ColumnHelper::get_cpp_data<TYPE_VARCHAR>(maybe_result.value());
             ASSERT_EQ("abc🐱🐷", std::string(result));
+            ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
         }
     }
 
