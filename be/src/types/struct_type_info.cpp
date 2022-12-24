@@ -43,7 +43,7 @@ public:
 
     size_t size() const override { return 16; }
 
-    LogicalType type() const override { return TYPE_MAP; }
+    LogicalType type() const override { return TYPE_STRUCT; }
 
     const std::vector<TypeInfoPtr>& field_types() const { return _field_types; }
 
