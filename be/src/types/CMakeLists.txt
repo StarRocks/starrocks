@@ -20,5 +20,6 @@ add_library(Types STATIC
     hll.cpp
     logical_type.cpp
     map_type_info.cpp
+    struct_type_info.cpp
     timestamp_value.cpp
 )
