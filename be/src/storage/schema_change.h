@@ -78,7 +78,6 @@ public:
     bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
 
 private:
-    ChunkAllocator* _chunk_allocator = nullptr;
     ChunkPtr _swap_chunk = nullptr;
     size_t _max_allocated_rows = 0;
 };
