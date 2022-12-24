@@ -103,7 +103,10 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
