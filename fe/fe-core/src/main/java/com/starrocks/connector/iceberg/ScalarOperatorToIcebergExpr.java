@@ -161,14 +161,7 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
-            Object literalValue = getLiteralValue(operator.getChild(1));
-            try {
-                if (context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
-                    literalValue = new BoolLiteral(String.valueOf(literalValue)).getValue();
-                }
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            Object literalValue = getLiteralValue(operator.getChild(1), context.getSchema().fieldType(columnName).typeId());
 
             if (literalValue == null) {
                 return null;
@@ -199,7 +192,8 @@ public class ScalarOperatorToIcebergExpr {
             }
 
             List<Object> literalValues = operator.getListChildren().stream()
-                    .map(ScalarOperatorToIcebergExpr::getLiteralValue)
+                    .map(inoperator -> ScalarOperatorToIcebergExpr.getLiteralValue(
+                            inoperator, context.getSchema().fieldType(columnName).typeId()))
                     .collect(Collectors.toList());
 
             if (operator.isNotIn()) {
@@ -218,7 +212,8 @@ public class ScalarOperatorToIcebergExpr {
 
             if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
                 if (operator.getChild(1).getType().isStringType()) {
-                    String literal = (String) getLiteralValue(operator.getChild(1));
+                    String literal = (String) getLiteralValue(
+                            operator.getChild(1), context.getSchema().fieldType(columnName).typeId());
                     if (literal.indexOf("%") == literal.length() - 1) {
                         return startsWith(columnName, literal.substring(0, literal.length() - 1));
                     }
@@ -233,12 +228,21 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static Object getLiteralValue(ScalarOperator operator) {
+    private static Object getLiteralValue(ScalarOperator operator, Type.TypeID columnType) {
         if (operator == null) {
             return null;
         }
 
-        return operator.accept(new ExtractLiteralValue(), null);
+        Object literalValue = operator.accept(new ExtractLiteralValue(), null);
+        try {
+            if (columnType == Type.TypeID.BOOLEAN) {
+                literalValue = new BoolLiteral(String.valueOf(literalValue)).getValue();
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
+        return literalValue;
     }
 
     private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Void> {
