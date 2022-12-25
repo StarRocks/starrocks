@@ -16,6 +16,9 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -30,6 +33,7 @@ import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -156,7 +160,16 @@ public class ScalarOperatorToIcebergExpr {
             if (columnName == null) {
                 return null;
             }
+
             Object literalValue = getLiteralValue(operator.getChild(1));
+            try {
+                if (context.getSchema().fieldType(columnName).typeId() == Type.TypeID.BOOLEAN) {
+                    literalValue = new BoolLiteral(String.valueOf(literalValue)).getValue();
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
             if (literalValue == null) {
                 return null;
             }
