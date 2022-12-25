@@ -22,20 +22,19 @@ The following describes the syntaxes and parameters based on different cases:
 
     ```SQL
     REFRESH EXTERNAL TABLE table_name 
-    [PARTITION ('partition_name=partition_value', ...)];
+    [PARTITION ('partition_name', ...)];
     ```
 
     | **Parameter**  | **Required** | **Description**                                              |
     | -------------- | ------------ | ------------------------------------------------------------ |
     | table_name     | Yes          | The name of a Hive external table or Hudi external table.    |
     | partition_name | No           | The names of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
-    | partition_value| No           | The value of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
 
 - External catalog
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name
-    [PARTITION ('partition_name=partition_value', ...)];
+    [PARTITION ('partition_name', ...)];
     ```
 
     | **Parameter**    | **Required** | **Description**                                              |
@@ -44,7 +43,6 @@ The following describes the syntaxes and parameters based on different cases:
     | db_name          | No           | The name of the database where a Hive table or Hudi table resides. |
     | table_name       | Yes          | The name of a Hive table or a Hudi table.                    |
     | partition_name   | No           | The names of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
-    | partition_value  | No           | The value of the partitions of a Hive table or Hudi table. Specifying this parameter updates the metadata of the partitions of the Hive table and Hudi table cached in StarRocks. |
 
 ## Usage notes
 
