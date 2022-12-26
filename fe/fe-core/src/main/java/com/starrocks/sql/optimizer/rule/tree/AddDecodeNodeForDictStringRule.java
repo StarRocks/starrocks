@@ -1107,6 +1107,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         @Override
         public Void visitCompoundPredicate(CompoundPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             if (predicate.isNot()) {
+                context.canDictOptBeApplied = false;
                 context.stopOptPropagateUpward = true;
                 return null;
             }
