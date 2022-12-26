@@ -110,7 +110,7 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
         for (auto row = 0; row < chunk_size; row++) {
             if (file_path_col->get_slice(row) != _datafile_path) {
                 DLOG(INFO) << "read path not matched, read " << file_path_col->get_slice(row) << " expect "
-                              << _datafile_path;
+                           << _datafile_path;
                 continue;
             }
 

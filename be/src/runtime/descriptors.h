@@ -109,7 +109,7 @@ private:
     friend class TupleDescriptor;
     friend class SchemaScanner;
     friend class OlapTableSchemaParam;
-    friend class vectorized::IcebergDeleteFileMeta;
+    friend class IcebergDeleteFileMeta;
 
     const SlotId _id;
     TypeDescriptor _type;
