@@ -2019,7 +2019,6 @@ Status ImmutableIndex::_get_in_fixlen_shard(size_t shard_idx, size_t n, const Sl
         uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        //auto key_idx = keys_info.key_idxes[i];
         auto key_idx = keys_info.key_infos[i].first;
         const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
         auto kv_pos = bucket_pos + pad(nele, kPackSize);
@@ -2050,7 +2049,6 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
         uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        //auto key_idx = keys_info.key_idxes[i];
         auto key_idx = keys_info.key_infos[i].first;
         const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
         auto offset_pos = bucket_pos + pad(nele, kPackSize);
@@ -2099,7 +2097,6 @@ Status ImmutableIndex::_check_not_exist_in_fixlen_shard(size_t shard_idx, size_t
         auto& bucket_info = (*shard)->bucket(pageid, bucketid);
         uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
         auto nele = bucket_info.size;
-        //auto key_idx = keys_info.key_idxes[i];
         auto key_idx = keys_info.key_infos[i].first;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
         const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
@@ -2122,14 +2119,12 @@ Status ImmutableIndex::_check_not_exist_in_varlen_shard(size_t shard_idx, size_t
     DCHECK(shard_info.key_size == 0);
     uint8_t candidate_idxes[kBucketSizeMax];
     for (size_t i = 0; i < keys_info.size(); i++) {
-        //IndexHash h(keys_info.hashes[i]);
         IndexHash h(keys_info.key_infos[i].second);
         auto pageid = h.page() % shard_info.npage;
         auto bucketid = h.bucket() % shard_info.nbucket;
         auto& bucket_info = (*shard)->bucket(pageid, bucketid);
         uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
         auto nele = bucket_info.size;
-        //auto key_idx = keys_info.key_idxes[i];
         auto key_idx = keys_info.key_infos[i].first;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
         const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
