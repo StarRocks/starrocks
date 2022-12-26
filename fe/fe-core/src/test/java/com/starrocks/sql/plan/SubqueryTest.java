@@ -450,7 +450,7 @@ public class SubqueryTest extends PlanTestBase {
                     "     rollup: t1\n" +
                     "     tabletRatio=0/0\n" +
                     "     tabletList=\n" +
-                    "     cardinality=0\n" +
+                    "     cardinality=1\n" +
                     "     avgRowSize=2.0\n" +
                     "     numNodes=0");
         }
