@@ -512,7 +512,7 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110015, "get_json_object", "VARCHAR", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
-    [110016, "get_json_object", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
+    [110020, "get_json_object", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # json type function
@@ -531,7 +531,7 @@ vectorized_functions = [
     [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
-    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
+    [110019, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
