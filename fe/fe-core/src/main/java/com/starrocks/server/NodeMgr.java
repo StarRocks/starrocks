@@ -39,6 +39,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -123,6 +124,7 @@ public class NodeMgr {
     private final SystemInfoService systemInfo;
     private final BrokerMgr brokerMgr;
     private final HeartbeatMgr heartbeatMgr;
+    private final GlobalFunctionMgr globalFunctionMgr;
 
     private final GlobalStateMgr stateMgr;
 
@@ -135,6 +137,7 @@ public class NodeMgr {
         this.heartbeatMgr = new HeartbeatMgr(systemInfo, !isCheckpoint);
         this.brokerMgr = new BrokerMgr();
         this.stateMgr = globalStateMgr;
+        this.globalFunctionMgr = new GlobalFunctionMgr();
     }
 
     public void initialize(String[] args) throws Exception {
@@ -194,6 +197,10 @@ public class NodeMgr {
 
     public BrokerMgr getBrokerMgr() {
         return brokerMgr;
+    }
+
+    public GlobalFunctionMgr getGlobalFunctionMgr() {
+        return globalFunctionMgr;
     }
 
     public void getClusterIdAndRoleOnStartup() throws IOException {

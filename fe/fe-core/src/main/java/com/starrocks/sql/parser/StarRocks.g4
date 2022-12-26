@@ -953,15 +953,15 @@ classifier
 // ------------------------------------------- Function ----------------------------------------------------
 
 showFunctionsStatement
-    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropFunctionStatement
-    : DROP FUNCTION qualifiedName '(' typeList ')'
+    : DROP GLOBAL? FUNCTION qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
-    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
     ;
 
 typeList

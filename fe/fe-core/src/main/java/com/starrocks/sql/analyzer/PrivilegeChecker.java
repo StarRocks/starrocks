@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TablePattern;
@@ -419,7 +420,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt stmt, ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -427,7 +429,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt stmt, ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -435,7 +438,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt stmt, ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -977,6 +981,10 @@ public class PrivilegeChecker {
         @Override
         public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
+            if (FunctionName.GLOBAL_UDF_DB.equals(dbName)) {
+                return null;
+            }
+
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(
@@ -1249,7 +1257,8 @@ public class PrivilegeChecker {
         @Override
         public Void visitCancelBackupStatement(CancelBackupStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
             }
             return null;
@@ -1329,7 +1338,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateRepositoryStatement(CreateRepositoryStmt statement, ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -1337,7 +1347,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -1345,7 +1356,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt stmt, ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -1353,7 +1365,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -1362,7 +1375,8 @@ public class PrivilegeChecker {
         @Override
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(
                         ErrorCode.ERR_DB_ACCESS_DENIED, ConnectContext.get().getQualifiedUser(), dbName);
             }

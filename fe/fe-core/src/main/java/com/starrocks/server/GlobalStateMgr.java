@@ -67,6 +67,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -697,6 +698,10 @@ public class GlobalStateMgr {
         return resourceMgr;
     }
 
+    public GlobalFunctionMgr getGlobalFunctionMgr() {
+        return nodeMgr.getGlobalFunctionMgr();
+    }
+
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
         return getCurrentState().globalTransactionMgr;
     }
@@ -1106,8 +1111,8 @@ public class GlobalStateMgr {
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
                 VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
-                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                        LiteralExpr.create("true", Type.BOOLEAN)),
+                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                                LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
         } catch (UserException e) {

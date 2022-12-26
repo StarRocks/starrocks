@@ -127,12 +127,12 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-    public static Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+    private static Function getDBUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = session.getDatabase();
         }
-        
+
         Database db = session.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
             return null;
@@ -155,11 +155,39 @@ public class AnalyzerUtils {
             // check SELECT action on any object(table/view/mv) in db
             if (!PrivilegeManager.checkActionInDb(session, dbName, "SELECT")) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
+                                "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
                         fnName, dbName), ErrorType.USER_ERROR);
             }
         }
+        return fn;
+    }
 
+    private static Function getGlobalUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function fn = session.getGlobalStateMgr().getGlobalFunctionMgr()
+                .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+        if (fn == null) {
+            return null;
+        }
+
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            if (!session.getGlobalStateMgr().getAuth().checkGlobalPriv(session, PrivPredicate.USAGE)) {
+                throw new StarRocksPlannerException(String.format("Access denied. " +
+                        "Found UDF: %s and need the USAGE priv for GLOBAL", fnName),
+                        ErrorType.USER_ERROR);
+            }
+        } else {
+            // TODO(yanz): priv check
+        }
+        return fn;
+    }
+
+    public static Function getUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+        Function fn = getDBUdfFunction(session, fnName, argTypes);
+        if (fn == null) {
+            fn = getGlobalUdfFunction(session, fnName, argTypes);
+        }
         if (!Config.enable_udf) {
             throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
                     ErrorType.USER_ERROR);
@@ -257,7 +285,8 @@ public class AnalyzerUtils {
         }
 
         private void getDB(TableName tableName) {
-            String catalog = Strings.isNullOrEmpty(tableName.getCatalog()) ? session.getCurrentCatalog() : tableName.getCatalog();
+            String catalog = Strings.isNullOrEmpty(tableName.getCatalog()) ? session.getCurrentCatalog() :
+                    tableName.getCatalog();
             String dbName = Strings.isNullOrEmpty(tableName.getDb()) ? session.getDatabase() : tableName.getDb();
 
             if (Strings.isNullOrEmpty(catalog)) {
@@ -370,7 +399,6 @@ public class AnalyzerUtils {
         new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
         return tables;
     }
-
 
     public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Map<String, TableRelation> tableRelations = Maps.newHashMap();
@@ -601,8 +629,9 @@ public class AnalyzerUtils {
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
 
-                AddPartitionClause addPartitionClause = new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
-                        partitionProperties, false);
+                AddPartitionClause addPartitionClause =
+                        new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
+                                partitionProperties, false);
                 result.put(partitionName, addPartitionClause);
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
