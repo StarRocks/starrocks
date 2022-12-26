@@ -215,6 +215,12 @@ public class AstToSQLBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(node.getName().toSql());
 
+            for (TableRelation.TableHint hint : node.getTableHints()) {
+                sqlBuilder.append(" [");
+                sqlBuilder.append(hint.name());
+                sqlBuilder.append("] ");
+            }
+
             if (node.getPartitionNames() != null) {
                 List<String> partitionNames = node.getPartitionNames().getPartitionNames();
                 if (partitionNames != null && !partitionNames.isEmpty()) {

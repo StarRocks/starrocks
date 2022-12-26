@@ -22,4 +22,5 @@ add_library(Connector STATIC
     lake_connector.cpp
     mysql_connector.cpp
     file_connector.cpp
+    binlog_connector.cpp
 )

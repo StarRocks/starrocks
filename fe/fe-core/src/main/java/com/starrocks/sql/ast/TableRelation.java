@@ -20,18 +20,25 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class TableRelation extends Relation {
+
+    public enum TableHint {
+        _META_,
+        _BINLOG_
+    }
+
     private final TableName name;
     private Table table;
     private Map<Field, Column> columns;
     // Support temporary partition
     private PartitionNames partitionNames;
     private final List<Long> tabletIds;
-    private boolean isMetaQuery;
-
+    private final Set<TableHint> tableHints = new HashSet<>();
     // optional temporal clause for external MySQL tables that support this syntax
     private String temporalClause;
 
@@ -100,12 +107,22 @@ public class TableRelation extends Relation {
         }
     }
 
-    public boolean isMetaQuery() {
-        return isMetaQuery;
+    // Maybe throw IllegalArgumentException if hintName is not defined
+    public void addTableHint(String hintName) {
+        TableHint hint = TableHint.valueOf(hintName);
+        tableHints.add(hint);
     }
 
-    public void setMetaQuery(boolean metaQuery) {
-        isMetaQuery = metaQuery;
+    public Set<TableHint> getTableHints() {
+        return tableHints;
+    }
+
+    public boolean isMetaQuery() {
+        return tableHints.contains(TableHint._META_);
+    }
+
+    public boolean isBinlogQuery() {
+        return tableHints.contains(TableHint._BINLOG_) && table.isOlapTable();
     }
 
     @Override

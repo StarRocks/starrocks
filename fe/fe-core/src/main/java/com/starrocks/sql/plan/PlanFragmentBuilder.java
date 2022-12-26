@@ -2852,17 +2852,15 @@ public class PlanFragmentBuilder {
 
             BinlogScanNode binlogScanNode = new BinlogScanNode(context.getNextNodeId(), tupleDescriptor);
             binlogScanNode.computeStatistics(optExpr.getStatistics());
-
-            // Add OPS column of binlog
-            SlotDescriptor opsSlot = context.getDescTbl().addSlotDescriptor(tupleDescriptor);
-            opsSlot.setIsNullable(false);
-            opsSlot.setType(Type.TINYINT);
-            opsSlot.setLabel("ops");
-            ColumnRefOperator columnRef =
-                    new ColumnRefOperator(opsSlot.getId().asInt(), opsSlot.getType(), "ops", opsSlot.getIsNullable());
-            context.getColRefToExpr().put(columnRef, new SlotRef(opsSlot.getLabel(), opsSlot));
+            try {
+                binlogScanNode.computeScanRanges();
+            } catch (UserException e) {
+                throw new StarRocksPlannerException(
+                        "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
+            }
 
             // Add slots from table
+            boolean hasBinlogOpSlot = false;
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
@@ -2870,6 +2868,20 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                if (entry.getKey().getName().equals(BinlogScanNode.BINLOG_OP_COLUMN_NAME)) {
+                    hasBinlogOpSlot = true;
+                }
+            }
+
+            if (!hasBinlogOpSlot) {
+                // Add OPS column of binlog
+                SlotDescriptor opsSlot = context.getDescTbl().addSlotDescriptor(tupleDescriptor);
+                opsSlot.setIsNullable(false);
+                opsSlot.setType(Type.TINYINT);
+                opsSlot.setLabel(BinlogScanNode.BINLOG_OP_COLUMN_NAME);
+                ColumnRefOperator columnRef = new ColumnRefOperator(opsSlot.getId().asInt(), opsSlot.getType(),
+                        BinlogScanNode.BINLOG_OP_COLUMN_NAME, opsSlot.getIsNullable());
+                context.getColRefToExpr().put(columnRef, new SlotRef(opsSlot.getLabel(), opsSlot));
             }
 
             // set predicate
