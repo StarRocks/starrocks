@@ -39,7 +39,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct IcebergColumnMeta;
 
 class PositionDeleteBuilder {
@@ -106,4 +106,4 @@ public:
 private:
     static SlotDescriptor gen_slot_helper(const IcebergColumnMeta& meta);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

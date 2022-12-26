@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/vectorized/iceberg/iceberg_delete_builder.h"
+#include "exec/iceberg/iceberg_delete_builder.h"
 
 #include "column/vectorized_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
@@ -40,7 +40,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct IcebergColumnMeta {
     int64_t id;
