@@ -226,6 +226,11 @@ public class DictMappingRewriter {
 
         @Override
         public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator operator, RewriterContext context) {
+            if (operator.isNot()) {
+                context.hasAppliedOperator = false;
+                context.hasUnsupportedOperator = true;
+                return visit(operator, context);
+            }
             return rewriteForScalarOperator(operator, context);
         }
 
