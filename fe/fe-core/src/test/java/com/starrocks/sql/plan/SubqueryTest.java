@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -325,4 +325,104 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  equal join conjunct: 6: v9 = 14: v4\n" +
                 "  |  equal join conjunct: 21: cast = 15: cast");
     }
+
+    @Test
+    public void testSubqueryMissLimit() throws Exception {
+        String sql = "select * from t0 limit 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "select * from (select * from t0 limit 1) t";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "(select * from t0 limit 1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "(select * from t0) limit 1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "((select * from t0) limit 2) limit 1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "((select * from t0) limit 1) limit 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "((select * from t0) limit 1) order by v1 limit 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 1");
+
+        sql = "((select * from t0) limit 2) order by v1 limit 1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 2\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 2");
+    }
+    
 }
