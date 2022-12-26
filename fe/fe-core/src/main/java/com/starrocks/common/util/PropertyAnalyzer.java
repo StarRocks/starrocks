@@ -312,9 +312,14 @@ public class PropertyAnalyzer {
             } catch (Exception e) {
                 throw new AnalysisException(e.getMessage());
             }
-            checkAvailableBackendsIsEnough(replicationNum);
+
+            // for multi-cluster
+            if (Config.use_staros == false) {
+                checkAvailableBackendsIsEnough(replicationNum);
+            }
             properties.remove(PROPERTIES_REPLICATION_NUM);
         }
+
         return replicationNum;
     }
 

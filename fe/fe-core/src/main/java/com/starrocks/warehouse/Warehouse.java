@@ -203,15 +203,18 @@ public class Warehouse implements Writable {
         if (!isReplay) {
             releaseComputeNodes();
         }
+        clusters.clear();
         writeUnLock();
     }
 
     public void resumeSelf(boolean isReplay) {
         writeLock();
+        Map<Long, Cluster> clusterMap = new HashMap<>();
         if (!isReplay) {
-            applyComputeNodes();
+            clusterMap = applyComputeNodes();
         }
         this.state = WarehouseState.RUNNING;
+        clusters = clusterMap;
         writeUnLock();
     }
 
@@ -230,13 +233,16 @@ public class Warehouse implements Writable {
         }
     }
 
-    private void applyComputeNodes() {
-        for (Cluster cluster : clusters.values()) {
-            long newGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup();
-            cluster.setWorkerGroupId(newGroupId);
+    private Map<Long, Cluster> applyComputeNodes() {
+        Map<Long, Cluster> newClusters = new HashMap<>();
+        for (int i = 0; i < minCluster; i++) {
+            long groupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup();
+            Cluster cluster = new Cluster(GlobalStateMgr.getCurrentState().getNextId(), groupId);
+            newClusters.put(cluster.getId(), cluster);
             // for debug
-            LOG.info("apply new worker group {}", newGroupId);
+            LOG.info("apply new worker group {}", groupId);
         }
+        return newClusters;
     }
 
     public void modifyCluterSize() throws DdlException {
@@ -368,17 +374,13 @@ public class Warehouse implements Writable {
             result.setNames(CLUSTER_PROC_NODE_TITLE_NAMES);
             readLock();
             try {
-                // suspend should show empty clusters
-                if (state != WarehouseState.SUSPENDED) {
-                    for (Map.Entry<Long, Cluster> entry : clusters.entrySet()) {
-                        Cluster cluster = entry.getValue();
-                        if (cluster == null) {
-                            continue;
-                        }
-                        cluster.getProcNodeData(result);
+                for (Map.Entry<Long, Cluster> entry : clusters.entrySet()) {
+                    Cluster cluster = entry.getValue();
+                    if (cluster == null) {
+                        continue;
                     }
+                    cluster.getProcNodeData(result);
                 }
-
             } finally {
                 readUnlock();
             }

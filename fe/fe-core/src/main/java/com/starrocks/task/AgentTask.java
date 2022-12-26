@@ -35,12 +35,16 @@
 package com.starrocks.task;
 
 import com.starrocks.common.Config;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TTaskType;
 
 public abstract class AgentTask {
     protected long signature;
     protected long backendId;
+    protected TNetworkAddress backendAddr;
     protected TTaskType taskType;
 
     protected long dbId;
@@ -63,7 +67,27 @@ public abstract class AgentTask {
     public AgentTask(TResourceInfo resourceInfo, long backendId, TTaskType taskType,
                      long dbId, long tableId, long partitionId, long indexId, long tabletId, long signature,
                      long createTime, String traceParent) {
-        this.backendId = backendId;
+        this.backendAddr = getBackendAddrFromId(backendId);
+        this.signature = signature;
+        this.taskType = taskType;
+
+        this.dbId = dbId;
+        this.tableId = tableId;
+        this.partitionId = partitionId;
+        this.indexId = indexId;
+        this.tabletId = tabletId;
+
+        this.resourceInfo = resourceInfo;
+
+        this.failedTimes = 0;
+        this.createTime = createTime;
+        this.traceParent = traceParent;
+    }
+
+    public AgentTask(TResourceInfo resourceInfo, TNetworkAddress backendAddr, TTaskType taskType,
+                     long dbId, long tableId, long partitionId, long indexId, long tabletId, long signature,
+                     long createTime, String traceParent) {
+        this.backendAddr = backendAddr;
         this.signature = signature;
         this.taskType = taskType;
 
@@ -97,12 +121,21 @@ public abstract class AgentTask {
         this(resourceInfo, backendId, taskType, dbId, tableId, partitionId, indexId, tabletId, signature, -1);
     }
 
+    public AgentTask(TResourceInfo resourceInfo, TNetworkAddress backendAddr, TTaskType taskType,
+                     long dbId, long tableId, long partitionId, long indexId, long tabletId) {
+        this(resourceInfo, backendAddr, taskType, dbId, tableId, partitionId, indexId, tabletId, tabletId,  -1, null);
+    }
+
     public long getSignature() {
         return this.signature;
     }
 
     public long getBackendId() {
         return this.backendId;
+    }
+
+    public TNetworkAddress getBackendAddr() {
+        return backendAddr;
     }
 
     public TTaskType getTaskType() {
@@ -168,5 +201,10 @@ public abstract class AgentTask {
     @Override
     public String toString() {
         return "[" + taskType + "], signature: " + signature + ", backendId: " + backendId + ", tablet id: " + tabletId;
+    }
+
+    public TNetworkAddress getBackendAddrFromId(long backendId) {
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        return new TNetworkAddress(backend.getHost(), backend.getBePort());
     }
 }

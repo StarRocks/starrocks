@@ -63,6 +63,8 @@ public class CreateTableStmt extends DdlStmt {
 
     private List<Index> indexes = Lists.newArrayList();
 
+    private String warehouseName;
+
     static {
         engineNames = Sets.newHashSet();
         engineNames.add("olap");
@@ -176,6 +178,26 @@ public class CreateTableStmt extends DdlStmt {
         this.tableSignature = -1;
         this.rollupAlterClauseList = rollupAlterClauseList == null ? new ArrayList<>() : rollupAlterClauseList;
         this.sortKeys = sortKeys;
+    }
+
+    public CreateTableStmt(boolean ifNotExists,
+                           boolean isExternal,
+                           TableName tableName,
+                           List<ColumnDef> columnDefinitions,
+                           List<IndexDef> indexDefs,
+                           String engineName,
+                           String charsetName,
+                           KeysDesc keysDesc,
+                           PartitionDesc partitionDesc,
+                           DistributionDesc distributionDesc,
+                           Map<String, String> properties,
+                           Map<String, String> extProperties,
+                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys,
+                           String warehouseName) {
+        this(ifNotExists, isExternal, tableName, columnDefinitions, indexDefs,
+                engineName, charsetName, keysDesc, partitionDesc, distributionDesc, properties, extProperties,
+                comment, rollupAlterClauseList, sortKeys);
+        this.warehouseName = warehouseName;
     }
 
     public void addColumnDef(ColumnDef columnDef) {

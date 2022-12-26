@@ -311,7 +311,10 @@ public enum ErrorCode {
             "Func not found when checking privilege"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
-    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
+
+    ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
+            "Unknown warehouse '%s'");
 
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {

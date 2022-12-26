@@ -616,7 +616,7 @@ showWarehousesStatement
     ;
 
 useWarehouseStatement
-    : USE qualifiedName
+    : USE WAREHOUSE identifierOrString
     ;
 
 dropWarehouseStatement

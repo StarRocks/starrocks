@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,6 +144,16 @@ public class CreateTableAnalyzer {
         // analyze key desc
         if (statement.isOlapOrLakeEngine()) {
             // olap table or lake table
+
+            // lake table need to check warehouse, except statistic tables
+            if (statement.isLakeEngine()) {
+                if (!tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)
+                        && !tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)
+                        && !tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
+                    MetaUtils.normalizationTableNameWithWarehouse(context, tableNameObject);
+                }
+            }
+
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
                 int keyLength = 0;

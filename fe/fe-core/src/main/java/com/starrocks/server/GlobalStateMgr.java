@@ -650,7 +650,6 @@ public class GlobalStateMgr {
         this.compactionManager = new CompactionManager();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.shardDeleter = new ShardDeleter();
-        this.warehouseManager = new WarehouseManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1615,14 +1614,12 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
-            saveRBACPrivilege(dos);
             checksum = MVManager.getInstance().store(dos, checksum);
             checksum = warehouseMgr.saveWarehouses(dos, checksum);
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
-
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -3060,6 +3057,14 @@ public class GlobalStateMgr {
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {
         this.alter.getClusterHandler().cancel(stmt);
+    }
+
+    // Change current warehouse of this session.
+    public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws AnalysisException {
+        if (!warehouseMgr.warehouseExists(newWarehouseName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+        }
+        ctx.setCurrentWarehouse(newWarehouseName);
     }
 
     // Change current catalog of this session.

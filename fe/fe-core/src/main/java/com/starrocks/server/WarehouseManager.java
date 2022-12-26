@@ -92,6 +92,15 @@ public class WarehouseManager implements Writable {
         return fullNameToWh.get(warehouseName);
     }
 
+    public boolean warehouseExists(String warehouseName) {
+        readLock();
+        try {
+            return fullNameToWh.containsKey(warehouseName);
+        } finally {
+            readUnlock();
+        }
+    }
+
     // these apis need lock protection
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
         createWarehouse(stmt.getFullWhName(), stmt.getProperties());

@@ -275,6 +275,11 @@ public class StatisticsMetaManager extends LeaderDaemon {
         ConnectContext context = StatisticUtils.buildConnectContext();
         context.setThreadLocalInfo();
 
+        // when no warehouse is specified, we do not create statistic tables
+        if (context.getCurrentWarehouse() == null) {
+            return false;
+        }
+
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return createSampleStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {

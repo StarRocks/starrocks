@@ -214,6 +214,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -764,7 +765,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // only internal table should check quota and cluster capacity
-        if (!stmt.isExternal()) {
+        if (!stmt.isExternal() && !stmt.isLakeEngine()) {
             // check cluster capacity
             systemInfoService.checkClusterCapacity();
             // check db quota
@@ -947,7 +948,8 @@ public class LocalMetastore implements ConnectorMetadata {
             if (partitionDesc instanceof SingleRangePartitionDesc) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 SingleRangePartitionDesc singleRangePartitionDesc = ((SingleRangePartitionDesc) partitionDesc);
-                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumns().size(), cloneProperties);
+                singleRangePartitionDesc.analyze(rangePartitionInfo.getPartitionColumns().size(),
+                        cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
                     rangePartitionInfo.checkAndCreateRange(singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
@@ -1627,7 +1629,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create shard group
         long shardGroupId = 0;
         if (table.isLakeTable()) {
-            shardGroupId =  GlobalStateMgr.getCurrentState().getStarOSAgent().
+            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     createShardGroup(db.getId(), table.getId(), partitionId);
         }
 
@@ -1672,11 +1674,13 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         int numAliveBackends = systemInfoService.getAliveBackendNumber();
         int numReplicas = 0;
+
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
+        if (table.isLakeTable() ||
+                partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
             buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else if (numAliveBackends > 0) {
@@ -1723,7 +1727,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
                                              int numBackends) throws DdlException {
-        int timeout = numReplicas / numBackends * Config.tablet_create_timeout_second;
+        int timeout = numReplicas / Math.max(1, numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
@@ -1804,15 +1808,16 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isLakeTable()) {
-                long primaryBackendId = -1;
+                // long primaryBackendId = -1;
+                TNetworkAddress backendAddr = null;
                 try {
-                    primaryBackendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                    backendAddr = ((LakeTablet) tablet).getPrimaryBackendAddr();
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
 
                 CreateReplicaTask task = new CreateReplicaTask(
-                        primaryBackendId,
+                        backendAddr,
                         dbId,
                         table.getId(),
                         partition.getId(),

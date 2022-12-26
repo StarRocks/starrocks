@@ -48,6 +48,8 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -55,6 +57,7 @@ import java.io.IOException;
 import java.util.Objects;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(TableName.class);
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
     private String catalog;
     @SerializedName(value = "tbl")
@@ -62,6 +65,9 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     private String db;
     @SerializedName(value = "fullDb")
     private String fullDb;
+
+    @SerializedName(value = "warehouse")
+    private String warehouse;
 
     public TableName() {
 
@@ -136,6 +142,14 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public void setCatalog(String catalog) {
         this.catalog = catalog;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
     }
 
     // for rename table

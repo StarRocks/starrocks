@@ -36,8 +36,6 @@ package com.starrocks.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.ClientPool;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
 import com.starrocks.thrift.TAgentTaskRequest;
@@ -77,8 +75,12 @@ public class AgentBatchTask implements Runnable {
     // backendId -> AgentTask List
     private final Map<Long, List<AgentTask>> backendIdToTasks;
 
+    // backendAddr -> AgentTask List
+    private final Map<TNetworkAddress, List<AgentTask>> backendAddrToTasks;
+
     public AgentBatchTask() {
         this.backendIdToTasks = new HashMap<>();
+        this.backendAddrToTasks = new HashMap<>();
     }
 
     public AgentBatchTask(AgentTask singleTask) {
@@ -91,17 +93,13 @@ public class AgentBatchTask implements Runnable {
             return;
         }
         long backendId = agentTask.getBackendId();
+        TNetworkAddress addr = agentTask.getBackendAddr();
         List<AgentTask> tasks = backendIdToTasks.computeIfAbsent(backendId, k -> new ArrayList<>());
         tasks.add(agentTask);
+        List<AgentTask> tasks2 = backendAddrToTasks.computeIfAbsent(addr, k -> new ArrayList<>());
+        tasks2.add(agentTask);
     }
 
-    public void addTasks(Long backendId, List<AgentTask> agentTasks) {
-        if (agentTasks == null) {
-            return;
-        }
-        List<AgentTask> tasks = backendIdToTasks.computeIfAbsent(backendId, k -> new ArrayList<>());
-        tasks.addAll(agentTasks);
-    }
 
     public List<AgentTask> getAllTasks() {
         List<AgentTask> tasks = new ArrayList<>(getTaskNum());
@@ -164,19 +162,14 @@ public class AgentBatchTask implements Runnable {
 
     @Override
     public void run() {
-        for (Long backendId : this.backendIdToTasks.keySet()) {
+        for (TNetworkAddress backendAddr : this.backendAddrToTasks.keySet()) {
             BackendService.Client client = null;
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                if (backend == null || !backend.isAlive()) {
-                    continue;
-                }
-                List<AgentTask> tasks = this.backendIdToTasks.get(backendId);
+                List<AgentTask> tasks = this.backendIdToTasks.get(backendAddr);
                 // create AgentClient
-                address = new TNetworkAddress(backend.getHost(), backend.getBePort());
-                client = ClientPool.backendPool.borrowObject(address);
+                client = ClientPool.backendPool.borrowObject(backendAddr);
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();
                 for (AgentTask task : tasks) {
                     agentTaskRequests.add(toAgentTaskRequest(task));
@@ -185,12 +178,12 @@ public class AgentBatchTask implements Runnable {
                 if (LOG.isDebugEnabled()) {
                     for (AgentTask task : tasks) {
                         LOG.debug("send task: type[{}], backend[{}], signature[{}]",
-                                task.getTaskType(), backendId, task.getSignature());
+                                task.getTaskType(), backendAddr, task.getSignature());
                     }
                 }
                 ok = true;
             } catch (Exception e) {
-                LOG.warn("task exec error. backend[{}]", backendId, e);
+                LOG.warn("task exec error. backend[{}]", backendAddr, e);
             } finally {
                 if (ok) {
                     ClientPool.backendPool.returnObject(address, client);

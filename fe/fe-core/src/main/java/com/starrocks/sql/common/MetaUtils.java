@@ -119,6 +119,16 @@ public class MetaUtils {
         }
     }
 
+    public static void normalizationTableNameWithWarehouse(ConnectContext connectContext, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getWarehouse())) {
+            if (Strings.isNullOrEmpty(connectContext.getCurrentWarehouse())) {
+                throw new SemanticException("No warehouse selected");
+            }
+            tableName.setWarehouse(connectContext.getCurrentWarehouse());
+        }
+    }
+
+
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
         CreateMaterializedViewStmt stmt;
 
