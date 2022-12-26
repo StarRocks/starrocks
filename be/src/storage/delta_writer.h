@@ -169,6 +169,8 @@ private:
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
+    // initial value is max value
+    size_t _memtable_buffer_row = -1;
 };
 
 } // namespace vectorized
