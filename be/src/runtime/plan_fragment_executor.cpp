@@ -353,6 +353,11 @@ void PlanFragmentExecutor::cancel() {
     LOG(INFO) << "cancel(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     DCHECK(_prepared);
     _runtime_state->set_is_cancelled(true);
+
+    if (_sink != nullptr) {
+        _sink->cancel();
+    }
+
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 
