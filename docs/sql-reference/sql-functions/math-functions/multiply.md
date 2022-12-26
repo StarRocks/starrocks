@@ -12,8 +12,8 @@ multiply(arg1, arg2)
 
 ### Parameters
 
-`arg1`: Numeric source column or literal.
-`arg2`: Numeric source column or literal.
+`arg1`: numeric source column or literal.
+`arg2`: numeric source column or literal.
 
 ## Return value
 
