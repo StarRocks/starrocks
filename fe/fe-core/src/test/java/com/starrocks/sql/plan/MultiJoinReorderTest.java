@@ -502,4 +502,5 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("<slot 27> : NULL"));
     }
+
 }
