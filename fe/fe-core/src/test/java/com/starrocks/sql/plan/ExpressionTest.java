@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
@@ -242,7 +241,8 @@ public class ExpressionTest extends PlanTestBase {
                 new ColumnRefOperator(100000, Type.INT, "x", true),
                 ConstantOperator.createInt(1));
         ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
-        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        LambdaFunctionOperator lambda =
+                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
         variableToSlotRef.clear();
         projectMap.clear();
         context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
@@ -1331,5 +1331,25 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:Project\n" +
                 "  |  <slot 2> : 200000");
+
+        sql = "select subtract(-30000, 40000);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : -70000");
+
+        sql = "select int_divide(128, 100);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 1");
+
+        sql = "select multiply(200, 50);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 10000");
+
+        sql = "select multiply(429496, 429496);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 184466814016");
     }
 }
