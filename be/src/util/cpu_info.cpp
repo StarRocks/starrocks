@@ -17,6 +17,8 @@
 
 #include "util/cpu_info.h"
 
+#include <limits>
+
 #if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 /* GCC-compatible compiler, targeting x86/x86-64 */
 #include <x86intrin.h>
@@ -61,6 +63,7 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "gflags/gflags.h"
+#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "util/errno.h"
 #include "util/pretty_printer.h"
@@ -251,16 +254,46 @@ void CpuInfo::_init_num_cores_with_cgroup() {
         LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(errno);
         return;
     }
-    std::ifstream ifs;
-    int64_t cfs_period_us = -1;
-    int64_t cfs_quota_us = -1;
+
+    auto sizeof_cpusets = [](const std::string& cpuset_str) {
+        int32_t count = 0;
+        std::vector<std::string> fields = strings::Split(cpuset_str, ",", strings::SkipWhitespace());
+        for (const auto& field : fields) {
+            if (field.find('-') == std::string::npos) {
+                count++;
+                continue;
+            }
+            std::vector<std::string> pair = strings::Split(field, "-", strings::SkipWhitespace());
+            if (pair.size() != 2) {
+                continue;
+            }
+            std::string& start_str = pair[0];
+            std::string& end_str = pair[1];
+            StringParser::ParseResult result;
+            auto start = StringParser::string_to_int<int32_t>(start_str.data(), start_str.size(), &result);
+            if (result != StringParser::PARSE_SUCCESS) {
+                continue;
+            }
+            auto end = StringParser::string_to_int<int32_t>(end_str.data(), end_str.size(), &result);
+            if (result != StringParser::PARSE_SUCCESS) {
+                continue;
+            }
+
+            count += (end - start + 1);
+        }
+        return count;
+    };
+
+    std::string cfs_period_us_str;
+    std::string cfs_quota_us_str;
+    std::string cpuset_str;
     if (fs.f_type == TMPFS_MAGIC) {
+        std::ifstream ifs;
         // cgroup v1
         ifs.open("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
         if (!ifs.good() || !ifs.is_open()) {
             return;
         }
-        std::string cfs_period_us_str;
         ifs >> cfs_period_us_str;
         ifs.close();
 
@@ -268,46 +301,61 @@ void CpuInfo::_init_num_cores_with_cgroup() {
         if (!ifs.good() || !ifs.is_open()) {
             return;
         }
-        std::string cfs_quota_us_str;
         ifs >> cfs_quota_us_str;
         ifs.close();
 
-        StringParser::ParseResult result;
-        cfs_period_us =
-                StringParser::string_to_int<int64_t>(cfs_period_us_str.data(), cfs_period_us_str.size(), &result);
-        if (result != StringParser::PARSE_SUCCESS) {
+        ifs.open("/sys/fs/cgroup/cpuset/cpuset.cpus");
+        if (!ifs.good() || !ifs.is_open()) {
             return;
         }
-        cfs_quota_us = StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(), cfs_quota_us_str.size(), &result);
-        if (result != StringParser::PARSE_SUCCESS) {
-            return;
-        }
+        getline(ifs, cpuset_str);
+        ifs.close();
     } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
+        std::ifstream ifs;
         // cgroup v2
         ifs.open("/sys/fs/cgroup/cpu.max");
         if (!ifs.good() || !ifs.is_open()) {
             return;
         }
-        std::string cfs_period_us_str;
-        std::string cfs_quota_us_str;
         ifs >> cfs_quota_us_str;
         ifs >> cfs_period_us_str;
         ifs.close();
 
+        ifs.open("/sys/fs/cgroup/cpuset.cpus");
+        if (!ifs.good() || !ifs.is_open()) {
+            return;
+        }
+        getline(ifs, cpuset_str);
+        ifs.close();
+    }
+
+    int32_t cfs_num_cores = num_cores_;
+    {
         StringParser::ParseResult result;
-        cfs_period_us =
+        auto cfs_period_us =
                 StringParser::string_to_int<int64_t>(cfs_period_us_str.data(), cfs_period_us_str.size(), &result);
         if (result != StringParser::PARSE_SUCCESS) {
-            return;
+            cfs_period_us = -1;
         }
-        cfs_quota_us = StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(), cfs_quota_us_str.size(), &result);
+        auto cfs_quota_us =
+                StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(), cfs_quota_us_str.size(), &result);
         if (result != StringParser::PARSE_SUCCESS) {
-            return;
+            cfs_quota_us = -1;
+        }
+        if (cfs_quota_us > 0 && cfs_period_us > 0) {
+            cfs_num_cores = cfs_quota_us / cfs_period_us;
         }
     }
-    if (cfs_quota_us > 0 && cfs_period_us > 0) {
-        num_cores_ = cfs_quota_us / cfs_period_us;
-        LOG(INFO) << "Init docker hardware cores by cgroup's cfs config, num_cores=" << num_cores_;
+
+    int32_t cpuset_num_cores = num_cores_;
+    if (cpuset_str != "") {
+        cpuset_num_cores = sizeof_cpusets(cpuset_str);
+    }
+
+    if (cfs_num_cores < num_cores_ || cpuset_num_cores < num_cores_) {
+        num_cores_ = std::max(1, std::min(cfs_num_cores, cpuset_num_cores));
+        LOG(INFO) << "Init docker hardware cores by cgroup's config, cfs_num_cores=" << cfs_num_cores
+                  << ", cpuset_num_cores=" << cpuset_num_cores << ", final num_cores=" << num_cores_;
     }
 }
 
