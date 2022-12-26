@@ -470,10 +470,7 @@
       + [log](./sql-reference/sql-functions/math-functions/log.md)
       + [log2](./sql-reference/sql-functions/math-functions/log2.md)
       + [log10](./sql-reference/sql-functions/math-functions/log10.md)
-<<<<<<< HEAD
       + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
-=======
->>>>>>> 7aa270814 ([Doc] Add doc for pow/power (#15411))
       + [pow](./sql-reference/sql-functions/math-functions/pow.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
