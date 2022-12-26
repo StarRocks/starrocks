@@ -489,8 +489,6 @@ public class AnalyzerUtils {
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
                 newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
                         srcType.getPrecision(), srcType.getDecimalDigits());
-            } else if (srcType.isOnlyMetricType()) {
-                throw new SemanticException("Unsupported Mv aggregate type: %s", srcType);
             } else {
                 newType = ScalarType.createType(srcType.getPrimitiveType());
             }
