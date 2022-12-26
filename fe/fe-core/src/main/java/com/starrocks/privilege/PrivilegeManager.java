@@ -641,6 +641,21 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkAnyActionOnResource(ConnectContext context, String name) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            // 1. check for any action on resource
+            PEntryObject resourceObject = manager.provider.generateObject(
+                    PrivilegeType.RESOURCE.name(), Arrays.asList(name), manager.globalStateMgr);
+            short resourceTypeId = manager.analyzeType(PrivilegeType.RESOURCE.name());
+            return manager.provider.searchAnyActionOnObject(resourceTypeId, resourceObject, collection);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when checking any action on resource {}", name, e);
+            return false;
+        }
+    }
+
     public static boolean checkResourceGroupAction(ConnectContext context, String name,
                                                    PrivilegeType.ResourceGroupAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -1420,12 +1435,7 @@ public class PrivilegeManager {
     }
 
     private void removeInvalidRolesUnlocked(Set<Long> roleIds) {
-        Iterator<Long> roleIdIter = roleIds.iterator();
-        while (roleIdIter.hasNext()) {
-            if (!roleIdToPrivilegeCollection.containsKey(roleIdIter.next())) {
-                roleIdIter.remove();
-            }
-        }
+        roleIds.removeIf(aLong -> !roleIdToPrivilegeCollection.containsKey(aLong));
     }
 
     /**
@@ -1677,7 +1687,7 @@ public class PrivilegeManager {
     }
 
     // This function only change data in parent roles
-    // Child role will be update as a whole by upgradeRoleInitPrivilegeUnlock
+    // Child role will be updated as a whole by upgradeRoleInitPrivilegeUnlock
     public void upgradeParentRoleRelationUnlock(long parentRoleId, long subRoleId) {
         roleIdToPrivilegeCollection.get(parentRoleId).addSubRole(subRoleId);
     }

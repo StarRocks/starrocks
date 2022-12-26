@@ -41,6 +41,8 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -165,20 +167,36 @@ public class ConnectScheduler {
         return numberConnection.get();
     }
 
-    public List<ConnectContext.ThreadInfo> listConnection(String user) {
+    private List<ConnectContext.ThreadInfo> getAllConnThreadInfoByUser(ConnectContext connectContext, String user) {
         List<ConnectContext.ThreadInfo> infos = Lists.newArrayList();
+        ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
 
         for (ConnectContext ctx : connectionMap.values()) {
-            // Check auth
-            if (!ctx.getQualifiedUser().equals(user) &&
-                    !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                            PrivPredicate.GRANT)) {
-                continue;
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (!ctx.getQualifiedUser().equals(user) &&
+                        !PrivilegeManager.checkSystemAction(currContext, PrivilegeType.SystemAction.OPERATE)) {
+                    continue;
+                }
+            } else {
+                // Check auth
+                if (!ctx.getQualifiedUser().equals(user) &&
+                        !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(currContext,
+                                PrivPredicate.GRANT)) {
+                    continue;
+                }
             }
 
             infos.add(ctx.toThreadInfo());
         }
         return infos;
+    }
+
+    public List<ConnectContext.ThreadInfo> listConnection(String user) {
+        return getAllConnThreadInfoByUser(null, user);
+    }
+
+    public List<ConnectContext.ThreadInfo> listConnection(ConnectContext context, String user) {
+        return getAllConnThreadInfoByUser(context, user);
     }
 
     private class LoopHandler implements Runnable {
@@ -211,7 +229,7 @@ public class ConnectScheduler {
                 ConnectProcessor processor = new ConnectProcessor(context);
                 processor.loop();
             } catch (Exception e) {
-                // for unauthrorized access such lvs probe request, may cause exception, just log it in debug level
+                // for unauthorized access such lvs probe request, may cause exception, just log it in debug level
                 if (context.getCurrentUserIdentity() != null) {
                     LOG.warn("connect processor exception because ", e);
                 } else {
