@@ -39,6 +39,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1109,6 +1110,28 @@ public class NodeMgr {
             }
         }
 
+        return checksum;
+    }
+
+    public long loadGlobalFunctions(DataInputStream dis, long checksum) throws IOException {
+        int count = dis.readInt();
+        checksum ^= count;
+        for (long i = 0; i < count; ++i) {
+            Function f = Function.read(dis);
+            globalFunctionMgr.replayAddFunction(f);
+        }
+        return checksum;
+    }
+
+    public long saveGlobalFunctions(DataOutputStream dos, long checksum) throws IOException {
+        List<Function> functions = globalFunctionMgr.getFunctions();
+        int size = functions.size();
+        checksum ^= size;
+        dos.writeInt(size);
+
+        for (Function f : functions) {
+            f.write(dos);
+        }
         return checksum;
     }
 
