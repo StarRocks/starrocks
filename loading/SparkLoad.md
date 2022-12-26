@@ -388,13 +388,13 @@ CANCEL LOAD FROM db1 WHERE LABEL = "label1";
 
 **FE 配置:** 下面配置属于 Spark Load 的系统级别配置，也就是作用于所有 Spark Load 导入任务的配置。主要通过修改 fe.conf 来调整配置值。
 
-* enable-spark-load：开启 Spark load 和创建 resource 功能。默认为 false，关闭此功能。
-* spark-load-default-timeout-second：任务默认超时时间为 86400 秒（1 天）。
-* spark-home-default-dir：spark 客户端路径 (fe/lib/spark2x) 。
-* spark-resource-path：打包好的 spark 依赖文件路径（默认为空）。
-* spark-launcher-log-dir：spark 客户端的提交日志存放的目录（fe/log/spark-launcher-log）。
-* yarn-client-path：yarn 二进制可执行文件路径 (fe/lib/yarn-client/hadoop/bin/yarn) 。
-* yarn-config-dir：yarn 配置文件生成路径 (fe/lib/yarn-config) 。
+* `enable_spark_load`：开启 Spark load 和创建 resource 功能。默认为 false，关闭此功能。
+* `spark_load_default_timeout_second`：任务默认超时时间为 86400 秒（1 天）。
+* `spark_home_default_dir`：spark 客户端路径 (fe/lib/spark2x) 。
+* `spark_resource_path`：打包好的 spark 依赖文件路径（默认为空）。
+* `spark_launcher_log_dir`：spark 客户端的提交日志存放的目录（fe/log/spark-launcher-log）。
+* `yarn_client_path`：yarn 二进制可执行文件路径 (fe/lib/yarn-client/hadoop/bin/yarn) 。
+* `yarn_config_dir`：yarn 配置文件生成路径 (fe/lib/yarn-config) 。
 
 ---
 
