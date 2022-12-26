@@ -178,7 +178,7 @@ public class AnalyzerUtils {
                         ErrorType.USER_ERROR);
             }
         } else {
-            // TODO(yanz): priv check
+            // TODO(yanz): priv check V2 for using global function.
         }
         return fn;
     }

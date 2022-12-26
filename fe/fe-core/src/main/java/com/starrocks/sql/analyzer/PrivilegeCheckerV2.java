@@ -1593,7 +1593,7 @@ public class PrivilegeCheckerV2 {
         }
 
         // ---------------------------------------- FUNC stmt --------------------------------------------------
-        // TODO(yan): privilege checker for global function.
+        // TODO(yanz): privilege checker for global function.
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
             FunctionName name = statement.getFunctionName();

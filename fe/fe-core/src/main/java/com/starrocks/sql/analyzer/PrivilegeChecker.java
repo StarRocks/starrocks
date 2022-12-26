@@ -981,6 +981,7 @@ public class PrivilegeChecker {
         @Override
         public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
+            // No need to check privilege when `show global functions`
             if (FunctionName.GLOBAL_UDF_DB.equals(dbName)) {
                 return null;
             }
