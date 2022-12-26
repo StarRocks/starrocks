@@ -34,7 +34,11 @@ public class StatsConstants {
     public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 1000 * 10000;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
 
-    public static final double MAXIMUM_COST = Double.MAX_VALUE * 0.8;
+    public static final double MAXIMUM_COST = Double.MAX_VALUE / Math.pow(10, 50);
+
+    public static final double MAXIMUM_ROW_COUNT = Double.MAX_VALUE / Math.pow(10, 100);
+
+    public static final double MAXIMUM_OUTPUT_SIZE = Double.MAX_VALUE / Math.pow(10, 80);
 
     //Statistics collection threshold
     public static final String STATISTIC_AUTO_COLLECT_RATIO = "statistic_auto_collect_ratio";
