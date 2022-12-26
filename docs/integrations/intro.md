@@ -1,6 +1,6 @@
 # Integrate with StarRocks
 
-This page introduce how to integrate with StarRocks.
+This topic introduces how to integrate with StarRocks.
 
 ## BI tools
 
@@ -25,7 +25,6 @@ This page introduce how to integrate with StarRocks.
 [Apache Kafka](../loading/RoutineLoad.md)
 
 [Apache pulsar](../loading/RoutineLoad.md)
-
 
 ## Cluster Management
 
