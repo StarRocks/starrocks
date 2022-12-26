@@ -22,10 +22,10 @@ Return upper-case string.
 
 ```plaintext
 MySQL [test]> select C_String, upper(C_String) from ex_iceberg_tbl;
-+---------------+-----------------+
-| C_String      | upper(C_String) |
-+---------------+-----------------+
-| Hello, China! | HELLO, CHINA!   |
-| Hello, World! | HELLO, WORLD!   |
-+---------------+-----------------+
++-------------------+-------------------+
+| C_String          | upper(C_String)   |
++-------------------+-------------------+
+| Hello, StarRocks! | HELLO, STARROCKS! |
+| Hello, World!     | HELLO, WORLD!     |
++-------------------+-------------------+
 ```
