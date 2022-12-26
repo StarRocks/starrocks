@@ -119,9 +119,8 @@ void MemInfo::set_memlimit_if_container() {
         return;
     }
     struct statfs fs;
-    int err = statfs("/sys/fs/cgroup", &fs);
-    if (err < 0) {
-        LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(err);
+    if (statfs("/sys/fs/cgroup", &fs) < 0) {
+        LOG(WARNING) << "Fail to get file system statistics. err: " << errno_to_string(errno);
         return;
     }
 
