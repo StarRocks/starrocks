@@ -799,8 +799,18 @@ public class PrivilegeManager {
                     db,
                     manager.globalStateMgr);
             short viewTypeId = manager.analyzeType(PrivilegeType.VIEW.name());
-            return manager.provider.searchAnyActionOnObject(viewTypeId, allViewInDbObject, collection);
-            // TODO(yiming): 4. check for any action on any mv in this db
+            if (manager.provider.searchAnyActionOnObject(viewTypeId, allViewInDbObject, collection)) {
+                return true;
+            }
+            // 4. check for any action on any mv in this db
+            PEntryObject allMvInDbObject = manager.provider.generateObject(
+                    PrivilegeType.MATERIALIZED_VIEW.name(),
+                    Arrays.asList(PrivilegeType.MATERIALIZED_VIEW.getPlural()),
+                    PrivilegeType.DATABASE.name(),
+                    db,
+                    manager.globalStateMgr);
+            short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
+            return manager.provider.searchAnyActionOnObject(mvTypeId, allMvInDbObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on or in db {}", db, e);
             return false;
@@ -843,7 +853,21 @@ public class PrivilegeManager {
                     return true;
                 }
             }
-            // TODO(yiming): 3. check for specified action on any mv in this db
+
+            // 3. check for specified action on any mv in this db
+            if (EnumUtils.isValidEnum(PrivilegeType.ViewAction.class, actionName)) {
+                PEntryObject allMvInDbObject = manager.provider.generateObject(
+                        PrivilegeType.MATERIALIZED_VIEW.name(),
+                        Arrays.asList(PrivilegeType.MATERIALIZED_VIEW.getPlural()),
+                        PrivilegeType.DATABASE.name(),
+                        db,
+                        manager.globalStateMgr);
+                short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
+                Action want = manager.provider.getAction(mvTypeId, actionName);
+                if (manager.provider.searchActionOnObject(mvTypeId, allMvInDbObject, collection, want)) {
+                    return true;
+                }
+            }
             return false;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action {} in db {}", actionName, db, e);

@@ -41,6 +41,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -101,14 +102,48 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
+        starRocksAssert.withDatabase("db3");
         starRocksAssert.withTable(createTblStmtStr1);
         starRocksAssert.withTable(createTblStmtStr2);
         starRocksAssert.withTable(createTblStmtStr3);
+        createMvForTest(starRocksAssert.getCtx());
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         privilegeManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
+    }
+
+    private static void createMvForTest(ConnectContext connectContext) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE db3.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String sql = "create materialized view db3.mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from db3.tbl1;";
+        createMaterializedView(sql, connectContext);
+    }
+
+    private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
+        Config.enable_experimental_mv = true;
+        CreateMaterializedViewStatement createMaterializedViewStatement =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
     }
 
     private static void mockRepository() {
@@ -476,12 +511,14 @@ public class PrivilegeCheckerV2Test {
                 Arrays.asList(
                         "grant SELECT,INSERT on db1.tbl1 to test",
                         "grant SELECT,INSERT on db1.tbl2 to test",
-                        "grant SELECT,INSERT on db2.tbl1 to test"
+                        "grant SELECT,INSERT on db2.tbl1 to test",
+                        "grant SELECT,INSERT on db3.tbl1 to test"
                 ),
                 Arrays.asList(
                         "revoke SELECT,INSERT on db1.tbl1 from test",
                         "revoke SELECT,INSERT on db1.tbl2 from test",
-                        "revoke SELECT,INSERT on db2.tbl1 from test"
+                        "revoke SELECT,INSERT on db2.tbl1 from test",
+                        "revoke SELECT,INSERT on db3.tbl1 from test"
                 ),
                 "SELECT command denied to user 'test'");
 
@@ -544,9 +581,11 @@ public class PrivilegeCheckerV2Test {
         analyzeManager.addAnalyzeJob(analyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
+            System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db2.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
@@ -554,6 +593,7 @@ public class PrivilegeCheckerV2Test {
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db3.tbl1 from test");
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db1 = globalStateMgr.getDb("db1");
@@ -717,6 +757,11 @@ public class PrivilegeCheckerV2Test {
                 "grant update on db1.tbl1 to test",
                 "revoke update on db1.tbl1 from test",
                 "UPDATE command denied to user 'test'");
+        verifyGrantRevoke(
+                "select k1, k2 from db3.mv1",
+                "grant select on materialized_view db3.mv1 to test",
+                "revoke select on materialized_view db3.mv1 from test",
+                "SELECT command denied to user 'test'@'localhost' for materialized view 'db3.mv1'");
     }
 
     @Test
