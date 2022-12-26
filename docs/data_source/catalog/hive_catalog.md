@@ -122,6 +122,8 @@ The parameter description is as follows:
 >
 > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
+After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
+
 ## Caching strategy of Hive metadata
 
 StarRocks develops a query execution plan based on the metadata of Hive tables. Therefore, the response time of Hive metastore directly affects the time consumed by a query. To reduce the impact, StarRocks provides caching strategies, based on which StarRocks can cache and update the metadata of Hive tables, such as partition statistics and file information of partitions. Currently, the following two strategies are available:
@@ -221,10 +223,6 @@ Configure the following parameters in the **$FE_HOME/conf/fe.conf** file of each
 | hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
 | enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
 | hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |
-
-## What to do next
-
-After you complete all the preceding operations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

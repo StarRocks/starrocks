@@ -12,8 +12,8 @@ multiply(arg1, arg2)
 
 ### Parameters
 
-`arg1`: Numeric source column or literal.
-`arg2`: Numeric source column or literal.
+`arg1`: numeric source column or literal.
+`arg2`: numeric source column or literal.
 
 ## Return value
 
@@ -57,6 +57,7 @@ MySQL> select multiply(1.0,id) from t;
 |                 2 |
 +-------------------+
 1 row in set (0.01 sec)
+```
 
 ## keyword
 
