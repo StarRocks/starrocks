@@ -15,8 +15,8 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/connector_scan_node.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exec/vectorized/connector_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"

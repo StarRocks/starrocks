@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
-#include "exec/vectorized/olap_scan_node.h"
+#include "exec/olap_scan_node.h"
 #include "exprs/runtime_filter_bank.h"
 #include "storage/tablet.h"
 

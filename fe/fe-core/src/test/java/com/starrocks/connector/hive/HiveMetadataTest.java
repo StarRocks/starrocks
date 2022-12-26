@@ -29,6 +29,8 @@ import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.RemotePathKey;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -186,6 +188,15 @@ public class HiveMetadataTest {
         Assert.assertEquals(0, blockDesc.getOffset());
         Assert.assertEquals(20, blockDesc.getLength());
         Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+    }
+
+    @Test
+    public void testGetFileWithSubdir() throws StarRocksConnectorException {
+        RemotePathKey pathKey = new RemotePathKey("hdfs://127.0.0.1:10000/hive.db", true, Optional.empty());
+        Map<RemotePathKey, List<RemoteFileDesc>> files = hiveRemoteFileIO.getRemoteFiles(pathKey);
+        List<RemoteFileDesc> remoteFileDescs = files.get(pathKey);
+        Assert.assertEquals(1, remoteFileDescs.size());
+        Assert.assertEquals("hive_tbl/000000_0", remoteFileDescs.get(0).getFileName());
     }
 
     @Test

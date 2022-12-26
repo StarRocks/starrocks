@@ -480,7 +480,7 @@ public class FileScanNode extends LoadScanNode {
         numInstances = Math.min(numInstances, Config.max_broker_concurrency);
         numInstances = Math.max(1, numInstances);
 
-        bytesPerInstance = (totalBytes + numInstances - 1) / numInstances;
+        bytesPerInstance = (totalBytes + numInstances - 1) / (numInstances != 0 ? numInstances : 1);
     }
 
     private void assignBackends() throws UserException {

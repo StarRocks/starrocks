@@ -20,7 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exec/vectorized/olap_scan_prepare.h"
+#include "exec/olap_scan_prepare.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
 #include "exprs/mock_vectorized_expr.h"

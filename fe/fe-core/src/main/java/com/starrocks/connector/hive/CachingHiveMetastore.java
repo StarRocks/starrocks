@@ -38,6 +38,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
@@ -219,7 +220,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
         Map<HivePartitionName, Partition> all = getAll(partitionCache, hivePartitionNames);
         ImmutableMap.Builder<String, Partition> partitionsByName = ImmutableMap.builder();
         for (Map.Entry<HivePartitionName, Partition> entry : all.entrySet()) {
-            partitionsByName.put(entry.getKey().getPartitionNames().get(), entry.getValue());
+            Optional<String> optPartitionNames = entry.getKey().getPartitionNames();
+            Preconditions.checkState(optPartitionNames.isPresent());
+            partitionsByName.put(optPartitionNames.get(), entry.getValue());
         }
         return partitionsByName.build();
     }
@@ -234,7 +237,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
         ImmutableMap.Builder<HivePartitionName, Partition> partitions = ImmutableMap.builder();
         for (HivePartitionName partitionName : partitionNames) {
-            partitions.put(partitionName, partitionsByNames.get(partitionName.getPartitionNames().get()));
+            Optional<Partition> optPartition = partitionName.getPartitionNames().map(partitionsByNames::get);
+            Preconditions.checkState(optPartition.isPresent());
+            partitions.put(partitionName, optPartition.get());
         }
         return partitions.build();
     }
@@ -274,11 +279,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     private HivePartitionStats loadPartitionStatistics(HivePartitionName hivePartitionName) {
         Table table = getTable(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
-        Preconditions.checkState(hivePartitionName.getPartitionNames().isPresent(), "hive partition name is missing");
+        Optional<String> optPartitionNames = hivePartitionName.getPartitionNames();
+        Preconditions.checkState(optPartitionNames.isPresent(), "hive partition name is missing");
         Map<String, HivePartitionStats> partitionsStatistics = metastore
-                .getPartitionStatistics(table, Lists.newArrayList(hivePartitionName.getPartitionNames().get()));
+                .getPartitionStatistics(table, Lists.newArrayList(optPartitionNames.get()));
 
-        return partitionsStatistics.get(hivePartitionName.getPartitionNames().get());
+        return partitionsStatistics.get(optPartitionNames.get());
     }
 
     private Map<HivePartitionName, HivePartitionStats> loadPartitionsStatistics(
@@ -331,7 +337,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
         List<HivePartitionName> needToRefresh = Lists.newArrayList();
         List<HivePartitionName> needToInvalidate = Lists.newArrayList();
         for (HivePartitionName name : presentInCache) {
-            if (name.getPartitionNames().isPresent() && partitionNamesInHMS.contains(name.getPartitionNames().get())) {
+            Optional<String> optPartitionNames = name.getPartitionNames();
+            if (optPartitionNames.isPresent() && partitionNamesInHMS.contains(optPartitionNames.get())) {
                 needToRefresh.add(name);
             } else {
                 needToInvalidate.add(name);

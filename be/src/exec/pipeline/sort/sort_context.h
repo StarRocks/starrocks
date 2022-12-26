@@ -21,10 +21,10 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/vectorized/chunks_sorter.h"
-#include "exec/vectorized/sorting/merge.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/merge.h"
+#include "exec/sorting/sorting.h"
 
 namespace starrocks::pipeline {
 

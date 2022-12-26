@@ -568,11 +568,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
                 partitionDescList.add(rangePartitionDesc);
             }
-            Expr expr = (Expr) visit(context.partitionExpression().expression());
-            List<String> columnList;
-            if (expr instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) expr;
-                columnList = ImmutableList.of(slotRef.getColumnName());
+            Expr expr = (Expr) visit(context.partitionExpression());
+            List<String> columnList = Lists.newArrayList();
+            if (expr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                ArrayList<Expr> children = functionCallExpr.getChildren();
+                for (Expr child : children) {
+                    if (child instanceof SlotRef) {
+                        SlotRef slotRef = (SlotRef) child;
+                        columnList.add(slotRef.getColumnName());
+                    }
+                }
             } else {
                 throw new ParsingException("Unsupported partition expression: %s", expr);
             }
@@ -777,17 +783,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowTableStatement(StarRocksParser.ShowTableStatementContext context) {
         boolean isVerbose = context.FULL() != null;
         String database = null;
+        String catalog = null;
+        // catalog.db
         if (context.qualifiedName() != null) {
-            database = getQualifiedName(context.qualifiedName()).toString();
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            List<String> parts = qualifiedName.getParts();
+            if (parts.size() == 2) {
+                catalog = qualifiedName.getParts().get(0);
+                database = qualifiedName.getParts().get(1);
+            } else if (parts.size() == 1) {
+                database = qualifiedName.getParts().get(0);
+            }
         }
 
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowTableStmt(database, isVerbose, stringLiteral.getValue());
+            return new ShowTableStmt(database, isVerbose, stringLiteral.getValue(), catalog);
         } else if (context.expression() != null) {
-            return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()));
+            return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()), catalog);
         } else {
-            return new ShowTableStmt(database, isVerbose, null);
+            return new ShowTableStmt(database, isVerbose, null, catalog);
         }
     }
 

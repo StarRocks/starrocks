@@ -237,7 +237,6 @@ public class FunctionSet {
     public static final String VAR_SAMP = "var_samp";
     public static final String VARIANCE_SAMP = "variance_samp";
     public static final String ANY_VALUE = "any_value";
-    public static final String SUM_DISTINCT = "sum_distinct";
     public static final String STD = "std";
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
@@ -796,7 +795,6 @@ public class FunctionSet {
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
-        registerBuiltinSumAggFunction(SUM_DISTINCT);
         // MultiDistinctSum
         registerBuiltinMultiDistinctSumAggFunction();
 

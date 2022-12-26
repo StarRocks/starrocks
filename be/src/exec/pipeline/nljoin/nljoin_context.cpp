@@ -17,8 +17,8 @@
 #include <algorithm>
 #include <numeric>
 
+#include "exec/cross_join_node.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exec/vectorized/cross_join_node.h"
 #include "exprs/expr.h"
 #include "fmt/format.h"
 #include "runtime/runtime_state.h"

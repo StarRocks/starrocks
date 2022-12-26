@@ -38,17 +38,32 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -95,7 +110,9 @@ import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -112,6 +129,8 @@ import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
+import com.starrocks.thrift.TCreatePartitionRequest;
+import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
@@ -152,6 +171,10 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNodeInfo;
+import com.starrocks.thrift.TNodesInfo;
+import com.starrocks.thrift.TOlapTableIndexTablets;
+import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -170,6 +193,7 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
@@ -189,13 +213,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
+import static com.starrocks.thrift.TStatusCode.OK;
+import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
 
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
@@ -1443,6 +1471,174 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TSetConfigResponse(status);
         }
+    }
+
+    @Override
+    public TCreatePartitionResult createPartition(TCreatePartitionRequest request) throws TException {
+
+        long dbId = request.getDb_id();
+        long tableId = request.getTable_id();
+        TCreatePartitionResult result = new TCreatePartitionResult();
+        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            result.setStatus(errorStatus);
+            result.setErr_msg(String.format("dbId=%d is not exists", dbId));
+            return result;
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            result.setStatus(errorStatus);
+            result.setErr_msg(String.format("dbId=%d tableId=%d is not exists", dbId, tableId));
+            return result;
+        }
+        if (!(table instanceof OlapTable)) {
+            result.setStatus(errorStatus);
+            result.setErr_msg(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId));
+            return result;
+        }
+        OlapTable olapTable = (OlapTable) table;
+
+        if (request.partitionValues == null) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("partitionValues should not null.");
+            return result;
+        }
+        // Now only supports the case of automatically creating single partition
+        if (request.partitionValues.size() != 1) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("only support single partition, partitionValues size should equal 1.");
+            return result;
+        }
+        List<String> partitionValues = request.partitionValues.get(0);
+
+        Set<String> partitionNames = Sets.newHashSet();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("only support expression range partition.");
+            return result;
+        }
+        List<Expr> partitionExprs = ((ExpressionRangePartitionInfo) partitionInfo).getPartitionExprs();
+        if (partitionExprs.size() != 1) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("only support one expression partitionExpr.");
+            return result;
+        }
+        Expr expr = partitionExprs.get(0);
+        if (!(expr instanceof FunctionCallExpr)) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("only support FunctionCallExpr");
+            return result;
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        String fnName = functionCallExpr.getFnName().getFunction();
+        if (!fnName.equals(FunctionSet.DATE_TRUNC)) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("only support data_trunc function.");
+            return result;
+        }
+        List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+        if (paramsExprs.size() != 2) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("params exprs size should be 2.");
+            return result;
+        }
+        Expr granularityExpr = paramsExprs.get(0);
+        if (!(granularityExpr instanceof StringLiteral)) {
+            result.setStatus(errorStatus);
+            result.setErr_msg("granularity is not string literal.");
+            return result;
+        }
+        StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+        String granularity = granularityLiteral.getStringValue();
+
+        Map<String, AddPartitionClause> addPartitionClauseMap;
+        try {
+            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(partitionValues,
+                    granularity, olapTable);
+        } catch (AnalysisException ex) {
+            result.setStatus(errorStatus);
+            result.setErr_msg(ex.getMessage());
+            return result;
+        }
+
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
+            try {
+                state.addPartitions(db, olapTable.getName(), addPartitionClause);
+            } catch (DdlException | AnalysisException e) {
+                result.setStatus(errorStatus);
+                result.setErr_msg(String.format("create partition failed. stmt:%s", addPartitionClause.toSql()));
+                return result;
+            }
+        }
+
+        // build partition & tablets
+        List<TOlapTablePartition> partitions = Lists.newArrayList();
+        List<TTabletLocation> tablets = Lists.newArrayList();
+        for (String partitionName : addPartitionClauseMap.keySet()) {
+            Partition partition = table.getPartition(partitionName);
+            TOlapTablePartition tPartition = new TOlapTablePartition();
+            tPartition.setId(partition.getId());
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
+            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            // set start keys
+            if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
+                for (int i = 0; i < partColNum; i++) {
+                    tPartition.addToStart_keys(
+                            range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                }
+            }
+            // set end keys
+            if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
+                for (int i = 0; i < partColNum; i++) {
+                    tPartition.addToEnd_keys(
+                            range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                }
+            }
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
+                        index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+                tPartition.setNum_buckets(index.getTablets().size());
+            }
+            partitions.add(tPartition);
+            // tablet
+            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    // we should ensure the replica backend is alive
+                    // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                    LocalTablet localTablet = (LocalTablet) tablet;
+                    Multimap<Replica, Long> bePathsMap =
+                            localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                    if (bePathsMap.keySet().size() < quorum) {
+                        LOG.warn("auto go quorum exception");
+                    }
+                    // replicas[0] will be the primary replica
+                    List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                    Collections.shuffle(replicas);
+                    tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                            .collect(Collectors.toList())));
+                }
+            }
+        }
+        result.setPartitions(partitions);
+        result.setTablets(tablets);
+
+        // build nodes
+        List<TNodeInfo> nodeInfos = Lists.newArrayList();
+        TNodesInfo nodesInfo = new TNodesInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(olapTable.getClusterId());
+        for (Long id : systemInfoService.getBackendIds(false)) {
+            Backend backend = systemInfoService.getBackend(id);
+            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        }
+        result.setNodes(nodeInfos);
+        result.setStatus(new TStatus(OK));
+        return result;
     }
 
     @Override

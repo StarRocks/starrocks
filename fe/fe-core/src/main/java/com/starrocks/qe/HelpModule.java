@@ -299,8 +299,10 @@ public class HelpModule {
     // Every query will begin at this method, so we add check logic here to check 
     // whether need reload ZipFile
     public static HelpModule getInstance() {
-        if (instance == null) {
-            instance = new HelpModule();
+        synchronized (HelpModule.class) {
+            if (instance == null) {
+                instance = new HelpModule();
+            }
         }
 
         try {

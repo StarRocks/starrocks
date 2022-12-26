@@ -17,7 +17,7 @@
 #include <ostream>
 
 #include "column/chunk.h"
-#include "exec/vectorized/sorting/sort_permute.h"
+#include "exec/sorting/sort_permute.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"

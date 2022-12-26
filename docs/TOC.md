@@ -388,6 +388,7 @@
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
+      + [substring](./sql-reference/sql-functions/string-functions/substring.md)
     + JSON Functions
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
@@ -509,10 +510,12 @@
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
+      + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
++ [Integrate with StarRocks](./integrations/intro.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -536,6 +539,7 @@
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
     + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
+    + [Build_Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes

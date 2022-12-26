@@ -167,7 +167,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(STORAGE_AGGREGATE_NONE, c1.aggregation());
     ASSERT_EQ(1, c1.subcolumn_count());
 
-    ASSERT_EQ("_c1_1", c1.subcolumn(0).name());
+    ASSERT_EQ("element", c1.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c1.subcolumn(0).unique_id());
     ASSERT_EQ(TYPE_DECIMALV2, c1.subcolumn(0).type());
     ASSERT_FALSE(c1.subcolumn(0).is_key());
@@ -192,7 +192,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(STORAGE_AGGREGATE_NONE, c2.aggregation());
     ASSERT_EQ(1, c2.subcolumn_count());
 
-    ASSERT_EQ("_c2_1", c2.subcolumn(0).name());
+    ASSERT_EQ("element", c2.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c2.subcolumn(0).unique_id());
     ASSERT_EQ(TYPE_ARRAY, c2.subcolumn(0).type());
     ASSERT_FALSE(c2.subcolumn(0).is_key());
@@ -205,7 +205,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(1, c2.subcolumn(0).subcolumn_count());
 
     const TabletColumn& c2_1 = c2.subcolumn(0);
-    ASSERT_EQ("_c2_2", c2_1.subcolumn(0).name());
+    ASSERT_EQ("element", c2_1.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c2_1.subcolumn(0).unique_id());
     ASSERT_EQ(TYPE_VARCHAR, c2_1.subcolumn(0).type());
     ASSERT_FALSE(c2_1.subcolumn(0).is_key());
@@ -214,7 +214,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_FALSE(c2_1.subcolumn(0).has_bitmap_index());
     ASSERT_FALSE(c2_1.subcolumn(0).has_default_value());
     ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).length());
-    ASSERT_EQ(10, c2_1.subcolumn(0).index_length());
+    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).index_length());
     ASSERT_EQ(0, c2_1.subcolumn(0).subcolumn_count());
 }
 
