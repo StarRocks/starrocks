@@ -830,6 +830,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         return;
     }
 
+<<<<<<< HEAD
     span->AddEvent("reslove_conflict");
     int64_t t_load = MonotonicMillis();
     EditVersion latest_applied_version;
@@ -846,8 +847,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         _set_error(msg);
         return;
     }
+=======
+>>>>>>> 545b7be0b ([Enhancement] Optimize mem usage of partial update (#14187))
     int64_t t_apply = MonotonicMillis();
-
     std::int32_t conditional_column = -1;
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     if (txn_meta.has_merge_condition()) {
@@ -867,11 +869,24 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         new_deletes[rowset_id + i] = {};
     }
+    EditVersion latest_applied_version;
+    st = get_latest_applied_version(&latest_applied_version);
 
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         state.load_upserts(rowset.get(), i);
         auto& upserts = state.upserts();
         if (upserts[i] != nullptr) {
+            // apply partial rowset segment
+            st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index);
+            if (!st.ok()) {
+                manager->update_state_cache().remove(state_entry);
+                std::string msg =
+                        strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                            st.to_string(), debug_string());
+                LOG(ERROR) << msg;
+                _set_error(msg);
+                return;
+            }
             _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
@@ -1057,8 +1072,13 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
               << " " << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
               << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
               << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
+<<<<<<< HEAD
               << Substitute("($0/$1/$2/$3/$4)", t_load - t_start, t_apply - t_load, t_index - t_apply,
                             t_delvec - t_index, t_write - t_delvec);
+=======
+              << strings::Substitute("($0/$1/$2/$3)", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
+                                     t_write - t_delvec);
+>>>>>>> 545b7be0b ([Enhancement] Optimize mem usage of partial update (#14187))
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
 }
 
@@ -2144,6 +2164,18 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);
+}
+
+int64_t TabletUpdates::get_average_row_size() {
+    TTabletInfo info;
+    get_tablet_info_extra(&info);
+    int64_t total_row = info.row_count;
+    int64_t total_size = info.data_size;
+    if (total_row != 0) {
+        return total_size / total_row;
+    } else {
+        return 0;
+    }
 }
 
 std::string TabletUpdates::RowsetStats::to_string() const {
@@ -3302,6 +3334,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         }
         std::string seg_path =
                 Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
+        LOG(INFO) << "segment path is " << seg_path;
         auto segment = Segment::open(fs, seg_path, rssid - iter->first, &rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
@@ -3326,10 +3359,15 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
     return Status::OK();
 }
 
-Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
-                                                    EditVersion* read_version, uint32_t* next_rowset_id,
-                                                    std::vector<std::vector<uint64_t>*>* rss_rowids) {
+Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upsert,
+                                                    EditVersion* read_version, std::vector<uint64_t>* rss_rowids) {
     std::lock_guard lg(_index_lock);
+    return prepare_partial_update_states_unlock(tablet, upsert, read_version, rss_rowids);
+}
+
+Status TabletUpdates::prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upsert,
+                                                           EditVersion* read_version,
+                                                           std::vector<uint64_t>* rss_rowids) {
     {
         // get next_rowset_id and read_version to identify conflict
         std::lock_guard wl(_lock);
@@ -3338,10 +3376,8 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
-        *next_rowset_id = _next_rowset_id;
         *read_version = _edit_version_infos[_apply_version_idx]->version;
     }
-
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
@@ -3358,12 +3394,7 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
         return Status::InternalError(msg);
     }
 
-    // get rss_rowids for each segment of rowset
-    uint32_t num_segments = upserts.size();
-    for (size_t i = 0; i < num_segments; i++) {
-        auto& pks = *upserts[i];
-        index.get(pks, (*rss_rowids)[i]);
-    }
+    index.get(*upsert, rss_rowids);
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
     // we should try to remove the index_entry from cache

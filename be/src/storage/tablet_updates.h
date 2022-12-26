@@ -146,6 +146,9 @@ public:
     // get info's version, version_count, row_count, data_size
     void get_tablet_info_extra(TTabletInfo* info);
 
+    // get average row size
+    int64_t get_average_row_size();
+
     std::string debug_string() const;
 
     // Return nullptr if the delta rowset does not exist.
@@ -225,9 +228,16 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<vectorized::Column>>* columns);
 
+    /*
     Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                          EditVersion* read_version, uint32_t* next_rowset_id,
                                          std::vector<std::vector<uint64_t>*>* rss_rowids);
+    */
+    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
+                                         std::vector<uint64_t>* rss_rowids);
+
+    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
+                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
