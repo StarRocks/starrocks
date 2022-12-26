@@ -269,7 +269,6 @@
       + [date_add](/sql-reference/sql-functions/date-time-functions/date_add.md)
       + [datediff](/sql-reference/sql-functions/date-time-functions/datediff.md)
       + [date_format](/sql-reference/sql-functions/date-time-functions/date_format.md)
-      + [date_slice](/sql-reference/sql-functions/date-time-functions/date_slice.md)
       + [date_sub, subdate](/sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_trunc](/sql-reference/sql-functions/date-time-functions/date_trunc.md)
       + [day](/sql-reference/sql-functions/date-time-functions/day.md)
@@ -461,7 +460,6 @@
       + [bitmap_union_int](/sql-reference/sql-functions/bitmap-functions/bitmap_union_int.md)
       + [bitmap_xor](/sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [intersect_count](/sql-reference/sql-functions/bitmap-functions/intersect_count.md)
-      + [sub_bitmap](/sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](/sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
       + [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
     + 数组函数
