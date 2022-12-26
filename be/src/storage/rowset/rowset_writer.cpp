@@ -148,7 +148,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
             RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
-                      Status::InternalError("segment number not equal to partial_rowset_footers size"));
+                      Status::InternalError(fmt::format("segment number {} not equal to partial_rowset_footers size {}",
+                                                        _num_segment,
+                                                        _rowset_txn_meta_pb->partial_rowset_footers().size())));
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
@@ -212,6 +214,12 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
             RETURN_IF_ERROR(wfile->sync());
         }
         RETURN_IF_ERROR(wfile->close());
+
+        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+            auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
+            partial_rowset_footer->set_position(segment_pb.partial_footer_position());
+            partial_rowset_footer->set_size(segment_pb.partial_footer_size());
+        }
 
         // 3. update statistic
         {
@@ -850,6 +858,10 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
         partial_rowset_footer->set_position(footer_position);
         partial_rowset_footer->set_size(footer_size);
+        if (seg_info) {
+            seg_info->set_partial_footer_position(footer_position);
+            seg_info->set_partial_footer_size(footer_size);
+        }
     }
     {
         std::lock_guard<std::mutex> l(_lock);
