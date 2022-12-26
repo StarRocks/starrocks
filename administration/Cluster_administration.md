@@ -304,13 +304,42 @@ admin set frontend config ("disable_colocate_balance"="false");
 
 ### 升级 CN 节点
 
-由于 CN 节点是无状态的，因此，只需要替换二进制文件，然后重新启动进程即可，推荐使用 graceful 的停止方式。
+升级 CN 节点时，您需要根据升级的版本，选择对应的升级方式：
 
-```shell
-sh bin/stop_cn.sh --graceful
-```
+* 如果为小版本升级（例如从 2.0.x 升级到 2.0.y），则只需要替换二进制文件 **/lib/starrocks_be**，然后重启服务。
+* 如果为大版本升级 （例如从 2.0.x 升级到 2.x.x），您需要替换 BE 节点路径下的 bin 和 lib 文件夹。
 
-使用该种方式停止，CN会等待当前运行的任务运行结束后再退出进程
+以下示例以大版本升级为例。
+
+1. 进入 CN 路径，停止 CN 节点。推荐使用 graceful 的停止方式。使用该种方式停止，CN 会等待当前运行的任务运行结束后再退出进程。
+
+    ```Shell
+    cd StarRocks-x.x.x/be
+    sh bin/stop_cn.sh --graceful
+    ```
+
+2. 替换 CN 节点相关文件。
+
+    ```Shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-x.x.x/be/lib  .
+    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+    ```
+
+3. 启动 CN 节点。
+
+    ```Shell
+    sh bin/start_cn.sh --daemon
+    ```
+
+4. 确认当前节点启动成功。
+
+    ```Shell
+    ps aux | grep starrocks_be
+    ```
+
+5. 重复以上步骤，升级其他 CN 节点。
 
 ### 升级 Broker
 
