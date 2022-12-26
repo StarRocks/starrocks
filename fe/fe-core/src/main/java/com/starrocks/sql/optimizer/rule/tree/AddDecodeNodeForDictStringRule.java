@@ -385,7 +385,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
 
                     Column oldColumn = scanOperator.getColRefToColumnMetaMap().get(stringColumn);
-                    Column newColumn = new Column(oldColumn.getName(), ID_TYPE, oldColumn.isAllowNull());
+                    Column newColumn = new Column(oldColumn);
+                    newColumn.setType(ID_TYPE);
 
                     newColRefToColumnMetaMap.remove(stringColumn);
                     newColRefToColumnMetaMap.put(newDictColumn, newColumn);
@@ -431,6 +432,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
+                    newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
 
                     OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -702,9 +704,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (newStringToDicts.isEmpty()) {
                 context.hasEncoded = false;
             }
-            return new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
-                    aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
-                    aggOperator.getPredicate(), aggOperator.getProjection());
+            final PhysicalHashAggregateOperator newHashAggregator =
+                    new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
+                            aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
+                            aggOperator.getPredicate(), aggOperator.getProjection());
+            newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
+            return newHashAggregator;
         }
 
         @Override
