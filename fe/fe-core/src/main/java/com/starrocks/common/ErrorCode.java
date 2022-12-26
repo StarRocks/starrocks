@@ -77,7 +77,7 @@ public enum ErrorCode {
             "There is no such grant defined for user '%s' on host '%s'"),
     ERR_TABLEACCESS_DENIED_ERROR(1142, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for table '%s'"),
-    ERR_MV_ACCESS_DENIED_ERROR(1142, new byte[] {'4', '2', '0', '0', '0'},
+    ERR_MV_ACCESS_DENIED_ERROR(1143, new byte[] {'4', '2', '0', '0', '0'},
             "%s command denied to user '%s'@'%s' for materialized view '%s'"),
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
     ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s'"),
