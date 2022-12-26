@@ -73,8 +73,8 @@ enum LogicalType {
 
 // TODO(lism): support varbinary for zone map.
 inline bool is_zone_map_key_type(LogicalType type) {
-    return type != TYPE_CHAR && type != TYPE_VARCHAR && type != TYPE_JSON && type != TYPE_VARBINARY
-        && type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
+    return type != TYPE_CHAR && type != TYPE_VARCHAR && type != TYPE_JSON && type != TYPE_VARBINARY &&
+           type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
 }
 
 template <LogicalType TYPE>
