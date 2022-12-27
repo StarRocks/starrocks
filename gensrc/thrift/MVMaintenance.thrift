@@ -34,7 +34,7 @@ enum MVTaskType {
 }
 
 struct TMVMaintenanceStartTask {
-    3: optional list<InternalService.TExecPlanFragmentParams> fragments;
+    1: optional list<InternalService.TExecPlanFragmentParams> fragments;
 }
 
 struct TMVMaintenanceStopTask {
@@ -51,7 +51,8 @@ struct TMVStartEpochTask {
     1: optional TMVEpoch epoch
     
     // Start position of this epoch
-    2: optional list<PlanNodes.TScanRange>  scan_range
+    // map<FragmentInstnaceId, map<PlanNodeId, list<ScanRanges>>>
+    2: optional map<Types.TUniqueId, map<Types.TPlanNodeId, list<PlanNodes.TScanRange>>> per_node_scan_ranges
     
     // Max execution threshold of this epoch
     3: optional i64 max_exec_millis
@@ -73,7 +74,7 @@ struct TMVReportEpochTask {
     1: optional TMVEpoch epoch
     
     // Each tablet's binlog consumption state
-    2: optional list<Types.TBinlogOffset> binlog_consume_state
+    2: optional map<Types.TUniqueId, map<Types.TPlanNodeId, list<PlanNodes.TScanRange>>> binlog_consume_state 
     // Transaction state
     3: optional list<Types.TTabletCommitInfo> txn_commit_info
     4: optional list<Types.TTabletFailInfo> txn_fail_info
@@ -92,8 +93,11 @@ struct TMVMaintenanceTasks {
     3: optional i64 signature
     4: optional string db_name
     5: optional string mv_name
-    6: optional i64 job_id
-    7: optional i64 task_id
+    6: optional i64 db_id
+    7: optional i64 mv_id
+    8: optional i64 job_id
+    9: optional i64 task_id
+    10: optional Types.TUniqueId query_id;
 
     // Tasks for BE
     11: optional TMVMaintenanceStartTask start_maintenance
