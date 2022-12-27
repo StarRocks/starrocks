@@ -52,7 +52,7 @@
 
 namespace starrocks {
 
-using ColumnHelper = vectorized::ColumnHelper;
+using ColumnHelper = ColumnHelper;
 
 class BooleanQueryBuilderTest : public testing::Test {
 public:
@@ -674,7 +674,7 @@ TEST_F(BooleanQueryBuilderTest, validate_compound_and) {
 
 TEST_F(BooleanQueryBuilderTest, validate_timezone) {
     ObjectPool pool;
-    vectorized::TimestampValue time = vectorized::TimestampValue::create(1997, 2, 3, 12, 0, 0);
+    TimestampValue time = TimestampValue::create(1997, 2, 3, 12, 0, 0);
 
     // default timezone convert(UTC +8:00)
     auto time_literal =

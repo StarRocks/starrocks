@@ -14,24 +14,23 @@
 
 #include "connector/file_connector.h"
 
+#include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
-#include "exec/vectorized/csv_scanner.h"
-#include "exec/vectorized/json_scanner.h"
-#include "exec/vectorized/orc_scanner.h"
-#include "exec/vectorized/parquet_scanner.h"
+#include "exec/json_scanner.h"
+#include "exec/orc_scanner.h"
+#include "exec/parquet_scanner.h"
 #include "exprs/expr.h"
 
 namespace starrocks::connector {
-using namespace vectorized;
 
-DataSourceProviderPtr FileConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<FileDataSourceProvider>(scan_node, plan_node);
 }
 
 // ================================
 
-FileDataSourceProvider::FileDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+FileDataSourceProvider::FileDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _file_scan_node(plan_node.file_scan_node) {}
 
 DataSourcePtr FileDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -96,7 +95,7 @@ void FileDataSource::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
 }
 
-Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     DCHECK(state != nullptr && chunk != nullptr);
     RETURN_IF_CANCELLED(state);
 

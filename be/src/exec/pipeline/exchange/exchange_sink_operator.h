@@ -71,13 +71,13 @@ public:
 
     Status set_cancelled(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     // For the first chunk , serialize the chunk data and meta to ChunkPB both.
     // For other chunk, only serialize the chunk data to ChunkPB.
-    Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
+    Status serialize_chunk(const Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
     // Return the physical bytes of attachment.
     int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment);
@@ -181,7 +181,7 @@ private:
 
     // The following fields are for shuffle exchange:
     const std::vector<ExprContext*>& _partition_expr_ctxs; // compute per-row partition values
-    vectorized::Columns _partitions_columns;
+    Columns _partitions_columns;
     std::vector<uint32_t> _hash_values;
     std::vector<uint32_t> _shuffle_channel_ids;
     std::vector<int> _driver_sequence_per_shuffle;

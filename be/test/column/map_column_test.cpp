@@ -26,7 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(MapColumnTest, test_create) {
@@ -1207,4 +1207,4 @@ PARALLEL_TEST(MapColumnTest, test_assign) {
     ASSERT_EQ(0, c0->values_column()->size());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -29,8 +29,6 @@ namespace starrocks {
 class RuntimeProfile;
 class RuntimeState;
 
-namespace vectorized {
-
 class ColumnPredicate;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -88,5 +86,4 @@ std::string to_string(TabletReaderParams::RangeEndOperation range_end_op);
 std::ostream& operator<<(std::ostream& os, TabletReaderParams::RangeStartOperation range_start_op);
 std::ostream& operator<<(std::ostream& os, TabletReaderParams::RangeEndOperation range_end_op);
 
-} // namespace vectorized
 } // namespace starrocks

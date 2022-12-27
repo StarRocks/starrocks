@@ -1196,6 +1196,9 @@ privilegeActionReserved
     | USAGE
     | CREATE_DATABASE
     | UPDATE
+    | EXPORT
+    | REPOSITORY
+    | CREATE_MATERIALIZED_VIEW
     | ALL
     ;
 
@@ -1214,6 +1217,7 @@ privilegeTypeReserved
     | DATABASE
     | CATALOG
     | DATABASES
+    | FUNCTION
     | RESOURCE_GROUP
     ;
 
@@ -1227,16 +1231,18 @@ grantRevokeClause
     ;
 
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON user TO grantRevokeClause                                               #grantImpersonateBrief
-    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause             #grantTablePrivBrief
-    | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause   #grantPrivWithType
+    : GRANT IMPERSONATE ON user TO grantRevokeClause                                                     #grantImpersonateBrief
+    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause                   #grantTablePrivBrief
+    | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause         #grantPrivWithType
+    | GRANT privilegeActionList ON privilegeType qualifiedName '(' typeList ')' TO grantRevokeClause     #grantPrivWithFunc
     | GRANT privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? TO grantRevokeClause   #grantOnAll
     ;
 
 revokePrivilegeStatement
-    : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                              #revokeImpersonateBrief
-    | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause            #revokeTablePrivBrief
-    | REVOKE privilegeActionList ON privilegeType (privilegeObjectNameList)? FROM grantRevokeClause  #revokePrivWithType
+    : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                                  #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause                #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON privilegeType (privilegeObjectNameList)? FROM grantRevokeClause      #revokePrivWithType
+    | REVOKE privilegeActionList ON privilegeType qualifiedName '(' typeList ')' FROM grantRevokeClause  #revokePrivWithFunc
     | REVOKE privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? FROM grantRevokeClause  #revokeOnAll
     ;
 
@@ -1742,6 +1748,7 @@ functionCall
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
+    | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -1777,9 +1784,16 @@ informationFunctionExpression
     | name = CURRENT_USER ('(' ')')?
     ;
 
+specialDateTimeExpression
+    : name = CURRENT_DATE ('(' ')')?
+    | name = CURRENT_TIME ('(' ')')?
+    | name = CURRENT_TIMESTAMP ('(' ')')?
+    | name = LOCALTIME ('(' ')')?
+    | name = LOCALTIMESTAMP ('(' ')')?
+    ;
+
 specialFunctionExpression
     : CHAR '(' expression ')'
-    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'

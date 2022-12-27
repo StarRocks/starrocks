@@ -92,11 +92,11 @@ void ConjugateOperator::set_precondition_ready(RuntimeState* state) {
     _source_op->set_precondition_ready(state);
 }
 
-StatusOr<vectorized::ChunkPtr> ConjugateOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> ConjugateOperator::pull_chunk(RuntimeState* state) {
     return _source_op->pull_chunk(state);
 }
 
-Status ConjugateOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status ConjugateOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _sink_op->push_chunk(state, chunk);
 }
 

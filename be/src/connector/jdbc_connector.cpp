@@ -17,25 +17,24 @@
 #include <sstream>
 
 #include "exec/exec_node.h"
-#include "exec/vectorized/jdbc_scanner.h"
+#include "exec/jdbc_scanner.h"
 #include "exprs/expr.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "storage/chunk_helper.h"
 #include "util/slice.h"
 
 namespace starrocks::connector {
-using namespace vectorized;
 
 // ================================
 
-DataSourceProviderPtr JDBCConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr JDBCConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<JDBCDataSourceProvider>(scan_node, plan_node);
 }
 
 // ================================
 
-JDBCDataSourceProvider::JDBCDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+JDBCDataSourceProvider::JDBCDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _jdbc_scan_node(plan_node.jdbc_scan_node) {}
 
 DataSourcePtr JDBCDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -88,7 +87,7 @@ void JDBCDataSource::close(RuntimeState* state) {
     }
 }
 
-Status JDBCDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status JDBCDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     bool eos = false;
     _init_chunk(chunk, 0);
     do {
@@ -134,7 +133,7 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
         return status;
     }
 
-    vectorized::JDBCScanContext scan_ctx;
+    JDBCScanContext scan_ctx;
     scan_ctx.driver_path = driver_location;
     scan_ctx.driver_class_name = driver_class;
     scan_ctx.jdbc_url = jdbc_table->jdbc_url();
@@ -142,7 +141,7 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     scan_ctx.passwd = jdbc_table->jdbc_passwd();
     scan_ctx.sql = get_jdbc_sql(scan_ctx.jdbc_url, jdbc_table->jdbc_table(), jdbc_scan_node.columns,
                                 jdbc_scan_node.filters, _read_limit);
-    _scanner = _pool->add(new vectorized::JDBCScanner(scan_ctx, _tuple_desc, _runtime_profile));
+    _scanner = _pool->add(new JDBCScanner(scan_ctx, _tuple_desc, _runtime_profile));
 
     RETURN_IF_ERROR(_scanner->open(state));
     return Status::OK();

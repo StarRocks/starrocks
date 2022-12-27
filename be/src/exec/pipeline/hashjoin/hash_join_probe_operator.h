@@ -14,15 +14,15 @@
 
 #pragma once
 
+#include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/vectorized/hash_joiner.h"
 
 namespace starrocks::pipeline {
 
-using HashJoiner = starrocks::vectorized::HashJoiner;
+using HashJoiner = starrocks::HashJoiner;
 
 class HashJoinProbeOperator final : public OperatorWithDependency {
 public:
@@ -46,8 +46,8 @@ public:
         return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _join_prober.get());
     }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     const HashJoinerPtr _join_prober;

@@ -54,7 +54,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/vectorized/csv_scanner.h"
+#include "exec/csv_scanner.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -122,10 +122,10 @@ public:
         config::storage_root_path = _default_storage_root_path;
     }
 
-    std::unique_ptr<vectorized::CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
-                                                               const std::vector<TBrokerRangeDesc>& ranges,
-                                                               const string& multi_row_delimiter = "\n",
-                                                               const string& multi_column_separator = "|") {
+    std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
+                                                   const std::vector<TBrokerRangeDesc>& ranges,
+                                                   const string& multi_row_delimiter = "\n",
+                                                   const string& multi_column_separator = "|") {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -170,12 +170,12 @@ public:
 
         RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
 
-        vectorized::ScannerCounter* counter = _obj_pool.add(new vectorized::ScannerCounter());
+        ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
 
         TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
-        return std::make_unique<vectorized::CSVScanner>(state, profile, *broker_scan_range, counter);
+        return std::make_unique<CSVScanner>(state, profile, *broker_scan_range, counter);
     }
 
     void init();

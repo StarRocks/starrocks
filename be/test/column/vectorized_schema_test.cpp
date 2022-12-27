@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SchemaTest : public testing::Test {
 public:
@@ -134,4 +134,4 @@ TEST_F(SchemaTest, get_field_index) {
     delete schema;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

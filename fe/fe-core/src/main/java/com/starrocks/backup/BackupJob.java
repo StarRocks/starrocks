@@ -179,6 +179,10 @@ public class BackupJob extends AbstractJob {
         return localMetaInfoFilePath;
     }
 
+    public List<TableRef> getTableRef() {
+        return tableRefs;
+    }
+
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
         Preconditions.checkState(task.getJobId() == jobId);
 

@@ -50,9 +50,9 @@ public:
         return Status::OK();
     }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
@@ -65,7 +65,7 @@ private:
     const std::vector<ExprContext*>& _common_sub_expr_ctxs;
 
     bool _is_finished = false;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
+    ChunkPtr _cur_chunk = nullptr;
 
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
@@ -101,7 +101,7 @@ private:
 
     std::vector<int32_t> _common_sub_column_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
-    vectorized::DictOptimizeParser _dict_optimize_parser;
+    DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace pipeline

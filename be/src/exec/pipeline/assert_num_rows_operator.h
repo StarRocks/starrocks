@@ -25,10 +25,7 @@ class BufferControlBlock;
 class ExprContext;
 class ResultWriter;
 class ExecNode;
-
-namespace vectorized {
 class ChunksSorter;
-}
 
 namespace pipeline {
 class AssertNumRowsOperator final : public Operator {
@@ -48,10 +45,10 @@ public:
     void close(RuntimeState* state) override;
 
     bool has_output() const override;
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     bool need_input() const override;
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status set_finishing(RuntimeState* state) override;
     bool is_finished() const override;
@@ -62,7 +59,7 @@ private:
     const TAssertion::type _assertion;
 
     int64_t _actual_num_rows = 0;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
+    ChunkPtr _cur_chunk = nullptr;
 
     bool _input_finished = false;
 };

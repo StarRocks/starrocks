@@ -16,7 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "exec/vectorized/file_scanner.h"
+#include "exec/file_scanner.h"
 
 namespace starrocks::connector {
 
@@ -24,7 +24,7 @@ class FileConnector final : public Connector {
 public:
     ~FileConnector() override = default;
 
-    DataSourceProviderPtr create_data_source_provider(starrocks::vectorized::ConnectorScanNode* scan_node,
+    DataSourceProviderPtr create_data_source_provider(starrocks::ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
     ConnectorType connector_type() const override { return ConnectorType::FILE; }
@@ -37,14 +37,14 @@ class FileDataSourceProvider final : public DataSourceProvider {
 public:
     ~FileDataSourceProvider() override = default;
     friend class FileDataSource;
-    FileDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    FileDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     bool insert_local_exchange_operator() const override { return true; }
     bool accept_empty_scan_ranges() const override { return false; }
 
 protected:
-    vectorized::ConnectorScanNode* _scan_node;
+    ConnectorScanNode* _scan_node;
     const TFileScanNode _file_scan_node;
 };
 
@@ -55,7 +55,7 @@ public:
     FileDataSource(const FileDataSourceProvider* provider, const TScanRange& scan_range);
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -71,8 +71,8 @@ private:
     bool _scan_finished{false};
     bool _closed{false};
 
-    std::unique_ptr<starrocks::vectorized::FileScanner> _scanner;
-    starrocks::vectorized::ScannerCounter _counter;
+    std::unique_ptr<starrocks::FileScanner> _scanner;
+    starrocks::ScannerCounter _counter;
 
     // Profile information
     RuntimeProfile::Counter* _scanner_total_timer = nullptr;

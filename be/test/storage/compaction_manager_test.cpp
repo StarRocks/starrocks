@@ -103,7 +103,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         tablet->set_tablet_meta(tablet_meta);
         tablet->set_data_dir(&data_dir);
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
-        compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(tablet.get());
+        compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
         tablet->set_compaction_context(compaction_context);
         tablets.push_back(tablet);
         std::shared_ptr<MockCompactionTask> task = std::make_shared<MockCompactionTask>();

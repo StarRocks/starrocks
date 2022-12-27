@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
-#include "exec/vectorized/olap_scan_node.h"
+#include "exec/olap_scan_node.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
@@ -56,7 +56,7 @@ bool OlapScanPrepareOperator::is_finished() const {
     return _ctx->is_prepare_finished() || _ctx->is_finished();
 }
 
-StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
 
     _morsel_queue->set_key_ranges(_ctx->key_ranges());
@@ -74,7 +74,7 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
 
 /// OlapScanPrepareOperatorFactory
 OlapScanPrepareOperatorFactory::OlapScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                               vectorized::OlapScanNode* const scan_node,
+                                                               OlapScanNode* const scan_node,
                                                                OlapScanContextFactoryPtr ctx_factory)
         : SourceOperatorFactory(id, "olap_scan_prepare", plan_node_id),
           _scan_node(scan_node),
@@ -87,8 +87,8 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
     const auto& tolap_scan_node = _scan_node->thrift_olap_scan_node();
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(tolap_scan_node.tuple_id);
 
-    vectorized::DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
-                                                       &(tuple_desc->decoded_slots()));
+    DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
+                                           &(tuple_desc->decoded_slots()));
 
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));

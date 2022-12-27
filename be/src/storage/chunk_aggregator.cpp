@@ -15,13 +15,13 @@
 #include "storage/chunk_aggregator.h"
 
 #include "common/config.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "gutil/casts.h"
 #include "storage/column_aggregate_func.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
-ChunkAggregator::ChunkAggregator(const starrocks::vectorized::VectorizedSchema* schema, uint32_t reserve_rows,
+ChunkAggregator::ChunkAggregator(const starrocks::VectorizedSchema* schema, uint32_t reserve_rows,
                                  uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
         : _schema(schema),
           _reserve_rows(reserve_rows),
@@ -271,4 +271,4 @@ size_t ChunkAggregator::bytes_usage() {
 
 void ChunkAggregator::close() {}
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

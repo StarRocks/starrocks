@@ -216,7 +216,7 @@ foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
 endforeach()
-find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer)
+find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
 
 add_library(libevent STATIC IMPORTED)
@@ -718,6 +718,10 @@ set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
+
+if (NOT $ENV{STARROCKS_LINKER} STREQUAL "")
+    add_link_options("-fuse-ld=$ENV{STARROCKS_LINKER}")
+endif ()
 
 if (${MAKE_TEST} STREQUAL "ON")
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")

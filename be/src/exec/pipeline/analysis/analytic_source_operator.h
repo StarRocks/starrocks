@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "exec/analytor.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/analytor.h"
 
 namespace starrocks::pipeline {
 class AnalyticSourceOperator : public SourceOperator {
@@ -37,7 +37,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     // It is used to perform analytic algorithms

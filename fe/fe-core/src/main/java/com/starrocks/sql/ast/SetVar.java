@@ -27,6 +27,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
@@ -105,10 +107,14 @@ public class SetVar implements ParseNode {
         }
 
         if (type == SetType.GLOBAL) {
-            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            if (!globalStateMgr.isUsingNewPrivilege()) {
+                if (!globalStateMgr.getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+                }
+            } else {
+                if (!PrivilegeManager.checkSystemAction(ConnectContext.get(), PrivilegeType.SystemAction.OPERATE)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
                 }
             }
         }

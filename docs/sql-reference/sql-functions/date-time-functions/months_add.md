@@ -2,7 +2,7 @@
 
 ## Description
 
-Add the specified month from the date, accurate to the month.
+Adds specified months to the date, accurate to the month.
 
 ## Syntax
 
@@ -14,7 +14,7 @@ DATETIME months_add(DATETIME expr1, INT expr2);
 
 - `expr1`: the start time. It must be of the DATETIME or DATE type.
 
-- `expr2`: the added month. It must be INT type, it could be greater, equal or less than zero.
+- `expr2`: the months to add. It must be of the INT type, it could be greater, equal or less than zero.
 
 ## Return value
 

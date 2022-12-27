@@ -30,7 +30,7 @@ HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t i
           _partial_rf_merger(partial_rf_merger),
           _distribution_mode(distribution_mode) {}
 
-Status HashJoinBuildOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status HashJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _join_builder->append_chunk_to_ht(state, chunk);
 }
 
@@ -55,7 +55,7 @@ void HashJoinBuildOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> HashJoinBuildOperator::pull_chunk(RuntimeState* state) {
     const char* msg = "pull_chunk not supported in HashJoinBuildOperator";
     CHECK(false) << msg;
     return Status::NotSupported(msg);
@@ -144,7 +144,7 @@ OperatorPtr HashJoinBuildOperatorFactory::create(int32_t degree_of_parallelism, 
             _hash_joiner_factory->get_read_only_probers(), _partial_rf_merger.get(), _distribution_mode);
 }
 
-void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, vectorized::Columns&& columns) {
+void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, Columns&& columns) {
     _string_key_columns[driver_sequence] = std::move(columns);
 }
 } // namespace starrocks::pipeline

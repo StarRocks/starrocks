@@ -52,6 +52,8 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -63,8 +65,6 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 public class SetPasswordTest {
 
     private Auth auth;
-    @Mocked
-    public GlobalStateMgr globalStateMgr;
     @Mocked
     private Analyzer analyzer;
     @Mocked
@@ -79,19 +79,20 @@ public class SetPasswordTest {
     @Before
     public void setUp() throws NoSuchMethodException, SecurityException, AnalysisException {
         auth = new Auth();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Auth getAuth() {
+                return auth;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
 
                 editLog.logCreateUser((PrivInfo) any);
                 minTimes = 0;

@@ -82,7 +82,7 @@ public:
         return _current_ordinal;
     }
 
-    Status next_batch(size_t* n, vectorized::Column* column);
+    Status next_batch(size_t* n, Column* column);
 
 private:
     IndexedColumnIterator(const IndexedColumnReader* reader, std::unique_ptr<RandomAccessFile> read_file);

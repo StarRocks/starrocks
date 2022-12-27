@@ -17,8 +17,8 @@
 #include <algorithm>
 #include <numeric>
 
+#include "exec/cross_join_node.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exec/vectorized/cross_join_node.h"
 #include "exprs/expr.h"
 #include "fmt/format.h"
 #include "runtime/runtime_state.h"
@@ -31,7 +31,7 @@ void NLJoinContext::close(RuntimeState* state) {
 }
 
 Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
-    vectorized::ChunkPtr one_row_chunk = nullptr;
+    ChunkPtr one_row_chunk = nullptr;
     size_t num_rows = 0;
     for (auto& chunk_ptr : _build_chunks) {
         if (chunk_ptr != nullptr) {
@@ -45,8 +45,8 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
     if (num_rows == 1) {
         DCHECK(one_row_chunk != nullptr);
         auto* pool = state->obj_pool();
-        ASSIGN_OR_RETURN(auto rfs, vectorized::CrossJoinNode::rewrite_runtime_filter(
-                                           pool, _rf_descs, one_row_chunk.get(), _rf_conjuncts_ctx));
+        ASSIGN_OR_RETURN(auto rfs, CrossJoinNode::rewrite_runtime_filter(pool, _rf_descs, one_row_chunk.get(),
+                                                                         _rf_conjuncts_ctx));
         _rf_hub->set_collector(_plan_node_id,
                                std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeBloomFilterList{}));
     } else {
@@ -74,7 +74,7 @@ bool NLJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>&
         _shared_build_match_flag.resize(build_match_flags.size(), 0);
     }
     DCHECK_EQ(build_match_flags.size(), _shared_build_match_flag.size());
-    vectorized::ColumnHelper::or_two_filters(&_shared_build_match_flag, build_match_flags.data());
+    ColumnHelper::or_two_filters(&_shared_build_match_flag, build_match_flags.data());
 
     return is_last;
 }
@@ -85,7 +85,7 @@ const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
     return _shared_build_match_flag;
 }
 
-void NLJoinContext::append_build_chunk(int32_t sinker_id, const vectorized::ChunkPtr& chunk) {
+void NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
     _input_chunks[sinker_id].push_back(chunk);
 }
 

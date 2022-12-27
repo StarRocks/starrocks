@@ -17,23 +17,19 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "exec/chunks_sorter.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/vectorized/chunks_sorter.h"
 
 namespace starrocks {
 class BufferControlBlock;
 class ExprContext;
 class ResultWriter;
 class ExecNode;
-
-namespace vectorized {
 class ChunksSorter;
-}
 
 namespace pipeline {
-using namespace vectorized;
 
 /*
  * Partiton Sort Operator is almost like Sort Operator,
@@ -43,7 +39,7 @@ using namespace vectorized;
 class PartitionSortSinkOperator final : public Operator {
 public:
     PartitionSortSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                              std::shared_ptr<vectorized::ChunksSorter> chunks_sorter, SortExecExprs& sort_exec_exprs,
+                              std::shared_ptr<ChunksSorter> chunks_sorter, SortExecExprs& sort_exec_exprs,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
                               SortContext* sort_context)
             : Operator(factory, id, "local_sort_sink", plan_node_id, driver_sequence),
@@ -51,9 +47,7 @@ public:
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
-              _sort_context(sort_context) {
-        _sort_context->ref();
-    }
+              _sort_context(sort_context) {}
 
     ~PartitionSortSinkOperator() override = default;
 
@@ -67,16 +61,16 @@ public:
 
     bool is_finished() const override { return _is_finished || _sort_context->is_finished(); }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status set_finishing(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;
 
-    std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;
+    std::shared_ptr<ChunksSorter> _chunks_sorter;
 
     // from topn
     // _sort_exec_exprs contains the ordering expressions

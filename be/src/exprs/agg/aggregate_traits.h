@@ -21,7 +21,7 @@
 #include "runtime/primitive_type.h"
 #include "types/logical_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Type traits from aggregate functions
 template <LogicalType lt, typename = guard::Guard>
@@ -77,4 +77,4 @@ using AggDataValueType = typename AggDataTypeTraits<lt>::ValueType;
 template <LogicalType lt>
 using AggDataRefType = typename AggDataTypeTraits<lt>::RefType;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

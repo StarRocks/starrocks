@@ -55,7 +55,10 @@ public class SetUserPropertyVar extends SetVar {
             throw new AnalysisException("User property value is null");
         }
 
-        checkAccess(isSelf);
+        // In new RBAC framework, set user property will be checked in PrivilegeCheckerV2
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            checkAccess(isSelf);
+        }
     }
 
     private void checkAccess(boolean isSelf) throws AnalysisException {

@@ -72,8 +72,8 @@ import java.util.Set;
 import java.util.UUID;
 import javax.net.ssl.SSLContext;
 
-// When one client connect in, we create a connect context for it.
-// We store session information here. Meanwhile ConnectScheduler all
+// When one client connect in, we create a connection context for it.
+// We store session information here. Meanwhile, ConnectScheduler all
 // connect with its connection id.
 public class ConnectContext {
     private static final Logger LOG = LogManager.getLogger(ConnectContext.class);
@@ -717,7 +717,7 @@ public class ConnectContext {
                 stmt = executor.getOriginStmtInString();
                 // refers to https://mariadb.com/kb/en/show-processlist/
                 // `show full processlist` will output full SQL
-                // and `show processlist will` output at most 100 chars.
+                // and `show processlist` will output at most 100 chars.
                 if (!full && stmt.length() > 100) {
                     stmt = stmt.substring(0, 100);
                 }

@@ -163,12 +163,6 @@ public class OutFileClause implements ParseNode {
             }
             processedPropKeys.add(PROP_MAX_FILE_SIZE);
         }
-
-        if (processedPropKeys.size() != properties.size()) {
-            LOG.debug("{} vs {}", processedPropKeys, properties);
-            throw new AnalysisException("Unknown properties: " + properties.keySet().stream()
-                    .filter(k -> !processedPropKeys.contains(k)).collect(Collectors.toList()));
-        }
     }
 
     private void getBrokerProperties(String filePath, Set<String> processedPropKeys) {

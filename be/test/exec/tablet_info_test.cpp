@@ -36,7 +36,6 @@
 
 #include <gtest/gtest.h>
 
-#include "exec/vectorized/tablet_info.h"
 #include "runtime/descriptor_helper.h"
 
 namespace starrocks {
@@ -117,7 +116,7 @@ TEST_F(OlapTablePartitionParamTest, unknown_distributed_col) {
     t_partition_param.partitions[0].indexes[0].tablets = {21};
     t_partition_param.partitions[0].indexes[1].index_id = 5;
 
-    vectorized::OlapTablePartitionParam part(schema, t_partition_param);
+    OlapTablePartitionParam part(schema, t_partition_param);
     st = part.init(nullptr);
     ASSERT_FALSE(st.ok());
 }
@@ -143,7 +142,7 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.partitions[0].indexes[0].index_id = 4;
         t_partition_param.partitions[0].indexes[0].tablets = {21};
 
-        vectorized::OlapTablePartitionParam part(schema, t_partition_param);
+        OlapTablePartitionParam part(schema, t_partition_param);
         st = part.init(nullptr);
         ASSERT_FALSE(st.ok());
     }
@@ -163,7 +162,7 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.partitions[0].indexes[0].tablets = {21};
         t_partition_param.partitions[0].indexes[1].index_id = 6;
 
-        vectorized::OlapTablePartitionParam part(schema, t_partition_param);
+        OlapTablePartitionParam part(schema, t_partition_param);
         st = part.init(nullptr);
         ASSERT_FALSE(st.ok());
     }

@@ -22,7 +22,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 #include "util/raw_container.h"
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, typename = guard::Guard>
 struct MaxByAggregateData {};
@@ -376,4 +376,4 @@ public:
     std::string get_name() const override { return "max_by"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

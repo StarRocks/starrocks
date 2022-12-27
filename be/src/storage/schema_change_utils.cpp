@@ -21,7 +21,7 @@
 #include "types/hll.h"
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
     _schema_mapping.resize(tablet_schema.num_columns());
@@ -668,4 +668,4 @@ Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, con
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

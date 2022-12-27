@@ -29,7 +29,7 @@ class CacheManager;
 using CacheManagerRawPtr = CacheManager*;
 using CacheManagerPtr = std::shared_ptr<CacheManager>;
 
-using CacheResult = std::vector<vectorized::ChunkPtr>;
+using CacheResult = std::vector<ChunkPtr>;
 
 struct CacheValue {
     int64_t latest_hit_time{0};

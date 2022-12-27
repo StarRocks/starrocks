@@ -19,10 +19,8 @@ class RowsetReadOptions;
 class Segment;
 class TabletSchema;
 
-namespace vectorized {
 class ChunkIterator;
 class VectorizedSchema;
-} // namespace vectorized
 
 namespace lake {
 
@@ -31,7 +29,7 @@ class Tablet;
 class CompactionTask;
 class LocationProvider;
 
-using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 using RowsetMetadata = RowsetMetadataPB;
 using RowsetMetadataPtr = std::shared_ptr<const starrocks::lake::RowsetMetadata>;
 using RowsetPtr = std::shared_ptr<starrocks::lake::Rowset>;

@@ -22,7 +22,7 @@
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType type, typename Dict, LogicalType result_type>
 class GlobalDictDecoderBase : public GlobalDictDecoder {
@@ -33,14 +33,14 @@ public:
 
     GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
 
-    Status decode(vectorized::Column* in, vectorized::Column* out) override;
+    Status decode(Column* in, Column* out) override;
 
 private:
     Dict _dict;
 };
 
 template <LogicalType type, typename Dict, LogicalType result_type>
-Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column* in, vectorized::Column* out) {
+Status GlobalDictDecoderBase<type, Dict, result_type>::decode(Column* in, Column* out) {
     DCHECK(in != nullptr);
     DCHECK(out != nullptr);
 
@@ -103,4 +103,4 @@ GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict) {
 // explicit instantiation
 template GlobalDictDecoderPtr create_global_dict_decoder<RGlobalDictMap>(const RGlobalDictMap& dict);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

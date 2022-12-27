@@ -23,7 +23,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -130,6 +129,7 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -568,11 +568,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
                 partitionDescList.add(rangePartitionDesc);
             }
-            Expr expr = (Expr) visit(context.partitionExpression().expression());
-            List<String> columnList;
-            if (expr instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) expr;
-                columnList = ImmutableList.of(slotRef.getColumnName());
+            Expr expr = (Expr) visit(context.partitionExpression());
+            List<String> columnList = Lists.newArrayList();
+            if (expr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                ArrayList<Expr> children = functionCallExpr.getChildren();
+                for (Expr child : children) {
+                    if (child instanceof SlotRef) {
+                        SlotRef slotRef = (SlotRef) child;
+                        columnList.add(slotRef.getColumnName());
+                    }
+                }
             } else {
                 throw new ParsingException("Unsupported partition expression: %s", expr);
             }
@@ -595,6 +601,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(listPartitionDesc);
             }
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            throw new ParsingException("List partition is not supported.");
         }
         return partitionDesc;
     }
@@ -776,17 +783,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowTableStatement(StarRocksParser.ShowTableStatementContext context) {
         boolean isVerbose = context.FULL() != null;
         String database = null;
+        String catalog = null;
+        // catalog.db
         if (context.qualifiedName() != null) {
-            database = getQualifiedName(context.qualifiedName()).toString();
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            List<String> parts = qualifiedName.getParts();
+            if (parts.size() == 2) {
+                catalog = qualifiedName.getParts().get(0);
+                database = qualifiedName.getParts().get(1);
+            } else if (parts.size() == 1) {
+                database = qualifiedName.getParts().get(0);
+            }
         }
 
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowTableStmt(database, isVerbose, stringLiteral.getValue());
+            return new ShowTableStmt(database, isVerbose, stringLiteral.getValue(), catalog);
         } else if (context.expression() != null) {
-            return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()));
+            return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()), catalog);
         } else {
-            return new ShowTableStmt(database, isVerbose, null);
+            return new ShowTableStmt(database, isVerbose, null, catalog);
         }
     }
 
@@ -4095,6 +4111,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
     }
 
+    @Override
+    public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, true);
+    }
+
+    @Override
+    public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
+        String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setFunctionArgsDef(argsDef);
+        objects.setFunctionName(functionName);
+        return newGrantRevokePrivilegeStmt(
+                type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
+    }
+
     private GrantRevokePrivilegeObjects parseGrantRevokeOnAll(
             List<StarRocksParser.PrivilegeTypeContext> privilegeTypeContexts,
             StarRocksParser.IdentifierOrStringContext identifierOrStringContext) {
@@ -4594,11 +4634,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitSpecialDateTimeExpression(StarRocksParser.SpecialDateTimeExpressionContext context) {
+        if (context.name.getText().equalsIgnoreCase("current_timestamp")
+                || context.name.getText().equalsIgnoreCase("current_time")
+                || context.name.getText().equalsIgnoreCase("current_date")
+                || context.name.getText().equalsIgnoreCase("localtime")
+                || context.name.getText().equalsIgnoreCase("localtimestamp")) {
+            return new FunctionCallExpr(context.name.getText().toUpperCase(), Lists.newArrayList());
+        }
+        throw new ParsingException("Unknown special function " + context.name.getText());
+    }
+
+    @Override
     public ParseNode visitSpecialFunctionExpression(StarRocksParser.SpecialFunctionExpressionContext context) {
         if (context.CHAR() != null) {
             return new FunctionCallExpr("char", visit(context.expression(), Expr.class));
-        } else if (context.CURRENT_TIMESTAMP() != null) {
-            return new FunctionCallExpr("current_timestamp", Lists.newArrayList());
         } else if (context.DAY() != null) {
             return new FunctionCallExpr("day", visit(context.expression(), Expr.class));
         } else if (context.HOUR() != null) {

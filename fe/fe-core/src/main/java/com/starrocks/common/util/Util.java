@@ -299,7 +299,7 @@ public class Util {
     }
 
     public static int generateSchemaHash() {
-        return Math.abs(ThreadLocalRandom.current().nextInt());
+        return Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
     }
 
     public static String dumpThread(Thread t, int lineNum) {

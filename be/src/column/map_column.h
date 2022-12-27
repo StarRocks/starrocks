@@ -19,7 +19,7 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class MapColumn final : public ColumnFactory<Column, MapColumn> {
     friend class ColumnFactory<Column, MapColumn>;
@@ -194,4 +194,4 @@ private:
     UInt32Column::Ptr _offsets;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
