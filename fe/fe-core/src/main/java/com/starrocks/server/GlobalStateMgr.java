@@ -1332,9 +1332,9 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = MVManager.getInstance().reload(dis, checksum);
             remoteChecksum = dis.readLong();
+            nodeMgr.loadGlobalFunctions(dis, checksum);
             // TODO put this at the end of the image before 3.0 release
             loadRBACPrivilege(dis);
-            nodeMgr.loadGlobalFunctions(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1601,9 +1601,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = MVManager.getInstance().store(dos, checksum);
             dos.writeLong(checksum);
+            nodeMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
-            nodeMgr.saveGlobalFunctions(dos, checksum);
+
         }
 
         long saveImageEndTime = System.currentTimeMillis();
