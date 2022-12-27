@@ -39,6 +39,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_utility();
     register_approx();
     register_others();
+    register_retract_functions();
 }
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;

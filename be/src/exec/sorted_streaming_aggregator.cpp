@@ -261,7 +261,7 @@ private:
     buffer_range buffer[2];
 };
 
-SortedStreamingAggregator::SortedStreamingAggregator(const TPlanNode& tnode) : Aggregator(tnode) {}
+SortedStreamingAggregator::SortedStreamingAggregator(AggregatorParamsPtr&& params) : Aggregator(std::move(params)) {}
 
 SortedStreamingAggregator::~SortedStreamingAggregator() {
     if (_state) {
@@ -312,7 +312,8 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     // finalize state
     // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
     // get result from aggregate values. such as count(*), sum(col)
-    auto agg_result_columns = _create_agg_result_columns(chunk_size);
+    bool use_intermediate = _use_intermediate_as_output();
+    auto agg_result_columns = _create_agg_result_columns(chunk_size, use_intermediate);
     RETURN_IF_ERROR(_get_agg_result_columns(chunk_size, selector, agg_result_columns));
 
     DCHECK_LE(agg_result_columns[0]->size(), _state->chunk_size());
@@ -322,7 +323,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     // combine group by keys
     auto res_group_by_columns = _create_group_by_columns(chunk_size);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
-    auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns);
+    auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns, use_intermediate);
 
     // TODO merge small chunk
     this->offer_chunk_to_buffer(result_chunk);
@@ -455,7 +456,8 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     if (_last_state == nullptr) {
         return nullptr;
     }
-    auto agg_result_columns = _create_agg_result_columns(1);
+    bool use_intermediate = _use_intermediate_as_output();
+    auto agg_result_columns = _create_agg_result_columns(1, use_intermediate);
     auto group_by_columns = _last_columns;
 
     TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_last_state, agg_result_columns));
@@ -463,7 +465,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     _last_state = nullptr;
     _last_columns.clear();
 
-    return _build_output_chunk(group_by_columns, agg_result_columns);
+    return _build_output_chunk(group_by_columns, agg_result_columns, use_intermediate);
 }
 
 } // namespace starrocks

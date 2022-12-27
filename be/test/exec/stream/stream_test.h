@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "exec/stream/aggregate/stream_aggregator.h"
 #include "exec/stream/stream_fdw.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/desc_tbl_helper.h"
@@ -43,6 +44,30 @@ protected:
                                    const std::vector<std::vector<SlotTypeInfo>>& slot_info_arrays) {
         return DescTblHelper::generate_desc_tbl(state, obj_pool,
                                                 DescTblHelper::create_slot_type_desc_info_arrays(slot_info_arrays));
+    }
+
+    std::shared_ptr<StreamAggregator> _create_stream_aggregator(
+            const std::vector<std::vector<SlotTypeInfo>>& slot_infos, const std::vector<GroupByKeyInfo>& group_by_infos,
+            const std::vector<AggInfo>& agg_infos, bool is_generate_retract, int32_t count_agg_idx) {
+        auto params = std::make_shared<AggregatorParams>();
+        params->needs_finalize = false;
+        params->has_outer_join_child = false;
+        params->streaming_preaggregation_mode = TStreamingPreaggregationMode::AUTO;
+        params->intermediate_tuple_id = 1;
+        params->output_tuple_id = 2;
+        params->count_agg_idx = count_agg_idx;
+        params->sql_grouping_keys = "";
+        params->sql_aggregate_functions = "";
+        params->conjuncts = {};
+        params->is_testing = true;
+        params->is_stream_mv = true;
+        // TODO: test more cases.
+        params->is_append_only = false;
+        params->is_generate_retract = is_generate_retract;
+        params->grouping_exprs = _create_group_by_exprs(slot_infos[0], group_by_infos);
+        params->intermediate_aggr_exprs = {};
+        params->aggregate_functions = _create_agg_exprs(slot_infos[0], agg_infos);
+        return std::make_shared<StreamAggregator>(std::move(params));
     }
 
     std::vector<TExpr> _create_group_by_exprs(std::vector<SlotTypeInfo> slot_infos, std::vector<GroupByKeyInfo> infos) {
