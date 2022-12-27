@@ -88,8 +88,6 @@ public:
 
     bool is_canceled() const { return _runtime_state->is_cancelled(); }
 
-    MVEpochManager* epoch_manager() { return _runtime_state->epoch_manager(); }
-
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
     Status prepare_all_pipelines() {
@@ -126,6 +124,10 @@ public:
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
     const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
     bool enable_resource_group() const { return _workgroup != nullptr; }
+
+    // STREAM MV
+    MVEpochManager* epoch_manager() { return _runtime_state->epoch_manager(); }
+    Status reset_epoch();
 
 private:
     // Id of this query

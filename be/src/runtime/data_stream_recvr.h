@@ -128,6 +128,10 @@ public:
 
     bool get_encode_level() const { return _encode_level; }
 
+    bool is_epoch_finished() const;
+    void epoch_finished(int sender_id, int be_number);
+    Status reset_epoch(RuntimeState* state);
+
 private:
     friend class DataStreamMgr;
     class SenderQueue;

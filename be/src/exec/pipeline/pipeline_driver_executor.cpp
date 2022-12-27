@@ -249,6 +249,31 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
+void GlobalDriverExecutor::report_epoch_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
+                                                   const Status& status, bool done) {
+    auto params = ExecStateReporter::create_epoch_report_exec_status_params(query_ctx, fragment_ctx, status, done);
+    auto fe_addr = fragment_ctx->fe_addr();
+    auto exec_env = fragment_ctx->runtime_state()->exec_env();
+    auto fragment_id = fragment_ctx->fragment_instance_id();
+
+    auto report_task = [=]() {
+        auto status = ExecStateReporter::report_epoch_exec_status(params, exec_env, fe_addr);
+        if (!status.ok()) {
+            if (status.is_not_found()) {
+                LOG(INFO) << "[Driver] Fail to report epoch exec state due to query not found: fragment_instance_id="
+                          << print_id(fragment_id);
+            } else {
+                LOG(WARNING) << "[Driver] Fail to report epoch exec state: fragment_instance_id="
+                             << print_id(fragment_id) << ", status: " << status.to_string();
+            }
+        } else {
+            LOG(INFO) << "[Driver] Succeed to report epoch exec state: fragment_instance_id=" << print_id(fragment_id);
+        }
+    };
+
+    this->_exec_state_reporter->submit(std::move(report_task));
+}
+
 void GlobalDriverExecutor::active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
     _blocked_driver_poller->active_parked_driver(predicate_func);
 }

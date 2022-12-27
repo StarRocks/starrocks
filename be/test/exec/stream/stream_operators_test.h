@@ -51,16 +51,18 @@ public:
     }
 
     int64_t tablet_id() { return _tablet_id; }
-    bool is_trigger_finished(const EpochInfo* epoch_info);
+    bool is_trigger_finished(const EpochInfo& epoch_info);
 
     // never finished until mv epoch manager set it finished
     bool is_finished() const override { return _mv_epoch_manager && _mv_epoch_manager->is_finished(); }
     bool has_output() const override { return !_is_epoch_finished; }
+
     bool is_epoch_finished() const override { return _is_epoch_finished; }
     Status set_epoch_finishing(RuntimeState* state) override { return Status::OK(); }
+
     Status reset_epoch(RuntimeState* state) override {
-        _current_epoch_info = state->epoch_manager()->get_epoch(_tablet_id);
-        VLOG_ROW << "reset_epoch:" << _current_epoch_info->debug_string();
+        _current_epoch_info = state->epoch_manager()->epoch_info();
+        VLOG_ROW << "reset_epoch:" << _current_epoch_info.debug_string();
         _processed_chunks = 1;
         _is_epoch_finished = false;
         return Status::OK();
@@ -71,7 +73,7 @@ public:
 private:
     GeneratorStreamSourceParam _param;
     int64_t _tablet_id;
-    const starrocks::EpochInfo* _current_epoch_info;
+    starrocks::EpochInfo _current_epoch_info;
     MVEpochManager* _mv_epoch_manager;
     bool _is_epoch_finished{true};
     int64_t _processed_chunks{1};

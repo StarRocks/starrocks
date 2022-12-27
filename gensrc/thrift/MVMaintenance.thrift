@@ -38,6 +38,7 @@ struct TMVMaintenanceStartTask {
 }
 
 struct TMVMaintenanceStopTask {
+    1: optional list<Types.TUniqueId> fragment_instance_ids;
 }
 
 struct TMVEpoch {
@@ -74,10 +75,12 @@ struct TMVReportEpochTask {
     1: optional TMVEpoch epoch
     
     // Each tablet's binlog consumption state
-    2: optional map<Types.TUniqueId, map<Types.TPlanNodeId, list<PlanNodes.TScanRange>>> binlog_consume_state 
+    2: optional Types.TUniqueId fragment_instance_id
+    3: optional map<Types.TPlanNodeId, list<PlanNodes.TScanRange>> binlog_consume_states
+
     // Transaction state
-    3: optional list<Types.TTabletCommitInfo> txn_commit_info
-    4: optional list<Types.TTabletFailInfo> txn_fail_info
+    10: optional list<Types.TTabletCommitInfo> txn_commit_info
+    11: optional list<Types.TTabletFailInfo> txn_fail_info
 }
 
 struct TMVReportEpochResponse {

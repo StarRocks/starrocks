@@ -24,8 +24,8 @@
 
 namespace starrocks::stream {
 
-bool GeneratorStreamSourceOperator::is_trigger_finished(const EpochInfo* epoch_info) {
-    auto trigger_mode = epoch_info->trigger_mode;
+bool GeneratorStreamSourceOperator::is_trigger_finished(const EpochInfo& epoch_info) {
+    auto trigger_mode = epoch_info.trigger_mode;
     switch (trigger_mode) {
     case TriggerMode::MANUAL: {
         return (--_processed_chunks) == 0;

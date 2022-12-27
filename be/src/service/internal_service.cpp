@@ -42,6 +42,7 @@
 #include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
@@ -58,6 +59,10 @@
 #include "util/uid_util.h"
 
 namespace starrocks {
+
+namespace pipeline {
+class DriverExecutor;
+} // namespace pipeline
 
 extern std::atomic<bool> k_starrocks_exit;
 
@@ -329,7 +334,7 @@ template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
     pipeline::FragmentExecutor fragment_executor;
-    auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
+    auto status = fragment_executor.template prepare<false>(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
     } else {
@@ -656,10 +661,133 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(controller);
-    cntl->SetFailed(brpc::EINTERNAL, "Not implemented");
-    Status st = Status::NotSupported("Not implemented");
+    Status st = _submit_mv_maintenance_task(cntl);
+    if (!st.ok()) {
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+    }
     st.to_protobuf(response->mutable_status());
-    return;
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller* cntl) {
+    auto ser_request = cntl->request_attachment().to_string();
+    TMVMaintenanceTasks t_request;
+    {
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
+    }
+    LOG(INFO) << "submit mv maintenance task, query_id=" << t_request.query_id << "db_name=" << t_request.db_name
+              << ", mv_name=" << t_request.mv_name << ", job_id=" << t_request.job_id
+              << ", task_id=" << t_request.task_id << ", signature=" << t_request.signature;
+    auto mv_task_type = t_request.task_type;
+    switch (mv_task_type) {
+    case MVTaskType::START_MAINTENANCE: {
+        LOG(INFO) << "start to handle start mv maintenance.";
+        auto start_maintenance = t_request.start_maintenance;
+        auto fragments = start_maintenance.fragments;
+        TUniqueId query_id = t_request.query_id;
+        std::vector<PromiseStatusSharedPtr> promise_statuses;
+        for (int i = 0; i < fragments.size(); ++i) {
+            PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
+            _exec_env->pipeline_prepare_pool()->offer([ms, fragments, i, this] {
+                pipeline::FragmentExecutor fragment_executor;
+                auto status = fragment_executor.template prepare<true>(_exec_env, fragments[i], fragments[i]);
+                if (status.ok()) {
+                    ms->set_value(fragment_executor.execute(_exec_env));
+                } else {
+                    auto final_status = status.is_duplicate_rpc_invocation() ? Status::OK() : status;
+                    ms->set_value(final_status);
+                }
+            });
+            promise_statuses.emplace_back(std::move(ms));
+        }
+        for (auto& promise : promise_statuses) {
+            // When a preparation fails, return error immediately. The other unfinished preparation is safe,
+            // since they can use the shared pointer of promise and t_batch_requests.
+            RETURN_IF_ERROR(promise->get_future().get());
+        }
+        return Status::OK();
+    }
+    case MVTaskType::START_EPOCH: {
+        TUniqueId query_id = t_request.query_id;
+        auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
+        if (!existing_query_ctx) {
+            return Status::InternalError("MV Job has been cancelled.");
+        }
+
+        auto& start_epoch_param = t_request.start_epoch;
+        auto& epoch = start_epoch_param.epoch;
+        auto epoch_info = EpochInfo{.txn_id = epoch.txn_id,
+                                    .epoch_id = epoch.epoch_id,
+                                    .max_exec_millis = start_epoch_param.max_exec_millis,
+                                    .max_scan_rows = start_epoch_param.max_scan_rows,
+                                    .trigger_mode = TriggerMode::PROCESSTIME_OFFSET};
+        // map<FragmentInstnaceId, map<PlanNodeId, list<ScanRanges>>>
+        auto per_node_scan_ranges = start_epoch_param.per_node_scan_ranges;
+        for (auto& [fragment_instance_id, node_to_scan_ranges] : per_node_scan_ranges) {
+            // step1: Find the fragment_ctx by fragment_instance_id;
+            auto&& fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
+            if (!fragment_ctx) {
+                return Status::InternalError("MV Job fragment_instance_id has been cancelled.");
+            }
+            std::unordered_map<int64_t, std::unordered_map<int64_t, BinlogOffset>> node_to_tablet_id_epoch_infos;
+            for (auto& [scan_node_id, scan_ranges] : node_to_scan_ranges) {
+                std::unordered_map<int64_t, BinlogOffset> tablet_id_epoch_infos;
+                for (auto& scan_range : scan_ranges) {
+                    auto& binlog_scan_range = scan_range.binlog_scan_range;
+                    auto& binlog_scan_range_offset = binlog_scan_range.offset;
+                    auto& tablet_id = binlog_scan_range_offset.tablet_id;
+                    auto& tablet_version = binlog_scan_range_offset.version;
+                    auto& tablet_lsn = binlog_scan_range_offset.lsn;
+                    tablet_id_epoch_infos.emplace(tablet_id, BinlogOffset{
+                                                                     .tablet_id = tablet_id,
+                                                                     .tablet_version = tablet_version,
+                                                                     .lsn = tablet_lsn,
+                                                             });
+                }
+                node_to_tablet_id_epoch_infos.emplace(scan_node_id, tablet_id_epoch_infos);
+            }
+
+            // step2: Update state in the runtime state.
+            RETURN_IF_ERROR(fragment_ctx->epoch_manager()->update_epoch(fragment_instance_id, epoch_info,
+                                                                        node_to_tablet_id_epoch_infos));
+
+            // step3: Reset epoch state.
+            RETURN_IF_ERROR(fragment_ctx->reset_epoch());
+        }
+
+        // step4: Active all drivers for the query_id from the parked driver queue.
+        // TODO: wg_driver_executor
+        pipeline::DriverExecutor* executor = _exec_env->driver_executor();
+        executor->active_parked_driver([query_id](const pipeline::PipelineDriver* driver) {
+            return driver->query_ctx()->query_id() == query_id;
+        });
+        break;
+    }
+    case MVTaskType::COMMIT_EPOCH: {
+        break;
+    }
+    case MVTaskType::STOP_MAINTENANCE: {
+        // Find the fragment context for the specific MV job
+        TUniqueId query_id;
+        auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
+        if (!existing_query_ctx) {
+            return Status::InternalError("MV Job has been cancelled.");
+        }
+        auto stop_maintenance = t_request.stop_maintenance;
+        std::vector<TUniqueId> fragment_instance_ids = stop_maintenance.fragment_instance_ids;
+        // TODO: parallel
+        for (auto& fragment_instance_id : fragment_instance_ids) {
+            auto&& fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
+            fragment_ctx->runtime_state()->epoch_manager()->set_is_finished(true);
+        }
+        break;
+    }
+    default:
+        LOG(INFO) << "unsupported!";
+    }
+    return Status::OK();
 }
 
 template class PInternalServiceImplBase<PInternalService>;

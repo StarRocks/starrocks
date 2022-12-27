@@ -36,6 +36,7 @@
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+#include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
@@ -469,6 +470,7 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
+template <bool is_stream_pipeline_driver = false>
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
@@ -541,6 +543,16 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     return Status::OK();
 }
 
+template <bool is_stream_pipeline_driver = false>
+DriverPtr FragmentExecutor::_create_pipeline_driver(Operators&& operators, size_t driver_id) {
+    if constexpr (is_stream_pipeline_driver) {
+        return std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx.get(), driver_id);
+    } else {
+        return std::make_shared<StreamPipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx.get(), driver_id);
+    }
+}
+
+template <bool is_stream_pipeline_driver = false>
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
@@ -569,7 +581,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
-    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+    RETURN_IF_ERROR(_prepare_pipeline_driver<is_stream_pipeline_driver>(exec_env, request));
     RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
@@ -816,5 +828,10 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     return Status::OK();
 }
 DIAGNOSTIC_POP
+
+template Status FragmentExecutor::prepare<true>(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
+                                                const TExecPlanFragmentParams& unique_request);
+template Status FragmentExecutor::prepare<false>(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
+                                                 const TExecPlanFragmentParams& unique_request);
 
 } // namespace starrocks::pipeline

@@ -37,11 +37,18 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
+    bool is_epoch_finished() const override;
+    Status set_epoch_finishing(RuntimeState* state) override;
+    Status reset_epoch(RuntimeState* state) override;
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
     std::atomic<bool> _is_finishing = false;
+
+    // STREAM MV
+    bool _is_epoch_finished = false;
 };
 
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {

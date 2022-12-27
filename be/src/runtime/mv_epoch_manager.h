@@ -24,29 +24,73 @@ namespace starrocks {
  */
 class MVEpochManager {
 public:
+    using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
+
     MVEpochManager() {}
     ~MVEpochManager() = default;
 
     // Start the new epoch from input epoch info
-    Status start_epoch(const std::unordered_map<int64_t, EpochInfo>& input_epoch_infos) {
+    Status update_epoch(const TUniqueId& fragment_instance_id, const EpochInfo& epoch_info,
+                        const std::unordered_map<int64_t, TabletId2BinlogOffset>& input_epoch_infos) {
         std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        // check
+        if (!_node_id_to_scan_ranges.empty() && _node_id_to_scan_ranges.size() != input_epoch_infos.size()) {
+            return Status::InternalError("MV Epoch ScanNode's ranges should not change.");
+        }
+
         // reset state
-        _source_operator_epoch_infos_mapping = input_epoch_infos;
+        _fragment_instance_id = fragment_instance_id;
+        _epoch_info = epoch_info;
+        _node_id_to_scan_ranges = input_epoch_infos;
         return Status::OK();
     }
 
-    const EpochInfo* get_epoch(int64_t tablet_id) const {
+    Status update_binlog_offset(int64_t scan_node_id, int64_t tablet_id, BinlogOffset binlog_offset) {
         std::unique_lock<std::shared_mutex> l(_epoch_lock);
-        return get_epoch_unlock(tablet_id);
+        auto iter = _node_id_to_scan_ranges.find(scan_node_id);
+        if (iter == _node_id_to_scan_ranges.end()) {
+            return Status::InternalError("MV Epoch scan_node_id cannot be found.");
+        }
+        auto& scan_range_mapping = iter->second;
+        auto scan_range_iter = scan_range_mapping.find(tablet_id);
+        if (scan_range_iter == scan_range_mapping.end()) {
+            return Status::InternalError("MV Epoch tablet_id cannot be found.");
+        }
+        // update binlog to report the final status
+        scan_range_iter->second = binlog_offset;
+        return Status::OK();
+    }
+
+    const BinlogOffset* get_binlog_offset(int64_t scan_node_id, int64_t tablet_id) const {
+        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        auto iter = _node_id_to_scan_ranges.find(scan_node_id);
+        if (iter == _node_id_to_scan_ranges.end()) {
+            return nullptr;
+        }
+        return get_epoch_unlock(iter->second, tablet_id);
+    }
+
+    const TUniqueId& fragment_instance_id() const {
+        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        return _fragment_instance_id;
+    }
+    const EpochInfo& epoch_info() const {
+        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        return _epoch_info;
+    }
+    const std::unordered_map<int64_t, TabletId2BinlogOffset>& node_id_to_scan_ranges() const {
+        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        return _node_id_to_scan_ranges;
     }
 
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire); }
     void set_is_finished(bool v) { _is_finished.store(v, std::memory_order_release); }
 
 private:
-    const EpochInfo* get_epoch_unlock(int64_t tablet_id) const {
-        auto iter = _source_operator_epoch_infos_mapping.find(tablet_id);
-        if (iter != _source_operator_epoch_infos_mapping.end()) {
+    const BinlogOffset* get_epoch_unlock(const TabletId2BinlogOffset& tablet_id_scan_ranges_mapping,
+                                         int64_t tablet_id) const {
+        auto iter = tablet_id_scan_ranges_mapping.find(tablet_id);
+        if (iter != tablet_id_scan_ranges_mapping.end()) {
             return &(iter->second);
         } else {
             return nullptr;
@@ -56,7 +100,9 @@ private:
     // TODO: Maybe use a bucket for each source operator later.
     mutable std::shared_mutex _epoch_lock;
     std::atomic_bool _is_finished{false};
-    std::unordered_map<int64_t, EpochInfo> _source_operator_epoch_infos_mapping;
+    TUniqueId _fragment_instance_id;
+    EpochInfo _epoch_info;
+    std::unordered_map<int64_t, TabletId2BinlogOffset> _node_id_to_scan_ranges;
 };
 
 } // namespace starrocks

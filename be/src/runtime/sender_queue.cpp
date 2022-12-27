@@ -415,7 +415,11 @@ void DataStreamRecvr::NonPipelineSenderQueue::clean_buffer_queues() {
 
 DataStreamRecvr::PipelineSenderQueue::PipelineSenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders,
                                                           int32_t degree_of_parallism)
-        : SenderQueue(parent_recvr), _num_remaining_senders(num_senders), _chunk_queue_states(degree_of_parallism) {
+        : SenderQueue(parent_recvr),
+          _num_remaining_senders(num_senders),
+          _chunk_queue_states(degree_of_parallism),
+          _num_senders(num_senders),
+          _num_epoch_remaining_senders(num_senders) {
     for (int i = 0; i < degree_of_parallism; i++) {
         _chunk_queues.emplace_back();
     }
@@ -471,7 +475,7 @@ bool DataStreamRecvr::PipelineSenderQueue::has_chunk() {
     if (_is_cancelled) {
         return true;
     }
-    if (_chunk_queues[0].size_approx() == 0 && _num_remaining_senders > 0) {
+    if (_chunk_queues[0].size_approx() == 0 && _num_remaining_senders > 0 && _num_epoch_remaining_senders > 0) {
         return false;
     }
     return true;
@@ -522,6 +526,20 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
     _num_remaining_senders--;
     VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
               << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
+              << " be_number=" << be_number;
+}
+
+void DataStreamRecvr::PipelineSenderQueue::decrement_epoch_finished_senders(int be_number) {
+    {
+        std::lock_guard<Mutex> l(_lock);
+        if (_sender_epoch_eos_set.find(be_number) != _sender_epoch_eos_set.end()) {
+            return;
+        }
+        _sender_epoch_eos_set.insert(be_number);
+    }
+    _num_epoch_remaining_senders--;
+    VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
+              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_epoch_remaining_senders
               << " be_number=" << be_number;
 }
 
@@ -802,7 +820,7 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
         return true;
     }
     // 4. if there is no new data, return true if this queue has chunks
-    if (_num_remaining_senders == 0) {
+    if (_num_remaining_senders == 0 || _num_epoch_remaining_senders == 0) {
         return chunk_num > 0;
     }
     // 5. if this queue has blocked closures, return true to release the closure ASAP to trigger the next transmit requests
@@ -811,6 +829,10 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
 
 bool DataStreamRecvr::PipelineSenderQueue::is_finished() const {
     return _is_cancelled || (_num_remaining_senders == 0 && _total_chunks == 0);
+}
+
+bool DataStreamRecvr::PipelineSenderQueue::is_epoch_finished() const {
+    return _is_cancelled || (_num_epoch_remaining_senders == 0 && _total_chunks == 0);
 }
 
 } // namespace starrocks

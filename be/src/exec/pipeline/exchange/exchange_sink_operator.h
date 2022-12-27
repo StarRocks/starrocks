@@ -71,6 +71,14 @@ public:
 
     Status set_cancelled(RuntimeState* state) override;
 
+    bool is_epoch_finished() const override { return _is_epoch_finished; }
+    Status set_epoch_finishing(RuntimeState* state) override;
+    Status set_epoch_finished(RuntimeState* state) { return Status::OK(); }
+    Status reset_epoch(RuntimeState* state) override {
+        _is_epoch_finished = false;
+        return Status::OK();
+    }
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
@@ -89,6 +97,19 @@ private:
     }
 
 private:
+    struct ChannelParam {
+        bool is_eos;
+        bool is_epoch_eos;
+    };
+    constexpr static const ChannelParam CHANNEL_PARAM_NON_EOS_NON_EPOCH_EOS =
+            ChannelParam{.is_eos = false, .is_epoch_eos = false};
+    constexpr static const ChannelParam CHANNEL_PARAM_EOS_NON_EPOCH_EOS =
+            ChannelParam{.is_eos = true, .is_epoch_eos = false};
+    constexpr static const ChannelParam CHANNEL_PARAM_NON_EOS_EPOCH_EOS =
+            ChannelParam{.is_eos = false, .is_epoch_eos = true};
+    constexpr static const ChannelParam CHANNEL_PARAM_EOS_EPOCH_EOS =
+            ChannelParam{.is_eos = true, .is_epoch_eos = true};
+
     class Channel;
 
     static const int32_t DEFAULT_DRIVER_SEQUENCE = 0;
@@ -203,6 +224,9 @@ private:
     std::unique_ptr<Shuffler> _shuffler;
 
     std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
+
+    /// STREAM MV
+    bool _is_epoch_finished = false;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {

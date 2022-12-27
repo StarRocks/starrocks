@@ -229,6 +229,11 @@ void DataStreamRecvr::remove_sender(int sender_id, int be_number) {
     _sender_queues[use_sender_id]->decrement_senders(be_number);
 }
 
+void DataStreamRecvr::epoch_finished(int sender_id, int be_number) {
+    int use_sender_id = _is_merging ? sender_id : 0;
+    _sender_queues[use_sender_id]->decrement_senders(be_number);
+}
+
 void DataStreamRecvr::cancel_stream() {
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->cancel();
@@ -289,6 +294,21 @@ bool DataStreamRecvr::is_finished() const {
     DCHECK(_is_pipeline);
     auto* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
     return sender_queue->is_finished();
+}
+
+bool DataStreamRecvr::is_epoch_finished() const {
+    DCHECK(!_is_merging);
+    DCHECK(_is_pipeline);
+    auto* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
+    return sender_queue->is_epoch_finished();
+}
+
+Status DataStreamRecvr::reset_epoch(RuntimeState* state) {
+    for (auto& queue : _sender_queues) {
+        auto* sender_queue = static_cast<PipelineSenderQueue*>(queue);
+        RETURN_IF_ERROR(sender_queue->reset_epoch(state));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

@@ -54,6 +54,9 @@ public:
 
     virtual void active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) = 0;
 
+    virtual void report_epoch_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                                         bool done) = 0;
+
 protected:
     std::string _name;
 };
@@ -71,7 +74,10 @@ public:
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
-    void active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func);
+    void active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) override;
+
+    void report_epoch_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                                 bool done) override;
 
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;

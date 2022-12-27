@@ -65,7 +65,7 @@ struct BinlogOffset {
  */
 struct EpochInfo {
     // transaction id
-    int64_t txd_id;
+    int64_t txn_id;
     // epoch marker id
     int64_t epoch_id;
     // max binlog duration which this epoch will run
@@ -74,8 +74,6 @@ struct EpochInfo {
     int64_t max_scan_rows;
     // Trigger mode
     TriggerMode trigger_mode;
-    // Binlog start offset
-    BinlogOffset binlog_offset;
 
     std::string debug_string() const {
         std::stringstream ss;

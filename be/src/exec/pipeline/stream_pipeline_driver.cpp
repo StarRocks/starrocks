@@ -285,11 +285,10 @@ Status StreamPipelineDriver::reset_epoch(RuntimeState* runtime_state) {
 void StreamPipelineDriver::epoch_finalize(RuntimeState* runtime_state, DriverState state) {
     // do report stats
     if (count_down_drivers()) {
-        // TODO:
         // 1. Add binlog commit off (from MVEpochManger) into repo state;
         // 2. Check the report api is the same with EpochCoordinator.
         auto status = _fragment_ctx->final_status();
-        runtime_state->exec_env()->driver_executor()->report_exec_state(_query_ctx, _fragment_ctx, status, true);
+        runtime_state->exec_env()->driver_executor()->report_epoch_exec_state(_query_ctx, _fragment_ctx, status, true);
     }
 }
 

@@ -40,6 +40,55 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
     return url.str();
 }
 
+TMVMaintenanceTasks ExecStateReporter::create_epoch_report_exec_status_params(QueryContext* query_ctx,
+                                                                              FragmentContext* fragment_ctx,
+                                                                              const Status& status, bool done) {
+    TMVMaintenanceTasks params;
+    auto* runtime_state = fragment_ctx->runtime_state();
+    DCHECK(runtime_state != nullptr);
+    auto* profile = runtime_state->runtime_profile();
+    DCHECK(profile != nullptr);
+    auto* exec_env = fragment_ctx->runtime_state()->exec_env();
+    DCHECK(exec_env != nullptr);
+    // query_id
+    params.__set_query_id(fragment_ctx->query_id());
+
+    params.__isset.report_epoch = true;
+    auto& report_epoch = params.report_epoch;
+
+    // fragment_instance_id
+    report_epoch.fragment_instance_id = fragment_ctx->epoch_manager()->fragment_instance_id();
+
+    // construct epoch info
+    auto& epoch_info = fragment_ctx->epoch_manager()->epoch_info();
+    report_epoch.epoch.txn_id = epoch_info.txn_id;
+    report_epoch.epoch.epoch_id = epoch_info.epoch_id;
+
+    // construct source consume info
+    auto& binlog_consume_states = report_epoch.binlog_consume_states;
+    auto node_id_to_scan_ranges = fragment_ctx->epoch_manager()->node_id_to_scan_ranges();
+    DCHECK_LT(0, node_id_to_scan_ranges.size());
+    for (auto& [scan_node_id, scan_ranges] : node_id_to_scan_ranges) {
+        for (auto& [tablet_id, scan_range] : scan_ranges) {
+            TScanRange t_scan_range;
+            t_scan_range.binlog_scan_range.offset.tablet_id = scan_range.tablet_id;
+            t_scan_range.binlog_scan_range.offset.version = scan_range.tablet_version;
+            t_scan_range.binlog_scan_range.offset.lsn = scan_range.lsn;
+            binlog_consume_states[scan_node_id].push_back(t_scan_range);
+        }
+    }
+
+    // construct tablet commit info
+    if (!runtime_state->tablet_commit_infos().empty()) {
+        report_epoch.txn_commit_info.reserve(runtime_state->tablet_commit_infos().size());
+        for (auto& info : runtime_state->tablet_commit_infos()) {
+            report_epoch.txn_commit_info.push_back(info);
+        }
+    }
+
+    return params;
+}
+
 TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
                                                                             FragmentContext* fragment_ctx,
                                                                             const Status& status, bool done) {
@@ -152,6 +201,43 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
     } catch (TException& e) {
         std::stringstream msg;
         msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
+        LOG(WARNING) << msg.str();
+        rpc_status = Status::InternalError(msg.str());
+    }
+    return rpc_status;
+}
+
+// including the final status when execution finishes.
+Status ExecStateReporter::report_epoch_exec_status(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
+                                                   const TNetworkAddress& fe_addr) {
+    Status fe_status;
+    FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
+    if (!fe_status.ok()) {
+        LOG(WARNING) << "Couldn't get a client for " << fe_addr;
+        return fe_status;
+    }
+
+    TMVReportEpochResponse res;
+    Status rpc_status;
+
+    VLOG_ROW << "debug: mvReport params is " << apache::thrift::ThriftDebugString(params).c_str();
+    try {
+        try {
+            coord->mvReport(res, params);
+        } catch (TTransportException& e) {
+            LOG(WARNING) << "Retrying mvReport: " << e.what();
+            rpc_status = coord.reopen();
+
+            if (!rpc_status.ok()) {
+                return rpc_status;
+            }
+            coord->mvReport(res, params);
+        }
+
+        rpc_status = Status::OK();
+    } catch (TException& e) {
+        std::stringstream msg;
+        msg << "mvReport() to " << fe_addr << " failed:\n" << e.what();
         LOG(WARNING) << msg.str();
         rpc_status = Status::InternalError(msg.str());
     }

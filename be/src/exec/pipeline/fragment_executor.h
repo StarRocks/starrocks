@@ -90,6 +90,8 @@ private:
 class FragmentExecutor {
 public:
     FragmentExecutor();
+
+    template <bool is_stream_pipeline_driver = false>
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
@@ -113,6 +115,7 @@ private:
     Status _prepare_runtime_state(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
+    template <bool is_stream_pipeline_driver = false>
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
@@ -120,6 +123,9 @@ private:
                                             const UnifiedExecPlanFragmentParams& request,
                                             std::unique_ptr<starrocks::DataSink>& datasink,
                                             const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
+
+    template <bool is_stream_pipeline_driver = false>
+    DriverPtr _create_pipeline_driver(Operators&& operators, size_t driver_id);
 
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;

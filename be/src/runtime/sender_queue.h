@@ -168,6 +168,13 @@ public:
 
     bool is_finished() const;
 
+    bool is_epoch_finished() const;
+    void decrement_epoch_finished_senders(int be_number);
+    Status reset_epoch(RuntimeState* state) {
+        _num_epoch_remaining_senders = _num_senders;
+        return Status::OK();
+    }
+
 private:
     struct ChunkItem {
         int64_t chunk_bytes = 0;
@@ -254,6 +261,11 @@ private:
     // key of first level is be_number
     // key of second level is request sequence
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
+
+    // STREAM MV
+    int _num_senders;
+    std::unordered_set<int> _sender_epoch_eos_set;
+    std::atomic<int> _num_epoch_remaining_senders;
 
     static constexpr size_t kUnplugBufferThreshold = 16;
 };

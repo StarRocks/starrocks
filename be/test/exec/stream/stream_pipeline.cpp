@@ -153,18 +153,24 @@ void StreamPipelineTest::CancelMV() {
 }
 
 Status StreamPipelineTest::StartEpoch(const std::vector<int64_t>& tablet_ids, const EpochInfo& epoch_info) {
-    std::unordered_map<int64_t, EpochInfo> input_epoch_infos;
+    std::unordered_map<int64_t, BinlogOffset> binlog_offsets;
     for (auto tablet_id : tablet_ids) {
-        input_epoch_infos.insert({tablet_id, epoch_info});
+        binlog_offsets.insert({tablet_id, BinlogOffset{}});
     }
+    std::unordered_map<int64_t, std::unordered_map<int64_t, BinlogOffset>> node_id_binlog_offsets;
+    node_id_binlog_offsets[0] = binlog_offsets;
+
     // step1. update epoch info
-    RETURN_IF_ERROR(_fragment_ctx->runtime_state()->epoch_manager()->start_epoch(input_epoch_infos));
+    RETURN_IF_ERROR(_fragment_ctx->epoch_manager()->update_epoch(_fragment_ctx->fragment_instance_id(), epoch_info,
+                                                                 node_id_binlog_offsets));
+
     // step2. reset state
     for (const auto& driver : _fragment_ctx->drivers()) {
         DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
         auto* stream_driver = dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get());
         RETURN_IF_ERROR(stream_driver->reset_epoch(_runtime_state));
     }
+
     // step3. active driver
     _exec_env->driver_executor()->active_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
     return Status::OK();
@@ -176,13 +182,14 @@ Status StreamPipelineTest::WaitUntilEpochEnd(const EpochInfo& epoch_info) {
     auto is_epoch_finished = [=]() {
         for (auto& driver : _fragment_ctx->drivers()) {
             if (driver->driver_state() != pipeline::DriverState::EPOCH_FINISH) {
+                VLOG_ROW << "WaitUntilEpochEnd not epoch finished: " << epoch_info.debug_string();
                 return false;
             }
         }
         return true;
     };
     while (!is_epoch_finished()) {
-        sleep(0.01);
+        sleep(0.1);
     }
     VLOG_ROW << "WaitUntilEpochEnd Done " << epoch_info.debug_string();
     return Status::OK();

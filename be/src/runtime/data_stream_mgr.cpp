@@ -131,6 +131,13 @@ Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google
     if (eos) {
         recvr->remove_sender(request->sender_id(), request->be_number());
     }
+
+    // set epoch finished
+    bool is_epoch_eos = request->is_epoch_eos();
+    if (is_epoch_eos) {
+        recvr->epoch_finished(request->sender_id(), request->be_number());
+    }
+
     return Status::OK();
 }
 
@@ -163,7 +170,12 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     }
 
     bool eos = request.eos();
-    DeferOp op([&eos, &recvr, &request]() {
+    bool is_epoch_eos = request.is_epoch_eos();
+    DeferOp op([&eos, &is_epoch_eos, &recvr, &request]() {
+        if (is_epoch_eos) {
+            recvr->epoch_finished(request.sender_id(), request.be_number());
+        }
+
         if (eos) {
             recvr->remove_sender(request.sender_id(), request.be_number());
         }
