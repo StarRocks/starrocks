@@ -2,15 +2,13 @@
 
 ## Description
 
-ADD_MONTHS adds an integer months to a given date (DATE, DATETIME), returning the resulting date.
+Adds an integer months to a given date (DATE, DATETIME). The integer can be positive or negative.
 
-months can be positive or negative.
-
-The resulting day component will remain the same as that specified in date, unless the resulting month
+The resulting day component remains the same as that specified in `date`, unless the resulting month
 has fewer days than the day component of the given date, in which case the day will be the last day of
 the resulting month.
 
-Returns NULL if given an invalid date, or a NULL argument.
+Returns NULL if an invalid date or a NULL argument is passed in.
 
 ## Syntax
 
@@ -25,7 +23,9 @@ ADD_MONTH(date, months)
 
 ## Return value
 
-Returns a DATETIME value. If the date does not exist, for example, `2020-02-30`, NULL is returned. If the date is a DATE value, it will be converted into a DATETIME value.
+Returns a DATETIME value. If the date does not exist, for example, `2020-02-30`, NULL is returned.
+
+If the date is a DATE value, it will be converted into a DATETIME value.
 
 ## Examples
 
