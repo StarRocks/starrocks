@@ -151,4 +151,4 @@ SlotDescriptor& IcebergDeleteFileMeta::get_delete_file_pos_slot() {
     return k_delete_file_pos_slot;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
