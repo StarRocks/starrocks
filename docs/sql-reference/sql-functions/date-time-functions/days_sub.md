@@ -1,8 +1,8 @@
-# days\_sub
+# days_sub
 
 ## Description
 
-Subtract specified days from a date or datetime to get a new datetime
+Subtracts specified number of days from a date or datetime to get a new datetime.
 
 ## Syntax
 
@@ -11,6 +11,7 @@ DATETIME days_sub(DATETIME|DATE d, INT n);
 ```
 
 ## Parameters
+
 `d`: the date or datetime expression;
 
 `n`: the number of days shall be subtracted from the `d`.
