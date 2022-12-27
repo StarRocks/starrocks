@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -47,7 +48,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
-import org.spark_project.guava.collect.ImmutableMap;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -536,9 +536,12 @@ public class ArithmeticExpr extends Expr {
         BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR, false),
         BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT, false),
         FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL, true),
-        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT, false),
-        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT, false),
-        BIT_SHIFT_RIGHT_LOGICAL("BITSHIFTRIGHTLOGICAL", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
+        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT,
+                false),
+        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT,
+                false),
+        BIT_SHIFT_RIGHT_LOGICAL("BITSHIFTRIGHTLOGICAL", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX,
+                TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
 
         private final String description;
         private final String name;
