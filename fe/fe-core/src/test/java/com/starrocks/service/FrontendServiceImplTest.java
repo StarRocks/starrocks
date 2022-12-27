@@ -10,6 +10,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.Assert;
@@ -37,27 +39,25 @@ public class FrontendServiceImplTest {
     @Test
     public void testUpdateResourceUsage() throws TException {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         Backend backend = new Backend();
         long backendId = 0;
         int numRunningQueries = 1;
         long memLimitBytes = 3;
         long memUsedBytes = 2;
         int cpuUsedPermille = 300;
-        new Expectations(systemInfoService, queryQueueManager) {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long id) {
+                if (id == backendId) {
+                    return backend;
+                }
+                return null;
+            }
+        };
+        new Expectations(queryQueueManager) {
             {
                 queryQueueManager.maybeNotifyAfterLock();
                 times = 1;
-            }
-
-            {
-                systemInfoService.getBackend(backendId);
-                result = backend;
-            }
-
-            {
-                systemInfoService.getBackend(anyLong);
-                result = null;
             }
         };
 
