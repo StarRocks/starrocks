@@ -229,11 +229,8 @@
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
-<<<<<<< HEAD
       + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md)
-=======
       + [date_sub, subdate](./sql-reference/sql-functions/date-time-functions/date_sub.md)
->>>>>>> eb67faf0f ([Doc] fix doc of variance and toc (#15543))
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_trunc](./sql-reference/sql-functions/date-time-functions/date_trunc.md)
       + [datediff](./sql-reference/sql-functions/date-time-functions/datediff.md)
@@ -292,11 +289,8 @@
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
       + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
-<<<<<<< HEAD
       + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
-=======
       + [variance, variance_pop, var_pop](./sql-reference/sql-functions/aggregate-functions/variance.md)
->>>>>>> eb67faf0f ([Doc] fix doc of variance and toc (#15543))
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
       + [multi_distinct_sum](./sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
@@ -429,15 +423,9 @@
       + [log](./sql-reference/sql-functions/math-functions/log.md)
       + [log2](./sql-reference/sql-functions/math-functions/log2.md)
       + [log10](./sql-reference/sql-functions/math-functions/log10.md)
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
       + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
       + [pow](./sql-reference/sql-functions/math-functions/pow.md)
->>>>>>> a94fe5b48 (add math and string function docs (#15522))
-=======
       + [pow](./sql-reference/sql-functions/math-functions/pow.md)
->>>>>>> 7aa270814 ([Doc] Add doc for pow/power (#15411))
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
       + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
