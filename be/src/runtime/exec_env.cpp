@@ -81,6 +81,7 @@
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
+#include "util/cpu_info.h"
 #include "util/mem_info.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -162,14 +163,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads <= 0) {
-        num_prepare_threads = std::thread::hardware_concurrency();
+        num_prepare_threads = CpuInfo::num_cores();
     }
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
-        num_sink_io_threads = std::thread::hardware_concurrency();
+        num_sink_io_threads = CpuInfo::num_cores();
     }
     if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
         return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
@@ -179,12 +180,12 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     int query_rpc_threads = config::internal_service_query_rpc_thread_num;
     if (query_rpc_threads <= 0) {
-        query_rpc_threads = std::thread::hardware_concurrency();
+        query_rpc_threads = CpuInfo::num_cores();
     }
     _query_rpc_pool = new PriorityThreadPool("query_rpc", query_rpc_threads, std::numeric_limits<uint32_t>::max());
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    _max_executor_threads = std::thread::hardware_concurrency();
+    _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }
@@ -266,7 +267,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     if (!store_paths.empty()) {
         int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
-                                     ? std::thread::hardware_concurrency()
+                                     ? CpuInfo::num_cores()
                                      : config::pipeline_scan_thread_pool_thread_num;
 
         std::unique_ptr<ThreadPool> scan_worker_thread_pool_without_workgroup;
