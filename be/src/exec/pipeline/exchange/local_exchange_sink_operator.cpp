@@ -22,7 +22,7 @@ namespace starrocks::pipeline {
 /// LocalExchangeSinkOperator.
 Status LocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    _exchanger->increment_sink_number();
+    _exchanger->incr_sinker();
     _unique_metrics->add_info_string("ShuffleNum", std::to_string(_exchanger->source_dop()));
     return Status::OK();
 }
