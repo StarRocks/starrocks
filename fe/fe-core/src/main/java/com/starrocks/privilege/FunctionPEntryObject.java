@@ -14,6 +14,7 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -21,7 +22,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
-import java.util.Objects;
 
 public class FunctionPEntryObject implements PEntryObject {
 
@@ -122,6 +122,11 @@ public class FunctionPEntryObject implements PEntryObject {
     }
 
     @Override
+    public int hashCode() {
+        return Objects.hashCode(functionSig, databaseId);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -130,8 +135,8 @@ public class FunctionPEntryObject implements PEntryObject {
             return false;
         }
         FunctionPEntryObject that = (FunctionPEntryObject) obj;
-        return Objects.equals(functionSig, that.functionSig) &&
-               Objects.equals(databaseId, that.databaseId);
+        return Objects.equal(functionSig, that.functionSig) &&
+               Objects.equal(databaseId, that.databaseId);
     }
 
     @Override
