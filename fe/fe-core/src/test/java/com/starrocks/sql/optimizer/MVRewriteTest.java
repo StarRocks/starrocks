@@ -1042,24 +1042,6 @@ public class MVRewriteTest {
     }
 
     @Test
-    public void testCaseWhenAggWithPartialOrderBy() throws Exception {
-        String query = "select k6, k7 from all_type_table where k6 = 1 group by k6, k7";
-
-        String createMVSQL = "CREATE MATERIALIZED VIEW partial_order_by_mv AS " +
-                "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6";
-        CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(createMVSQL, starRocksAssert.getCtx());
-        createMaterializedViewStmt.getMVColumnItemList().forEach(k -> Assert.assertTrue(k.isKey()));
-
-        starRocksAssert.withMaterializedView(createMVSQL).query(query).explainContains("rollup: partial_order_by_mv");
-
-        String createMVSQL2 = "CREATE MATERIALIZED VIEW order_by_mv AS " +
-                "SELECT k6, k7 FROM all_type_table GROUP BY k6, k7 ORDER BY k6, k7";
-        starRocksAssert.withMaterializedView(createMVSQL2).query(query).explainContains("rollup: order_by_mv");
-    }
-
-
-    @Test
     public void testCaseWhenSelectMV() throws Exception {
         // NOTE(yan): add a field not used in query, so optimized plan will select mv
         // otherwise I doubt that will use fact table.
