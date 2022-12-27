@@ -272,7 +272,7 @@ public class PrivilegeCollection {
                 PrivilegeEntry entry = entryIterator.next();
                 if (entry.object != null && !entry.object.isFuzzyMatching() && !entry.object.validate(globalStateMgr)) {
                     String entryStr = GsonUtils.GSON.toJson(entry);
-                    LOG.info("find invalidate object, will remove the entry now: {}", entryStr);
+                    LOG.info("find invalid object, will remove the entry now: {}", entryStr);
                     entryIterator.remove();
                 }
             }
