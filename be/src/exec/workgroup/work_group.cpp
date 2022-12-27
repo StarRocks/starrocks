@@ -8,6 +8,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
+#include "util/cpu_info.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -520,7 +521,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
 }
 
 size_t WorkGroupManager::normal_workgroup_cpu_hard_limit() const {
-    static int num_hardware_cores = std::thread::hardware_concurrency();
+    static int num_hardware_cores = CpuInfo::num_cores();
     return std::max<int>(1, num_hardware_cores - _rt_cpu_limit);
 }
 
