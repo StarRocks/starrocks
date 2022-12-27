@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
@@ -132,7 +133,7 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
         return replay ? null : new DeleteLakeTableTask(this);
     }
 
@@ -191,5 +192,12 @@ public class LakeTable extends OlapTable {
             return tableProperty.getReplicationNum();
         }
         return 1;
+    }
+
+    // used in colocate table index, return an empty list for LakeTable
+    @Override
+    public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
+        List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
+        return backendsPerBucketSeq;
     }
 }

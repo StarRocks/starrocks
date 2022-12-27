@@ -971,6 +971,14 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return new ArrayList<>(idToPartition.keySet());
     }
 
+    public List<Long> getShardGroupIds() {
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            shardGroupIds.add(p.getShardGroupId());
+        }
+        return shardGroupIds;
+    }
+
     public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         Collections.sort(partitions, new Comparator<Partition>() {
@@ -1056,7 +1064,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (colocateMaterializedViewNames.contains(mvName)) {
             if (colocateMaterializedViewNames.size() == 1 && isInColocateMvGroup()) {
                 ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
-                colocateTableIndex.removeTable(this.id);
+                colocateTableIndex.removeTable(this.id, null, false /* isReplay */);
                 setInColocateMvGroup(false);
                 setColocateGroup(null);
             }
@@ -1070,7 +1078,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (!colocateTableIndex.isColocateTable(this.id) && colocateMaterializedViewNames.contains(rollupIndexName)) {
             String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
             String groupName = dbName + ":" + rollupIndexName;
-            colocateTableIndex.addTableToGroup(dbId, this, groupName, null);
+            try {
+                colocateTableIndex.addTableToGroup(dbId, this, groupName, null, false /* isReplay */);
+            } catch (DdlException e) {
+                // should not happen, just log an error here
+                LOG.error(e.getMessage());
+            }
             setInColocateMvGroup(true);
             setColocateGroup(groupName);
 
@@ -2050,7 +2063,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @Override
     public Runnable delete(boolean replay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this, replay);
         return replay ? null : new DeleteOlapTableTask(this);
     }
 

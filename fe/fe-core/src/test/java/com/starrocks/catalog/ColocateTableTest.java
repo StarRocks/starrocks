@@ -187,7 +187,7 @@ public class ColocateTableTest {
         Assert.assertTrue(index.isSameGroup(firstTblId, secondTblId));
 
         // drop first
-        index.removeTable(firstTblId);
+        index.removeTable(firstTblId, null, false);
         Assert.assertEquals(1, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(1, index.getAllGroupIds().size());
         Assert.assertEquals(1, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
@@ -200,7 +200,7 @@ public class ColocateTableTest {
         Assert.assertFalse(index.isSameGroup(firstTblId, secondTblId));
 
         // drop second
-        index.removeTable(secondTblId);
+        index.removeTable(secondTblId, null, false);
         Assert.assertEquals(0, Deencapsulation.<Multimap<GroupId, Long>>getField(index, "group2Tables").size());
         Assert.assertEquals(0, index.getAllGroupIds().size());
         Assert.assertEquals(0, Deencapsulation.<Map<Long, GroupId>>getField(index, "table2Group").size());
