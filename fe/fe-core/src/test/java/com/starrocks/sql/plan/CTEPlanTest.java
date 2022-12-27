@@ -597,4 +597,35 @@ public class CTEPlanTest extends PlanTestBase {
         assertContains(plan, "9:SELECT\n" +
                 "  |  predicates: 26: v2 > 0, 28: v4 = 123");
     }
+
+    @Test
+    public void testMultiDistinctWithLimit() throws Exception {
+        {
+            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(DISTINCT 1: v1), avg(DISTINCT 2: v2)\n" +
+                    "  |  group by: \n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
+        }
+        {
+            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 group by v3 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 4> : 4: sum\n" +
+                    "  |  <slot 5> : 5: avg\n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(DISTINCT 1: v1), avg(DISTINCT 2: v2)\n" +
+                    "  |  group by: 3: v3\n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
+        }
+    }
 }
