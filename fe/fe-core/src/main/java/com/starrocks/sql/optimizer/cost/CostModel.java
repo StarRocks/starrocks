@@ -342,7 +342,7 @@ public class CostModel {
             double cpuCost = StatisticUtils.multiplyOutputSize(leftSize, rightSize)
                     + StatsConstants.CROSS_JOIN_COST_PENALTY;
             double memCost = StatisticUtils.multiplyOutputSize(rightSize,
-                    StatsConstants.CROSS_JOIN_COST_PENALTY * 2);
+                    StatsConstants.CROSS_JOIN_COST_PENALTY * 2D);
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
