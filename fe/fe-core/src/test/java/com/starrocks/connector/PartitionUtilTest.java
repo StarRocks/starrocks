@@ -156,6 +156,10 @@ public class PartitionUtilTest {
                 table.getType();
                 result = Table.TableType.HIVE;
                 minTimes = 0;
+
+                table.isHiveTable();
+                result = true;
+                minTimes = 0;
             }
         };
 

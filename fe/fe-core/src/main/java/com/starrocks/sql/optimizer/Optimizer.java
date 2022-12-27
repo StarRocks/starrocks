@@ -313,7 +313,8 @@ public class Optimizer {
 
         if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
                 && sessionVariable.isEnableMaterializedViewRewrite()
-                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()
+                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
             // external table need to to re-compute scanOperatorPredicates
