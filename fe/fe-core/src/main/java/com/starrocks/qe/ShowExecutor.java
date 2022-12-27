@@ -550,12 +550,15 @@ public class ShowExecutor {
     }
 
     // Show table statement.
-    private void handleShowTable() throws AnalysisException, DdlException {
+    private void handleShowTable() throws AnalysisException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        String catalog = ctx.getCurrentCatalog();
+        String catalogName = showTableStmt.getCatalogName();
+        if (catalogName == null) {
+            catalogName = ctx.getCurrentCatalog();
+        }
         String dbName = showTableStmt.getDb();
-        Database db = metadataMgr.getDb(catalog, dbName);
+        Database db = metadataMgr.getDb(catalogName, dbName);
 
         PatternMatcher matcher = null;
         if (showTableStmt.getPattern() != null) {
@@ -566,9 +569,9 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
-        db.readLock();
-        try {
-            if (CatalogMgr.isInternalCatalog(catalog)) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            db.readLock();
+            try {
                 for (Table tbl : db.getTables()) {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
@@ -579,22 +582,22 @@ public class ShowExecutor {
                             continue;
                         }
                     } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
+                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
                                 db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
                     }
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
-            } else {
-                List<String> tableNames = metadataMgr.listTableNames(catalog, dbName);
-                if (matcher != null) {
-                    tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
-                }
-                tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
+            } finally {
+                db.readUnlock();
             }
-        } finally {
-            db.readUnlock();
+        } else {
+            List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+            if (matcher != null) {
+                tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
+            }
+            tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {
