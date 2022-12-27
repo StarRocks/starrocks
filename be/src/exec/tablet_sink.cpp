@@ -970,12 +970,14 @@ Status OlapTableSink::try_close(RuntimeState* state) {
     bool intolerable_failure = false;
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
-            auto st = ch->try_close();
-            if (!st.ok()) {
-                LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
-                err_st = st;
-                index_channel->mark_as_failed(ch);
+            if (!index_channel->is_failed_channel(ch)) {
+                auto st = ch->try_close();
+                if (!st.ok()) {
+                    LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                                 << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                    err_st = st;
+                    index_channel->mark_as_failed(ch);
+                }
             }
             if (index_channel->has_intolerable_failure()) {
                 intolerable_failure = true;
