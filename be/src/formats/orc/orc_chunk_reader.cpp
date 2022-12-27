@@ -26,8 +26,8 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "exprs/vectorized/cast_expr.h"
-#include "exprs/vectorized/literal.h"
+#include "exprs/cast_expr.h"
+#include "exprs/literal.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
@@ -259,11 +259,12 @@ Status OrcChunkReader::_init_position_in_orc() {
         auto slot_desc = _src_slot_descriptors[i];
 
         if (slot_desc == nullptr) continue;
-        auto it = _name_to_column_id.find(slot_desc->col_name());
+        std::string col_name = format_column_name(slot_desc->col_name(), _case_sensitive);
+        auto it = _name_to_column_id.find(col_name);
         if (it == _name_to_column_id.end()) {
             auto s = strings::Substitute(
-                    "OrcChunkReader::init_position_in_orc. failed to find position. col_name = $0, file = $1",
-                    slot_desc->col_name(), _current_file_name);
+                    "OrcChunkReader::init_position_in_orc. failed to find position. col_name = $0, file = $1", col_name,
+                    _current_file_name);
             return Status::NotFound(s);
         }
         int col_id = it->second;

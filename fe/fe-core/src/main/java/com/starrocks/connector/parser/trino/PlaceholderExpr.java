@@ -39,6 +39,6 @@ public class PlaceholderExpr extends Expr {
 
     @Override
     public Expr clone() {
-        return null;
+        return new PlaceholderExpr(index, clazz);
     }
 }

@@ -32,8 +32,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.PredicateUtils;
+import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -43,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -90,10 +93,24 @@ public class IcebergScanNode extends ScanNode {
     private long totalBytes = 0;
 
     private boolean isFinalized = false;
+    private CloudConfiguration cloudConfiguration = null;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         srIcebergTable = (IcebergTable) desc.getTable();
+        setupCloudCredential();
+    }
+
+    private void setupCloudCredential() {
+        String catalogName = srIcebergTable.getCatalog();
+        if (catalogName == null) {
+            return;
+        }
+        IcebergConnector connector = (IcebergConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+                getConnector(catalogName);
+        if (connector != null) {
+            cloudConfiguration = connector.getCloudConfiguration();
+        }
     }
 
     @Override
@@ -339,6 +356,12 @@ public class IcebergScanNode extends ScanNode {
 
         if (srIcebergTable != null) {
             msg.hdfs_scan_node.setTable_name(srIcebergTable.getTable());
+        }
+
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
     }
 

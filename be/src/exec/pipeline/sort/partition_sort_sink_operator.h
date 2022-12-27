@@ -17,10 +17,10 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "exec/chunks_sorter.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/sort_exec_exprs.h"
-#include "exec/vectorized/chunks_sorter.h"
 
 namespace starrocks {
 class BufferControlBlock;
@@ -47,9 +47,7 @@ public:
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
-              _sort_context(sort_context) {
-        _sort_context->ref();
-    }
+              _sort_context(sort_context) {}
 
     ~PartitionSortSinkOperator() override = default;
 

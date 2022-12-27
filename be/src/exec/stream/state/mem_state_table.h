@@ -81,7 +81,6 @@ private:
     bool _equal_keys(const DatumKeyRow& m_k, const DatumRow key) const;
 
 private:
-    TupleDescriptor* _tuple_desc;
     std::vector<SlotDescriptor*> _slots;
     size_t _k_num;
     size_t _cols_num;

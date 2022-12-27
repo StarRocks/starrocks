@@ -2,8 +2,8 @@
 
 #include "column/chunk.h"
 #include "column/const_column.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "exprs/vectorized/column_ref.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "formats/csv/output_stream_file.h"

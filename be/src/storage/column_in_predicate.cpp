@@ -18,10 +18,10 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"
+#include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
-#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 

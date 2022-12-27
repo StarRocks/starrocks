@@ -681,7 +681,7 @@ public class Config extends ConfigBase {
     /**
      * The thrift server max worker threads
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
@@ -1766,12 +1766,30 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    /**
+     * empty shard group clean threshold (by create time).
+     */
+    @ConfField
+    public static long shard_group_clean_threshold_sec = 3600L;
+
+    /**
+     * ShardDeleter run interval in seconds
+     */
+    @ConfField
+    public static long shard_deleter_run_interval_sec = 600L;
+
     @ConfField
     public static String hdfs_url = "";
 
     /* default file store type used */
     @ConfField
     public static String default_fs_type = "S3";
+
+    /**
+     * starmgr disable auto shard balance or not
+     */
+    @ConfField
+    public static boolean starmgr_disable_shard_balance = false;
 
     /**
      * default storage cache ttl of lake table
@@ -1781,6 +1799,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_expression_partition = false;
 
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;

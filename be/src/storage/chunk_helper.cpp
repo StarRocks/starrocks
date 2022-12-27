@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_schema.h"
 #include "gutil/strings/fastmem.h"
@@ -125,8 +126,8 @@ starrocks::VectorizedField ChunkHelper::convert_field_to_format_v2(ColumnId id, 
     LogicalType type = TypeUtils::to_storage_format_v2(c.type());
 
     TypeInfoPtr type_info = nullptr;
-    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
-        type == TYPE_DECIMAL128) {
+    if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_DECIMAL32 ||
+        type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
         // ARRAY and DECIMAL should be handled specially
         // Array is nested type, the message is stored in TabletColumn
         // Decimal has precision and scale, the message is stored in TabletColumn
@@ -144,6 +145,12 @@ starrocks::VectorizedField ChunkHelper::convert_field_to_format_v2(ColumnId id, 
         f.add_sub_field(sub_field);
     } else if (type == TYPE_MAP) {
         for (int i = 0; i < 2; ++i) {
+            const TabletColumn& sub_column = c.subcolumn(i);
+            auto sub_field = convert_field_to_format_v2(id, sub_column);
+            f.add_sub_field(sub_field);
+        }
+    } else if (type == TYPE_STRUCT) {
+        for (int i = 0; i < c.subcolumn_count(); ++i) {
             const TabletColumn& sub_column = c.subcolumn(i);
             auto sub_field = convert_field_to_format_v2(id, sub_column);
             f.add_sub_field(sub_field);
@@ -255,6 +262,15 @@ struct ColumnPtrBuilder {
             auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
             auto map = MapColumn::create(std::move(keys), std::move(values), offsets);
             return nullable(map);
+        } else if constexpr (ftype == TYPE_STRUCT) {
+            std::vector<std::string> names;
+            std::vector<ColumnPtr> fields;
+            for (auto& sub_field : field.sub_fields()) {
+                names.template emplace_back(sub_field.name());
+                fields.template emplace_back(sub_field.create_column());
+            }
+            auto struct_column = StructColumn::create(std::move(fields), std::move(names));
+            return nullable(struct_column);
         } else {
             switch (ftype) {
             case TYPE_DECIMAL32:
@@ -360,6 +376,8 @@ struct ColumnBuilder {
             CHECK(false) << "array not supported";
         } else if constexpr (ftype == TYPE_MAP) {
             CHECK(false) << "array not supported";
+        } else if constexpr (ftype == TYPE_STRUCT) {
+            CHECK(false) << "array not supported";
         } else {
             return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
         }
@@ -389,6 +407,16 @@ ColumnPtr ChunkHelper::column_from_field(const VectorizedField& field) {
     case TYPE_MAP:
         return NullableIfNeed(MapColumn::create(column_from_field(field.sub_field(0)),
                                                 column_from_field(field.sub_field(1)), UInt32Column::create()));
+    case TYPE_STRUCT: {
+        std::vector<std::string> names;
+        std::vector<ColumnPtr> fields;
+        for (auto& sub_field : field.sub_fields()) {
+            names.template emplace_back(sub_field.name());
+            fields.template emplace_back(sub_field.create_column());
+        }
+        auto struct_column = StructColumn::create(std::move(fields), std::move(names));
+        return NullableIfNeed(struct_column);
+    }
     default:
         return NullableIfNeed(column_from_field_type(type, false));
     }

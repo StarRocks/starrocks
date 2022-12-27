@@ -87,16 +87,16 @@ public class RefreshMaterializedViewStatementTest {
     @Test
     public void testRefreshMaterializedView() throws Exception {
         cluster.runSql("test",
-                "create table t1 ( c1 bigint NOT NULL, c2 string not null, c3 int not null ) " +
+                "create table table_name_tmp_1 ( c1 bigint NOT NULL, c2 string not null, c3 int not null ) " +
                         " DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
                         " PROPERTIES(\"replication_num\" = \"1\");");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         starRocksAssert.withNewMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
                 " refresh manual" +
-                " as select c1, sum(c3) as total from t1 group by c1");
-        cluster.runSql("test", "insert into t1 values(1, \"str1\", 100)");
-        Table t1 = db.getTable("t1");
-        Assert.assertNotNull(t1);
+                " as select c1, sum(c3) as total from table_name_tmp_1 group by c1");
+        cluster.runSql("test", "insert into table_name_tmp_1 values(1, \"str1\", 100)");
+        Table table = db.getTable("table_name_tmp_1");
+        Assert.assertNotNull(table);
         Table t2 = db.getTable("mv1");
         Assert.assertNotNull(t2);
         MaterializedView mv1 = (MaterializedView) t2;
@@ -111,12 +111,12 @@ public class RefreshMaterializedViewStatementTest {
         taskManager.executeTaskSync(mvTaskName);
         MaterializedView.MvRefreshScheme refreshScheme = mv1.getRefreshScheme();
         Assert.assertNotNull(refreshScheme);
-        LOG.info("visibleVersionMap:" + refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap());
-        Assert.assertTrue(refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().containsKey(t1.getId()));
+        System.out.println("visibleVersionMap:" + refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap());
+        Assert.assertTrue(refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().containsKey(table.getId()));
         Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap =
-                refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(t1.getId());
-        Assert.assertTrue(partitionInfoMap.containsKey("t1"));
-        MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("t1");
-        Assert.assertEquals(t1.getPartition("t1").getVisibleVersion(), partitionInfo.getVersion());
+                refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(table.getId());
+        Assert.assertTrue(partitionInfoMap.containsKey("table_name_tmp_1"));
+        MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
+        Assert.assertEquals(table.getPartition("table_name_tmp_1").getVisibleVersion(), partitionInfo.getVersion());
     }
 }

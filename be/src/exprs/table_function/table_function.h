@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "column/column.h"
-#include "exprs/vectorized/function_helper.h"
+#include "exprs/function_helper.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

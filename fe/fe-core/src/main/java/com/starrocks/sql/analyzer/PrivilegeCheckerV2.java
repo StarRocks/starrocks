@@ -126,6 +126,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -150,6 +151,7 @@ import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -230,6 +232,23 @@ public class PrivilegeCheckerV2 {
         if (!PrivilegeManager.checkAnyActionOnTable(context, dbName, tableName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
                                                 context.getQualifiedUser(), tableName);
+        }
+    }
+
+    public static void checkMvAction(ConnectContext context,
+                                     TableName tableName,
+                                     PrivilegeType.MaterializedViewAction action) {
+        String catalogName = tableName.getCatalog();
+        if (catalogName == null) {
+            catalogName = context.getCurrentCatalog();
+        }
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+        }
+        String actionStr = action.toString();
+        if (!PrivilegeManager.checkMaterializedViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_MV_ACCESS_DENIED_ERROR,
+                    actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
     }
 
@@ -339,7 +358,7 @@ public class PrivilegeCheckerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null && !db.isInfoSchemaDb()) {
                 Table table = db.getTable(tableId);
-                if (table != null) {
+                if (table != null && table.isOlapOrLakeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
                 }
@@ -360,6 +379,9 @@ public class PrivilegeCheckerV2 {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
         if (db != null && !db.isInfoSchemaDb()) {
             for (Table table : db.getTables()) {
+                if (table == null || !table.isOlapOrLakeTable()) {
+                    continue;
+                }
                 TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         db.getFullName(), table.getName());
                 tableNames.add(tableNameNew);
@@ -641,7 +663,11 @@ public class PrivilegeCheckerV2 {
 
             @Override
             public Void visitTable(TableRelation node, Void context) {
-                checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
+                if (node.getTable().isMaterializedView()) {
+                    checkMvAction(session, node.getName(), PrivilegeType.MaterializedViewAction.SELECT);
+                } else {
+                    checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
+                }
                 return null;
             }
         }
@@ -711,6 +737,13 @@ public class PrivilegeCheckerV2 {
                     context, statement.getResourceName(), PrivilegeType.ResourceAction.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowResourceStatement(ShowResourcesStmt statement, ConnectContext context) {
+            // `show resources` only show resource that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowResources()` for details.
             return null;
         }
 
@@ -1229,6 +1262,13 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
+            // `show alter table` only show tables/views/mvs that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowAlter()` for details.
             return null;
         }
 

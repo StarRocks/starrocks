@@ -31,8 +31,11 @@
 namespace {
 static const staros::starlet::metrics::Labels kSrPosixFsLables({{"fstype", "srposix"}});
 
-DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_posixread_iosize, staros::starlet::fslib::kMKReadIOSize, kSrPosixFsLables);
-DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_posixread_iolatency, staros::starlet::fslib::kMKReadIOLatency, kSrPosixFsLables);
+DEFINE_HISTOGRAM_METRIC_KEY_WITH_TAG_BUCKET(s_posixread_iosize, staros::starlet::fslib::kMKReadIOSize, kSrPosixFsLables,
+                                            staros::starlet::metrics::MetricsSystem::kIOSizeBuckets);
+DEFINE_HISTOGRAM_METRIC_KEY_WITH_TAG_BUCKET(s_posixread_iolatency, staros::starlet::fslib::kMKReadIOLatency,
+                                            kSrPosixFsLables,
+                                            staros::starlet::metrics::MetricsSystem::kIOLatencyBuckets);
 } // namespace
 #endif
 
@@ -67,7 +70,7 @@ StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
     ssize_t res;
 #ifdef USE_STAROS
-    staros::starlet::metrics::TimeObserver observer(s_posixread_iolatency);
+    staros::starlet::metrics::TimeObserver<prometheus::Histogram> observer(s_posixread_iolatency);
 #endif
     RETRY_ON_EINTR(res, ::pread(_fd, static_cast<char*>(data), count, _offset));
     if (UNLIKELY(res < 0)) {

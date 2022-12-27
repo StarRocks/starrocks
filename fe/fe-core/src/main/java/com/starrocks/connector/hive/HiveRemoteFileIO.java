@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ObjectStorageUtils;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
@@ -65,7 +66,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
-            URI uri = new URI(path.replace(" ", "%20"));
+            URI uri = new Path(path).toUri();
             FileSystem fileSystem;
 
             if (!FeConstants.runningUnitTest) {
@@ -85,7 +86,8 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                 if (!isValidDataFile(locatedFileStatus)) {
                     continue;
                 }
-                String fileName = locatedFileStatus.getPath().getName();
+                String locateName = locatedFileStatus.getPath().toUri().getPath();
+                String fileName = PartitionUtil.getSuffixName(uri.getPath(), locateName);
 
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);

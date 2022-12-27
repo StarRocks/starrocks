@@ -56,6 +56,7 @@
 #include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_io.h"
+#include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
@@ -270,6 +271,8 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
             return create_array_column_writer(opts, std::move(type_info), column, wfile);
         case LogicalType::TYPE_MAP:
             return create_map_column_writer(opts, std::move(type_info), column, wfile);
+        case LogicalType::TYPE_STRUCT:
+            return create_struct_column_writer(opts, std::move(type_info), column, wfile);
         default:
             return Status::NotSupported("unsupported type for ColumnWriter: " + std::to_string(type_info->type()));
         }

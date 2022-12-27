@@ -36,7 +36,6 @@
 
 #include <gtest/gtest.h>
 
-#include "exec/vectorized/tablet_info.h"
 #include "runtime/descriptor_helper.h"
 
 namespace starrocks {

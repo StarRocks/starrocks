@@ -27,16 +27,16 @@
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/in_const_predicate.hpp"
+#include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/miscs.h"
 #include "simd/simd.h"
 #include "storage/column_expr_predicate.h"
+#include "storage/column_predicate.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 constexpr static const LogicalType kDictCodeType = TYPE_INT;

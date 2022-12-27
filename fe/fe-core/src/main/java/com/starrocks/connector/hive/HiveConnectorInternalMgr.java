@@ -19,9 +19,9 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
-import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -31,6 +31,7 @@ import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
 
 public class HiveConnectorInternalMgr {
     private final String catalogName;
+    private final HdfsEnvironment hdfsEnvironment;
     private final Map<String, String> properties;
     private final boolean enableMetastoreCache;
     private final CachingHiveMetastoreConf hmsConf;
@@ -46,9 +47,10 @@ public class HiveConnectorInternalMgr {
     private final int loadRemoteFileMetadataThreadNum;
     private final boolean enableHmsEventsIncrementalSync;
 
-    public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties) {
+    public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
+        this.hdfsEnvironment = hdfsEnvironment;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
         this.hmsConf = new CachingHiveMetastoreConf(properties);
 
@@ -98,8 +100,8 @@ public class HiveConnectorInternalMgr {
 
     public RemoteFileIO createRemoteFileIO() {
         // TODO(stephen): Abstract the creator class to construct RemoteFiloIO
-        Configuration configuration = new Configuration();
-        RemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
+
+        RemoteFileIO remoteFileIO = new HiveRemoteFileIO(hdfsEnvironment.getConfiguration());
 
         RemoteFileIO baseRemoteFileIO;
         if (!enableRemoteFileCache) {
@@ -141,5 +143,9 @@ public class HiveConnectorInternalMgr {
 
     public boolean enableHmsEventsIncrementalSync() {
         return enableHmsEventsIncrementalSync;
+    }
+
+    public HdfsEnvironment getHdfsEnvironment() {
+        return hdfsEnvironment;
     }
 }

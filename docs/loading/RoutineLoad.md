@@ -204,8 +204,8 @@ CREATE TABLE `example_tbl2` (
     `pay_dt` date NULL COMMENT "Payment date", 
     `price`double SUM NULL COMMENT "Price"
 ) 
-AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
 ENGINE=OLAP
+AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
 DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
 ```
 

@@ -51,6 +51,7 @@
 #include "storage/type_traits.h"
 #include "types/date_value.hpp"
 #include "types/map_type_info.h"
+#include "types/struct_type_info.h"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
 #include "util/mysql_global.h"
@@ -323,6 +324,13 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
         TypeInfoPtr value_type_info = get_type_info(value_meta);
 
         return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+    } else if (type == TYPE_STRUCT) {
+        std::vector<TypeInfoPtr> field_types;
+        for (int i = 0; i < column_meta_pb.children_columns_size(); ++i) {
+            auto& meta = column_meta_pb.children_columns(i);
+            field_types.emplace_back(get_type_info(meta));
+        }
+        return get_struct_type_info(std::move(field_types));
     } else {
         return get_type_info(delegate_type(type));
     }
@@ -343,6 +351,12 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
         TypeInfoPtr value_type_info = get_type_info(value_meta);
 
         return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+    } else if (col.type() == TYPE_STRUCT) {
+        std::vector<TypeInfoPtr> field_types;
+        for (int i = 0; i < col.subcolumn_count(); ++i) {
+            field_types.emplace_back(get_type_info(col.subcolumn(i)));
+        }
+        return get_struct_type_info(std::move(field_types));
     } else {
         return get_type_info(col.type(), col.precision(), col.scale());
     }

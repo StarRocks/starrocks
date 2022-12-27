@@ -14,9 +14,9 @@
 
 #include "exec/pipeline/scan/meta_scan_operator.h"
 
+#include "exec/meta_scanner.h"
 #include "exec/pipeline/scan/meta_chunk_source.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
-#include "exec/vectorized/meta_scanner.h"
 
 namespace starrocks::pipeline {
 MetaScanOperatorFactory::MetaScanOperatorFactory(int32_t id, ScanNode* meta_scan_node, size_t dop,
