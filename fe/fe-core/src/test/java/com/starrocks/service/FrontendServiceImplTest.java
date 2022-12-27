@@ -4,7 +4,6 @@ package com.starrocks.service;
 
 
 import com.starrocks.qe.QueryQueueManager;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceUsage;
