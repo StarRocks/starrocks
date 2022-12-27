@@ -51,9 +51,11 @@ namespace starrocks {
 
 #if ENABLE_COUNTERS
 #define ADD_COUNTER(profile, name, type) (profile)->add_counter(name, type)
+#define ADD_COUNTER_SKIP_MERGE(profile, name, type) (profile)->add_counter(name, type, true)
 #define ADD_TIMER(profile, name) (profile)->add_counter(name, TUnit::TIME_NS)
-#define ADD_CHILD_COUNTER(profile, name, type, parent) (profile)->add_counter(name, type, parent)
-#define ADD_CHILD_TIMER(profile, name, parent) (profile)->add_counter(name, TUnit::TIME_NS, parent)
+#define ADD_CHILD_COUNTER(profile, name, type, parent) (profile)->add_child_counter(name, type, parent)
+#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, parent) (profile)->add_child_counter(name, type, parent, true)
+#define ADD_CHILD_TIMER(profile, name, parent) (profile)->add_child_counter(name, TUnit::TIME_NS, parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
     ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
@@ -89,7 +91,8 @@ class RuntimeProfile {
 public:
     class Counter {
     public:
-        explicit Counter(TUnit::type type, int64_t value = 0) : _value(value), _type(type) {}
+        explicit Counter(TUnit::type type, int64_t value = 0, bool skip_merge = false)
+                : _value(value), _type(type), _skip_merge(skip_merge){};
 
         virtual ~Counter() = default;
 
@@ -114,11 +117,19 @@ public:
 
         TUnit::type type() const { return _type; }
 
+        bool skip_merge() const { return _skip_merge; }
+
     private:
         friend class RuntimeProfile;
 
         std::atomic<int64_t> _value;
-        TUnit::type _type;
+        const TUnit::type _type;
+
+        // For non-time metrics, the default behavior of profile merge mechanism is sum up all the
+        // isomorphic counters, but for some special counters, like dop, tabletCount etc., which require
+        // its original value after merge. We can set the flag _skip_merge to true to skip the merge process
+        // of the counter.
+        const bool _skip_merge;
     };
 
     class ConcurrentTimerCounter;
@@ -133,7 +144,8 @@ public:
     /// as value()) and the current value.
     class HighWaterMarkCounter : public Counter {
     public:
-        explicit HighWaterMarkCounter(TUnit::type unit) : Counter(unit) {}
+        explicit HighWaterMarkCounter(TUnit::type type, int64_t value = 0, bool skip_merge = false)
+                : Counter(type, value, skip_merge) {}
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
@@ -254,7 +266,7 @@ public:
     // Create a runtime profile object with 'name'.
     explicit RuntimeProfile(std::string name, bool is_averaged_profile = false);
 
-    ~RuntimeProfile();
+    ~RuntimeProfile() = default;
 
     RuntimeProfile* parent() const { return _parent; }
 
@@ -308,8 +320,11 @@ public:
     // If parent_name is a non-empty string, the counter is added as a child of
     // parent_name.
     // If the counter already exists, the existing counter object is returned.
-    Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_name);
-    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ROOT_COUNTER); }
+    Counter* add_child_counter(const std::string& name, TUnit::type type, const std::string& parent_name,
+                               bool skip_merge = false);
+    Counter* add_counter(const std::string& name, TUnit::type type, bool skip_merge = false) {
+        return add_child_counter(name, type, ROOT_COUNTER, skip_merge);
+    }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
@@ -412,49 +427,10 @@ public:
     // Note: this function should not block (or take a long time).
     typedef std::function<int64_t()> SampleFn;
 
-    // Add a rate counter to the current profile based on src_counter with name.
-    // The rate counter is updated periodically based on the src counter.
-    // The rate counter has units in src_counter unit per second.
-    Counter* add_rate_counter(const std::string& name, Counter* src_counter);
-
-    // Same as 'add_rate_counter' above except values are taken by calling fn.
-    // The resulting counter will be of 'type'.
-    Counter* add_rate_counter(const std::string& name, SampleFn fn, TUnit::type type);
-
-    // Add a sampling counter to the current profile based on src_counter with name.
-    // The sampling counter is updated periodically based on the src counter by averaging
-    // the samples taken from the src counter.
-    // The sampling counter has the same unit as src_counter unit.
-    Counter* add_sampling_counter(const std::string& name, Counter* src_counter);
-
-    // Same as 'add_sampling_counter' above except the samples are taken by calling fn.
-    Counter* add_sampling_counter(const std::string& name, SampleFn fn);
-
-    // Add a bucket of counters to store the sampled value of src_counter.
-    // The src_counter is sampled periodically and the buckets are updated.
-    void add_bucketing_counters(const std::string& name, const std::string& parent_name, Counter* src_counter,
-                                int max_buckets, std::vector<Counter*>* buckets);
-
     /// Adds a high water mark counter to the runtime profile. Otherwise, same behavior
     /// as AddCounter().
     HighWaterMarkCounter* AddHighWaterMarkCounter(const std::string& name, TUnit::type unit,
-                                                  const std::string& parent_name = "");
-
-    // stops updating the value of 'rate_counter'. Rate counters are updated
-    // periodically so should be removed as soon as the underlying counter is
-    // no longer going to change.
-    void stop_rate_counters_updates(Counter* rate_counter);
-
-    // stops updating the value of 'sampling_counter'. Sampling counters are updated
-    // periodically so should be removed as soon as the underlying counter is
-    // no longer going to change.
-    void stop_sampling_counters_updates(Counter* sampling_counter);
-
-    // stops updating the bucket counter.
-    // If convert is true, convert the buckets from count to percentage.
-    // Sampling counters are updated periodically so should be removed as soon as the
-    // underlying counter is no longer going to change.
-    void stop_bucketing_counters_updates(std::vector<Counter*>* buckets, bool convert);
+                                                  const std::string& parent_name = "", bool skip_merge = false);
 
     // Recursively compute the fraction of the 'total_time' spent in this profile and
     // its children.
@@ -470,7 +446,8 @@ private:
     typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
-    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name);
+    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name,
+                                bool skip_merge);
 
     RuntimeProfile* _parent;
 
@@ -535,65 +512,6 @@ private:
     // of the total time in the entire profile tree.
     double _local_time_percent;
 
-    enum PeriodicCounterType {
-        RATE_COUNTER = 0,
-        SAMPLING_COUNTER,
-    };
-
-    struct RateCounterInfo {
-        Counter* src_counter;
-        SampleFn sample_fn;
-        int64_t elapsed_ms;
-    };
-
-    struct SamplingCounterInfo {
-        Counter* src_counter; // the counter to be sampled
-        SampleFn sample_fn;
-        int64_t total_sampled_value; // sum of all sampled values;
-        int64_t num_sampled;         // number of samples taken
-    };
-
-    struct BucketCountersInfo {
-        Counter* src_counter; // the counter to be sampled
-        int64_t num_sampled;  // number of samples taken
-        // TODO: customize bucketing
-    };
-
-    // This is a static singleton object that is used to update all rate counters and
-    // sampling counters.
-    struct PeriodicCounterUpdateState {
-        PeriodicCounterUpdateState();
-
-        // Tears down the update thread.
-        ~PeriodicCounterUpdateState();
-
-        // Lock protecting state below
-        std::mutex lock;
-
-        // If true, tear down the update thread.
-        volatile bool _done{false};
-
-        // Thread performing asynchronous updates.
-        std::unique_ptr<std::thread> update_thread;
-
-        // A map of the dst (rate) counter to the src counter and elapsed time.
-        typedef std::map<Counter*, RateCounterInfo> RateCounterMap;
-        RateCounterMap rate_counters;
-
-        // A map of the dst (averages over samples) counter to the src counter (to be sampled)
-        // and number of samples taken.
-        typedef std::map<Counter*, SamplingCounterInfo> SamplingCounterMap;
-        SamplingCounterMap sampling_counters;
-
-        // Map from a bucket of counters to the src counter
-        typedef std::map<std::vector<Counter*>*, BucketCountersInfo> BucketCountersMap;
-        BucketCountersMap bucketing_counters;
-    };
-
-    // Singleton object that keeps track of all rate counters and the thread
-    // for updating them.
-    static PeriodicCounterUpdateState _s_periodic_counter_update_state; // NOLINT
-
     // update a subtree of profiles from nodes, rooted at *idx.
     // On return, *idx points to the node immediately following this subtree.
     void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx);
@@ -602,18 +520,6 @@ private:
     // this profile and its children.
     // Called recusively.
     void compute_time_in_profile(int64_t total_time);
-
-    // Registers a periodic counter to be updated by the update thread.
-    // Either sample_fn or dst_counter must be non-NULL.  When the periodic counter
-    // is updated, it either gets the value from the dst_counter or calls the sample
-    // function to get the value.
-    // dst_counter/sample fn is assumed to be compatible types with src_counter.
-    static void register_periodic_counter(Counter* src_counter, SampleFn sample_fn, Counter* dst_counter,
-                                          PeriodicCounterType type);
-
-    // Loop for periodic counter update thread.  This thread wakes up once in a while
-    // and updates all the added rate counters and sampling counters.
-    static void periodic_counter_update_loop();
 
     // Print the child counters of the given counter name
     static void print_child_counters(const std::string& prefix, const std::string& counter_name,

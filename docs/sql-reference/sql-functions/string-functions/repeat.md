@@ -1,16 +1,16 @@
 # repeat
 
-## description
+## Description
 
-### Syntax
+This function repeats str by a number of times according to count. When count is below 1, it returns an empty string. When str or count is NULL, it returns NULL.
+
+## Syntax
 
 ```Haskell
 VARCHAR repeat(VARCHAR str, INT count)
 ```
 
-This function repeats str by a number of times according to count. When count is below 1, it returns an empty string. When str or count is NULL, it returns NULL.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT repeat("a", 3);

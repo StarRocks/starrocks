@@ -79,7 +79,8 @@ Status BrokerWriter::open() {
     TBrokerOpenWriterResponse response;
     try {
         Status status;
-        BrokerServiceConnection client(client_cache(_env), broker_addr, 10000, &status);
+        BrokerServiceConnection client(client_cache(_env), broker_addr, config::broker_write_timeout_seconds * 1000,
+                                       &status);
         if (!status.ok()) {
             LOG(WARNING) << "Create broker writer client failed. "
                          << "broker=" << broker_addr << ", status=" << status.get_error_msg();
@@ -186,9 +187,8 @@ Status BrokerWriter::close() {
     TBrokerOperationStatus response;
     try {
         Status status;
-        // use 20 second because close may take longer in remote storage, sometimes.
-        // TODO(cmy): optimize this if necessary.
-        BrokerServiceConnection client(client_cache(_env), broker_addr, 20000, &status);
+        BrokerServiceConnection client(client_cache(_env), broker_addr, config::broker_write_timeout_seconds * 1000,
+                                       &status);
         if (!status.ok()) {
             LOG(WARNING) << "Create broker write client failed. broker=" << broker_addr
                          << ", status=" << status.get_error_msg();

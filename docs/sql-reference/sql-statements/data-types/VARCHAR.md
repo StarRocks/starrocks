@@ -4,7 +4,10 @@
 
 VARCHAR(M)
 
-A variable-length string. `M` represents the length of a variable-length string. The range of `M` is 1–1048576. The default value is 1. In versions earlier than 2.1, the range of `M` is 1–65533. From 2.1 onwards, the range of `M` is 1–1048576.
+A variable-length string. `M` indicates the length of the string. The default value is `1`. Unit: bytes.
+
+- In versions earlier than StarRocks 2.1, the value range of `M` is 1–65533.
+- [Preview] In StarRocks 2.1 and later versions, the value range of `M` is 1–1048576.
 
 ## Examples
 

@@ -82,7 +82,8 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
     RETURN_IF_ERROR(_check_local_snapshot_paths(src_to_dest_path, true));
 
     // 2. get broker client
-    BrokerServiceConnection client(client_cache(_env), broker_addr, 10000, &status);
+    BrokerServiceConnection client(client_cache(_env), broker_addr, config::broker_write_timeout_seconds * 1000,
+                                   &status);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
@@ -200,7 +201,8 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
     RETURN_IF_ERROR(_check_local_snapshot_paths(src_to_dest_path, false));
 
     // 2. get broker client
-    BrokerServiceConnection client(client_cache(_env), broker_addr, 10000, &status);
+    BrokerServiceConnection client(client_cache(_env), broker_addr, config::broker_write_timeout_seconds * 1000,
+                                   &status);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "

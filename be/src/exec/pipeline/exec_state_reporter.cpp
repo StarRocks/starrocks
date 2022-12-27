@@ -30,7 +30,8 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
     return url.str();
 }
 
-TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(FragmentContext* fragment_ctx,
+TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
+                                                                            FragmentContext* fragment_ctx,
                                                                             const Status& status, bool done) {
     TReportExecStatusParams params;
     auto* runtime_state = fragment_ctx->runtime_state();
@@ -53,7 +54,7 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             params.__set_loaded_rows(runtime_state->num_rows_load_total());
         }
-        if (fragment_ctx->is_report_profile()) {
+        if (query_ctx->is_report_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
         }

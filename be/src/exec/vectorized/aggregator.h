@@ -15,6 +15,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
@@ -59,7 +60,7 @@ class Aggregator final : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    ~Aggregator() {
+    ~Aggregator() noexcept override {
         if (_state != nullptr) {
             close(_state);
         }
@@ -118,7 +119,7 @@ public:
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
-    void convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
+    Status convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
 
     void process_limit(vectorized::ChunkPtr* chunk);
 
@@ -304,7 +305,8 @@ public:
     }
 
     template <typename HashMapWithKey>
-    void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+    Status convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,
+                                     vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_get_results_timer);
         using Iterator = typename HashMapWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
@@ -334,13 +336,15 @@ public:
             SCOPED_TIMER(_agg_append_timer);
             if (_needs_finalize) {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                      _agg_states_offsets[i], agg_result_columns[i].get());
+                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                                          _agg_states_offsets[i],
+                                                                          agg_result_columns[i].get()));
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                       _agg_states_offsets[i], agg_result_columns[i].get());
+                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                                           _agg_states_offsets[i],
+                                                                           agg_result_columns[i].get()));
                 }
             }
         }
@@ -358,9 +362,9 @@ public:
                     group_by_columns[0]->append_default();
 
                     if (_needs_finalize) {
-                        _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
+                        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     } else {
-                        _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
+                        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     }
 
                     ++read_index;
@@ -394,6 +398,8 @@ public:
         }
         _num_rows_returned += read_index;
         *chunk = std::move(_result_chunk);
+
+        return Status::OK();
     }
 
     template <typename HashSetWithKey>

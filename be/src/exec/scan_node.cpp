@@ -46,7 +46,12 @@ Status ScanNode::prepare(RuntimeState* state) {
     _rows_read_counter = ADD_COUNTER(runtime_profile(), _s_rows_read_counter, TUnit::UNIT);
     _read_timer = ADD_TIMER(runtime_profile(), _s_total_read_timer);
 #ifndef BE_TEST
-    _total_throughput_counter = runtime_profile()->add_rate_counter(_s_total_throughput_counter, _bytes_read_counter);
+    _total_throughput_counter = runtime_profile()->add_derived_counter(
+            _s_total_throughput_counter, TUnit::BYTES_PER_SECOND,
+            [bytes_read_counter = _bytes_read_counter, total_time_countger = runtime_profile()->total_time_counter()] {
+                return RuntimeProfile::units_per_second(bytes_read_counter, total_time_countger);
+            },
+            "");
 #endif
     _materialize_tuple_timer =
             ADD_CHILD_TIMER(runtime_profile(), _s_materialize_tuple_timer, _s_scanner_thread_total_wallclock_time);

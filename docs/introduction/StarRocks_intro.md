@@ -74,12 +74,12 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart>
 <NavBoxPartItem title="Query external data sources​">
 
-- [Apache Hive™](../using_starrocks/Manage_data.md)
-- [Apache Hudi](../using_starrocks/External_table.md#hudi-external-table)
-- [Apache Iceberg](../using_starrocks/External_table.md#apache-iceberg-external-table)
-- [MySQL](../using_starrocks/External_table.md#mysql-external-table)
-- [Elasticsearch](../using_starrocks/External_table.md#elasticsearch-external-table)
-- [JDBC-compatible database](../using_starrocks/External_table.md#external-table-for-a-jdbc-compatible-database)
+- [Apache Hive™](../data_source/Manage_data.md)
+- [Apache Hudi](../data_source/External_table.md#hudi-external-table)
+- [Apache Iceberg](../data_source/External_table.md#apache-iceberg-external-table)
+- [MySQL](../data_source/External_table.md#mysql-external-table)
+- [Elasticsearch](../data_source/External_table.md#elasticsearch-external-table)
+- [JDBC-compatible database](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database)
 
 </NavBoxPartItem>
 </NavBoxPart>

@@ -11,6 +11,8 @@
 
 namespace starrocks::pipeline {
 Status ProjectOperator::prepare(RuntimeState* state) {
+    _expr_compute_timer = ADD_TIMER(_unique_metrics, "ExprComputeTime");
+    _common_sub_expr_compute_timer = ADD_TIMER(_unique_metrics, "CommonSubExprComputeTime");
     return Operator::prepare(state);
 }
 
@@ -24,16 +26,20 @@ StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) 
 }
 
 Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    TRY_CATCH_ALLOC_SCOPE_START()
-    for (size_t i = 0; i < _common_sub_column_ids.size(); ++i) {
-        ASSIGN_OR_RETURN(auto col, _common_sub_expr_ctxs[i]->evaluate(chunk.get()));
-        chunk->append_column(std::move(col), _common_sub_column_ids[i]);
-        RETURN_IF_HAS_ERROR(_common_sub_expr_ctxs);
+    TRY_CATCH_ALLOC_SCOPE_START();
+    {
+        SCOPED_TIMER(_common_sub_expr_compute_timer);
+        for (size_t i = 0; i < _common_sub_column_ids.size(); ++i) {
+            ASSIGN_OR_RETURN(auto col, _common_sub_expr_ctxs[i]->evaluate(chunk.get()));
+            chunk->append_column(std::move(col), _common_sub_column_ids[i]);
+            RETURN_IF_HAS_ERROR(_common_sub_expr_ctxs);
+        }
     }
 
     using namespace vectorized;
     vectorized::Columns result_columns(_column_ids.size());
     {
+        SCOPED_TIMER(_expr_compute_timer);
         for (size_t i = 0; i < _column_ids.size(); ++i) {
             ASSIGN_OR_RETURN(result_columns[i], _expr_ctxs[i]->evaluate(chunk.get()));
 

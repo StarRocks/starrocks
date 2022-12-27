@@ -22,6 +22,10 @@ Broker Load supports the following data file formats:
 
 - ORC
 
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+
 ## Supported storage systems
 
 Broker Load supports the following storage systems:
@@ -36,7 +40,7 @@ Broker Load supports the following storage systems:
 
 Brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
@@ -46,7 +50,7 @@ After you submit a load job to an FE, the FE generates a query plan, splits the 
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/4.3-1.png)
+![Workflow of Broker Load](../assets/4.3-1-en.png)
 
 ## Basic operations
 
@@ -151,11 +155,14 @@ WITH BROKER "mybroker"
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> - The S3A protocol is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
 
 #### Load data from Google GCS
 
@@ -180,7 +187,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 ### Query data
 

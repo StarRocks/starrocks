@@ -1387,9 +1387,8 @@ public class DatabaseTransactionMgr {
             long tableId = tableCommitInfo.getTableId();
             OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
-                // This usually caused by materialized view table downgrade
                 LOG.warn("ignore update transaction state visible log, tableId={}", tableId);
-                return true;
+                continue;
             }
             List<String> validDictCacheColumns = Lists.newArrayList();
             long maxPartitionVersionTime = -1;

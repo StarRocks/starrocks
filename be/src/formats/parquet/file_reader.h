@@ -86,7 +86,7 @@ private:
 
     // find column meta according column name
     static const tparquet::ColumnMetaData* _get_column_meta(const tparquet::RowGroup& row_group,
-                                                            const std::string& col_name);
+                                                            const std::string& col_name, bool case_sensitive);
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
@@ -100,7 +100,6 @@ private:
     size_t _row_group_size = 0;
     vectorized::Schema _schema;
 
-    std::vector<GroupReaderParam::Column> _read_cols;
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
     bool _is_only_partition_scan = false;

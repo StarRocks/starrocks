@@ -49,6 +49,8 @@ public class MappingPhase implements SearchPhase {
     public void preProcess(SearchContext context) {
         if (context.version() != null && context.version().onOrAfter(EsMajorVersion.V_7_X)) {
             includeTypeName = true;
+        } else if (context.version() != null && context.version().before(EsMajorVersion.V_7_X)) {
+            includeTypeName = false;
         }
     }
 

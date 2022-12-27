@@ -49,7 +49,6 @@ set(RUNTIME_FILES
     result_buffer_mgr.cpp
     runtime_state.cpp
     string_value.cpp
-    thread_resource_mgr.cpp
     decimal_value.cpp
     decimalv2_value.cpp
     large_int_value.cpp

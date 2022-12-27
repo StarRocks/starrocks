@@ -7,7 +7,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -408,5 +407,36 @@ public class CTEPlanTest extends PlanTestBase {
                 "  RESULT SINK\n" +
                 "\n" +
                 "  2:AGGREGATE (update finalize)\n");
+    }
+
+    @Test
+    public void testNullTypeHack() throws Exception {
+        String sql = "WITH cte_1 AS (\n" +
+                "  SELECT null v1\n" +
+                ")\n" +
+                "SELECT  \n" +
+                "  CASE \n" +
+                "    WHEN a.v1 = b.v1 THEN 1 \n" +
+                "    ELSE -1 \n" +
+                "  END IS_OK\n" +
+                "FROM cte_1 a, cte_1 b";
+
+        String plan = getThriftPlan(sql);
+        assertNotContains(plan, "NULL_TYPE");
+    }
+
+    @Test
+    public void testMergePushdownPredicate() throws Exception {
+        String sql = "with with_t_0 as (select v1, v2, v4 from t0 join t1),\n" +
+                "with_t_1 as (select v1, v2, v5 from t0 join t1)\n" +
+                "select v5, 1 from with_t_1 join with_t_0 left semi join\n" +
+                "(select v2 from with_t_0 where v4 = 123) subwith_t_0\n" +
+                "on with_t_0.v1 = subwith_t_0.v2 and with_t_0.v1 > 0\n" +
+                "where with_t_0.v4 < 100;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "11:SELECT\n" +
+                "  |  predicates: 19: v1 > 0, 22: v4 < 100");
+        assertContains(plan, "14:SELECT\n" +
+                "  |  predicates: 26: v2 > 0, 28: v4 = 123");
     }
 }

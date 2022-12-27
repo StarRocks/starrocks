@@ -54,7 +54,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "runtime/thread_resource_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -130,7 +129,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
-    _thread_mgr = new ThreadResourceMgr();
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init());
@@ -437,10 +435,6 @@ void ExecEnv::_destroy() {
     if (_thread_pool) {
         delete _thread_pool;
         _thread_pool = nullptr;
-    }
-    if (_thread_mgr) {
-        delete _thread_mgr;
-        _thread_mgr = nullptr;
     }
     if (_consistency_mem_tracker) {
         delete _consistency_mem_tracker;

@@ -639,7 +639,8 @@ Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
         auto& expr_ctxs = iter.second;
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
-            std::unique_ptr<ColumnPredicate> p(parser->parse_expr_ctx(*slot_desc, runtime_state, ctx));
+            ASSIGN_OR_RETURN(auto tmp, parser->parse_expr_ctx(*slot_desc, runtime_state, ctx));
+            std::unique_ptr<ColumnPredicate> p(std::move(tmp));
             preds->emplace_back(std::move(p));
         }
     }

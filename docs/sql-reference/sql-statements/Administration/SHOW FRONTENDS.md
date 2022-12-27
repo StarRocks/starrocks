@@ -1,6 +1,6 @@
 # SHOW FRONTENDS
 
-## description
+## Description
 
 This statement is used to view FE nodes.
 

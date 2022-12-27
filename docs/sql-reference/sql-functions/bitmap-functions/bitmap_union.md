@@ -4,7 +4,7 @@
 
 Calculates the bitmap union of a set of values after grouping. Common usage scenarios include calculating PV and UV.
 
-### Syntax
+## Syntax
 
 ```Haskell
 BITMAP BITMAP_UNION(BITMAP value)

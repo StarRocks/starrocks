@@ -293,6 +293,12 @@ public class BinaryPredicate extends Predicate implements Writable {
         if (type1.isJsonType() || type2.isJsonType()) {
             return Type.JSON;
         }
+
+        if (type1.isComplexType() || type2.isComplexType()) {
+            // We don't support complex type for binary predicate.
+            return Type.INVALID;
+        }
+
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
             return Type.VARCHAR;
         }

@@ -202,10 +202,11 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
             _is_nulls.resize(num_parsed_levels);
             int null_pos = 0;
             for (int i = 0; i < num_parsed_levels; ++i) {
-                _is_nulls[null_pos] = _def_levels[i] < _field->max_def_level();
+                level_t def_level = _def_levels[i + _levels_parsed];
+                _is_nulls[null_pos] = (def_level < _field->max_def_level());
                 // if current def level < ancestor def level, the ancestor will be not defined too, so that we don't
                 // need to add null value to this column. Otherwise, we need to add null value to this column.
-                null_pos += _def_levels[i] >= _field->level_info.immediate_repeated_ancestor_def_level;
+                null_pos += (def_level >= _field->level_info.immediate_repeated_ancestor_def_level);
             }
             RETURN_IF_ERROR(_reader->decode_values(null_pos, &_is_nulls[0], content_type, dst));
         }
@@ -230,6 +231,7 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
     DCHECK_GT(_levels_decoded - _levels_parsed, 0);
     size_t levels_pos = _levels_parsed;
 
+#ifndef NDEBUG
     std::stringstream ss;
     ss << "rep=[";
     for (int i = levels_pos; i < _levels_decoded; ++i) {
@@ -240,7 +242,8 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
         ss << ", " << _def_levels[i];
     }
     ss << "]";
-    LOG(INFO) << ss.str();
+    VLOG_FILE << ss.str();
+#endif
 
     if (!_meet_first_record) {
         _meet_first_record = true;
@@ -253,7 +256,7 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
         rows_read += _rep_levels[levels_pos] == 0;
     }
 
-    LOG(INFO) << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
+    VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
     *num_rows = rows_read;
     *num_levels_parsed = levels_pos - _levels_parsed;
 }
@@ -515,7 +518,6 @@ Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType c
     if (_opts.context->filter) {
         dst->append_default(records_to_skip);
         *records_read = records_to_skip;
-        _opts.context->advance(records_to_skip);
     }
     return Status::OK();
 }
@@ -549,6 +551,10 @@ Status StoredColumnReader::_next_selected_page(size_t records_to_read, ColumnCon
             _lazy_load_page_rows(batch_size, content_type, dst);
             _num_values_skip_in_cur_page = 0;
             break;
+        }
+
+        if (_opts.context->filter) {
+            _opts.context->advance(std::min(to_read, remain_values));
         }
         if (to_read < remain_values) {
             _num_values_skip_in_cur_page += to_read;

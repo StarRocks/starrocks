@@ -1,6 +1,6 @@
 # SHOW ROLES
 
-## description
+## Description
 
 This statement is used to show all the information about the created roles, containing roles' names, users included and their permissions.
 
@@ -10,7 +10,7 @@ Syntax:
 SHOW ROLES;
 ```
 
-## example
+## Examples
 
 1. View the created roles
 

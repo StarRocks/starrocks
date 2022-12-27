@@ -4,6 +4,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -517,5 +518,11 @@ public class SetTest extends PlanTestBase {
                 "  |  order by: <slot 8> 8: expr ASC"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 4> : 1: v1 + 2: v2"));
+    }
+
+    @Test
+    public void testSetExpression() throws Exception {
+        UtFrameUtils.parseAndAnalyzeStmt("set exec_mem_limit = 2 * 4", connectContext);
+        UtFrameUtils.parseAndAnalyzeStmt("set exec_mem_limit = 2 + 4 - 1 * 3", connectContext);
     }
 }

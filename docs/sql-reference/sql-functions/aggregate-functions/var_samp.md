@@ -1,16 +1,16 @@
 # VAR_SAMP,VARIANCE_SAMP
 
-## description
+## Description
 
-### Syntax
+Returns the sample variance of the expr expression.
+
+## Syntax
 
 ```Haskell
 VAR_SAMP(expr)
 ```
 
-It returns the sample variance of the expr expression.
-
-## example
+## Examples
 
 ```plain text
 MySQL > select var_samp(scan_rows)

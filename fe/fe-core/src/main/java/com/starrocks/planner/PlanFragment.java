@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * PlanFragments form a tree structure via their ExchangeNodes. A tree of fragments
@@ -243,6 +244,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public int getPipelineDop() {
         return pipelineDop;
+    }
+
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
@@ -588,7 +593,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     // For plan fragment has join
     public void mergeQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.queryGlobalDicts.addAll(dicts);
+        if (this.queryGlobalDicts != dicts) {
+            this.queryGlobalDicts = Stream.concat(this.queryGlobalDicts.stream(), dicts.stream()).distinct()
+                    .collect(Collectors.toList());
+        }
     }
 
     public void setLoadGlobalDicts(

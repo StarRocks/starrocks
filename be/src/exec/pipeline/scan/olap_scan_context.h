@@ -8,6 +8,10 @@
 namespace starrocks {
 
 class ScanNode;
+class Tablet;
+using TabletSharedPtr = std::shared_ptr<Tablet>;
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
 
 namespace vectorized {
 class RuntimeFilterProbeCollector;
@@ -23,6 +27,7 @@ using namespace vectorized;
 class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node) : _scan_node(scan_node) {}
+    ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
@@ -38,6 +43,10 @@ public:
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
 
+    Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
+    const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
+    const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
+
 private:
     vectorized::OlapScanNode* _scan_node;
 
@@ -50,6 +59,13 @@ private:
     ObjectPool _obj_pool;
 
     std::atomic<bool> _is_prepare_finished{false};
+
+    // The row sets of tablets will become stale and be deleted, if compaction occurs
+    // and these row sets aren't referenced, which will typically happen when the tablets
+    // of the left table are compacted at building the right hash table. Therefore, reference
+    // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
+    std::vector<TabletSharedPtr> _tablets;
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 } // namespace pipeline

@@ -101,14 +101,14 @@ View the execution status of the last backup job, including:
 
 View the backups that already exist in the remote repository.
 
-  * Snapshot: The name (Label) of this backup specified at backup time.
-  * Timestamp: The timestamp of the backup.
-  * Status: Whether the backup is normal or not.
+* Snapshot: The name (Label) of this backup specified at backup time.
+* Timestamp: The timestamp of the backup.
+* Status: Whether the backup is normal or not.
 
 If you specify the `where` clause after `SHOW SNAPSHOT`, you will see more detailed backup information.
 
-  * Database: The corresponding Database.
-  * Details:  A holistic view of the backup data directory.
+* Database: The corresponding Database.
+* Details:  A holistic view of the backup data directory.
 
 ### RESTORE
 

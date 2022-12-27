@@ -14,6 +14,7 @@
 namespace starrocks::pipeline {
 
 /// Operator.
+const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
 
@@ -159,8 +160,9 @@ RuntimeState* Operator::runtime_state() const {
 
 void Operator::_init_rf_counters(bool init_bloom) {
     if (_runtime_in_filter_num_counter == nullptr) {
-        _runtime_in_filter_num_counter = ADD_COUNTER(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT);
-        _runtime_bloom_filter_num_counter = ADD_COUNTER(_common_metrics, "RuntimeBloomFilterNum", TUnit::UNIT);
+        _runtime_in_filter_num_counter = ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT);
+        _runtime_bloom_filter_num_counter =
+                ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeBloomFilterNum", TUnit::UNIT);
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");

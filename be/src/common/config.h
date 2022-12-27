@@ -276,6 +276,7 @@ CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
@@ -782,4 +783,12 @@ CONF_Int32(internal_service_async_thread_num, "10");
 CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
+
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
+
+CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+
+CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
+
 } // namespace starrocks::config

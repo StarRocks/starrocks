@@ -59,6 +59,8 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
+    void set_query_ctx(const QueryContextPtr& query_ctx);
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -67,7 +69,7 @@ private:
     Status _try_to_trigger_next_scan(RuntimeState* state);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
-    void _merge_chunk_source_profiles();
+    void _merge_chunk_source_profiles(RuntimeState* state);
     size_t _buffer_unplug_threshold() const;
     size_t _num_buffered_chunks() const;
 

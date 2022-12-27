@@ -1,6 +1,6 @@
 # DECIMAL
 
-## description
+## Description
 
 DECIMAL(P[,S])
 

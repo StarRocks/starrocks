@@ -120,7 +120,6 @@ CREATE EXTERNAL TABLE elastic_search_external_table
     k5 DATETIME
 )
 ENGINE=ELASTICSEARCH
-PARTITION BY RANGE(k1)
 ()
 PROPERTIES (
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",

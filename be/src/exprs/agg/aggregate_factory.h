@@ -94,6 +94,9 @@ public:
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
     template <PrimitiveType PT>
+    static AggregateFunctionPtr MakePercentileContAggregateFunction();
+
+    template <PrimitiveType PT>
     static AggregateFunctionPtr MakeArrayAggAggregateFunction();
 
     // Windows functions:

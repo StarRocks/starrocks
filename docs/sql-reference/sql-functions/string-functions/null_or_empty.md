@@ -1,16 +1,16 @@
 # null_or_empty
 
-## description
+## Description
 
-### Syntax
+This function returns true when the string is empty or NULL. Otherwise, it returns false.
+
+## Syntax
 
 ```Haskell
 BOOLEAN NULL_OR_EMPTY (VARCHAR str)
 ```
 
-This function returns true when the string is empty or NULL. Otherwise, it returns false.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select null_or_empty(null);

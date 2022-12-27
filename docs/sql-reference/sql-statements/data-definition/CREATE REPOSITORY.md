@@ -1,6 +1,6 @@
 # CREATE REPOSITORY
 
-## description
+## Description
 
 This statement is used to create the repository. The repository is used for backup or restore. Only root or superuser users can create repository.
 
@@ -19,7 +19,7 @@ Note:
 2. If it is a read-only repository, it can only be restored on the repository. If not, it can be backed up and restored.
 3. PROPERTIES vary depending on broker of different types.
 
-## example
+## Examples
 
 1. Create a repository named bos_repo based on BOS broker "bos_broker", and the data root directory is: bos://palo_backup.
 

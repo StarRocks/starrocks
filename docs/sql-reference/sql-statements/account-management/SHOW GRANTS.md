@@ -1,6 +1,6 @@
 # SHOW GRANTS
 
-## description
+## Description
 
 This statement is used to view user permissions.
 
@@ -18,7 +18,7 @@ Note:
 3. When user_identity is not specified, the permissions of the current user will be showed. 
 ```
 
-## example
+## Examples
 
 1. View all users' permissions.
 

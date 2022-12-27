@@ -1344,15 +1344,16 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
     }
 }
 
-template <PrimitiveType toType>
-static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, std::string json_str) {
+template <PrimitiveType toType, class JsonValueType>
+static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, JsonValueType json_str) {
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
 
     std::cerr << "evaluate cast from json: " << json_str << std::endl;
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
-    auto json = JsonValue::parse(json_str);
+
+    StatusOr<JsonValue> json = JsonValue::from(json_str);
     if (!json.ok()) {
         return nullptr;
     }
@@ -1366,8 +1367,8 @@ static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& c
     return ColumnHelper::cast_to<toType>(ptr);
 }
 
-template <PrimitiveType toType>
-static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json_str) {
+template <PrimitiveType toType, class JsonValueType>
+static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, JsonValueType json_str) {
     std::cerr << "evaluate castCast: " << json_str << std::endl;
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
@@ -1376,7 +1377,8 @@ static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json
     if (!expr) {
         return nullptr;
     }
-    auto json = JsonValue::parse(json_str);
+    StatusOr<JsonValue> json = JsonValue::from(json_str);
+
     if (!json.ok()) {
         return nullptr;
     }
@@ -1402,10 +1404,10 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("{\"a\": 1}", jsonCol->get_data()[0]->to_string().value());
 
     // cast success
-    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, "1")->get_data()[0]);
-    EXPECT_EQ(1.1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "1.1")->get_data()[0]);
-    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "true")->get_data()[0]);
-    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "false")->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, 1)->get_data()[0]);
+    EXPECT_EQ(1.1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1.1)->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, false)->get_data()[0]);
     EXPECT_EQ("a", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"a\"")->get_data()[0]);
     EXPECT_EQ("1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"1\"")->get_data()[0]);
     EXPECT_EQ("[1, 2, 3]", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "[1,2,3]")->get_data()[0]);
@@ -1417,8 +1419,8 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "")->get_data()[0]);
 
     // implicit json type case
-    EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "1")->get_data()[0]);
-    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, "1.1")->get_data()[0]);
+    EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1)->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, 1.1)->get_data()[0]);
 
     // cast failed
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "\"a\"")));
@@ -1433,8 +1435,8 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "{}")));
 
     // overflow
-    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, "100000")));
-    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, "-100000")));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, 100000)));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, -100000)));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(
                          cast_expr, std::to_string(std::numeric_limits<int64_t>::max()))));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(
@@ -1525,7 +1527,7 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
         EXPECT_EQ(R"("star")", evaluateCastToJson<TYPE_CHAR>(cast_expr, "star"));
         EXPECT_EQ(R"(" star")", evaluateCastToJson<TYPE_VARCHAR>(cast_expr, " star"));
 
-        EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_CHAR>(cast_expr, " 1"));
+        EXPECT_EQ(R"(" 1")", evaluateCastToJson<TYPE_CHAR>(cast_expr, " 1"));
         EXPECT_EQ(R"("1")", evaluateCastToJson<TYPE_CHAR>(cast_expr, "\"1\""));
         EXPECT_EQ(R"({})", evaluateCastToJson<TYPE_CHAR>(cast_expr, "{}"));
         EXPECT_EQ(R"({})", evaluateCastToJson<TYPE_CHAR>(cast_expr, "   {}"));

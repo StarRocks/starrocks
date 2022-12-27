@@ -144,7 +144,8 @@ public:
     // update meta after state of a rowset commit is applied
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
                                       std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
-                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index);
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                      const starrocks::RowsetMetaPB* rowset_meta);
 
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
@@ -161,6 +162,13 @@ public:
     using DeleteVectorList = std::vector<std::pair<uint32_t, int64_t>>;
 
     static StatusOr<DeleteVectorList> list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version);
+
+    // delete all delete vectors of a tablet not useful anymore for query version < `version`, for example
+    // suppose we have delete vectors of version 1, 3, 5, 6, 7, 12, 16
+    // min queryable version is 10, which require delvector of version 7
+    // delvector of versin < 7 can be deleted, that is [1,3,5,6]
+    // return num of del vector deleted
+    static StatusOr<size_t> delete_del_vector_before_version(KVStore* meta, TTabletId tablet_id, int64_t version);
 
     static Status delete_del_vector_range(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
                                           int64_t start_version, int64_t end_version);
@@ -189,6 +197,12 @@ public:
     static Status clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 
     static Status remove_tablet_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, TSchemaHash schema_hash);
+
+    static Status remove_primary_key_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
+
+    static Status remove_table_meta(DataDir* store, TTableId table_id);
+
+    static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
 };
 
 } // namespace starrocks

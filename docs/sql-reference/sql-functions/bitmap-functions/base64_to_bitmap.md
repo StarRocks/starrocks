@@ -7,13 +7,13 @@ This function is used to convert Base64 strings into bitmap data.
 
 ## Syntax
 
-```SQL
-BITMAP base64_to_bitmap(STRING bitmap)
+```Haskell
+BITMAP base64_to_bitmap(VARCHAR bitmap)
 ```
 
 ## Parameters
 
-`bitmap`: The supported data type is STRING. Before you import bitmap data into StarRocks, you can use Java or C++ to first create a BitmapValue object, add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
+`bitmap`: The supported data type is VARCHAR. Before you import bitmap data into StarRocks, you can use Java or C++ to first create a BitmapValue object, add an element, serialize the data, and encode the data as a Base64 string. Then, pass the Base64 string as an input parameter into this function.
 
 ## Return value
 
@@ -56,7 +56,12 @@ Create a database named `bitmapdb` and a table named `bitmap`. Use Stream Load t
     Use base64_to_bitmap to convert  `userid` into a bitmap value.
 
     ```Plain
-    curl --location-trusted -u root: -H "columns: c1,c2,c3,tagname=c1,tagvalue=c2,userid=base64_to_bitmap(c3)" -H "label:bitmap123" -H "format: json" -H "jsonpaths: [\"$.tagname\",\"$.tagvalue\",\"$.userid\"]" -T simpleData http://host:port/api/bitmapdb/bitmap_table/_stream_load
+    curl --location-trusted -u root:\
+        -H "columns: c1,c2,c3,tagname=c1,tagvalue=c2,userid=base64_to_bitmap(c3)"\
+        -H "label:bitmap123"\
+        -H "format: json"\
+        -H "jsonpaths: [\"$.tagname\",\"$.tagvalue\",\"$.userid\"]"\
+        -T simpleData http://host:port/api/bitmapdb/bitmap_table/_stream_load
     ```
 
 3. Query data from `bitmap_table`.

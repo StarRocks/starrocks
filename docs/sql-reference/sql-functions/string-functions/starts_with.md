@@ -1,16 +1,16 @@
 # starts_with
 
-## description
+## Description
 
-### Syntax
+This function returns 1 when a string starts with a specified prefix. Otherwise, it returns 0. When the argument is NULL, the result is NULL.
+
+## Syntax
 
 ```Haskell
 BOOLEAN starts_with(VARCHAR str, VARCHAR prefix)
 ```
 
-This function returns 1 when a string starts with a specified prefix. Otherwise, it returns 0. When the argument is NULL, the result is NULL.
-
-## example
+## Examples
 
 ```Plain Text
 mysql> select starts_with("hello world","hello");

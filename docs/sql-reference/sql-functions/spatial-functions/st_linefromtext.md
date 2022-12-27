@@ -1,16 +1,16 @@
 # ST_LineFromText,ST_LineStringFromText
 
-## description
+## Description
 
-### Syntax
+Converts a WKT (Well Known Text) to a memory representation in the form of Line.
+
+## Syntax
 
 ```Haskell
 GEOMETRY ST_LineFromText(VARCHAR wkt)
 ```
 
-Convert a WKT (Well Known Text) to a memory representation in the form of Line.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_LineFromText("LINESTRING (1 1, 2 2)"));

@@ -183,8 +183,13 @@ DriverRawPtr SubQuerySharedDriverQueue::take() {
 
 /// WorkGroupDriverQueue.
 bool WorkGroupDriverQueue::WorkGroupDriverSchedEntityComparator::operator()(
-        const WorkGroupDriverSchedEntityPtr& lhs, const WorkGroupDriverSchedEntityPtr& rhs) const {
-    return lhs->vruntime_ns() < rhs->vruntime_ns();
+        const WorkGroupDriverSchedEntityPtr& lhs_ptr, const WorkGroupDriverSchedEntityPtr& rhs_ptr) const {
+    int64_t lhs_val = lhs_ptr->vruntime_ns();
+    int64_t rhs_val = rhs_ptr->vruntime_ns();
+    if (lhs_val != rhs_val) {
+        return lhs_val < rhs_val;
+    }
+    return lhs_ptr < rhs_ptr;
 }
 
 void WorkGroupDriverQueue::close() {
@@ -371,7 +376,7 @@ void WorkGroupDriverQueue::_enqueue_workgroup(workgroup::WorkGroupDriverSchedEnt
             int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
             if (diff_vruntime_ns > 0) {
                 DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
-                wg_entity->incr_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
+                wg_entity->adjust_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
             }
         }
     }

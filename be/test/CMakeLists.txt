@@ -52,6 +52,7 @@ set(EXEC_FILES
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -227,7 +228,6 @@ set(EXEC_FILES
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
-        ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
