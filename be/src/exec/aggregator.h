@@ -62,10 +62,7 @@ struct HashTableKeyAllocator {
     // memory aligned when allocate
     static size_t constexpr aligned = 16;
 
-    // `aggregate_key_size` is the total size including all aggregate functions' state,
-    // keys' size and other extra state size.
     int aggregate_key_size = 0;
-
     std::vector<std::pair<void*, int>> vecs;
     MemPool* pool = nullptr;
 
@@ -169,13 +166,14 @@ struct AggregatorParams {
     std::vector<TExpr> aggregate_functions;
     std::vector<TExpr> intermediate_aggr_exprs;
 
-    // streaming mv variables
-    bool is_stream_mv;
-    // is_append_only: whether input is only append-only or with retract messages.
-    bool is_append_only;
-    // is_generate_retract: whether output is generated with retract or without retract messages.
-    bool is_generate_retract;
+    // Incremental MV
+    // Whether it's testing, use MemStateTable in testing, instead use IMTStateTable.
     bool is_testing;
+    // Whether input is only append-only or with retract messages.
+    bool is_append_only;
+    // Whether output is generated with retract or without retract messages.
+    bool is_generate_retract;
+    // The agg index of count agg function.
     int32_t count_agg_idx;
 };
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
@@ -480,8 +478,8 @@ public:
         if (it != _aggregators.end()) {
             return it->second;
         }
-        auto params = convert_to_aggregator_params(_tnode);
-        auto aggregator = std::make_shared<T>(std::move(params));
+        auto aggregator = std::make_shared<T>(convert_to_aggregator_params(_tnode));
+        aggregator->set_aggr_mode(_aggr_mode);
         _aggregators[id] = aggregator;
         return aggregator;
     }
