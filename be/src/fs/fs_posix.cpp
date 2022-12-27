@@ -41,11 +41,11 @@
 namespace {
 static const staros::starlet::metrics::Labels kSrPosixFsLables({{"fstype", "srposix"}});
 
-DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_sr_posix_write_iosize, staros::starlet::fslib::kMKWriteIOSize, kSrPosixFsLables);
-DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_sr_posix_write_iolatency, staros::starlet::fslib::kMKWriteIOLatency,
-                                   kSrPosixFsLables);
-
-DEFINE_COUNTER_METRIC_KEY_WITH_TAG(s_posix_file_open, staros::starlet::fslib::kMKFsOpenFiles, kSrPosixFsLables);
+DEFINE_HISTOGRAM_METRIC_KEY_WITH_TAG_BUCKET(s_sr_posix_write_iosize, staros::starlet::fslib::kMKWriteIOSize,
+                                            kSrPosixFsLables, staros::starlet::metrics::MetricsSystem::kIOSizeBuckets);
+DEFINE_HISTOGRAM_METRIC_KEY_WITH_TAG_BUCKET(s_sr_posix_write_iolatency, staros::starlet::fslib::kMKWriteIOLatency,
+                                            kSrPosixFsLables,
+                                            staros::starlet::metrics::MetricsSystem::kIOLatencyBuckets);
 } // namespace
 #endif
 
@@ -199,7 +199,7 @@ public:
 
     Status appendv(const Slice* data, size_t cnt) override {
 #ifdef USE_STAROS
-        staros::starlet::metrics::TimeObserver write_latency(s_sr_posix_write_iolatency);
+        staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
 #endif
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));

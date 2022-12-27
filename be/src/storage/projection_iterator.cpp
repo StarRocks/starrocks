@@ -19,7 +19,7 @@
 #include "column/chunk.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ProjectionIterator final : public ChunkIterator {
 public:
@@ -107,4 +107,4 @@ ChunkIteratorPtr new_projection_iterator(const VectorizedSchema& schema, const C
     return std::make_shared<ProjectionIterator>(schema, child);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

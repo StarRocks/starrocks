@@ -21,7 +21,7 @@
 #include "util/decimal_types.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 class DecimalV3Column final : public ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>, Column> {
@@ -53,4 +53,4 @@ private:
     int _scale;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

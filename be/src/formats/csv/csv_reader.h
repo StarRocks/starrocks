@@ -19,7 +19,7 @@
 
 #include "formats/csv/converter.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class CSVBuffer {
 public:
     // Does NOT take the ownership of |buff|.
@@ -217,7 +217,6 @@ private:
 
     size_t _parsed_bytes = 0;
     size_t _limit = 0;
-    size_t _offset = 0;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

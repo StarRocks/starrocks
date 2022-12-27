@@ -39,7 +39,7 @@
 #include "storage/tablet_meta.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SizeTieredCompactionPolicyTest : public testing::Test {
 public:
@@ -59,10 +59,10 @@ public:
         for (size_t i = 0; i < 24576 * pow(config::size_tiered_level_multiple + 1, level - 2); ++i) {
             test_data.push_back("well" + std::to_string(std::rand()));
             auto& cols = chunk->columns();
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(std::rand())));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(std::rand())));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(vectorized::Datum(field_1));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + std::rand())));
+            cols[1]->append_datum(Datum(field_1));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + std::rand())));
         }
         CHECK_OK(writer->add_chunk(*chunk));
     }
@@ -875,6 +875,9 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
     write_new_version(tablet_meta, 4);
     write_new_version(tablet_meta, 3);
     write_new_version(tablet_meta, 3);
+    write_new_version(tablet_meta, 3);
+    write_new_version(tablet_meta, 2);
+    write_new_version(tablet_meta, 2);
     write_new_version(tablet_meta, 2);
     write_new_version(tablet_meta, 2);
 
@@ -883,16 +886,16 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
     tablet->init();
     init_compaction_context(tablet);
 
-    ASSERT_EQ(5, tablet->version_count());
+    ASSERT_EQ(8, tablet->version_count());
 
     {
         auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
-        ASSERT_EQ(4, tablet->version_count());
+        ASSERT_EQ(5, tablet->version_count());
         std::vector<Version> versions;
         tablet->list_versions(&versions);
-        ASSERT_EQ(4, versions.size());
+        ASSERT_EQ(5, versions.size());
         ASSERT_EQ(0, versions[0].first);
         ASSERT_EQ(0, versions[0].second);
         ASSERT_EQ(1, versions[1].first);
@@ -900,7 +903,9 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
         ASSERT_EQ(2, versions[2].first);
         ASSERT_EQ(2, versions[2].second);
         ASSERT_EQ(3, versions[3].first);
-        ASSERT_EQ(4, versions[3].second);
+        ASSERT_EQ(3, versions[3].second);
+        ASSERT_EQ(4, versions[4].first);
+        ASSERT_EQ(7, versions[4].second);
     }
 
     {
@@ -914,7 +919,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
         ASSERT_EQ(0, versions[0].first);
         ASSERT_EQ(0, versions[0].second);
         ASSERT_EQ(1, versions[1].first);
-        ASSERT_EQ(4, versions[1].second);
+        ASSERT_EQ(7, versions[1].second);
     }
 
     {
@@ -926,7 +931,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
         tablet->list_versions(&versions);
         ASSERT_EQ(1, versions.size());
         ASSERT_EQ(0, versions[0].first);
-        ASSERT_EQ(4, versions[0].second);
+        ASSERT_EQ(7, versions[0].second);
     }
 }
 
@@ -1207,4 +1212,4 @@ TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction) {
     config::base_compaction_interval_seconds_since_last_operation = 86400;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

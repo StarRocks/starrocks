@@ -55,7 +55,7 @@ void AggregateStreamingSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* state) {
     // It is no need to distinguish whether streaming or aggregation mode
     // We just first read chunk from buffer and finally read chunk from hash table
     if (!_aggregator->is_chunk_buffer_empty()) {
@@ -64,14 +64,14 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
 
     // Even if it is streaming mode, the purpose of reading from hash table is to
     // correctly process the state of hash table(_is_ht_eos)
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     RETURN_IF_ERROR(_output_chunk_from_hash_map(&chunk, state));
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state) {
+Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_map_variant().visit(
                 [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });

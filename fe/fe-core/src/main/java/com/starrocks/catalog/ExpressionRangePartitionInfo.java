@@ -41,7 +41,6 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         super(columns);
         Preconditions.checkState(partitionExprs != null);
         Preconditions.checkState(partitionExprs.size() > 0);
-        Preconditions.checkState(columns != null);
         Preconditions.checkState(partitionExprs.size() == columns.size());
         this.partitionExprs = partitionExprs;
         this.isMultiColumnPartition = partitionExprs.size() > 0;

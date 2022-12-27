@@ -50,20 +50,19 @@ void AggregateDistinctStreamingSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_chunk(RuntimeState* state) {
     if (!_aggregator->is_chunk_buffer_empty()) {
         return _aggregator->poll_chunk_buffer();
     }
 
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _output_chunk_from_hash_set(&chunk, state);
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vectorized::ChunkPtr* chunk,
-                                                                           RuntimeState* state) {
+void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->hash_set_variant().visit(
                 [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });

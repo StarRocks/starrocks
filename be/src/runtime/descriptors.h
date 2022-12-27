@@ -57,9 +57,7 @@ class TTupleDescriptor;
 class Expr;
 class ExprContext;
 class RuntimeState;
-namespace vectorized {
 class SchemaScanner;
-} // namespace vectorized
 class OlapTableSchemaParam;
 class PTupleDescriptor;
 class PSlotDescriptor;
@@ -108,7 +106,7 @@ public:
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
-    friend class vectorized::SchemaScanner;
+    friend class SchemaScanner;
     friend class OlapTableSchemaParam;
 
     const SlotId _id;

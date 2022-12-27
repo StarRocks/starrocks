@@ -85,7 +85,7 @@ public class ResourceGroupMetricMgr {
             return null;
         }
         if (!cacheMap.containsKey(resourceGroupName)) {
-            synchronized (cacheMap) {
+            synchronized (ResourceGroupMetricMgr.class) {
                 if (!cacheMap.containsKey(resourceGroupName)) {
                     LongCounterMetric metric = new LongCounterMetric(metricsName, Metric.MetricUnit.REQUESTS,
                             metricsMsg);
@@ -130,7 +130,7 @@ public class ResourceGroupMetricMgr {
                 {"mean", "75_quantile", "95_quantile", "98_quantile", "99_quantile", "999_quantile"};
 
         private MetricRegistry metricRegistry;
-        private volatile Histogram histogram;
+        private Histogram histogram;
         private List<GaugeMetricImpl> metricsList;
         private String metricsName;
 

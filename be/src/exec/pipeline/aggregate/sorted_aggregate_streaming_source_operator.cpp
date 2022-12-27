@@ -15,7 +15,7 @@
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 
 #include "exec/pipeline/sort/sort_context.h"
-#include "exec/vectorized/sorted_streaming_aggregator.h"
+#include "exec/sorted_streaming_aggregator.h"
 
 namespace starrocks::pipeline {
 SortedAggregateStreamingSourceOperator::SortedAggregateStreamingSourceOperator(
@@ -64,9 +64,9 @@ void SortedAggregateStreamingSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> SortedAggregateStreamingSourceOperator::pull_chunk(RuntimeState* state) {
     DCHECK(has_output());
-    vectorized::ChunkPtr chunk;
+    ChunkPtr chunk;
     if (!_aggregator->is_chunk_buffer_empty()) {
         chunk = _aggregator->poll_chunk_buffer();
     } else {

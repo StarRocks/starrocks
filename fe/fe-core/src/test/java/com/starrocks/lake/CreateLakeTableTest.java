@@ -105,7 +105,8 @@ public class CreateLakeTableTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
@@ -169,7 +170,8 @@ public class CreateLakeTableTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),

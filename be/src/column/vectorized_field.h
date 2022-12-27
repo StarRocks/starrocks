@@ -25,7 +25,7 @@
 #include "storage/types.h"
 #include "util/c_string.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Datum;
 
@@ -155,6 +155,8 @@ public:
 
     const VectorizedField& sub_field(int i) const;
 
+    const std::vector<VectorizedField>& sub_fields() const { return *_sub_fields; }
+
     ColumnPtr create_column() const;
 
     static VectorizedFieldPtr convert_to_dict_field(const VectorizedField& field) {
@@ -240,4 +242,4 @@ inline std::string VectorizedField::to_string() const {
     return ss.str();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -440,7 +440,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
@@ -470,7 +471,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
@@ -523,7 +525,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
@@ -556,7 +559,8 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 1> : 1: v1\n" +
                     "  |  <slot 4> : 4: sum\n" +
                     "  |  <slot 8> : 10: anyValue\n" +
-                    "  |  <slot 11> : assert_true((9: countRows IS NULL) OR (9: countRows <= 1))\n" +
+                    "  |  <slot 11> : assert_true((9: countRows IS NULL) OR (9: countRows <= 1), " +
+                    "'correlate scalar subquery result must 1 row')\n" +
                     "  |  \n" +
                     "  6:HASH JOIN\n" +
                     "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +

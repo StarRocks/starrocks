@@ -33,8 +33,6 @@ class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
 
-namespace vectorized {
-
 class MemTable;
 class MemTableSink;
 
@@ -54,7 +52,7 @@ struct DeltaWriterOptions {
     PUniqueId load_id;
     // slots are in order of tablet's schema
     const std::vector<SlotDescriptor*>* slots;
-    vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
+    GlobalDictByNameMaps* global_dicts = nullptr;
     Span parent_span;
     int64_t index_id;
     int64_t node_id;
@@ -94,6 +92,8 @@ public:
     // [NOT thread-safe]
     [[nodiscard]] Status close();
 
+    void cancel(const Status& st);
+
     // Wait until all data have been flushed to disk, then create a new Rowset.
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
@@ -128,7 +128,7 @@ public:
     const ReplicateToken* replicate_token() const { return _replicate_token.get(); }
 
     // REQUIRE: has successfully `commit()`ed
-    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
+    const DictColumnsValidMap& global_dict_columns_valid_info() const {
         CHECK_EQ(kCommitted, _state);
         CHECK(_rowset_writer != nullptr);
         return _rowset_writer->global_dict_columns_valid_info();
@@ -176,8 +176,8 @@ private:
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
+    // initial value is max value
+    size_t _memtable_buffer_row = -1;
 };
-
-} // namespace vectorized
 
 } // namespace starrocks

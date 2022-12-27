@@ -17,7 +17,7 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import org.apache.hadoop.conf.Configuration;
+import com.starrocks.connector.HdfsEnvironment;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
@@ -38,13 +38,13 @@ public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
     private static final ConcurrentHashMap<String, IcebergRESTCatalog> REST_URI_TO_CATALOG =
             new ConcurrentHashMap<>();
 
-    public static synchronized IcebergRESTCatalog getInstance(Map<String, String> properties) {
+    public static synchronized IcebergRESTCatalog getInstance(Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         String uri = properties.get(CatalogProperties.URI);
         return REST_URI_TO_CATALOG.computeIfAbsent(
             uri,
             key ->
                 (IcebergRESTCatalog) CatalogLoader.rest(
-                    String.format("rest-%s", uri), new Configuration(), properties
+                    String.format("rest-%s", uri), hdfsEnvironment.getConfiguration(), properties
                 ).loadCatalog()
         );
     }

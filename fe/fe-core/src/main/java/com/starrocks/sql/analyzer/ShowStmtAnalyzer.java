@@ -105,6 +105,16 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowTableStatement(ShowTableStmt node, ConnectContext context) {
+            String catalogName;
+            if (node.getCatalogName() != null) {
+                catalogName = node.getCatalogName();
+            } else {
+                catalogName = context.getCurrentCatalog();
+            }
+
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
             String db = node.getDb();
             db = getDatabaseName(db, context);
             node.setDb(db);
@@ -304,14 +314,14 @@ public class ShowStmtAnalyzer {
             }
 
             if (CatalogMgr.isInternalCatalog(catalogName)) {
-                descInternalTbl(node, context);
+                descInternalCatalogTable(node, context);
             } else {
-                descExternalTbl(node, catalogName, dbName, tbl);
+                descExternalCatalogTable(node, catalogName, dbName, tbl);
             }
             return null;
         }
 
-        private void descInternalTbl(DescribeStmt node, ConnectContext context) {
+        private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
             Database db = GlobalStateMgr.getCurrentState().getDb(node.getDb());
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
@@ -451,7 +461,7 @@ public class ShowStmtAnalyzer {
             }
         }
 
-        private void descExternalTbl(DescribeStmt node, String catalogName, String dbName, String tbl) {
+        private void descExternalCatalogTable(DescribeStmt node, String catalogName, String dbName, String tbl) {
             // show external table schema only
             String procString = "/catalog/" + catalogName + "/" + dbName + "/" + tbl + "/" + ExternalTableProcDir.SCHEMA;
             try {

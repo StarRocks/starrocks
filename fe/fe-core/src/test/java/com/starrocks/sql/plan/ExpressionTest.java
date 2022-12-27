@@ -537,11 +537,12 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void testLambdaReuseSubExpressionWithoutLambdaArguments() throws Exception {
+    public void testLambdaReuseSubExpression() throws Exception {
         starRocksAssert.withTable("create table if not exists test_array" +
                 "(c0 INT,c1 int, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+        // without lambda arguments
         String sql = "select b, array_map(x->x+b, arr) from (select array_map(x->x+1, [1,2]) as arr, 3*c1 as b " +
                 "from test_array)T";
         String plan = getFragmentPlan(sql);
@@ -564,11 +565,37 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("common expressions"));
         Assert.assertTrue(plan.contains("array_length(6: array_map)"));
 
-        sql = "select  array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
+        sql = "select array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("common expressions"));
         Assert.assertTrue(plan.contains(
                 "array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) + 7: multiply + 7: multiply"));
+
+        // with lambda arguments
+        sql = "select array_map(x -> x*2 + x*2, [1,3])";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 5> <-> CAST(<slot 2> AS SMALLINT)}" +
+                "{<slot 6> <-> <slot 5> * 2}{<slot 7> <-> CAST(<slot 6> AS INT)}"));
+
+        sql = "select array_map((x,y) -> x*2 + y  + x*2, [1,3],[4,5])";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 6> <-> CAST(<slot 2> AS SMALLINT)}" +
+                "{<slot 7> <-> <slot 6> * 2}"));
+
+        sql = "select array_map((x,y) -> x*2 + y  + x*2, [1,3],[4,5]) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS SMALLINT)}{<slot 9>" +
+                " <-> <slot 8> * 2}"));
+
+        sql = "select array_map(x -> x*2  + abs(c1) + x*2+ abs(c1), c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS BIGINT)}" +
+                "{<slot 9> <-> <slot 8> * 2}"));
+
+        sql = "select array_map(x -> x*2  + abs(c1) + (x*2+ abs(c1)), c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS BIGINT)}{<slot 9> " +
+                "<-> <slot 8> * 2}{<slot 10> <-> <slot 9> + 6: abs}"));
     }
 
     @Test
@@ -1248,19 +1275,19 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testAssertTrue() throws Exception {
         {
-            String sql = "select assert_true(null)";
+            String sql = "select assert_true(null, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(NULL)");
+            assertContains(plan, "<slot 2> : assert_true(NULL, 'a')");
         }
         {
-            String sql = "select assert_true(true)";
+            String sql = "select assert_true(true, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(TRUE)");
+            assertContains(plan, "<slot 2> : assert_true(TRUE, 'a')");
         }
         {
-            String sql = "select assert_true(false)";
+            String sql = "select assert_true(false, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(FALSE)");
+            assertContains(plan, "<slot 2> : assert_true(FALSE, 'a')");
         }
     }
 

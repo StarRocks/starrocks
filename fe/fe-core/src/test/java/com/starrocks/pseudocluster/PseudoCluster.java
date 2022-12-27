@@ -195,7 +195,8 @@ public class PseudoCluster {
         }
 
         @Override
-        public void createShardGroup(long groupId) throws DdlException {
+        public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+            return partitionId;
         }
 
         @Override
@@ -215,8 +216,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public void deleteShards(Set<Long> shardIds) throws DdlException {
-            shardInfos.removeIf(s -> shardIds.contains(s.getShardId()));
+        public void deleteShardGroup(List<Long> groupIds) {
         }
 
         @Override

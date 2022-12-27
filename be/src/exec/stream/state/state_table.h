@@ -22,8 +22,8 @@
 
 namespace starrocks::stream {
 
-using ChunkIteratorPtrOr = StatusOr<vectorized::ChunkIteratorPtr>;
-using ChunkPtrOr = StatusOr<vectorized::ChunkPtr>;
+using ChunkIteratorPtrOr = StatusOr<ChunkIteratorPtr>;
+using ChunkPtrOr = StatusOr<ChunkPtr>;
 
 /**
  * `StateTable` is used in Incremental MV, stateful operators will use`StateTable` to keep its
@@ -55,7 +55,7 @@ public:
     virtual std::vector<ChunkIteratorPtrOr> prefix_scan(const std::vector<DatumRow>& keys) const = 0;
 
     // Flush the input chunk into the state table: StreamChunk contains the ops columns.
-    virtual Status flush(RuntimeState* state, vectorized::StreamChunk* chunk) = 0;
+    virtual Status flush(RuntimeState* state, StreamChunk* chunk) = 0;
 
     // Commit the flushed state data to be used in the later transaction.
     virtual Status commit(RuntimeState* state) = 0;

@@ -28,7 +28,7 @@ BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, c
   - `0` is the default value, which indicates common funnel calculation.
   - `1` indicates the `DEDUPLICATION` mode, that is, the filtered event chain cannot have repeated events. Suppose the `array` parameter is `[event_type = 'A', event_type = 'B', event_type = 'C', event_type = 'D']` and the original event chain is "A-B-C-B-D". Event B is repeated and the filtered event chain is "A-B-C".
   - `2` indicates the `FIXED` mode, that is, the filtered event chain cannot have events that disrupt the specified sequence. Suppose the previous `array` parameter is used and the original event chain is "A-B-D-C". Event D interrupts the sequence and the filtered event chain is "A-B".
-  - `4` indicates the `INCREASE` mode, which means the filtered events must have strictly increasing timestamps. Duplicate timestamp disrupts the event chain.
+  - `4` indicates the `INCREASE` mode, which means the filtered events must have strictly increasing timestamps. Duplicate timestamp disrupts the event chain. This mode is supported since version 2.5.
 
 - `array`: The defined event chain. It must be an array.
 
@@ -71,8 +71,12 @@ mysql> select * from action;
 Execute the following statement:
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='Browse', event_type='Click', 
-        event_type='Order', event_type='Pay']) AS level from action group by uid order by uid; 
+select uid,
+       window_funnel(1800,time,0,[event_type='Browse', event_type='Click', 
+        event_type='Order', event_type='Pay']) AS level
+from action
+group by uid
+order by uid; 
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -122,8 +126,12 @@ mysql> select * from action1 order by time;
 Execute the following statement:
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='Browse', 
-        event_type='Click', event_type='Order', event_type='Pay']) AS level from action1 group by uid order by uid;
+select uid,
+       window_funnel(1800,time,0,[event_type='Browse', 
+        event_type='Click', event_type='Order', event_type='Pay']) AS level
+from action1
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -170,8 +178,12 @@ mysql> select * from action2 order by time;
 Execute the following statement:
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,0,[event_type='Browse', event_type='Click', 
-        event_type='Order', event_type='Pay']) AS level from action2 group by uid order by uid;
+select uid,
+       window_funnel(1900,time,0,[event_type='Browse', event_type='Click', 
+        event_type='Order', event_type='Pay']) AS level
+from action2
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -186,8 +198,12 @@ mysql> select uid, window_funnel(1900,time,0,[event_type='Browse', event_type='C
 Change `mode` to `2` and execute the statement again.
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,2,[event_type='Browse', event_type='Click', 
-        event_type='Order', event_type='Pay']) AS level from action2 group by uid order by uid;
+select uid,
+       window_funnel(1900,time,2,[event_type='Browse', event_type='Click', 
+        event_type='Order', event_type='Pay']) AS level
+from action2
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -221,9 +237,12 @@ select * from action3 order by time;
 Execute the following statement:
 
 ```Plaintext
-select uid, window_funnel(1900,time,0,[event_type='Browse', event_type='Click',
+select uid,
+       window_funnel(1900,time,0,[event_type='Browse', event_type='Click',
         event_type='Order']) AS level
-from action3 group by uid order by uid;
+from action3
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -237,9 +256,12 @@ from action3 group by uid order by uid;
 Change `mode` to `4` and execute the statement again.
 
 ```Plaintext
-select uid, window_funnel(1900,time,4,[event_type='Browse', event_type='Click',
+select uid,
+       window_funnel(1900,time,4,[event_type='Browse', event_type='Click',
         event_type='Order']) AS level
-from action3 group by uid order by uid;
+from action3
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+

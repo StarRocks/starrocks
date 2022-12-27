@@ -149,6 +149,7 @@ public class MetaScanNode extends ScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
+        output.append(prefix).append("Table: ").append(olapTable.getName()).append("\n");
         for (Map.Entry<Integer, String> kv : columnIdToNames.entrySet()) {
             output.append(prefix);
             output.append("<id ").

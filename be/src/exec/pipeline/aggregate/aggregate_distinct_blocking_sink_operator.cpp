@@ -48,11 +48,11 @@ Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state)
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK_LE(chunk->num_rows(), state->chunk_size());
     RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 

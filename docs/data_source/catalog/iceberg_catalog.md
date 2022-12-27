@@ -8,7 +8,7 @@ An Iceberg catalog is an external catalog supported in StarRocks 2.4 and later v
 
 - StarRocks supports querying data files of Iceberg in the following formats: Parquet and ORC
 - StarRocks supports querying compressed data files of Iceberg in the following formats: gzip, Zstd, LZ4, and Snappy.
-- StarRocks supports querying Iceberg data in the following types: BOOLEAN, INTEGER, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, LIST, FIXED(L), BINARY, STRUCT, and MAP. The TIMESTAMPTZ type is not supported. An error occurs when you query Iceberg data of the TIMESTAMPTZ type.
+- StarRocks does not support querying data of the TIMESTAMPTZ type from Iceberg. Note that errors occur if you query Iceberg data of the TIMESTAMPTZ type.
 - StarRocks supports querying Versions 1 tables (Analytic Data Tables). Versions 2 tables (Row-level Deletes) are not supported. For the differences between these two types of tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of an Iceberg table in StarRocks 2.4 and later versions.
 

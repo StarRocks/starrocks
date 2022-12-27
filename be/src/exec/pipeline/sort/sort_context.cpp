@@ -17,15 +17,11 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
-#include "exec/vectorized/sorting/merge.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/merge.h"
+#include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
 namespace starrocks::pipeline {
-
-using vectorized::Permutation;
-using vectorized::Columns;
-using vectorized::SortedRuns;
 
 void SortContext::close(RuntimeState* state) {
     _chunks_sorter_partitions.clear();
@@ -92,7 +88,7 @@ Status SortContext::_init_merger() {
 
     _partial_cursors.reserve(_num_partition_sinkers);
     for (int i = 0; i < _num_partition_sinkers; i++) {
-        vectorized::ChunkProvider provider = [i, this](vectorized::ChunkUniquePtr* out_chunk, bool* eos) -> bool {
+        ChunkProvider provider = [i, this](ChunkUniquePtr* out_chunk, bool* eos) -> bool {
             // data ready
             if (out_chunk == nullptr || eos == nullptr) {
                 return true;
@@ -106,8 +102,7 @@ Status SortContext::_init_merger() {
             *out_chunk = chunk->clone_unique();
             return true;
         };
-        _partial_cursors.push_back(
-                std::make_unique<vectorized::SimpleChunkSortCursor>(std::move(provider), &_sort_exprs));
+        _partial_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(std::move(provider), &_sort_exprs));
     }
 
     RETURN_IF_ERROR(_merger.init(_sort_desc, std::move(_partial_cursors)));
@@ -118,28 +113,24 @@ Status SortContext::_init_merger() {
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
-                                       int64_t offset, int64_t limit, int32_t num_right_sinkers,
-                                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
-                                       const std::vector<bool>& is_null_first)
+                                       int64_t offset, int64_t limit, std::vector<ExprContext*> sort_exprs,
+                                       const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
         : _state(state),
           _topn_type(topn_type),
           _is_merging(is_merging),
-          _sort_contexts(is_merging ? 1 : num_right_sinkers),
           _offset(offset),
           _limit(limit),
-          _num_right_sinkers(num_right_sinkers),
           _sort_exprs(std::move(sort_exprs)),
           _sort_descs(is_asc_order, is_null_first) {}
 
 SortContextPtr SortContextFactory::create(int32_t idx) {
     size_t actual_idx = _is_merging ? 0 : idx;
-    int32_t num_sinkers = _is_merging ? _num_right_sinkers : 1;
-
-    DCHECK_LE(actual_idx, _sort_contexts.size());
-    if (!_sort_contexts[actual_idx]) {
-        _sort_contexts[actual_idx] = std::make_shared<SortContext>(_state, _topn_type, _offset, _limit, num_sinkers,
-                                                                   _sort_exprs, _sort_descs);
+    if (auto it = _sort_contexts.find(actual_idx); it != _sort_contexts.end()) {
+        return it->second;
     }
-    return _sort_contexts[actual_idx];
+
+    auto ctx = std::make_shared<SortContext>(_state, _topn_type, _offset, _limit, _sort_exprs, _sort_descs);
+    _sort_contexts.emplace(actual_idx, ctx);
+    return ctx;
 }
 } // namespace starrocks::pipeline

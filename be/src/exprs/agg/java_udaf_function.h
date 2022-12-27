@@ -34,7 +34,7 @@
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JavaUDAFAggregateFunction : public AggregateFunction {
 public:
@@ -265,7 +265,6 @@ public:
         LOCAL_REF_GUARD_ENV(env, state_array);
 
         // prepare buffer
-        DCHECK(column->is_binary());
         auto serialized_column =
                 ColumnHelper::get_binary_column(const_cast<Column*>(ColumnHelper::get_data_column(column)));
 
@@ -440,4 +439,4 @@ public:
 
     std::string get_name() const override { return "java_udaf"; }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

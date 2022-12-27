@@ -20,12 +20,17 @@
 
 namespace starrocks::pipeline {
 
+Status LocalMergeSortSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
+    _sort_context->ref();
+    return Status::OK();
+}
 void LocalMergeSortSourceOperator::close(RuntimeState* state) {
     _sort_context->unref(state);
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     return _sort_context->pull_chunk();
 }
 

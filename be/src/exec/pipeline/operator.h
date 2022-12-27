@@ -17,7 +17,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
@@ -28,7 +28,7 @@ class Expr;
 class ExprContext;
 class RuntimeProfile;
 class RuntimeState;
-using RuntimeFilterProbeCollector = starrocks::vectorized::RuntimeFilterProbeCollector;
+using RuntimeFilterProbeCollector = starrocks::RuntimeFilterProbeCollector;
 
 namespace pipeline {
 class Operator;
@@ -107,10 +107,10 @@ public:
     // Pull chunk from this operator
     // Use shared_ptr, because in some cases (local broadcast exchange),
     // the chunk need to be shared
-    virtual StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) = 0;
+    virtual StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) = 0;
 
     // Push chunk to this operator
-    virtual Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) = 0;
+    virtual Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) = 0;
 
     // reset_state is used by MultilaneOperator in cache mechanism, because lanes in MultilaneOperator are
     // re-used by tablets, before the lane serves for the current tablet, it must invoke reset_state to re-prepare
@@ -155,15 +155,14 @@ public:
     const std::vector<SlotId>& filter_null_value_columns() const;
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
-    Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                         vectorized::FilterPtr* filter = nullptr, bool apply_filter = true);
+    Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
+                                         FilterPtr* filter = nullptr, bool apply_filter = true);
 
     // Evaluate conjuncts without cache
-    Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                          vectorized::FilterPtr* filter = nullptr);
+    Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter = nullptr);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
-    void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
+    void eval_runtime_bloom_filters(Chunk* chunk);
 
     // 1. (-∞, s_pseudo_plan_node_id_upper_bound] is for operator which is not in the query's plan
     // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
@@ -214,7 +213,7 @@ protected:
     bool _conjuncts_and_in_filters_is_cached = false;
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
-    vectorized::RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+    RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
     // Common metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

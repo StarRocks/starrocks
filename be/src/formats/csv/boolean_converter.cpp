@@ -18,7 +18,7 @@
 #include "common/logging.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 Status BooleanConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                       const Options& options) const {
@@ -64,4 +64,4 @@ bool BooleanConverter::read_quoted_string(Column* column, Slice s, const Options
     return read_string(column, s, options);
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

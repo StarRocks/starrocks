@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "exec/aggregator.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 class AggregateStreamingSourceOperator : public SourceOperator {
@@ -37,10 +37,10 @@ public:
 
     void close(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    Status _output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state);
+    Status _output_chunk_from_hash_map(ChunkPtr* chunk, RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSinkOperator. It is

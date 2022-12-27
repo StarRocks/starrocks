@@ -42,11 +42,11 @@ Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateDistinctStreamingSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
 
     _aggregator->update_num_input_rows(chunk_size);
@@ -65,7 +65,7 @@ Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, c
 
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_streaming() {
     SCOPED_TIMER(_aggregator->streaming_timer());
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _aggregator->output_chunk_by_streaming(&chunk);
     _aggregator->offer_chunk_to_buffer(chunk);
     return Status::OK();
@@ -110,11 +110,11 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
             SCOPED_TIMER(_aggregator->streaming_timer());
             size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
             if (zero_count == 0) {
-                vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+                ChunkPtr chunk = std::make_shared<Chunk>();
                 _aggregator->output_chunk_by_streaming(&chunk);
                 _aggregator->offer_chunk_to_buffer(chunk);
             } else if (zero_count != _aggregator->streaming_selection().size()) {
-                vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+                ChunkPtr chunk = std::make_shared<Chunk>();
                 _aggregator->output_chunk_by_streaming_with_selection(&chunk);
                 _aggregator->offer_chunk_to_buffer(chunk);
             }
@@ -126,7 +126,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
     return Status::OK();
 }
 Status AggregateDistinctStreamingSinkOperator::reset_state(RuntimeState* state,
-                                                           const std::vector<vectorized::ChunkPtr>& refill_chunks) {
+                                                           const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
     return _aggregator->reset_state(state, refill_chunks, this);
 }

@@ -19,7 +19,6 @@
 #include "column/fixed_length_column.h"
 
 namespace starrocks {
-namespace vectorized {
 class AvxNumericColumn {
 public:
     void avx256_filter(const std::vector<int32_t>& data, const std::vector<uint8_t>& filter, size_t result_size_hint,
@@ -98,7 +97,6 @@ public:
     }
 };
 
-} // namespace vectorized
 } // namespace starrocks
 
 #endif

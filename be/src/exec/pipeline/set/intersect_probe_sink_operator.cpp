@@ -21,7 +21,7 @@ void IntersectProbeSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> IntersectProbeSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> IntersectProbeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from sink operator");
 }
 

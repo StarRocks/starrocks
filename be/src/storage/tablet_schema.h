@@ -275,7 +275,7 @@ public:
 
     bool shared() const { return _schema_map != nullptr; }
 
-    vectorized::VectorizedSchema* schema() const;
+    VectorizedSchema* schema() const;
 
 private:
     friend class SegmentReaderWriterTest;
@@ -307,7 +307,7 @@ private:
 
     bool _has_bf_fpp = false;
 
-    mutable std::unique_ptr<starrocks::vectorized::VectorizedSchema> _schema;
+    mutable std::unique_ptr<starrocks::VectorizedSchema> _schema;
     mutable std::once_flag _init_schema_once_flag;
 };
 

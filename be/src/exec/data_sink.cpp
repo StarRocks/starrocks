@@ -166,7 +166,7 @@ Status DataSink::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status DataSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status DataSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::NotSupported("Don't support vector query engine");
 }
 
