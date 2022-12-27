@@ -47,7 +47,7 @@ public:
         }
         return operators;
     }
-    void create_drivers(RuntimeState* state);
+    void instantiate_drivers(RuntimeState* state);
     Drivers& drivers();
     const Drivers& drivers() const;
     void count_down_driver(RuntimeState* state);

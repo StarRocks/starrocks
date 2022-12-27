@@ -64,7 +64,7 @@ public:
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
     ExecNode*& plan() { return _plan; }
 
-    void set_tplan(TPlan& tplan);
+    void move_tplan(TPlan& tplan);
     const TPlan& tplan() const { return _tplan; }
     void set_data_sink(std::unique_ptr<DataSink> data_sink);
 

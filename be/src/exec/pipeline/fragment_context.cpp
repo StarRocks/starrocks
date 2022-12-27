@@ -63,7 +63,7 @@ size_t FragmentContext::total_dop() const {
     return total;
 }
 
-void FragmentContext::set_tplan(TPlan& tplan) {
+void FragmentContext::move_tplan(TPlan& tplan) {
     swap(_tplan, tplan);
 }
 void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {

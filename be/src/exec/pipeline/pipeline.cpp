@@ -44,7 +44,7 @@ const Drivers& Pipeline::drivers() const {
     return _drivers;
 }
 
-void Pipeline::create_drivers(RuntimeState* state) {
+void Pipeline::instantiate_drivers(RuntimeState* state) {
     auto* query_ctx = state->query_ctx();
     auto* fragment_ctx = state->fragment_ctx();
     auto workgroup = fragment_ctx->workgroup();

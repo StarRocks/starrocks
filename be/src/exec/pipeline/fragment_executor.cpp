@@ -292,7 +292,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                                                                 : TTabletInternalParallelMode::type::AUTO;
 
     // Set up plan
-    _fragment_ctx->set_tplan(*const_cast<TPlan*>(&fragment.plan));
+    _fragment_ctx->move_tplan(*const_cast<TPlan*>(&fragment.plan));
     RETURN_IF_ERROR(
             ExecNode::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl, &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
@@ -517,7 +517,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     }
 
     for (const auto& pipeline : pipelines) {
-        pipeline->create_drivers(runtime_state);
+        pipeline->instantiate_drivers(runtime_state);
     }
 
     // Acquire driver token to avoid overload

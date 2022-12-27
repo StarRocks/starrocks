@@ -110,7 +110,7 @@ void PipelineTestBase::_prepare() {
     const size_t num_pipelines = pipelines.size();
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
-        pipeline->create_drivers(_fragment_ctx->runtime_state());
+        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
     }
 }
 

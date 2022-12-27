@@ -242,7 +242,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
     }
 
     for (const auto& pipeline : pipelines) {
-        pipeline->create_drivers(_fragment_ctx->runtime_state());
+        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
     }
 }
 
