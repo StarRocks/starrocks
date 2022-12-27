@@ -57,6 +57,7 @@ public class CoordinatorMonitor {
         if (GlobalStateMgr.isCheckpointThread()) {
             return false;
         }
+        LOG.info("add backend {} to dead backend queue", backendID);
         return comingDeadBackendIDQueue.offer(backendID);
     }
 
