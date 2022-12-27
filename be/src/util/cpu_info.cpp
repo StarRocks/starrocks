@@ -51,6 +51,7 @@
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -66,6 +67,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "util/errno.h"
+#include "util/file_util.h"
 #include "util/pretty_printer.h"
 #include "util/string_parser.hpp"
 
@@ -288,45 +290,27 @@ void CpuInfo::_init_num_cores_with_cgroup() {
     std::string cfs_quota_us_str;
     std::string cpuset_str;
     if (fs.f_type == TMPFS_MAGIC) {
-        std::ifstream ifs;
         // cgroup v1
-        ifs.open("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
-        if (!ifs.good() || !ifs.is_open()) {
+        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpu/cpu.cfs_period_us", cfs_period_us_str)) {
             return;
         }
-        ifs >> cfs_period_us_str;
-        ifs.close();
 
-        ifs.open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
-        if (!ifs.good() || !ifs.is_open()) {
+        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", cfs_quota_us_str)) {
             return;
         }
-        ifs >> cfs_quota_us_str;
-        ifs.close();
 
-        ifs.open("/sys/fs/cgroup/cpuset/cpuset.cpus");
-        if (!ifs.good() || !ifs.is_open()) {
+        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpuset/cpuset.cpus", cpuset_str)) {
             return;
         }
-        getline(ifs, cpuset_str);
-        ifs.close();
     } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
-        std::ifstream ifs;
         // cgroup v2
-        ifs.open("/sys/fs/cgroup/cpu.max");
-        if (!ifs.good() || !ifs.is_open()) {
+        if (!FileUtil::read_contents("/sys/fs/cgroup/cpu.max", cfs_quota_us_str, cfs_period_us_str)) {
             return;
         }
-        ifs >> cfs_quota_us_str;
-        ifs >> cfs_period_us_str;
-        ifs.close();
 
-        ifs.open("/sys/fs/cgroup/cpuset.cpus");
-        if (!ifs.good() || !ifs.is_open()) {
+        if (!FileUtil::read_whole_content("/sys/fs/cgroup/cpuset.cpus", cpuset_str)) {
             return;
         }
-        getline(ifs, cpuset_str);
-        ifs.close();
     }
 
     int32_t cfs_num_cores = num_cores_;
@@ -348,7 +332,8 @@ void CpuInfo::_init_num_cores_with_cgroup() {
     }
 
     int32_t cpuset_num_cores = num_cores_;
-    if (cpuset_str != "") {
+    if (!cpuset_str.empty() &&
+        std::any_of(cpuset_str.begin(), cpuset_str.end(), [](char c) { return !std::isspace(c); })) {
         cpuset_num_cores = sizeof_cpusets(cpuset_str);
     }
 
