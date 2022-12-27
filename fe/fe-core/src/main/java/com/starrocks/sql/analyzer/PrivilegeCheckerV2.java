@@ -126,6 +126,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -150,6 +151,7 @@ import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -738,6 +740,13 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
+        @Override
+        public Void visitShowResourceStatement(ShowResourcesStmt statement, ConnectContext context) {
+            // `show resources` only show resource that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowResources()` for details.
+            return null;
+        }
+
         // --------------------------------- Resource Group Statement -------------------------------------
         public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkSystemAction(
@@ -1253,6 +1262,13 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
+            // `show alter table` only show tables/views/mvs that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowAlter()` for details.
             return null;
         }
 

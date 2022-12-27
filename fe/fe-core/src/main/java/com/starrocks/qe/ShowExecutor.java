@@ -440,7 +440,10 @@ public class ShowExecutor {
         List<ConnectContext.ThreadInfo> threadInfos = ctx.getConnectScheduler().listConnection(ctx.getQualifiedUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
-            rowSet.add(info.toRow(nowMs, showStmt.showFull()));
+            List<String> row = info.toRow(nowMs, showStmt.showFull());
+            if (row != null) {
+                rowSet.add(row);
+            }
         }
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
