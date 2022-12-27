@@ -603,13 +603,8 @@ public class CTEPlanTest extends PlanTestBase {
         {
             String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:Project\n" +
-                    "  |  <slot 4> : 4: sum\n" +
-                    "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
-                    "  |  limit: 1\n" +
-                    "  |  \n" +
-                    "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(DISTINCT 1: v1), avg(DISTINCT 2: v2)\n" +
                     "  |  group by: \n" +
                     "  |  limit: 1\n" +
                     "  |  \n" +
@@ -621,11 +616,11 @@ public class CTEPlanTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 4> : 4: sum\n" +
-                    "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
+                    "  |  <slot 5> : 5: avg\n" +
                     "  |  limit: 1\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
+                    "  |  output: sum(DISTINCT 1: v1), avg(DISTINCT 2: v2)\n" +
                     "  |  group by: 3: v3\n" +
                     "  |  limit: 1\n" +
                     "  |  \n" +
