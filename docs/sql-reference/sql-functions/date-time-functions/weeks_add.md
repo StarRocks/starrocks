@@ -2,23 +2,23 @@
 
 ## Description
 
-Returns the value with the number of weeks added to date.
+Adds a specified number of weeks to a date.
 
 ## Syntax
 
 ```Haskell
-DATETIME weeks_add(DATETIME expr1, INT expr2);
+DATETIME weeks_add(DATETIME|DATE expr1, INT expr2);
 ```
 
 ## Parameters
 
-- `expr1`: the original date. It must be of the `DATETIME` type.
+- `expr1`: the original date. It must be of the DATETIME or DATE type.
 
-- `expr2`: the number of weeks. It must be of the `INT` type.
+- `expr2`: the number of weeks to add. It must be of the `INT` type.
 
 ## Return value
 
-returns `DATETIME`. 
+Returns a DATETIME value. 
 
 `NULL` is returned if the date does not exist.
 
