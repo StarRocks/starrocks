@@ -1593,18 +1593,29 @@ public class PrivilegeCheckerV2 {
         }
 
         // ---------------------------------------- FUNC stmt --------------------------------------------------
-        // TODO(yanz): privilege checker for global function.
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
             FunctionName name = statement.getFunctionName();
-            if (!PrivilegeManager.checkDbAction(context, name.getDb(), PrivilegeType.DbAction.CREATE_FUNCTION)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE FUNCTION");
+            if (name.isGlobalFunction()) {
+                if (!PrivilegeManager.checkSystemAction(
+                        context, PrivilegeType.SystemAction.CREATE_GLOBAL_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "CREATE_GLOBAL_FUNCTION");
+                }
+            } else {
+                if (!PrivilegeManager.checkDbAction(context, name.getDb(), PrivilegeType.DbAction.CREATE_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE FUNCTION");
+                }
             }
             return null;
         }
 
         @Override
         public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
+            // Don't do any privilege check on show global functions.
+            if (statement.getIsGlobal()) {
+                return null;
+            }
             if (!PrivilegeManager.checkAnyActionOnDb(context, statement.getDbName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                         context.getQualifiedUser(), statement.getDbName());
@@ -1637,6 +1648,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
+            // TODO(yanz): privilege checker for global function.
             FunctionName functionName = statement.getFunctionName();
             Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
             Function function = db.getFunction(statement.getFunction());
