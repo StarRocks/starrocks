@@ -143,15 +143,18 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
+    const auto& pipeline_kind = request.pipeline_kind();
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
+    _fragment_ctx->set_pipeline_kind(pipeline_kind);
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(fragment_instance_id) << " backend_num=" << request.backend_num();
+              << " fragment_instance_id=" << print_id(fragment_instance_id) << " pipeline_kind=" << int(pipeline_kind)
+              << " backend_num=" << request.backend_num();
 
     return Status::OK();
 }
@@ -470,7 +473,6 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
-template <bool is_stream_pipeline_driver = false>
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
@@ -543,16 +545,6 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     return Status::OK();
 }
 
-template <bool is_stream_pipeline_driver = false>
-DriverPtr FragmentExecutor::_create_pipeline_driver(Operators&& operators, size_t driver_id) {
-    if constexpr (is_stream_pipeline_driver) {
-        return std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx.get(), driver_id);
-    } else {
-        return std::make_shared<StreamPipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx.get(), driver_id);
-    }
-}
-
-template <bool is_stream_pipeline_driver = false>
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
@@ -581,7 +573,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
-    RETURN_IF_ERROR(_prepare_pipeline_driver<is_stream_pipeline_driver>(exec_env, request));
+    RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
     RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
@@ -828,10 +820,5 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     return Status::OK();
 }
 DIAGNOSTIC_POP
-
-template Status FragmentExecutor::prepare<true>(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
-                                                const TExecPlanFragmentParams& unique_request);
-template Status FragmentExecutor::prepare<false>(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
-                                                 const TExecPlanFragmentParams& unique_request);
 
 } // namespace starrocks::pipeline

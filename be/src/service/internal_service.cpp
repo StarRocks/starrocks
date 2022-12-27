@@ -334,7 +334,7 @@ template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
     pipeline::FragmentExecutor fragment_executor;
-    auto status = fragment_executor.template prepare<false>(_exec_env, t_common_param, t_unique_request);
+    auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
     } else {
@@ -692,7 +692,7 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
             PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
             _exec_env->pipeline_prepare_pool()->offer([ms, fragments, i, this] {
                 pipeline::FragmentExecutor fragment_executor;
-                auto status = fragment_executor.template prepare<true>(_exec_env, fragments[i], fragments[i]);
+                auto status = fragment_executor.prepare(_exec_env, fragments[i], fragments[i]);
                 if (status.ok()) {
                     ms->set_value(fragment_executor.execute(_exec_env));
                 } else {

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
@@ -80,6 +81,11 @@ public:
     }
     const TDataSink& output_sink() const;
 
+    const PipelineKind pipeline_kind() const {
+        auto pipeline_kind = _common_request.pipeline_kind;
+        return pipeline_kind == TPipelineKind::STREAM_PIPELINE ? PipelineKind::STREAM_PIPELINE : PipelineKind::PIPELINE;
+    }
+
 private:
     static const std::vector<TScanRangeParams> _no_scan_ranges;
     static const PerDriverScanRangesMap _no_scan_ranges_per_driver_seq;
@@ -91,7 +97,6 @@ class FragmentExecutor {
 public:
     FragmentExecutor();
 
-    template <bool is_stream_pipeline_driver = false>
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
@@ -115,7 +120,6 @@ private:
     Status _prepare_runtime_state(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
-    template <bool is_stream_pipeline_driver = false>
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
@@ -123,9 +127,6 @@ private:
                                             const UnifiedExecPlanFragmentParams& request,
                                             std::unique_ptr<starrocks::DataSink>& datasink,
                                             const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
-
-    template <bool is_stream_pipeline_driver = false>
-    DriverPtr _create_pipeline_driver(Operators&& operators, size_t driver_id);
 
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;

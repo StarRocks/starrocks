@@ -27,6 +27,8 @@
 
 namespace starrocks::stream {
 
+using DriverPtr = pipeline::DriverPtr;
+
 Status StreamPipelineTest::PreparePipeline() {
     VLOG_ROW << "PreparePipeline";
     _exec_env = ExecEnv::GetInstance();
@@ -49,6 +51,7 @@ Status StreamPipelineTest::PreparePipeline() {
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
+    _fragment_context->set_pipeline_kind(pipeline::PipelineKind::STREAM_PIPELINE);
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
@@ -68,43 +71,32 @@ Status StreamPipelineTest::PreparePipeline() {
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
-    pipeline::Drivers drivers;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
-        const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-
-        LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
-                  << " fragment_instance_id=" << print_id(fragment_id);
-
-        DCHECK(!pipeline->source_operator_factory()->with_morsels());
-
-        for (size_t i = 0; i < degree_of_parallelism; ++i) {
-            auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-            for (auto& op : operators) {
+        pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
+        for (auto& driver : pipeline->drivers()) {
+            for (auto& operator: driver->operators()) {
                 if (auto* stream_source_op = dynamic_cast<GeneratorStreamSourceOperator*>(op.get())) {
                     _tablet_ids.push_back(stream_source_op->tablet_id());
                 }
             }
-            pipeline::DriverPtr driver = std::make_shared<pipeline::StreamPipelineDriver>(std::move(operators),
-                                                                                          _query_ctx, _fragment_ctx, i);
-            drivers.emplace_back(driver);
         }
     }
-
-    _fragment_ctx->set_drivers(std::move(drivers));
     return Status::OK();
 }
 
 Status StreamPipelineTest::ExecutePipeline() {
     VLOG_ROW << "ExecutePipeline";
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
-    }
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        _exec_env->driver_executor()->submit(driver.get());
-    }
+    Status prepare_status = _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
+    DCHECK(prepare_status.ok());
+
+    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+        exec_env->driver_executor()->submit(driver.get());
+        return Status::OK();
+    });
     return Status::OK();
 }
 
@@ -165,11 +157,7 @@ Status StreamPipelineTest::StartEpoch(const std::vector<int64_t>& tablet_ids, co
                                                                  node_id_binlog_offsets));
 
     // step2. reset state
-    for (const auto& driver : _fragment_ctx->drivers()) {
-        DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
-        auto* stream_driver = dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get());
-        RETURN_IF_ERROR(stream_driver->reset_epoch(_runtime_state));
-    }
+    RETURN_IF_ERROR(_fragment_ctx->reset_epoch());
 
     // step3. active driver
     _exec_env->driver_executor()->active_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
@@ -180,10 +168,12 @@ Status StreamPipelineTest::WaitUntilEpochEnd(const EpochInfo& epoch_info) {
     VLOG_ROW << "WaitUntilEpochEnd: " << epoch_info.debug_string();
 
     auto is_epoch_finished = [=]() {
-        for (auto& driver : _fragment_ctx->drivers()) {
-            if (driver->driver_state() != pipeline::DriverState::EPOCH_FINISH) {
-                VLOG_ROW << "WaitUntilEpochEnd not epoch finished: " << epoch_info.debug_string();
-                return false;
+        for (auto& pipeline : _fragment_ctx->pipelines()) {
+            for (auto& driver : pipeline->drivers()) {
+                if (driver->driver_state() != pipeline::DriverState::EPOCH_FINISH) {
+                    VLOG_ROW << "WaitUntilEpochEnd not epoch finished: " << epoch_info.debug_string();
+                    return false;
+                }
             }
         }
         return true;

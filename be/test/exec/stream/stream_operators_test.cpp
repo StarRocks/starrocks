@@ -130,7 +130,8 @@ TEST_F(StreamOperatorsTest, MultiDop_4) {
             op_factories = maybe_interpolate_local_passthrough_exchange(op_factories);
             op_factories.emplace_back(
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
-            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories));
+            auto pipeline = std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories);
+            _pipelines.push_back(std::move(pipeline));
         };
         return Status::OK();
     }));

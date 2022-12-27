@@ -17,9 +17,9 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/stream_chunk.h"
+#include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/aggregator.h"
 
 namespace starrocks {
 

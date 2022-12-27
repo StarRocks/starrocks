@@ -126,8 +126,10 @@ public:
     bool enable_resource_group() const { return _workgroup != nullptr; }
 
     // STREAM MV
-    MVEpochManager* epoch_manager() { return _runtime_state->epoch_manager(); }
+    MVEpochManager* epoch_manager() const { return _runtime_state->epoch_manager(); }
     Status reset_epoch();
+    void set_pipeline_kind(PipelineKind pipeline_kind) { _pipeline_kind = pipeline_kind; }
+    PipelineKind pipeline_kind() const { return _pipeline_kind; }
 
 private:
     // Id of this query
@@ -167,6 +169,7 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
+    PipelineKind _pipeline_kind;
 };
 
 class FragmentContextManager {

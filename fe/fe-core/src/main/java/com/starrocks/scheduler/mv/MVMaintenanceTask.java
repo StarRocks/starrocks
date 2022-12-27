@@ -131,37 +131,37 @@ public class MVMaintenanceTask {
     }
 
     public synchronized void updateEpochState(TMVReportEpochTask reportTask) {
+        TUniqueId fragmentInstanceId = reportTask.fragment_instance_id;
+        Preconditions.checkState(fragmentInstanceId != null, "fragment instance not exists: " + fragmentInstanceId);
         // Validate state
-        reportTask.getBinlog_consume_state().forEach((k, v) -> {
-            Map<Integer, List<TScanRange>> nodeScanRanges = binlogConsumeState.get(k);
-            Preconditions.checkState(nodeScanRanges != null, "fragment instance not exists: " + k);
-            v.forEach((node, rangeList) -> {
-                List<TScanRange> ranges = nodeScanRanges.get(node);
-                Preconditions.checkState(ranges != null, "plan node not exists: " + node);
-                ranges.forEach((range) -> {
-                    Preconditions.checkState(range.isSetBinlog_scan_range(), "must be binlog scan");
-                    TBinlogScanRange binlogScan = range.getBinlog_scan_range();
-                    TBinlogOffset offset = binlogScan.getOffset();
-                    long tabletId = offset.getTablet_id();
-                    long version = offset.getVersion();
-                    long lsn = offset.getLsn();
-                    Optional<TScanRange> existedState =
-                            ranges.stream()
-                                    .filter(x -> x.getBinlog_scan_range().getTablet_id() == tabletId)
-                                    .findFirst();
-                    Preconditions.checkState(existedState.isPresent(), "no existed state");
+        Map<Integer, List<TScanRange>> nodeScanRanges = reportTask.getBinlog_consume_states();
+        Preconditions.checkState(nodeScanRanges != null, "nodeScanRanges not exists, fragmentInstanceId: " + fragmentInstanceId);
+        v.forEach((node, rangeList) -> {
+            List<TScanRange> ranges = nodeScanRanges.get(node);
+            Preconditions.checkState(ranges != null, "plan node not exists: " + node);
+            ranges.forEach((range) -> {
+                Preconditions.checkState(range.isSetBinlog_scan_range(), "must be binlog scan");
+                TBinlogScanRange binlogScan = range.getBinlog_scan_range();
+                TBinlogOffset offset = binlogScan.getOffset();
+                long tabletId = offset.getTablet_id();
+                long version = offset.getVersion();
+                long lsn = offset.getLsn();
+                Optional<TScanRange> existedState =
+                        ranges.stream()
+                                .filter(x -> x.getBinlog_scan_range().getTablet_id() == tabletId)
+                                .findFirst();
+                Preconditions.checkState(existedState.isPresent(), "no existed state");
 
-                    // Check version is progressive increase
-                    TBinlogOffset existedOffset = existedState.get().getBinlog_scan_range().getOffset();
-                    long existedVersion = existedOffset.getVersion();
-                    long existedLsn = existedOffset.getLsn();
-                    Preconditions.checkState(version >= existedVersion || lsn >= existedLsn,
-                            "offset must be increased");
-                });
+                // Check version is progressive increase
+                TBinlogOffset existedOffset = existedState.get().getBinlog_scan_range().getOffset();
+                long existedVersion = existedOffset.getVersion();
+                long existedLsn = existedOffset.getLsn();
+                Preconditions.checkState(version >= existedVersion || lsn >= existedLsn,
+                        "offset must be increased");
             });
         });
 
-        this.binlogConsumeState = reportTask.getBinlog_consume_state();
+        this.binlogConsumeState.put(fragmentInstanceId, nodeScanRanges);
     }
 
     @Override

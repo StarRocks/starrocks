@@ -277,7 +277,7 @@ Status StreamPipelineDriver::reset_epoch(RuntimeState* runtime_state) {
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
     }
     _first_epoch_unfinished = 0;
-    _num_epoch_finished_drivers = _fragment_ctx->num_drivers();
+    _num_epoch_finished_drivers = _fragment_ctx->pipelines().size();
     DCHECK_LT(0, _num_epoch_finished_drivers);
     return Status::OK();
 }

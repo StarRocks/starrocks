@@ -251,10 +251,12 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 }
 
 Status FragmentContext::reset_epoch() {
-    for (const auto& driver : drivers()) {
-        DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
-        auto* stream_driver = dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get());
-        RETURN_IF_ERROR(stream_driver->reset_epoch(_runtime_state.get()));
+    for (const auto& pipeline : _pipelines) {
+        for (const auto& driver : pipeline->drivers()) {
+            DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
+            auto* stream_driver = dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get());
+            RETURN_IF_ERROR(stream_driver->reset_epoch(_runtime_state.get()));
+        }
     }
     return Status::OK();
 }

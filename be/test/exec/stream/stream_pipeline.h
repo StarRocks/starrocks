@@ -66,16 +66,18 @@ template <typename T>
 std::vector<ChunkPtr> StreamPipelineTest::FetchResults(const EpochInfo& epoch_info) {
     VLOG_ROW << "FetchResults: " << epoch_info.debug_string();
     std::vector<ChunkPtr> result_chunks;
-    auto drivers = _fragment_ctx->drivers();
-    for (auto& driver : drivers) {
-        auto* sink_op = driver->sink_operator();
-        if (auto* stream_sink_op = dynamic_cast<T*>(sink_op); stream_sink_op != nullptr) {
-            result_chunks = stream_sink_op->output_chunks();
-            for (auto& chunk : result_chunks) {
-                VLOG_ROW << "FetchResults, result: " << chunk->debug_columns();
+    const auto& pipelines = _fragment_ctx->pipelines();
+    for (auto& pipeline : pipelines) {
+        for (auto& driver : pipeline->drivers()) {
+            auto* sink_op = driver->sink_operator();
+            if (auto* stream_sink_op = dynamic_cast<T*>(sink_op); stream_sink_op != nullptr) {
+                result_chunks = stream_sink_op->output_chunks();
+                for (auto& chunk : result_chunks) {
+                    VLOG_ROW << "FetchResults, result: " << chunk->debug_columns();
+                }
+                stream_sink_op->reset_epoch(nullptr);
+                break;
             }
-            stream_sink_op->reset_epoch(nullptr);
-            break;
         }
     }
     return result_chunks;
