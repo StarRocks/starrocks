@@ -19,9 +19,9 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
+#include "exec/intersect_hash_set.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/vectorized/intersect_hash_set.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
@@ -71,11 +71,10 @@ public:
     Status refine_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
                                 const std::vector<ExprContext*>& child_exprs, int hit_times);
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
 private:
-    std::unique_ptr<vectorized::IntersectHashSerializeSet> _hash_set =
-            std::make_unique<vectorized::IntersectHashSerializeSet>();
+    std::unique_ptr<IntersectHashSerializeSet> _hash_set = std::make_unique<IntersectHashSerializeSet>();
 
     const int _dst_tuple_id;
     // Cache the dest tuple descriptor in the preparation phase of IntersectBuildSinkOperatorFactory.
@@ -91,11 +90,11 @@ private:
     // when IntersectOutputSourceOperator is finished by calling close().
     std::unique_ptr<MemPool> _build_pool = nullptr;
 
-    vectorized::IntersectHashSerializeSet::KeyVector _remained_keys;
+    IntersectHashSerializeSet::KeyVector _remained_keys;
     // Used for traversal on the hash set to get the undeleted keys to dest chunk.
     // Init when the hash set is finished building in finish_build_ht().
-    vectorized::IntersectHashSerializeSet::Iterator _next_processed_iter;
-    vectorized::IntersectHashSerializeSet::Iterator _hash_set_end_iter;
+    IntersectHashSerializeSet::Iterator _next_processed_iter;
+    IntersectHashSerializeSet::Iterator _hash_set_end_iter;
     bool _is_hash_set_empty = false;
 
     // The BUILD, PROBES, and OUTPUT operators execute sequentially.

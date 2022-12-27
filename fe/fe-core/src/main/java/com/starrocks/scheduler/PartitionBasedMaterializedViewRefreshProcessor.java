@@ -50,6 +50,7 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -737,6 +738,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         try {
             executor.handleDMLStmt(execPlan, insertStmt);
         } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(ctx.getExecutionId());
             auditAfterExec(mvContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }

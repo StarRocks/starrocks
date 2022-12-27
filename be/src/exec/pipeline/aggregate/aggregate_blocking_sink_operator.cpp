@@ -62,11 +62,11 @@ Status AggregateBlockingSinkOperator::reset_state(RuntimeState* state, const std
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Not support");
 }
 
-Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
     bool agg_group_by_with_limit =

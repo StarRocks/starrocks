@@ -35,10 +35,10 @@
 
 namespace starrocks::lake {
 
-using Chunk = starrocks::vectorized::Chunk;
-using Column = starrocks::vectorized::Column;
-using MemTable = starrocks::vectorized::MemTable;
-using MemTableSink = starrocks::vectorized::MemTableSink;
+using Chunk = starrocks::Chunk;
+using Column = starrocks::Column;
+using MemTable = starrocks::MemTable;
+using MemTableSink = starrocks::MemTableSink;
 
 class TabletWriterSink : public MemTableSink {
 public:
@@ -129,7 +129,7 @@ private:
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
     std::shared_ptr<const TabletSchema> _tablet_schema;
-    vectorized::VectorizedSchema _vectorized_schema;
+    VectorizedSchema _vectorized_schema;
     bool _schema_initialized;
 };
 

@@ -30,11 +30,9 @@ namespace starrocks {
 class MemPool;
 class RuntimeState;
 
-namespace vectorized {
 class Column;
 struct JavaUDAFContext;
 using ColumnPtr = std::shared_ptr<Column>;
-} // namespace vectorized
 
 class FunctionContext {
 public:
@@ -120,7 +118,7 @@ public:
     // Return true if it's constant and not null
     bool is_notnull_constant_column(int i) const;
 
-    std::shared_ptr<starrocks::vectorized::Column> get_constant_column(int arg_idx) const;
+    std::shared_ptr<starrocks::Column> get_constant_column(int arg_idx) const;
 
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
@@ -135,7 +133,7 @@ public:
     /// it.
     FunctionContext* clone(MemPool* pool);
 
-    void set_constant_columns(std::vector<vectorized::ColumnPtr> columns) { _constant_columns = std::move(columns); }
+    void set_constant_columns(std::vector<ColumnPtr> columns) { _constant_columns = std::move(columns); }
 
     MemPool* mem_pool() { return _mem_pool; }
     size_t mem_usage() { return _mem_usage; }
@@ -145,7 +143,7 @@ public:
     bool has_error() const;
     const char* error_msg() const;
 
-    vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
+    JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
 private:
     friend class ExprContext;
@@ -173,7 +171,7 @@ private:
     // Type descriptors for each argument of the function.
     std::vector<FunctionContext::TypeDesc> _arg_types;
 
-    std::vector<vectorized::ColumnPtr> _constant_columns;
+    std::vector<ColumnPtr> _constant_columns;
 
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;
@@ -182,7 +180,7 @@ private:
     size_t _mem_usage = 0;
 
     // UDAF Context
-    std::unique_ptr<vectorized::JavaUDAFContext> _jvm_udaf_ctxs;
+    std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
 };
 
 } // namespace starrocks

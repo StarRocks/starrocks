@@ -19,7 +19,7 @@
 #include "gutil/casts.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 Status DatetimeConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                        const Options& options) const {
@@ -50,4 +50,4 @@ bool DatetimeConverter::read_quoted_string(Column* column, Slice s, const Option
     return read_string(column, s, options);
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

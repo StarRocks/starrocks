@@ -33,12 +33,9 @@ class ExecEnv;
 class SegmentPB;
 class PTabletInfo;
 class FileSystem;
-
-namespace vectorized {
 class DeltaWriterOptions;
-}
 
-using DeltaWriterOptions = starrocks::vectorized::DeltaWriterOptions;
+using DeltaWriterOptions = starrocks::DeltaWriterOptions;
 
 class ReplicateChannel {
 public:

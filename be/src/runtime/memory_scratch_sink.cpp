@@ -96,7 +96,7 @@ Status MemoryScratchSink::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MemoryScratchSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status MemoryScratchSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }

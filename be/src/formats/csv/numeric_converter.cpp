@@ -18,7 +18,7 @@
 #include "common/logging.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 template <typename T>
 Status NumericConverter<T>::write_string(OutputStream* os, const Column& column, size_t row_num,
@@ -90,4 +90,4 @@ template class NumericConverter<int32_t>;
 template class NumericConverter<int64_t>;
 template class NumericConverter<int128_t>;
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

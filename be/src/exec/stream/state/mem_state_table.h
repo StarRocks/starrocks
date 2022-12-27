@@ -22,12 +22,12 @@
 
 namespace starrocks::stream {
 
-using VectorizedFields = vectorized::VectorizedFields;
-using VectorizedSchema = vectorized::VectorizedSchema;
-using DatumKeyRow = std::vector<vectorized::DatumKey>;
+using VectorizedFields = VectorizedFields;
+using VectorizedSchema = VectorizedSchema;
+using DatumKeyRow = std::vector<DatumKey>;
 
 // NOTE: This class is only used in testing. DatumRowIterator is used to convert datum to chunk iter.
-class DatumRowIterator final : public vectorized::ChunkIterator {
+class DatumRowIterator final : public ChunkIterator {
 public:
     explicit DatumRowIterator(VectorizedSchema schema, std::vector<DatumRow>&& rows)
             : ChunkIterator(schema, rows.size()), _rows(std::move(rows)) {}
@@ -71,17 +71,16 @@ public:
     std::vector<ChunkPtrOr> seek(const std::vector<DatumRow>& keys) const override;
     ChunkIteratorPtrOr prefix_scan(const DatumRow& key) const override;
     std::vector<ChunkIteratorPtrOr> prefix_scan(const std::vector<DatumRow>& keys) const override;
-    Status flush(RuntimeState* state, vectorized::StreamChunk* chunk) override;
+    Status flush(RuntimeState* state, StreamChunk* chunk) override;
 
 private:
     VectorizedSchema _make_schema_from_slots(const std::vector<SlotDescriptor*>& slots) const;
     static DatumKeyRow _convert_datum_row_to_key(const DatumRow& row, size_t start, size_t end);
-    static DatumKeyRow _make_datum_key_row(vectorized::Chunk* chunk, size_t start, size_t end, int row_idx);
-    static DatumRow _make_datum_row(vectorized::Chunk* chunk, size_t start, size_t end, int row_idx);
+    static DatumKeyRow _make_datum_key_row(Chunk* chunk, size_t start, size_t end, int row_idx);
+    static DatumRow _make_datum_row(Chunk* chunk, size_t start, size_t end, int row_idx);
     bool _equal_keys(const DatumKeyRow& m_k, const DatumRow key) const;
 
 private:
-    TupleDescriptor* _tuple_desc;
     std::vector<SlotDescriptor*> _slots;
     size_t _k_num;
     size_t _cols_num;

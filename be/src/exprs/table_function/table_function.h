@@ -17,27 +17,27 @@
 #include <utility>
 
 #include "column/column.h"
-#include "exprs/vectorized/function_helper.h"
+#include "exprs/function_helper.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class TableFunctionState {
 public:
     TableFunctionState() = default;
     virtual ~TableFunctionState() = default;
 
-    void set_params(starrocks::vectorized::Columns columns) { this->_columns = std::move(columns); }
+    void set_params(starrocks::Columns columns) { this->_columns = std::move(columns); }
 
     void set_offset(int offset) { this->_offset = offset; }
 
     int get_offset() { return _offset; }
 
-    starrocks::vectorized::Columns& get_columns() { return _columns; }
+    starrocks::Columns& get_columns() { return _columns; }
 
 private:
     //Params of table function
-    starrocks::vectorized::Columns _columns;
+    starrocks::Columns _columns;
     /**
      * _offset is used to record the return value offset of the currently processed columns parameter,
      * if the table function needs to return too many results.
@@ -68,4 +68,4 @@ public:
 
 using TableFunctionPtr = std::shared_ptr<TableFunction>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -21,10 +21,10 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_nullable_column_upgrade_if_overflow) {
@@ -375,4 +375,4 @@ PARALLEL_TEST(NullableColumnTest, test_replicate) {
     ASSERT_EQ(4, c2->get(6).get_int32());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

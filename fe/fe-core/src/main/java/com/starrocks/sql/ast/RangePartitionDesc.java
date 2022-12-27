@@ -140,33 +140,7 @@ public class RangePartitionDesc extends PartitionDesc {
 
         // check and get partition column
         for (String colName : partitionColNames) {
-            boolean find = false;
-            for (Column column : schema) {
-                if (column.getName().equalsIgnoreCase(colName)) {
-                    if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
-                        throw new DdlException("The partition column could not be aggregated column"
-                                + " and unique table's partition column must be key column");
-                    }
-
-                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
-                        throw new DdlException(String.format("Invalid partition column '%s': %s",
-                                column.getName(), "invalid data type " + column.getType()));
-                    }
-
-                    try {
-                        RangePartitionInfo.checkRangeColumnType(column);
-                    } catch (AnalysisException e) {
-                        throw new DdlException(e.getMessage());
-                    }
-
-                    partitionColumns.add(column);
-                    find = true;
-                    break;
-                }
-            }
-            if (!find) {
-                throw new DdlException("Partition column[" + colName + "] does not found");
-            }
+            ExpressionPartitionDesc.findRangePartitionColumn(schema, partitionColumns, colName);
         }
 
         /*

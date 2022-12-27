@@ -79,7 +79,7 @@ public:
 class ConnectorChunkSource final : public ChunkSource {
 public:
     ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ScanOperator* op, vectorized::ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+                         ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
     ~ConnectorChunkSource() override;
 
@@ -92,10 +92,10 @@ private:
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     connector::DataSourcePtr _data_source;
-    [[maybe_unused]] vectorized::ConnectorScanNode* _scan_node;
+    [[maybe_unused]] ConnectorScanNode* _scan_node;
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
-    const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
+    const RuntimeFilterProbeCollector* _runtime_bloom_filters;
 
     // copied from scan node and merge predicates from runtime filter.
     std::vector<ExprContext*> _conjunct_ctxs;

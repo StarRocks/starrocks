@@ -30,27 +30,27 @@ void DictDecodeOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
-Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status DictDecodeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     Columns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = chunk->get_column_by_slot_id(_encode_column_cids[i]);
         TypeDescriptor desc;
         desc.type = TYPE_VARCHAR;
 
-        decode_columns[i] = vectorized::ColumnHelper::create_column(desc, encode_column->is_nullable());
+        decode_columns[i] = ColumnHelper::create_column(desc, encode_column->is_nullable());
         RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
     }
 
-    _cur_chunk = std::make_shared<vectorized::Chunk>();
+    _cur_chunk = std::make_shared<Chunk>();
 
     // The order when traversing Chunk::_slot_id_to_index may be unstable of different instance of DictDecodeOperator
     // Subsequent operator may call Chunk::append_selective which requires Chunk::_slot_id_to_index to be exactly same
     // So here we keep the output chunks with the same order as original chunks
-    std::vector<std::pair<vectorized::ColumnPtr, int>> columns_with_original_order(chunk->columns().size());
+    std::vector<std::pair<ColumnPtr, int>> columns_with_original_order(chunk->columns().size());
     const auto& slot_id_to_index_map = chunk->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         if (std::find(_encode_column_cids.begin(), _encode_column_cids.end(), slot_id) == _encode_column_cids.end()) {
@@ -119,7 +119,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
         // TODO : avoid copy dict
-        vectorized::GlobalDictDecoderPtr decoder = vectorized::create_global_dict_decoder(dict_iter->second.second);
+        GlobalDictDecoderPtr decoder = create_global_dict_decoder(dict_iter->second.second);
 
         _decoders.emplace_back(std::move(decoder));
     }

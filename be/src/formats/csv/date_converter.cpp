@@ -19,7 +19,7 @@
 #include "gutil/casts.h"
 #include "types/date_value.hpp"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 Status DateConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                    const Options& options) const {
@@ -50,4 +50,4 @@ bool DateConverter::read_quoted_string(Column* column, Slice s, const Options& o
     return read_string(column, s, options);
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

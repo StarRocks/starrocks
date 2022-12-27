@@ -29,7 +29,7 @@ void SelectOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
     auto chunk_size = state->chunk_size();
 
     /*
@@ -64,8 +64,8 @@ StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
                 _pre_output_chunk = std::move(_curr_chunk);
                 return output_chunk;
             } else {
-                vectorized::Columns& dest_columns = _pre_output_chunk->columns();
-                vectorized::Columns& src_columns = _curr_chunk->columns();
+                Columns& dest_columns = _pre_output_chunk->columns();
+                Columns& src_columns = _curr_chunk->columns();
                 size_t num_rows = cur_size;
                 // copy the new read chunk to the reserved
                 for (size_t i = 0; i < dest_columns.size(); i++) {
@@ -77,14 +77,14 @@ StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
     }
 
     // when output chunk is small, we just return empty chunk.
-    return std::make_shared<vectorized::Chunk>();
+    return std::make_shared<Chunk>();
 }
 
 bool SelectOperator::need_input() const {
     return !_curr_chunk;
 }
 
-Status SelectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status SelectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get()));
     _curr_chunk = chunk;
     return Status::OK();

@@ -113,7 +113,7 @@ Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, column.get()));
     DCHECK(num_to_read == num_read);
 
-    vectorized::ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
     auto value = viewer.value(0);
 
     *result = Roaring::read(value.data, false);
@@ -131,9 +131,9 @@ Status BitmapIndexIterator::read_union_bitmap(rowid_t from, rowid_t to, Roaring*
     return Status::OK();
 }
 
-Status BitmapIndexIterator::read_union_bitmap(const vectorized::SparseRange& range, Roaring* result) {
+Status BitmapIndexIterator::read_union_bitmap(const SparseRange& range, Roaring* result) {
     for (size_t i = 0; i < range.size(); i++) { // NOLINT
-        const vectorized::Range& r = range[i];
+        const Range& r = range[i];
         RETURN_IF_ERROR(read_union_bitmap(r.begin(), r.end(), result));
     }
     return Status::OK();

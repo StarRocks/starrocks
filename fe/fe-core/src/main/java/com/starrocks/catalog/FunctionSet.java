@@ -39,7 +39,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.protobuf.MapEntry;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
@@ -238,15 +237,12 @@ public class FunctionSet {
     public static final String VAR_SAMP = "var_samp";
     public static final String VARIANCE_SAMP = "variance_samp";
     public static final String ANY_VALUE = "any_value";
-    public static final String SUM_DISTINCT = "sum_distinct";
     public static final String STD = "std";
-    public static final String STDDEV_VAL = "stddev_val";
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
     public static final String HLL_RAW = "hll_raw";
     public static final String HLL_EMPTY = "hll_empty";
     public static final String NDV = "ndv";
-    public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
     public static final String DICT_MERGE = "dict_merge";
@@ -532,8 +528,7 @@ public class FunctionSet {
             .add(FunctionSet.STD)
             .add(FunctionSet.STDDEV)
             .add(FunctionSet.STDDEV_POP)
-            .add(FunctionSet.STDDEV_SAMP)
-            .add(FunctionSet.STDDEV_VAL).build();
+            .add(FunctionSet.STDDEV_SAMP).build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -800,7 +795,6 @@ public class FunctionSet {
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
-        registerBuiltinSumAggFunction(SUM_DISTINCT);
         // MultiDistinctSum
         registerBuiltinMultiDistinctSumAggFunction();
 

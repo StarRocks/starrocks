@@ -39,7 +39,7 @@ bool RepeatOperator::has_output() const {
     return _repeat_times_last < _repeat_times_required;
 }
 
-StatusOr<vectorized::ChunkPtr> RepeatOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> RepeatOperator::pull_chunk(RuntimeState* state) {
     ChunkPtr curr_chunk = _curr_chunk->clone_empty(_curr_chunk->num_rows());
     curr_chunk->append_safe(*_curr_chunk, 0, _curr_chunk->num_rows());
     extend_and_update_columns(&curr_chunk);
@@ -65,7 +65,7 @@ void RepeatOperator::extend_and_update_columns(ChunkPtr* curr_chunk) {
     ++_repeat_times_last;
 }
 
-Status RepeatOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status RepeatOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     // get new chunk.
     _curr_chunk = chunk;
 

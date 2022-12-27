@@ -25,8 +25,7 @@ public:
 
     ~Rowset();
 
-    [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const vectorized::VectorizedSchema& schema,
-                                                  const RowsetReadOptions& options);
+    [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const VectorizedSchema& schema, const RowsetReadOptions& options);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
 

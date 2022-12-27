@@ -33,6 +33,9 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     private String restrictType = null;
     private String restrictName = null;
 
+    private FunctionArgsDef functionArgsDef = null;
+
+    private String functionName = null;
     public void setPrivilegeObjectNameTokensList(List<List<String>> privilegeObjectNameTokensList) {
         this.privilegeObjectNameTokensList = privilegeObjectNameTokensList;
     }
@@ -65,6 +68,22 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
 
     public String getRestrictName() {
         return restrictName;
+    }
+
+    public String getFunctionName() {
+        return functionName;
+    }
+
+    public void setFunctionName(String functionName) {
+        this.functionName = functionName;
+    }
+
+    public FunctionArgsDef getFunctionArgsDef() {
+        return functionArgsDef;
+    }
+
+    public void setFunctionArgsDef(FunctionArgsDef functionArgsDef) {
+        this.functionArgsDef = functionArgsDef;
     }
 
     @Override

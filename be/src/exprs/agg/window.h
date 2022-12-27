@@ -17,7 +17,7 @@
 #include "column/column_helper.h"
 #include "exprs/agg/aggregate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename State>
 class WindowFunction : public AggregateFunctionStateHelper<State> {
@@ -603,4 +603,4 @@ class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowF
     std::string get_name() const override { return "lead-lag"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

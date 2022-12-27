@@ -67,7 +67,7 @@
 // And we can also used to DirectlyCopyableGuard to define template specialization to
 // match (AT, PT) which satisfies is_directly_copyable predicate.
 //
-// More demos will be showed in src/exec/vectorized/arrow_converter.cpp in the PR following.
+// More demos will be showed in src/exec/arrow_converter.cpp in the PR following.
 
 #define PRED_GUARD(guard_name, predicate, ...)             \
     template <META_MACRO_PAIR_LIST_CONCAT_WS(__VA_ARGS__)> \

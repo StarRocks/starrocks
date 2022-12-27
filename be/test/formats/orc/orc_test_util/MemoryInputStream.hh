@@ -17,7 +17,7 @@
 #include <iostream>
 #include <orc/OrcFile.hh>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class MemoryInputStream : public orc::InputStream {
 public:
     MemoryInputStream(const char* _buffer, size_t _size)
@@ -40,4 +40,4 @@ private:
     uint64_t size, naturalReadSize;
     std::string name;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

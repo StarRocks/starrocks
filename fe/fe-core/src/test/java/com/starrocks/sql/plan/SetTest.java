@@ -303,8 +303,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [3, DECIMAL64(12,2), true]\n" +
-                "  |      [6, DECIMAL64(12,2), true]\n");
+                "  |      [3, DECIMAL64(12,2), false]\n" +
+                "  |      [6, DECIMAL64(12,2), false]\n");
 
         sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
@@ -313,8 +313,8 @@ public class SetTest extends PlanTestBase {
                 "  |  output exprs:\n" +
                 "  |      [7, DECIMAL64(12,2), true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [3, DECIMAL64(12,2), true]\n" +
-                "  |      [6, DECIMAL64(12,2), true]");
+                "  |      [3, DECIMAL64(12,2), false]\n" +
+                "  |      [6, DECIMAL64(12,2), false]");
     }
 
     @Test

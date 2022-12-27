@@ -19,12 +19,13 @@
 
 namespace starrocks {
 
-namespace vectorized {
 class Column;
-} // namespace vectorized
 
 class ArrayColumnIterator final : public ColumnIterator {
 public:
+    ArrayColumnIterator(std::unique_ptr<ColumnIterator> null_iterator,
+                        std::unique_ptr<ColumnIterator> array_size_iterator,
+                        std::unique_ptr<ColumnIterator> element_iterator);
     ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
                         ColumnIterator* element_iterator);
 
@@ -32,9 +33,9 @@ public:
 
     Status init(const ColumnIteratorOptions& opts) override;
 
-    Status next_batch(size_t* n, vectorized::Column* dst) override;
+    Status next_batch(size_t* n, Column* dst) override;
 
-    Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
+    Status next_batch(const SparseRange& range, Column* dst) override;
 
     Status seek_to_first() override;
 
@@ -43,14 +44,13 @@ public:
     ordinal_t get_current_ordinal() const override { return _array_size_iterator->get_current_ordinal(); }
 
     /// for vectorized engine
-    Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
-                                      const vectorized::ColumnPredicate* del_predicate,
-                                      vectorized::SparseRange* row_ranges) override {
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange* row_ranges) override {
         CHECK(false) << "array column does not has zone map index";
         return Status::OK();
     }
 
-    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
 private:
     std::unique_ptr<ColumnIterator> _null_iterator;

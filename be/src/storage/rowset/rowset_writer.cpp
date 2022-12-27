@@ -161,7 +161,9 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
             RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
-                      Status::InternalError("segment number not equal to partial_rowset_footers size"));
+                      Status::InternalError(fmt::format("segment number {} not equal to partial_rowset_footers size {}",
+                                                        _num_segment,
+                                                        _rowset_txn_meta_pb->partial_rowset_footers().size())));
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
@@ -225,6 +227,12 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
             RETURN_IF_ERROR(wfile->sync());
         }
         RETURN_IF_ERROR(wfile->close());
+
+        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+            auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
+            partial_rowset_footer->set_position(segment_pb.partial_footer_position());
+            partial_rowset_footer->set_size(segment_pb.partial_footer_size());
+        }
 
         // 3. update statistic
         {
@@ -360,7 +368,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
     return std::move(segment_writer);
 }
 
-Status HorizontalRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
+Status HorizontalRowsetWriter::add_chunk(const Chunk& chunk) {
     if (_segment_writer == nullptr) {
         ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
@@ -384,7 +392,7 @@ std::string HorizontalRowsetWriter::_dump_mixed_segment_delfile_not_supported() 
     return msg;
 }
 
-Status HorizontalRowsetWriter::flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
+Status HorizontalRowsetWriter::flush_chunk(const Chunk& chunk, SegmentPB* seg_info) {
     // 1. pure upsert
     // once upsert, subsequent flush can only do upsert
     switch (_flush_chunk_state) {
@@ -399,7 +407,7 @@ Status HorizontalRowsetWriter::flush_chunk(const vectorized::Chunk& chunk, Segme
     return _flush_chunk(chunk, seg_info);
 }
 
-Status HorizontalRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
+Status HorizontalRowsetWriter::_flush_chunk(const Chunk& chunk, SegmentPB* seg_info) {
     auto segment_writer = _create_segment_writer();
     if (!segment_writer.ok()) {
         return segment_writer.status();
@@ -417,9 +425,9 @@ Status HorizontalRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk, Segm
     return _flush_segment_writer(&segment_writer.value(), seg_info);
 }
 
-Status HorizontalRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                        const vectorized::Column& deletes, SegmentPB* seg_info) {
-    auto flush_del_file = [&](const vectorized::Column& deletes, SegmentPB* seg_info) {
+Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
+                                                        SegmentPB* seg_info) {
+    auto flush_del_file = [&](const Column& deletes, SegmentPB* seg_info) {
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_del_file_path(
                                              _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
@@ -530,7 +538,7 @@ Status HorizontalRowsetWriter::_final_merge() {
 
     std::vector<std::shared_ptr<Segment>> segments;
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     seg_options.fs = _fs;
 
     OlapReaderStatistics stats;
@@ -550,7 +558,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         segments.emplace_back(segment_ptr.value());
     }
 
-    std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
+    std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
 
     if (CompactionUtils::choose_compaction_algorithm(_context.tablet_schema->num_columns(),
@@ -588,9 +596,8 @@ Status HorizontalRowsetWriter::_final_merge() {
 
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
         RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", _context.tablet_id)));
-        auto mask_buffer =
-                std::make_unique<vectorized::RowSourceMaskBuffer>(_context.tablet_id, tablet->data_dir()->path());
-        auto source_masks = std::make_unique<std::vector<vectorized::RowSourceMask>>();
+        auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_context.tablet_id, tablet->data_dir()->path());
+        auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
 
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
@@ -609,7 +616,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), true);
         }
-        itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
 
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
@@ -707,7 +714,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             } else {
                 itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
             }
-            itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+            itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
 
             auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
@@ -779,7 +786,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), 0);
         }
-        itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+        itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
 
         auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
@@ -863,6 +870,10 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
         partial_rowset_footer->set_position(footer_position);
         partial_rowset_footer->set_size(footer_size);
+        if (seg_info) {
+            seg_info->set_partial_footer_position(footer_position);
+            seg_info->set_partial_footer_size(footer_size);
+        }
     }
     {
         std::lock_guard<std::mutex> l(_lock);
@@ -913,8 +924,7 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
     }
 }
 
-Status VerticalRowsetWriter::add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                         bool is_key) {
+Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
     const size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);

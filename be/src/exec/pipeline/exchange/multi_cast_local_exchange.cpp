@@ -59,7 +59,7 @@ bool MultiCastLocalExchanger::can_push_chunk() const {
     return true;
 }
 
-Status MultiCastLocalExchanger::push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence,
+Status MultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence,
                                            MultiCastLocalExchangeSinkOperator* sink_operator) {
     if (chunk->num_rows() == 0) return Status::OK();
 
@@ -102,7 +102,7 @@ bool MultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const
     return false;
 }
 
-StatusOr<vectorized::ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
+StatusOr<ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int32_t mcast_consumer_index) {
     DCHECK(mcast_consumer_index < _consumer_number);
 
     std::unique_lock l(_mutex);
@@ -201,7 +201,7 @@ Status MultiCastLocalExchangeSourceOperator::set_finishing(RuntimeState* state) 
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
     auto ret = _exchanger->pull_chunk(state, _mcast_consumer_index);
     if (ret.status().is_end_of_file()) {
         set_finishing(state);
@@ -235,11 +235,11 @@ Status MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Should not pull_chunk in MultiCastLocalExchangeSinkOperator");
 }
 
-Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _exchanger->push_chunk(chunk, _driver_sequence, this);
 }
 

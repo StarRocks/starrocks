@@ -17,12 +17,12 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
-#include "exprs/vectorized/arithmetic_operation.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // AvgResultPT for final result
 template <LogicalType PT, typename = guard::Guard>
@@ -263,4 +263,4 @@ template <LogicalType PT, typename = DecimalPTGuard<PT>>
 using DecimalAvgAggregateFunction =
         AvgAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

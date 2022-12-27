@@ -23,7 +23,7 @@
 #include "gutil/casts.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, typename = guard::Guard>
 struct MaxAggregateData {};
@@ -229,4 +229,4 @@ public:
     std::string get_name() const override { return "maxmin"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

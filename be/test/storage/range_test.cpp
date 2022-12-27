@@ -18,7 +18,7 @@
 
 #include <sstream>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 inline std::string to_bitmap_string(const uint8_t* bitmap, size_t n) {
     std::string s;
@@ -245,4 +245,4 @@ TEST(SparseRangeIteratorTest, convert_to_bitmap) {
     ASSERT_EQ("111111111100000000011001", to_bitmap_string(bitmap.data(), 24));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

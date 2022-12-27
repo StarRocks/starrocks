@@ -30,7 +30,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OrcChunkReaderTest : public testing::Test {
 public:
@@ -1256,7 +1256,7 @@ Padding ratio: 0%
 TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
     SlotDesc slot_descs[] = {
             {"col_upper_int", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
-            {"col_upper_char", TypeDescriptor::from_primtive_type(LogicalType::TYPE_CHAR)},
+            {"col_upper_CHAR", TypeDescriptor::from_primtive_type(LogicalType::TYPE_CHAR)},
             {""},
     };
 
@@ -1889,4 +1889,4 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

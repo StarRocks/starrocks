@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/column_predicate.h"
+
 #include <vector>
 
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_or_predicate.h"
-#include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // to string of boolean values, e.g,
 //   [1,2,3] => "1,1,1"
@@ -2219,4 +2220,4 @@ TEST(ColumnPredicateTest, test_convert_cmp_binary_predicate) {
         EXPECT_EQ(new_p->type(), p->type());
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

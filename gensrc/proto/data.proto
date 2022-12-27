@@ -100,4 +100,6 @@ message SegmentPB {
     optional int64 delete_data_size = 9;
     optional int64 delete_num_rows = 10;
     optional string delete_path = 11;
+    optional int64 partial_footer_position = 12;
+    optional int64 partial_footer_size = 13;
 };

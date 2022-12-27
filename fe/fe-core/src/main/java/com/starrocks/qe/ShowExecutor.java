@@ -44,6 +44,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -103,6 +104,7 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -182,6 +184,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.JDBC;
@@ -350,6 +353,23 @@ public class ShowExecutor {
                         CaseSensibility.TABLE.getCaseSensibility());
             }
             for (MaterializedView mvTable : db.getMaterializedViews()) {
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
+                    mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
+                        if (!PrivilegeManager.checkTableAction(ctx, db.getFullName(),
+                                                               baseTableInfo.getTableName(),
+                                                               PrivilegeType.TableAction.SELECT)) {
+                            baseTableHasPrivilege.set(false);
+                        }
+                    });
+                    if (!baseTableHasPrivilege.get()) {
+                        continue;
+                    }
+                    if (!PrivilegeManager.checkAnyActionOnMaterializedView(ctx, db.getFullName(),
+                                                                           mvTable.getName())) {
+                        continue;
+                    }
+                }
                 if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
@@ -420,7 +440,10 @@ public class ShowExecutor {
         List<ConnectContext.ThreadInfo> threadInfos = ctx.getConnectScheduler().listConnection(ctx.getQualifiedUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
-            rowSet.add(info.toRow(nowMs, showStmt.showFull()));
+            List<String> row = info.toRow(nowMs, showStmt.showFull());
+            if (row != null) {
+                rowSet.add(row);
+            }
         }
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
@@ -545,7 +568,7 @@ public class ShowExecutor {
 
             if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
                 if (CatalogMgr.isInternalCatalog(catalogName) &&
-                        !PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
+                        !PrivilegeManager.checkAnyActionOnOrInDb(ctx, dbName)) {
                     continue;
                 }
             } else {
@@ -564,12 +587,15 @@ public class ShowExecutor {
     }
 
     // Show table statement.
-    private void handleShowTable() throws AnalysisException, DdlException {
+    private void handleShowTable() throws AnalysisException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        String catalog = ctx.getCurrentCatalog();
+        String catalogName = showTableStmt.getCatalogName();
+        if (catalogName == null) {
+            catalogName = ctx.getCurrentCatalog();
+        }
         String dbName = showTableStmt.getDb();
-        Database db = metadataMgr.getDb(catalog, dbName);
+        Database db = metadataMgr.getDb(catalogName, dbName);
 
         PatternMatcher matcher = null;
         if (showTableStmt.getPattern() != null) {
@@ -580,9 +606,9 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
-        db.readLock();
-        try {
-            if (CatalogMgr.isInternalCatalog(catalog)) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            db.readLock();
+            try {
                 for (Table tbl : db.getTables()) {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
@@ -593,22 +619,22 @@ public class ShowExecutor {
                             continue;
                         }
                     } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
+                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
                                 db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
                     }
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
-            } else {
-                List<String> tableNames = metadataMgr.listTableNames(catalog, dbName);
-                if (matcher != null) {
-                    tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
-                }
-                tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
+            } finally {
+                db.readUnlock();
             }
-        } finally {
-            db.readUnlock();
+        } else {
+            List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+            if (matcher != null) {
+                tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
+            }
+            tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -1520,6 +1546,24 @@ public class ShowExecutor {
         }
 
         BackupJob backupJob = (BackupJob) jobI;
+
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // check privilege
+            List<TableRef> tableRefs = backupJob.getTableRef();
+            AtomicBoolean privilegeDeny = new AtomicBoolean(false);
+            tableRefs.forEach(tableRef -> {
+                TableName tableName = tableRef.getName();
+                if (!PrivilegeManager.checkTableAction(ctx, tableName.getDb(), tableName.getTbl(),
+                                                       PrivilegeType.TableAction.EXPORT)) {
+                    privilegeDeny.set(true);
+                }
+            });
+            if (privilegeDeny.get()) {
+                resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
+                return;
+            }
+        }
+
         List<String> info = backupJob.getInfo();
         List<List<String>> infos = Lists.newArrayList();
         infos.add(info);
@@ -1631,11 +1675,18 @@ public class ShowExecutor {
                         dynamicPartitionScheduler.removeRuntimeInfo(olapTable.getName());
                         continue;
                     }
-                    // check tbl privs
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), olapTable.getName(),
-                            PrivPredicate.SHOW)) {
-                        continue;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
+                                db.getFullName(), olapTable.getName())) {
+                            continue;
+                        }
+                    } else {
+                        // check tbl privs
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                                db.getFullName(), olapTable.getName(),
+                                PrivPredicate.SHOW)) {
+                            continue;
+                        }
                     }
                     DynamicPartitionProperty dynamicPartitionProperty =
                             olapTable.getTableProperty().getDynamicPartitionProperty();

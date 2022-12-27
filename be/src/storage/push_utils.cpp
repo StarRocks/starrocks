@@ -14,7 +14,7 @@
 
 #include "storage/push_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 PushBrokerReader::~PushBrokerReader() {
     _counter.reset();
@@ -236,4 +236,4 @@ void PushBrokerReader::print_profile() {
     LOG(INFO) << ss.str();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
