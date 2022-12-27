@@ -65,6 +65,25 @@ QueryContext::~QueryContext() noexcept {
     }
 }
 
+void QueryContext::count_down_fragments() {
+    size_t old = _num_active_fragments.fetch_sub(1);
+    DCHECK_GE(old, 1);
+    bool all_fragments_finished = old == 1;
+    if (!all_fragments_finished) {
+        return;
+    }
+
+    // Acquire the pointer to avoid be released when removing query
+    auto query_trace = shared_query_trace();
+    ExecEnv::GetInstance()->query_context_mgr()->remove(_query_id);
+    // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
+    // considering that this feature is generally used for debugging,
+    // I think it should not have a big impact now
+    if (query_trace != nullptr) {
+        query_trace->dump();
+    }
+}
+
 FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }
@@ -346,7 +365,7 @@ void QueryContextManager::report_fragments_with_same_host(
         if (reported[i] == false) {
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->num_drivers() == 0) {
+            if (fragment_ctx->all_pipelines_finished()) {
                 reported[i] = true;
                 continue;
             }
@@ -444,7 +463,7 @@ void QueryContextManager::report_fragments(
 
             FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
 
-            if (fragment_ctx->num_drivers() == 0) {
+            if (fragment_ctx->all_pipelines_finished()) {
                 continue;
             }
 
