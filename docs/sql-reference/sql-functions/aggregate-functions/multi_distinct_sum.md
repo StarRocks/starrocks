@@ -1,8 +1,8 @@
-# MAX
+# multi_distinct_sum
 
 ## Description
 
-Return the sum value of the distinct expr, equivalent to sum(distinct expr)
+Returns the sum value of the distinct `expr`, equivalent to sum(distinct expr).
 
 ## Syntax
 
