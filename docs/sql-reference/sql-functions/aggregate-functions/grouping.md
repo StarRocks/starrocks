@@ -2,7 +2,7 @@
 
 ## Description
 
-Indicates whether a column is an aggregate column. If it is an aggregate column, it is 0, otherwise it is 1.
+Indicates whether a column is an aggregate column. If it is an aggregate column, 0 is returned. Otherwise, 1 is returned.
 
 ## Syntax
 
@@ -12,8 +12,7 @@ GROUPING(col_expr)
 
 ## Parameters
 
-- `col_expr`: An expression for a dimension column specified in the expression-list of the ROLLUP, CUBE, or GROUPING SETS expansion of the GROUP BY clause.
-
+`col_expr`: An expression for a dimension column specified in the expression-list of the ROLLUP, CUBE, or GROUPING SETS expansion of the GROUP BY clause.
 
 ## Examples
 
