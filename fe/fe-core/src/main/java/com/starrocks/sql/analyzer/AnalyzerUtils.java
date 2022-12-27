@@ -127,7 +127,8 @@ public class AnalyzerUtils {
         return !aggregates.isEmpty() || !groupByExpressions.isEmpty();
     }
 
-    private static Function getDBUdfFunction(ConnectContext session, FunctionName fnName, Type[] argTypes) {
+    private static Function getDBUdfFunction(ConnectContext session, FunctionName fnName,
+                                             Type[] argTypes) {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = session.getDatabase();
@@ -188,9 +189,11 @@ public class AnalyzerUtils {
         if (fn == null) {
             fn = getGlobalUdfFunction(session, fnName, argTypes);
         }
-        if (!Config.enable_udf) {
-            throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
-                    ErrorType.USER_ERROR);
+        if (fn != null) {
+            if (!Config.enable_udf) {
+                throw new StarRocksPlannerException("CBO Optimizer don't support UDF function: " + fnName,
+                        ErrorType.USER_ERROR);
+            }
         }
         return fn;
     }
