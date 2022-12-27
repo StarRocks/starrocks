@@ -486,12 +486,8 @@
       + [square](./sql-reference/sql-functions/math-functions/square.md)
       + [tan](./sql-reference/sql-functions/math-functions/tan.md)
       + [tanh](./sql-reference/sql-functions/math-functions/tanh.md)
-<<<<<<< HEAD
-=======
-      + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
     + Scalar Functions
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
->>>>>>> af7a8b140 ([docs] add hll_cardinality.md (#15481))
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
