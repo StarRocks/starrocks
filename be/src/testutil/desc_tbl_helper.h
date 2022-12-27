@@ -22,7 +22,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using SlotTypeDescInfo = std::tuple<std::string, TypeDescriptor, bool>;
 using SlotTypeDescInfoArray = std::vector<SlotTypeDescInfo>;
@@ -81,4 +81,4 @@ public:
         return slot_type_desc_info_arrays;
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

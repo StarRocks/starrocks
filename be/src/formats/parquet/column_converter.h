@@ -23,9 +23,9 @@
 #include "runtime/types.h"
 #include "util/bit_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Column;
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace starrocks::parquet {
 
@@ -42,9 +42,9 @@ public:
     }
 
     // create column according parquet data type
-    vectorized::ColumnPtr create_src_column();
+    ColumnPtr create_src_column();
 
-    virtual Status convert(const vectorized::ColumnPtr& src, vectorized::Column* dst) { return Status::OK(); };
+    virtual Status convert(const ColumnPtr& src, Column* dst) { return Status::OK(); };
 
 public:
     bool need_convert = false;

@@ -19,7 +19,7 @@
 #include "formats/csv/output_stream_string.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class NumericConverterTest : public ::testing::Test {
 public:
@@ -210,4 +210,4 @@ TEST_F(NumericConverterTest, test_write_string) {
     ASSERT_EQ("-327681132767-327681132767", buff.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

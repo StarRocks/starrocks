@@ -20,7 +20,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT, typename = guard::Guard>
 inline constexpr LogicalType DevFromAveResultPT = TYPE_DOUBLE;
@@ -440,4 +440,4 @@ public:
     std::string get_name() const override { return "stddev"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

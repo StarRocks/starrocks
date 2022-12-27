@@ -30,7 +30,7 @@
 namespace starrocks::lake {
 
 class AsyncDeltaWriterImpl {
-    using Chunk = starrocks::vectorized::Chunk;
+    using Chunk = starrocks::Chunk;
 
 public:
     using Callback = AsyncDeltaWriter::Callback;

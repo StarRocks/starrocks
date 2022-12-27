@@ -82,22 +82,22 @@ public class TablePrivEntry extends DbPrivEntry {
         }
 
         TablePrivEntry otherEntry = (TablePrivEntry) other;
-        int res = origHost.compareTo(otherEntry.origHost);
+        int res = otherEntry.origHost.compareTo(origHost);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        res = origDb.compareTo(otherEntry.origDb);
+        res = otherEntry.origDb.compareTo(origDb);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        res = realOrigUser.compareTo(otherEntry.realOrigUser);
+        res = otherEntry.realOrigUser.compareTo(realOrigUser);
         if (res != 0) {
-            return -res;
+            return res;
         }
 
-        return -origTbl.compareTo(otherEntry.origTbl);
+        return otherEntry.origTbl.compareTo(origTbl);
     }
 
     @Override

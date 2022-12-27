@@ -16,7 +16,7 @@
 
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 DecimalV3Column<T>::DecimalV3Column(size_t num_rows) {
@@ -122,4 +122,4 @@ int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
 template class DecimalV3Column<int32_t>;
 template class DecimalV3Column<int64_t>;
 template class DecimalV3Column<int128_t>;
-} // namespace starrocks::vectorized
+} // namespace starrocks

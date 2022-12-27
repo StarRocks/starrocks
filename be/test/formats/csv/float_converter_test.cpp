@@ -20,7 +20,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class FloatConverterTest : public ::testing::Test {
 public:
@@ -121,4 +121,4 @@ TEST_F(FloatConverterTest, test_float_write_string) {
     ASSERT_EQ("7.092579e+08", buff.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

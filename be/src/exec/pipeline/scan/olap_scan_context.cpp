@@ -14,13 +14,11 @@
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
-#include "exec/vectorized/olap_scan_node.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exec/olap_scan_node.h"
+#include "exprs/runtime_filter_bank.h"
 #include "storage/tablet.h"
 
 namespace starrocks::pipeline {
-
-using namespace vectorized;
 
 /// OlapScanContext.
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
@@ -63,7 +61,7 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
         auto* scan_range = olap_scan_ranges[i];
 
         int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-        ASSIGN_OR_RETURN(TabletSharedPtr tablet, vectorized::OlapScanNode::get_tablet(scan_range));
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, OlapScanNode::get_tablet(scan_range));
 
         // Capture row sets of this version tablet.
         {
@@ -89,13 +87,13 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 
     // eval_const_conjuncts.
     Status status;
-    RETURN_IF_ERROR(vectorized::OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
+    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     if (!status.ok()) {
         return status;
     }
 
     // Init _conjuncts_manager.
-    vectorized::OlapScanConjunctsManager& cm = _conjuncts_manager;
+    OlapScanConjunctsManager& cm = _conjuncts_manager;
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_obj_pool;

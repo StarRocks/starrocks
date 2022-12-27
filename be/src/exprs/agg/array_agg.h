@@ -21,7 +21,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType PT>
 struct ArrayAggAggregateState {
@@ -91,4 +91,4 @@ public:
     std::string get_name() const override { return "array_agg"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -27,7 +27,7 @@
 #include "util/mysql_row_buffer.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
@@ -760,4 +760,4 @@ bool BinaryColumnBase<T>::capacity_limit_reached(std::string* msg) const {
 template class BinaryColumnBase<uint32_t>;
 template class BinaryColumnBase<uint64_t>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/fixed_length_column_base.h"
-namespace starrocks::vectorized {
+namespace starrocks {
 template <typename T>
 class FixedLengthColumn final : public ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>, Column> {
 public:
@@ -31,4 +31,4 @@ public:
     FixedLengthColumn(const FixedLengthColumn& src) : SuperClass((const FixedLengthColumnBase<T>&)(src)) {}
     MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

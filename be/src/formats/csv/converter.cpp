@@ -27,7 +27,7 @@
 #include "formats/csv/numeric_converter.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     switch (t.type) {
@@ -100,4 +100,4 @@ std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool n
     return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

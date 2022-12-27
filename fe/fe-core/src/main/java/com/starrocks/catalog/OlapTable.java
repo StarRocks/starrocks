@@ -97,7 +97,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -323,7 +322,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // change single partition name
         if (this.partitionInfo != null && this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             if (getPartitions().stream().findFirst().isPresent()) {
-                Partition partition = getPartitions().stream().findFirst().get();
+                Optional<Partition> optPartition = getPartitions().stream().findFirst();
+                Preconditions.checkState(optPartition.isPresent());
+                Partition partition = optPartition.get();
                 partition.setName(newName);
                 nameToPartition.clear();
                 nameToPartition.put(newName, partition);
@@ -461,7 +462,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public List<MaterializedIndex> getVisibleIndex() {
         Optional<Partition> firstPartition = idToPartition.values().stream().findFirst();
         if (firstPartition.isPresent()) {
-            Partition partition = idToPartition.values().stream().findFirst().get();
+            Partition partition = firstPartition.get();
             return partition.getMaterializedIndices(IndexExtState.VISIBLE);
         }
         return Lists.newArrayList();
@@ -566,7 +567,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 idx.clearTabletsForRestore();
                 Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                         partitionInfo.getReplicationNum(entry.getKey()), partition.getVisibleVersion(),
-                        schemaHash, partition.getId());
+                        schemaHash, partition.getId(), partition.getShardGroupId());
                 if (!status.ok()) {
                     return status;
                 }
@@ -580,7 +581,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                          int replicationNum, long version, int schemaHash, long partitionId) {
+                                          int replicationNum, long version, int schemaHash,
+                                          long partitionId, long shardGroupId) {
         for (int i = 0; i < tabletNum; i++) {
             long newTabletId = globalStateMgr.getNextId();
             LocalTablet newTablet = new LocalTablet(newTabletId);
@@ -770,7 +772,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
-    private Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
+    private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         // 1. If "isForceDrop" is false, the partition will be added to the GlobalStateMgr Recyle bin, and all tablets of this
         //    partition will not be deleted.
         // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
@@ -778,7 +780,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         //    If "reserveTablets" is true, the tablets of this partition will not to deleted.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
-        Set<Long> tabletIds = new HashSet<Long>();
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
@@ -796,21 +797,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getStorageCacheInfo(partition.getId()),
                         isLakeTable());
             } else if (!reserveTablets) {
-                tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
 
             // drop partition info
             rangePartitionInfo.dropPartition(partition.getId());
         }
-        return tabletIds;
     }
 
-    public Set<Long> dropPartitionAndReserveTablet(String partitionName) {
-        return dropPartition(-1, partitionName, true, true);
+    public void dropPartitionAndReserveTablet(String partitionName) {
+        dropPartition(-1, partitionName, true, true);
     }
 
-    public Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop) {
-        return dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+        dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
     }
 
     /*
@@ -1404,7 +1404,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex =
-                    copied.getPartitions().stream().findFirst().get().getMaterializedIndices(IndexExtState.SHADOW);
+                    copied.getPartitions().stream().findFirst()
+                            .map(p -> p.getMaterializedIndices(IndexExtState.SHADOW)).orElse(Lists.newArrayList());
             for (MaterializedIndex deleteIndex : shadowIndex) {
                 LOG.debug("copied table delete shadow index : {}", deleteIndex.getId());
                 copied.deleteIndexInfo(copied.getIndexNameById(deleteIndex.getId()));

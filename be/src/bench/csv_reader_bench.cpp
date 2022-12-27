@@ -1,14 +1,14 @@
 #include <iostream>
 #include <memory>
 
-#include "exec/vectorized/file_scanner.h"
+#include "exec/file_scanner.h"
 #include "formats/csv/csv_reader.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define CSVBENCHMARK
 
@@ -176,9 +176,8 @@ static std::unique_ptr<BenchScanner> init_bench_scanner(std::string filename) {
     return create_bench_scanner(ranges, buffer_size);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
-using namespace starrocks::vectorized;
 using namespace starrocks;
 
 int main(int argc, char** argv) {
@@ -221,4 +220,4 @@ int main(int argc, char** argv) {
         std::cout << "Have read " << read_row_cnt << " records" << std::endl;
         std::cout << "Parsing: " << diff.count() << std::endl;
     }
-}
+} // namespace starrocks

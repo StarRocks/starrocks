@@ -18,7 +18,7 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class StructColumn final : public ColumnFactory<Column, StructColumn> {
     friend class ColumnFactory<Column, StructColumn>;
 
@@ -172,4 +172,4 @@ private:
     // _field_names will not participate in serialization because it is created based on meta information
     std::vector<std::string> _field_names;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

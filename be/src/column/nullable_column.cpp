@@ -20,7 +20,7 @@
 #include "simd/simd.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
         : _data_column(std::move(data_column)), _has_null(false) {
@@ -415,4 +415,4 @@ StatusOr<ColumnPtr> NullableColumn::downgrade() {
     return downgrade_helper_func(&_data_column);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

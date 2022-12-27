@@ -20,7 +20,7 @@
 #include "column/nullable_column.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_with_codes(
         const GlobalDictMap& dict_map) {
@@ -45,4 +45,4 @@ std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_
     return std::make_pair(std::move(res), std::move(codes));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

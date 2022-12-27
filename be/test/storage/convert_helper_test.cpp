@@ -25,7 +25,7 @@
 #include "storage/types.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static std::string trim_trailing_zeros(const std::string& s) {
     if (s.find('.') == std::string::npos) return s;
@@ -482,4 +482,4 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_TIMESTAMP) {
     EXPECT_EQ(values[1], c1->get(1).get_timestamp());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

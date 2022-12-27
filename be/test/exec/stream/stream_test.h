@@ -23,9 +23,9 @@
 
 namespace starrocks::stream {
 
-using SlotTypeInfo = vectorized::SlotTypeInfo;
-using ExprsTestHelper = vectorized::ExprsTestHelper;
-using StreamRowOp = vectorized::StreamRowOp;
+using SlotTypeInfo = SlotTypeInfo;
+using ExprsTestHelper = ExprsTestHelper;
+using StreamRowOp = StreamRowOp;
 using GroupByKeyInfo = SlotId;
 using AggInfo = std::tuple<SlotId, std::string, LogicalType, LogicalType>;
 
@@ -41,8 +41,8 @@ protected:
 protected:
     DescriptorTbl* GenerateDescTbl(RuntimeState* state, ObjectPool& obj_pool,
                                    const std::vector<std::vector<SlotTypeInfo>>& slot_info_arrays) {
-        return vectorized::DescTblHelper::generate_desc_tbl(
-                state, obj_pool, vectorized::DescTblHelper::create_slot_type_desc_info_arrays(slot_info_arrays));
+        return DescTblHelper::generate_desc_tbl(state, obj_pool,
+                                                DescTblHelper::create_slot_type_desc_info_arrays(slot_info_arrays));
     }
 
     std::vector<TExpr> _create_group_by_exprs(std::vector<SlotTypeInfo> slot_infos, std::vector<GroupByKeyInfo> infos) {
@@ -81,10 +81,10 @@ protected:
     StreamChunkPtr MakeStreamChunk(const std::vector<std::vector<T>>& cols, const std::vector<int8_t>& ops) {
         auto chunk_ptr = std::make_shared<Chunk>();
         for (size_t i = 0; i < cols.size(); i++) {
-            auto col = vectorized::ColumnTestHelper::build_column<T>(cols[i]);
+            auto col = ColumnTestHelper::build_column<T>(cols[i]);
             chunk_ptr->append_column(std::move(col), i);
         }
-        vectorized::Int8ColumnPtr ops_col = vectorized::Int8Column::create();
+        Int8ColumnPtr ops_col = Int8Column::create();
         ops_col->append_numbers(ops.data(), ops.size() * sizeof(int8_t));
         return StreamChunkConverter::make_stream_chunk(std::move(chunk_ptr), std::move(ops_col));
     }

@@ -192,7 +192,7 @@ private:
     // Created in prepare (if required), owned by this object.
     std::unique_ptr<DataSink> _sink;
 
-    vectorized::ChunkPtr _chunk;
+    ChunkPtr _chunk;
 
     // Number of rows returned by this fragment
     RuntimeProfile::Counter* _rows_produced_counter = nullptr;
@@ -223,7 +223,7 @@ private:
 
     Status _open_internal_vectorized();
 
-    Status _get_next_internal_vectorized(vectorized::ChunkPtr* chunk);
+    Status _get_next_internal_vectorized(ChunkPtr* chunk);
 
     const DescriptorTbl& desc_tbl() { return _runtime_state->desc_tbl(); }
 

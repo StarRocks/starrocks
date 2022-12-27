@@ -31,7 +31,7 @@ public:
 
     Status init() override;
 
-    Status append(const vectorized::Column& column) override;
+    Status append(const Column& column) override;
 
     uint64_t estimate_buffer_size() override;
 
@@ -163,15 +163,15 @@ Status MapColumnWriter::init() {
     return Status::OK();
 }
 
-Status MapColumnWriter::append(const vectorized::Column& column) {
-    const vectorized::MapColumn* map_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status MapColumnWriter::append(const Column& column) {
+    const MapColumn* map_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (is_nullable()) {
-        const auto& nullable_column = down_cast<const vectorized::NullableColumn&>(column);
-        map_column = down_cast<vectorized::MapColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column.null_column().get());
+        const auto& nullable_column = down_cast<const NullableColumn&>(column);
+        map_column = down_cast<MapColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
     } else {
-        map_column = down_cast<const vectorized::MapColumn*>(&column);
+        map_column = down_cast<const MapColumn*>(&column);
     }
 
     // 1. write null column when necessary

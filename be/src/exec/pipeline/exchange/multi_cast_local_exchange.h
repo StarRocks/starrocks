@@ -48,9 +48,9 @@ public:
     ~MultiCastLocalExchanger();
     bool can_pull_chunk(int32_t mcast_consumer_index) const;
     bool can_push_chunk() const;
-    Status push_chunk(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequenc,
+    Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequenc,
                       MultiCastLocalExchangeSinkOperator* sink_operator);
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index);
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t mcast_consuemr_index);
     void open_source_operator(int32_t mcast_consumer_index);
     void close_source_operator(int32_t mcast_consumer_index);
     void open_sink_operator();
@@ -59,7 +59,7 @@ public:
 
 private:
     struct Cell {
-        vectorized::ChunkPtr chunk = nullptr;
+        ChunkPtr chunk = nullptr;
         Cell* next = nullptr;
         size_t memory_usage = 0;
         size_t accumulated_row_size = 0;
@@ -105,7 +105,7 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;
@@ -153,9 +153,9 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     void update_counter(size_t memory_usage, size_t buffer_row_size);
 

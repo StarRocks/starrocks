@@ -79,10 +79,9 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     }
 
     if (table_function_name == "unnest" && arg_types.size() > 1) {
-        _table_function = vectorized::get_table_function(table_function_name, {}, {}, table_fn.binary_type);
+        _table_function = get_table_function(table_function_name, {}, {}, table_fn.binary_type);
     } else {
-        _table_function =
-                vectorized::get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
+        _table_function = get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
     }
 
     if (_table_function == nullptr) {
@@ -100,11 +99,11 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     return _table_function->open(state, _table_function_state);
 }
 
-StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_input_chunk != nullptr);
     size_t chunk_size = state->chunk_size();
     size_t remain_chunk_size = chunk_size;
-    std::vector<vectorized::ColumnPtr> output_columns;
+    std::vector<ColumnPtr> output_columns;
 
     _process_table_function();
 
@@ -133,11 +132,11 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
 
         // Build outer data, repeat multiple times
         for (size_t i = 0; i < _outer_slots.size(); ++i) {
-            vectorized::ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
-            vectorized::Datum value = input_column_ptr->get(_input_chunk_index);
+            ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
+            Datum value = input_column_ptr->get(_input_chunk_index);
             if (value.is_null()) {
                 DCHECK(output_columns[i]->is_nullable());
-                down_cast<vectorized::NullableColumn*>(output_columns[i].get())->append_nulls(repeat_times);
+                down_cast<NullableColumn*>(output_columns[i].get())->append_nulls(repeat_times);
             } else {
                 output_columns[i]->append_value_multiple_times(&value, repeat_times);
             }
@@ -176,12 +175,12 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
     return _build_chunk(output_columns);
 }
 
-Status TableFunctionOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _input_chunk = chunk;
     _table_function_result_eos = false;
 
     _input_chunk_index = 0;
-    vectorized::Columns table_function_params;
+    Columns table_function_params;
     for (SlotId slotId : _param_slots) {
         table_function_params.emplace_back(_input_chunk->get_column_by_slot_id(slotId));
     }
@@ -190,8 +189,8 @@ Status TableFunctionOperator::push_chunk(RuntimeState* state, const vectorized::
     return Status::OK();
 }
 
-vectorized::ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<vectorized::ColumnPtr>& columns) {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& columns) {
+    ChunkPtr chunk = std::make_shared<Chunk>();
 
     for (size_t i = 0; i < _outer_slots.size(); ++i) {
         chunk->append_column(columns[i], _outer_slots[i]);

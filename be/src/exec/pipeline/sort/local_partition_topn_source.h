@@ -39,7 +39,7 @@ public:
 
     bool is_finished() const override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     LocalPartitionTopnContext* _partition_topn_ctx;

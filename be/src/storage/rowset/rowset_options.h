@@ -32,25 +32,21 @@ class RowCursor;
 class RuntimeState;
 class TabletSchema;
 
-namespace vectorized {
-
 class ColumnPredicate;
 class DeletePredicates;
 struct RowidRangeOption;
 struct ShortKeyRangeOption;
 
-} // namespace vectorized
-
 class RowsetReadOptions {
-    using RowidRangeOptionPtr = std::shared_ptr<vectorized::RowidRangeOption>;
-    using ShortKeyRangeOptionPtr = std::shared_ptr<vectorized::ShortKeyRangeOption>;
-    using PredicateList = std::vector<const vectorized::ColumnPredicate*>;
+    using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+    using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+    using PredicateList = std::vector<const ColumnPredicate*>;
 
 public:
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 
-    std::vector<vectorized::SeekRange> ranges;
+    std::vector<SeekRange> ranges;
 
     std::unordered_map<ColumnId, PredicateList> predicates;
     std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
@@ -58,7 +54,7 @@ public:
     // whether rowset should return rows in sorted order.
     bool sorted = true;
 
-    const vectorized::DeletePredicates* delete_predicates = nullptr;
+    const DeletePredicates* delete_predicates = nullptr;
 
     const TabletSchema* tablet_schema = nullptr;
 
@@ -71,13 +67,13 @@ public:
     RuntimeProfile* profile = nullptr;
     bool use_page_cache = false;
 
-    vectorized::ColumnIdToGlobalDictMap* global_dictmaps = &vectorized::EMPTY_GLOBAL_DICTMAPS;
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    vectorized::OlapRuntimeScanRangePruner runtime_range_pruner;
+    OlapRuntimeScanRangePruner runtime_range_pruner;
 };
 
 } // namespace starrocks

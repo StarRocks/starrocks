@@ -1157,7 +1157,7 @@ TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
 }
 
 RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                              vectorized::Column* one_delete = nullptr) {
+                              Column* one_delete = nullptr) {
     RowsetWriterContext writer_context;
     RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
     writer_context.rowset_id = rowset_id;
@@ -1177,9 +1177,9 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     auto& cols = chunk->columns();
     size_t size = keys.size();
     for (size_t i = 0; i < size; i++) {
-        cols[0]->append_datum(vectorized::Datum(keys[i]));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % size + 1)));
-        cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % size + 2)));
+        cols[0]->append_datum(Datum(keys[i]));
+        cols[1]->append_datum(Datum((int16_t)(keys[i] % size + 1)));
+        cols[2]->append_datum(Datum((int32_t)(keys[i] % size + 2)));
     }
     if (one_delete == nullptr && !keys.empty()) {
         CHECK_OK(writer->flush_chunk(*chunk));
@@ -1237,7 +1237,7 @@ void build_persistent_index_from_tablet(size_t N) {
         LOG(WARNING) << "failed to load rowset update state: " << st.to_string();
         ASSERT_TRUE(false);
     }
-    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using ColumnUniquePtr = std::unique_ptr<Column>;
     const std::vector<ColumnUniquePtr>& upserts = state.upserts();
 
     PersistentIndex persistent_index(kPersistentIndexDir);

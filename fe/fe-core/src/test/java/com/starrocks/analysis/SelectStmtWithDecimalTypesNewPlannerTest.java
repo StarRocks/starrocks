@@ -62,7 +62,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
         starRocksAssert.withTable("CREATE TABLE `test_decimal_type6` (\n" +
-                "  `dec_1_2` decimal32(2, 1) NOT NULL COMMENT \"\",\n" +
+                "  `dec_2_1` decimal32(2, 1) NOT NULL COMMENT \"\",\n" +
                 "  `dec_18_0` decimal64(18, 0) NOT NULL COMMENT \"\",\n" +
                 "  `dec_18_18` decimal64(18, 18) NOT NULL COMMENT \"\",\n" +
                 "  `dec_10_2` decimal64(10, 2) NOT NULL COMMENT \"\",\n" +
@@ -72,9 +72,9 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "   dec_4_2 decimal64(4, 2),\n" +
                 "   dec_5_1 decimal64(5, 1)\n" +
                 ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`dec_1_2`)\n" +
+                "DUPLICATE KEY(`dec_2_1`)\n" +
                 "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`dec_1_2`) BUCKETS 10\n" +
+                "DISTRIBUTED BY HASH(`dec_2_1`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
@@ -317,7 +317,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select stddev(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet = "aggregate: stddev[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DOUBLE)); " +
-                "args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]";
+                "args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -326,7 +326,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select variance(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet = "aggregate: variance[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DOUBLE)); " +
-                "args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]";
+                "args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -402,7 +402,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         // decimal(10, 2) + decimal(10, 2) = decimal(11, 2)
         sql = "select count(`dec_10_2` + dec_10_2) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("[12: cast, DECIMAL64(11,2), true] + [12: cast, DECIMAL64(11,2), true]"));
+        Assert.assertTrue(plan.contains("[12: cast, DECIMAL64(11,2), false] + [12: cast, DECIMAL64(11,2), false]"));
 
         sql = "select count(`dec_10_2` + dec_12_10) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
@@ -419,9 +419,9 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan.contains(" 2 <-> 1000000000000000000.000000000000000001"));
 
-        sql = "select dec_1_2 + dec_1_2 from test_decimal_type6";
+        sql = "select dec_2_1 + dec_2_1 from test_decimal_type6";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("[11: cast, DECIMAL32(3,1), true] + [11: cast, DECIMAL32(3,1), true]"));
+        Assert.assertTrue(plan.contains("[11: cast, DECIMAL32(3,1), false] + [11: cast, DECIMAL32(3,1), false]"));
     }
 
     @Test
@@ -494,7 +494,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains(
-                "round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
+                "round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: false; result nullable: true]"));
     }
 
     @Test

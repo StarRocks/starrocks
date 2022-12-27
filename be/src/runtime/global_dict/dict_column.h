@@ -16,8 +16,8 @@
 
 #include "column/vectorized_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
-using LowCardDictColumn = vectorized::Int32Column;
+using LowCardDictColumn = Int32Column;
 
 }

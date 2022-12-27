@@ -15,9 +15,9 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "exec/meta_scan_node.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
-#include "exec/vectorized/meta_scan_node.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -40,7 +40,7 @@ private:
 
     MetaScanContextPtr _scan_ctx;
 
-    std::shared_ptr<vectorized::MetaScanner> _scanner;
+    std::shared_ptr<MetaScanner> _scanner;
 };
 
 } // namespace starrocks::pipeline

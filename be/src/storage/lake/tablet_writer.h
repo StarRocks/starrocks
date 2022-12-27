@@ -19,9 +19,9 @@
 
 #include "common/status.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class Chunk;
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -43,7 +43,7 @@ public:
     // It's guaranteed that the elements in each chunk are arranged in ascending
     // order, and the elements among all chunks written before `flush()` are also
     // arranged in ascending order.
-    virtual Status write(const starrocks::vectorized::Chunk& data) = 0;
+    virtual Status write(const starrocks::Chunk& data) = 0;
 
     // Flushes this writer and forces any buffered bytes to be written out to segment files.
     // There is no order guarantee between the data written before a `flush()`

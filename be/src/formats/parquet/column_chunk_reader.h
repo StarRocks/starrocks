@@ -73,7 +73,7 @@ public:
         return _rep_level_decoder.decode_batch(n, levels);
     }
 
-    Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType content_type, vectorized::Column* dst) {
+    Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType content_type, Column* dst) {
         size_t idx = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];
@@ -91,18 +91,18 @@ public:
         return Status::OK();
     }
 
-    Status decode_values(size_t n, ColumnContentType content_type, vectorized::Column* dst) {
+    Status decode_values(size_t n, ColumnContentType content_type, Column* dst) {
         return _cur_decoder->next_batch(n, content_type, dst);
     }
 
     const tparquet::ColumnMetaData& metadata() const { return _chunk_metadata->meta_data; }
 
-    Status get_dict_values(vectorized::Column* column) {
+    Status get_dict_values(Column* column) {
         RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(column);
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) {
         RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(dict_codes, column);
     }

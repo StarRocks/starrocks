@@ -131,6 +131,7 @@ public class StarMgrServer {
         com.staros.util.Config.S3_ENDPOINT = Config.starmgr_s3_endpoint;
         com.staros.util.Config.S3_AK = Config.starmgr_s3_ak;
         com.staros.util.Config.S3_SK = Config.starmgr_s3_sk;
+        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.starmgr_disable_shard_balance;
 
         com.staros.util.Config.HDFS_URL = Config.hdfs_url;
 

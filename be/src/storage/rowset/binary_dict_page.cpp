@@ -166,7 +166,7 @@ Status BinaryDictPageBuilder::get_last_value(void* value) const {
     return Status::OK();
 }
 
-bool BinaryDictPageBuilder::is_valid_global_dict(const vectorized::GlobalDictMap* global_dict) const {
+bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dict) const {
     for (const auto& it : _dictionary) {
         if (auto iter = global_dict->find(it.first); iter == global_dict->end()) {
             return false;
@@ -222,17 +222,17 @@ void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
-    vectorized::SparseRange read_range;
+Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, Column* dst) {
+    SparseRange read_range;
     uint32_t begin = current_index();
-    read_range.add(vectorized::Range(begin, begin + *n));
+    read_range.add(Range(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin;
     return Status::OK();
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange& range, Column* dst) {
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch(range, dst);
     }
@@ -269,14 +269,14 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, vectorized::Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(n, dst);
 }
 
 template <LogicalType Type>
-Status BinaryDictPageDecoder<Type>::next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
+Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange& range, Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);
