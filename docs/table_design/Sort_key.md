@@ -129,13 +129,15 @@ Use the preceding tables as examples. The sorting effect varies in the following
   select sum(pv) from site_access_duplicate where city_code = 2;
   ```
 
-  > Note: In this situation, the sort key columns do not yield the expected sorting effect.
+  > **NOTE**
+  >
+  > In this situation, the sort key columns do not yield the expected sorting effect.
 
 As described above, when your query filters on both `site_id` and `city_code`, StarRocks runs a binary search on the table to narrow the query range down to a specific location. If the table consists of a large number of rows, StarRocks runs binary searches on the `site_id` and `city_code` columns instead. This requires StarRocks to load the data of the two columns into memory and therefore increases memory consumption. In this case, you can use a prefix index to reduce the amount of data cached in memory, thereby accelerating your query.
 
 Additionally, note that a large number of sort key columns also increase memory consumption. To reduce memory consumption, StarRocks imposes the following limits on the usage of prefix indexes:
 
-- The prefix index entry of a block must be composed of the prefix of the table's sort key columns in the first row of that block. 
+- The prefix index entry of a block must be composed of the prefix of the table's sort key columns in the first row of that block.
 
 - A prefix index can be created on a maximum of 3 columns.
 

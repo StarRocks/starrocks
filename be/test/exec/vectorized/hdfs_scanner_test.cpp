@@ -310,6 +310,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
                 std::cout << "status not ok: " << status.get_error_msg() << std::endl; \
                 break;                                                                 \
             }                                                                          \
+            chunk->check_or_die();                                                     \
             if (chunk->num_rows() > 0) {                                               \
                 std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
                 EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
@@ -1312,6 +1313,236 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
     status = scanner->open(_runtime_state);
     // parquet column reader: not supported convert from parquet `INT96` to `VARCHAR`
     EXPECT_TRUE(!status.ok()) << status.get_error_msg();
+    scanner->close(_runtime_state);
+}
+
+// =============================================================================
+
+/*
+id 0 ~ 99
+A "00" ~ "99"
+
+file schema: schema
+--------------------------------------------------------------------------------
+id:          OPTIONAL INT64 R:0 D:1
+A:           OPTIONAL BINARY O:UTF8 R:0 D:1
+
+row group 1: RC:100 TS:1730 OFFSET:4
+--------------------------------------------------------------------------------
+id:           INT64 SNAPPY DO:4 FPO:432 SZ:595/981/1.65 VC:100 ENC:PLAIN,RLE,PLAIN_DICTIONARY
+A:            BINARY SNAPPY DO:693 FPO:1139 SZ:581/749/1.29 VC:100 ENC:PLAIN,RLE,PLAIN_DICTIONARY
+*/
+
+TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
+    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                                {"a", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/upcase_field.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    param->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+
+    // expect a = '05'
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "05");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "05");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[1], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1);
+    EXPECT_EQ(scanner->raw_rows_read(), 100);
+    scanner->close(_runtime_state);
+}
+
+// =============================================================================
+
+/*
+file schema: schema
+--------------------------------------------------------------------------------
+id:          OPTIONAL INT64 R:0 D:1
+f00:         OPTIONAL F:1
+.list:       REPEATED F:1
+..item:      OPTIONAL INT64 R:1 D:3
+f01:         OPTIONAL F:1
+.list:       REPEATED F:1
+..item:      OPTIONAL INT64 R:1 D:3
+
+row group 1: RC:1500 TS:52144 OFFSET:4
+--------------------------------------------------------------------------------
+id:           INT64 UNCOMPRESSED DO:4 FPO:12023 SZ:14162/14162/1.00 VC:1500 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+f00:
+.list:
+..item:       INT64 UNCOMPRESSED DO:14264 FPO:26307 SZ:18991/18991/1.00 VC:4500 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+f01:
+.list:
+..item:       INT64 UNCOMPRESSED DO:33367 FPO:45410 SZ:18991/18991/1.00 VC:4500 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+
+python code to generate this file.
+
+def array2_parquet():
+    def fn():
+        records = []
+        N = 1500
+        for i in range(N):
+            x = {'id': i}
+            for f in range(2):
+                key = 'f%02d' % f
+                x[key] = [(j + i) for j in range(5)]
+                if i % 2 == 0:
+                    x[key] = None
+
+            records.append(x)
+        return records
+
+    name = 'array2.parquet'
+    write_parquet_file(name, fn)
+*/
+
+TEST_F(HdfsScannerTest, TestParquetArrayDecode) {
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    SlotDesc parquet_descs[] = {
+            {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)}, {"f00", array_type}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/array_decode.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1500);
+    EXPECT_EQ(scanner->raw_rows_read(), 1500);
+    scanner->close(_runtime_state);
+}
+
+// =============================================================================
+
+/*
+
+a column, in a row group it's encoded as dict page
+but in another row group it's encoded as plain page.
+
+sandbox-cloud :: ~ » hadoop jar ~/installed/parquet-tools-1.9.0.jar dump -c id --disable-data --disable-crop file:///home/disk4/zhangyan/dict2.parquet                                                                                                                                                                                                         1 ↵
+row group 0
+--------------------------------------------------------------------------------
+id:  BINARY UNCOMPRESSED DO:5709 FPO:5709 SZ:163/163/1.00 VC:100 ENC:PLAIN,RLE_DICTIONARY
+
+    id TV=100 RL=0 DL=1 DS: 3 DE:PLAIN
+    ----------------------------------------------------------------------------
+    page 0:                  DLE:RLE RLE:BIT_PACKED VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:103 VC:100
+
+row group 1
+--------------------------------------------------------------------------------
+id:  BINARY UNCOMPRESSED DO:0 FPO:16447 SZ:721/721/1.00 VC:100 ENC:PLAIN
+
+    id TV=100 RL=0 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:BIT_PACKED VLE:PLAIN ST:[no stats for this column] SZ:701 VC:100
+
+
+Python code
+
+def dict2_parquet():
+    def fn():
+        records = []
+        d = ['ysq01', 'ysq02', 'ysq03', None]
+        N = 100
+        for i in range(N):
+            x = {'seq': i}
+            for f in range(2):
+                x['f%02d' % f] = ''.join([chr(ord('a') + (i + f + x) % 26) for x in range(20)])
+            x['id'] = d[i % 4]
+            for f in range(2):
+                x['f%02d' % (f + 3)] = ''.join([chr(ord('a') + (i + f + x) % 26) for x in range(20)])
+            records.append(x)
+        return records
+
+    name = 'dict2.parquet'
+    json_data = fn()
+    df = pd.DataFrame.from_records(json_data)
+    # to enforce as dictionary page.
+    df['id'] = df['id'].astype('category')
+    fastparquet.write(name, df)
+
+    df = pd.DataFrame.from_records(json_data)
+    fastparquet.write(name, df, append=True)
+    peek_parquet_data(name)
+*/
+
+TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
+    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/dict_two_page.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    param->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+
+    // expect id = 'ysq01'
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "ysq01");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::LE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+        param->conjunct_ctxs.push_back(ctx);
+    }
+
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 50);
+    EXPECT_EQ(scanner->raw_rows_read(), 200);
     scanner->close(_runtime_state);
 }
 

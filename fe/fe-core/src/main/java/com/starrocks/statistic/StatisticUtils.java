@@ -4,6 +4,8 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
@@ -17,6 +19,7 @@ import com.starrocks.system.SystemInfoService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 public class StatisticUtils {
@@ -107,4 +110,19 @@ public class StatisticUtils {
         return ((OlapTable) table).getPartitions().stream().noneMatch(Partition::hasData);
     }
 
+    // Get all the columns in the table that can be collected.
+    // The list will only contain aggregated and non-aggregated columns of the "replace" type.
+    // This is because in aggregate type tables, metric columns generally do not participate in predicate.
+    // Collecting these columns is not meaningful but time-consuming, so we exclude them.
+    public static List<String> getCollectibleColumns(Table table) {
+        List<String> columns = new ArrayList<>();
+        for (Column column : table.getBaseSchema()) {
+            if (!column.isAggregated()) {
+                columns.add(column.getName());
+            } else if (column.getAggregationType().equals(AggregateType.REPLACE)) {
+                columns.add(column.getName());
+            }
+        }
+        return columns;
+    }
 }

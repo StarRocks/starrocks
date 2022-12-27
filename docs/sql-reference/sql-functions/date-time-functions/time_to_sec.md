@@ -2,7 +2,7 @@
 
 ## Description
 
-Converts a time value into the number of seconds. The formula used for the conversion is as follows: 
+Converts a time value into the number of seconds. The formula used for the conversion is as follows:
 
 Hour x 3600 + Minute x 60 + Second
 

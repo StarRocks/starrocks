@@ -101,7 +101,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     case TDataSinkType::OLAP_TABLE_SINK: {
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
-        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), row_desc, output_exprs, &status);
+        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), output_exprs, &status);
         RETURN_IF_ERROR(status);
         break;
     }

@@ -105,7 +105,7 @@ Status BetaRowsetWriter::init() {
 }
 
 StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
-    if (_num_rows_written > 0) {
+    if (_num_rows_written > 0 || (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _num_delfile > 0)) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta->set_num_rows(_num_rows_written);
@@ -331,6 +331,9 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
             return Status::InternalError("deletes column serialize failed");
         }
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
         _num_delfile++;
         _num_rows_del += deletes.size();

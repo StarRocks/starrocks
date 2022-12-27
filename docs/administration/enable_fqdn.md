@@ -48,35 +48,35 @@ You need to enable FQDN access for all the non-Leader Follower FE nodes before e
 
 1. Navigate to the deployment directory of the FE node, and run the following command to stop the FE node:
 
-  ```Shell
-  ./bin/stop_fe.sh --daemon
-  ```
+    ```Shell
+    ./bin/stop_fe.sh --daemon
+    ```
 
 2. Execute the following statement via your MySQL client to check the `Alive` status of the FE node that you have stopped. Wait until the `Alive` status becomes `false`.
 
-  ```SQL
-  SHOW PROC '/frontends'\G
-  ```
+    ```SQL
+    SHOW PROC '/frontends'\G
+    ```
 
 3. Execute the following statement to replace the IP address with FQDN.
 
-  ```SQL
-  ALTER SYSTEM MODIFY FRONTEND HOST "<fe_ip>" TO "<fe_hostname>";
-  ```
+    ```SQL
+    ALTER SYSTEM MODIFY FRONTEND HOST "<fe_ip>" TO "<fe_hostname>";
+    ```
 
 4. Run the following command to start the FE node with FQDN access.
 
-  ```Shell
-  ./bin/start_fe.sh --host_type FQDN --daemon
-  ```
+    ```Shell
+    ./bin/start_fe.sh --host_type FQDN --daemon
+    ```
 
-  The property `--host_type` specifies the access method that is used to start the node. Valid values include `FQDN` and `IP`. You only need to specify this property ONCE when you restart the node after you modify the node.
+    The property `--host_type` specifies the access method that is used to start the node. Valid values include `FQDN` and `IP`. You only need to specify this property ONCE when you restart the node after you modify the node.
 
 5. Check the `Alive` status of the FE node. Wait until the `Alive` status becomes `true`.
 
-  ```SQL
-  SHOW PROC '/frontends'\G
-  ```
+    ```SQL
+    SHOW PROC '/frontends'\G
+    ```
 
 6. Repeat the above steps to enable FQDN access for the other non-Leader Follower FE nodes one after another when the `Alive` status of the current FE node is `true`.
 
@@ -90,37 +90,37 @@ After all the non-Leader FE nodes have been modified and restarted successfully,
 
 1. Navigate to the deployment directory of the Leader FE node, and run the following command to stop the Leader FE node.
 
-  ```Shell
-  ./bin/stop_fe.sh --daemon
-  ```
+    ```Shell
+    ./bin/stop_fe.sh --daemon
+    ```
 
 2. Execute the following statement via your MySQL client to check whether a new Leader FE node has been elected for the cluster.
 
-  ```SQL
-  SHOW PROC '/frontends'\G
-  ```
+    ```SQL
+    SHOW PROC '/frontends'\G
+    ```
 
-  Any FE node with status `Alive` and `isMaster` being `true` is a Leader FE that is running.
+    Any FE node with status `Alive` and `isMaster` being `true` is a Leader FE that is running.
 
 3. Execute the following statement to replace the IP address with FQDN.
 
-  ```SQL
-  ALTER SYSTEM MODIFY FRONTEND HOST "<fe_ip>" TO "<fe_hostname>";
-  ```
+    ```SQL
+    ALTER SYSTEM MODIFY FRONTEND HOST "<fe_ip>" TO "<fe_hostname>";
+    ```
 
 4. Run the following command to start the FE node with FQDN access.
 
-  ```Shell
-  ./bin/start_fe.sh --host_type FQDN --daemon
-  ```
+    ```Shell
+    ./bin/start_fe.sh --host_type FQDN --daemon
+    ```
 
-  The property `--host_type` specifies the access method that is used to start the node. Valid values include `FQDN` and `IP`. You only need to specify this property ONCE when you restart the node after you modify the node.
+    The property `--host_type` specifies the access method that is used to start the node. Valid values include `FQDN` and `IP`. You only need to specify this property ONCE when you restart the node after you modify the node.
 
 5. Check the `Alive` status of the FE node.
 
-  ```Plain
-  SHOW PROC '/frontends'\G
-  ```
+    ```Plain
+    SHOW PROC '/frontends'\G
+    ```
 
   If the `Alive` status becomes `true`, the FE node is successfully modified and added to the cluster as a Follower FE node.
 

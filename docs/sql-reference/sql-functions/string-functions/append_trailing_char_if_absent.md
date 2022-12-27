@@ -1,18 +1,16 @@
 # append_trailing_char_if_absent
 
-## description
+## Description
 
-### Syntax
+If the str string is not empty and does not contain trailing_char character in the end, it appends trailing_char character to the end. trailing_char can only contain one character. If it contains multiple characters, this function will return NULL.
+
+## Syntax
 
 ```Haskell
 VARCHAR append_trailing_char_if_absent(VARCHAR str, VARCHAR trailing_char)
 ```
 
-If the str string is not empty and does not contain trailing_char character in the end, it appends trailing_char character to the end.
-
-trailing_char can only contain one character. If it contains multiple characters, this function will return NULL.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL [test]> select append_trailing_char_if_absent('a','c');

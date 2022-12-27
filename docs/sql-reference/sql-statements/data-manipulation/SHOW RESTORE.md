@@ -1,6 +1,6 @@
 # SHOW RESTORE
 
-## description
+## Description
 
 This statement is used to view RESTORE task
 
@@ -41,7 +41,7 @@ Status：                 if the job fails, the failure information is displayed
 Timeout：                job timeout, in seconds
 ```
 
-## example
+## Examples
 
 1. View example_ db the next RESTORE task.
 

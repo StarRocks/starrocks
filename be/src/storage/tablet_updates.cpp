@@ -934,8 +934,17 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             return;
         }
         // 4. write meta
-        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs,
-                                                    index_meta, enable_persistent_index);
+        const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+        if (rowset_meta_pb.has_txn_meta()) {
+            rowset->rowset_meta()->clear_txn_meta();
+            st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
+                                                        new_del_vecs, index_meta, enable_persistent_index,
+                                                        &(rowset->rowset_meta()->get_meta_pb()));
+        } else {
+            st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
+                                                        new_del_vecs, index_meta, enable_persistent_index, nullptr);
+        }
+
         if (!st.ok()) {
             std::string msg = Substitute("_apply_rowset_commit error: write meta failed: $0 $1", st.to_string(),
                                          _debug_string(false));
@@ -1323,7 +1332,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         }
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
-                                                    delvecs, index_meta, enable_persistent_index);
+                                                    delvecs, index_meta, enable_persistent_index, nullptr);
         if (!st.ok()) {
             manager->index_cache().release(index_entry);
             std::string msg = Substitute("_apply_compaction_commit error: write meta failed: $0 $1", st.to_string(),
@@ -1406,7 +1415,8 @@ void TabletUpdates::to_updates_pb(TabletUpdatesPB* updates_pb) const {
 }
 
 void TabletUpdates::_erase_expired_versions(int64_t expire_time,
-                                            std::vector<std::unique_ptr<EditVersionInfo>>* expire_list) {
+                                            std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
+                                            int64_t* min_readable_version) {
     DCHECK(expire_list->empty());
     std::lock_guard l(_lock);
     if (_edit_version_infos.empty()) {
@@ -1423,6 +1433,7 @@ void TabletUpdates::_erase_expired_versions(int64_t expire_time,
     auto n = expire_list->size();
     _edit_version_infos.erase(_edit_version_infos.begin(), _edit_version_infos.begin() + n);
     _apply_version_idx -= n;
+    *min_readable_version = _edit_version_infos[0]->version.major();
 }
 
 bool TabletUpdates::check_rowset_id(const RowsetId& rowset_id) const {
@@ -1463,7 +1474,8 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     }
     /// Remove expired versions from memory.
     std::vector<std::unique_ptr<EditVersionInfo>> expired_edit_version_infos;
-    _erase_expired_versions(expire_time, &expired_edit_version_infos);
+    int64_t min_readable_version = 0;
+    _erase_expired_versions(expire_time, &expired_edit_version_infos, &min_readable_version);
 
     if (!expired_edit_version_infos.empty()) {
         int64_t tablet_id = 0;
@@ -1495,29 +1507,21 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
             _rowset_stats.erase(id);
         }
 
-        /// Remove useless delete vectors.
-        auto max_expired_version = expired_edit_version_infos.back()->version.major();
+        // Remove useless delete vectors.
         auto meta_store = _tablet.data_dir()->get_meta();
-
-        size_t n_delvec_range = 0;
-        auto res = TabletMetaManager::list_del_vector(meta_store, tablet_id, max_expired_version + 1);
-        if (res.ok()) {
-            for (const auto& elem : *res) {
-                auto segment_id = elem.first;
-                auto end_version = elem.second;
-                (void)TabletMetaManager::delete_del_vector_range(meta_store, tablet_id, segment_id, 0, end_version);
-                VLOG(1) << "Removed delete vector tablet_id=" << tablet_id << " segment_id=" << segment_id
-                        << " start_version=0 end_version=" << end_version;
-            }
-            n_delvec_range = (*res).size();
+        auto res = TabletMetaManager::delete_del_vector_before_version(meta_store, tablet_id, min_readable_version);
+        size_t delvec_deleted = 0;
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to delete_del_vector_before_version tablet:" << tablet_id
+                         << " min_readable_version:" << min_readable_version << " msg:" << res.status();
         } else {
-            LOG(WARNING) << "Fail to list delete vector: " << res.status();
+            delvec_deleted = res.value();
         }
         LOG(INFO) << Substitute(
-                "remove_expired_versions $0 time:$1 max_expire_version:$2 deletes: #version:$3 #rowset:$4 "
-                "#delvecrange:$5",
-                _debug_version_info(true), expire_time, max_expired_version, expired_edit_version_infos.size(),
-                unused_rid.size(), n_delvec_range);
+                "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
+                "#delvec:$5",
+                _debug_version_info(true), expire_time, min_readable_version, expired_edit_version_infos.size(),
+                unused_rid.size(), delvec_deleted);
     }
     _remove_unused_rowsets();
 }
@@ -1674,7 +1678,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         total_rows_after_compaction = new_rows;
         total_bytes_after_compaction = new_bytes;
         if (total_bytes_after_compaction > compaction_result_bytes_threashold ||
-            total_rows_after_compaction > compaction_result_rows_threashold) {
+            total_rows_after_compaction > compaction_result_rows_threashold ||
+            info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
         }
     }
@@ -2970,6 +2975,16 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
                                      _debug_version_info(true), JoinInts(missing_version_ranges, ","),
                                      JoinInts(versions, ","));
     return Status::OK();
+}
+
+void TabletUpdates::to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                                      std::vector<RowsetMetaPB>& rowset_metas_pb) {
+    std::lock_guard wl(_lock);
+    rowset_metas_pb.reserve(rowset_metas.size());
+    for (const auto& rowset_meta : rowset_metas) {
+        RowsetMetaPB& meta_pb = rowset_metas_pb.emplace_back();
+        rowset_meta->to_rowset_pb(&meta_pb);
+    }
 }
 
 } // namespace starrocks

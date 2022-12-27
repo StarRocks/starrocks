@@ -199,6 +199,10 @@ Status OlapScanNode::close(RuntimeState* state) {
         release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
     }
 
+    for (const auto& rowsets_per_tablet : _tablet_rowsets) {
+        Rowset::release_readers(rowsets_per_tablet);
+    }
+
     return ScanNode::close(state);
 }
 
@@ -470,6 +474,9 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
 
+    _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
+    _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
+
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
     _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
@@ -667,6 +674,7 @@ Status OlapScanNode::_capture_tablet_rowsets() {
         {
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
         }
     }
 

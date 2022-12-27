@@ -11,6 +11,8 @@ class DriverQueue;
 namespace starrocks::workgroup {
 
 class WorkGroup;
+using WorkGroupPtr = std::shared_ptr<WorkGroup>;
+
 class ScanTaskQueue;
 
 template <typename Q>
@@ -21,6 +23,7 @@ using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
 class WorkGroupManager;
 class ScanExecutor;
 
-using WorkGroupPtr = std::shared_ptr<WorkGroup>;
+struct RunningQueryToken;
+using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 
 } // namespace starrocks::workgroup

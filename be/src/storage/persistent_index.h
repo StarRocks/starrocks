@@ -169,11 +169,13 @@ public:
     Status check_not_exist(size_t n, const void* keys);
 
     // get Immutable index file size;
-    void file_size(uint64_t* file_size) {
+    uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
             CHECK(res.ok()) << res.status(); // FIXME: no abort
-            *file_size = *res;
+            return *res;
+        } else {
+            return 0;
         }
     }
 
@@ -269,6 +271,14 @@ public:
 
     // apply modification
     Status on_commited();
+
+    uint64_t l0_file_size() {
+        if (_index_file != nullptr) {
+            return _index_file->size();
+        } else {
+            return 0;
+        }
+    }
 
     // batch index operations
 

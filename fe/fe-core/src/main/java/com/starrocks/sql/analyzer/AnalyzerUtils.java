@@ -87,11 +87,6 @@ public class AnalyzerUtils {
             dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
         }
 
-        if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-            throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
-                    ErrorType.USER_ERROR);
-        }
-
         Database db = session.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
             return null;
@@ -102,6 +97,12 @@ public class AnalyzerUtils {
 
         if (fn == null) {
             return null;
+        }
+
+        if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+            throw new StarRocksPlannerException(String.format("Access denied. " +
+                    "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                    ErrorType.USER_ERROR);
         }
 
         if (!Config.enable_udf) {

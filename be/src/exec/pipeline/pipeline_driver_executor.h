@@ -36,7 +36,10 @@ public:
     // the FragmentContext is not unregistered until all the drivers has finished, because some
     // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
     // to objects owned by FragmentContext.
-    virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) = 0;
+    virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                                   bool done) = 0;
+
+    virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
 protected:
     std::string _name;
@@ -50,15 +53,17 @@ public:
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
-    void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                           bool done) override;
+
+    void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    void _update_profile_by_level(FragmentContext* fragment_ctx, bool done);
-    void _remove_non_core_metrics(FragmentContext* fragment_ctx, std::vector<RuntimeProfile*>& driver_profiles);
-    void _simplify_common_metrics(RuntimeProfile* driver_profile);
+    void _update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done);
+    void _remove_non_core_metrics(QueryContext* query_ctx, std::vector<RuntimeProfile*>& driver_profiles);
 
 private:
     LimitSetter _num_threads_setter;

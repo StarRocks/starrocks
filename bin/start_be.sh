@@ -94,6 +94,16 @@ fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 
+# check java version and choose correct JAVA_OPTS
+JAVA_VERSION=$(jdk_version)
+final_java_opt=$JAVA_OPTS
+if [[ "$JAVA_VERSION" -gt 8 ]]; then
+    if [ -n "$JAVA_OPTS_FOR_JDK_9_AND_LATER" ]; then
+    final_java_opt=$JAVA_OPTS_FOR_JDK_9_AND_LATER
+    fi
+fi
+export LIBHDFS_OPTS=$final_java_opt
+
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/lib/udf-extensions-jar-with-dependencies.jar:$STARROCKS_HOME/lib/starrocks-jdbc-bridge-jar-with-dependencies.jar:$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH

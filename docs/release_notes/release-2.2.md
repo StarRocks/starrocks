@@ -1,5 +1,63 @@
 # StarRocks version 2.2
 
+## 2.2.10
+
+Release date: December 2, 2022
+
+### Improvements
+
+- Optimized the error message returned for Routine Load jobs. [#12203](https://github.com/StarRocks/starrocks/pull/12203)
+
+- Supports the logical operator `&&`. [#11819](https://github.com/StarRocks/starrocks/issues/11819)
+
+- Queries are immediately canceled when the BE crashes, preventing system stuck issues caused by expired queries. [#12954](https://github.com/StarRocks/starrocks/pull/12954)
+
+- Optimized the FE start script. Java version is now checked during FE start. [#14094](https://github.com/StarRocks/starrocks/pull/14094)
+
+- Supports deleting large volumes of data from primary key tables. [#4772](https://github.com/StarRocks/starrocks/issues/4772)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- When users create a view from multiple tables (UNION), BEs crash if the leftmost child of UNION operations uses NULL constants. ([#13792](https://github.com/StarRocks/starrocks/pull/13792))
+
+- BEs crash if the Parquet file to query has inconsistent column types with Hive table schema. [#8848](https://github.com/StarRocks/starrocks/issues/8848)
+
+- When a query contains a large number of OR operators, the planner needs to perform excessive recursive calculations, which causes the query to time out. [#12788](https://github.com/StarRocks/starrocks/pull/12788)
+
+- The query result is incorrect when the subquery contains a LIMIT clause. [#12466](https://github.com/StarRocks/starrocks/pull/12466)
+
+- The CREATE VIEW statement fails when double quotation marks in the SELECT clause are mixed with single quotation marks. [#13102](https://github.com/StarRocks/starrocks/pull/13102)
+
+## 2.2.9
+
+Release date: November 15, 2022
+
+### Improvements
+
+- Added the session variable `hive_partition_stats_sample_size` to control the number of Hive partitions from which to collect statistics. An excessive number of partitions will cause errors in obtaining Hive metadata. [#12700](https://github.com/StarRocks/starrocks/pull/12700)
+
+- Elasticsearch external tables support custom time zones. [#12662](https://github.com/StarRocks/starrocks/pull/12662)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The DECOMMISSION operation is stuck if an error occurs during metadata synchronization for external tables. [#12369](https://github.com/StarRocks/starrocks/pull/12368)
+
+- Compaction crashes if a column that is newly added is deleted. [#12907](https://github.com/StarRocks/starrocks/pull/12907)
+
+- SHOW CREATE VIEW does not display the comments that were added when creating the view. [#4163](https://github.com/StarRocks/starrocks/issues/4163)
+
+- Memory leak in Java UDF may cause OOM. [#12418](https://github.com/StarRocks/starrocks/pull/12418)
+
+- The node alive status stored in Follower FEs is not accurate in some scenarios because the status depends on `heartbeatRetryTimes`. To fix this issue, a property `aliveStatus` is added to `HeartbeatResponse` to indicate the node alive status. [#12481](https://github.com/StarRocks/starrocks/pull/12481)
+
+### Behavior Change
+
+Extended the length of Hive STRING columns that can be queried by StarRocks from 64 KB to 1 MB. If a STRING column exceeds 1 MB, it will be processed as a null column during queries. [#12986](https://github.com/StarRocks/starrocks/pull/12986)
+
 ## 2.2.8
 
 Release date: October 17, 2022
@@ -16,7 +74,7 @@ The following bugs are fixed:
 
 - BEs crash when the ORDER BY NULL LIMIT clause is used. [#11648](https://github.com/StarRocks/starrocks/issues/11648)
 
-- BEs crash if the column type defined in the external table is different from the column type in the source Parquet file. [#11839](https://github.com/StarRocks/starrocks/issues/11839)
+- BEs crash if the Parquet file to query has inconsistent column type with Hive table schema. [#11839](https://github.com/StarRocks/starrocks/issues/11839)
 
 ## 2.2.7
 
@@ -176,7 +234,7 @@ Release date: May 22, 2022
 
 - [Preview] JSON data types and JSON functions are supported.
 
-- External tables can be used to query data from Apache Hudi. This further improves users' data lake analytics experience with StarRocks. For more information, see [External tables](../using_starrocks/External_table.md).
+- External tables can be used to query data from Apache Hudi. This further improves users' data lake analytics experience with StarRocks. For more information, see [External tables](../data_source/External_table.md).
 
 - The following functions are added:
   - ARRAY functions: [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md), array_sort, array_distinct, array_join, reverse, array_slice, array_concat, array_difference, arrays_overlap, and array_intersect
@@ -187,9 +245,9 @@ Release date: May 22, 2022
 
 - The parser and analyzer of the cost-based optimizer (CBO) are restructured, the code structure is optimized, and syntaxes such as INSERT with Common Table Expression (CTE) are supported. These improvements are made to increase the performance of complex queries, such as queries that involve the reuse of CTEs.
 
-- The performance of queries on Apache Hive™ external tables that are stored in cloud object storage services such as AWS Simple Storage Service (S3), Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS) is optimized. After the optimization, the performance of object storage-based queries is comparable to that of HDFS-based queries. Additionally, late materialization of ORC files is supported, and queries on small files are accelerated. For more information, see [Apache Hive™ external table](../using_starrocks/External_table.md).
+- The performance of queries on Apache Hive™ external tables that are stored in cloud object storage services such as AWS Simple Storage Service (S3), Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS) is optimized. After the optimization, the performance of object storage-based queries is comparable to that of HDFS-based queries. Additionally, late materialization of ORC files is supported, and queries on small files are accelerated. For more information, see [Apache Hive™ external table](../data_source/External_table.md).
 
-- When queries from Apache Hive™ are run by using external tables, StarRocks automatically performs incremental updates to the cached metadata by consuming Hive metastore events such as data changes and partition changes. StarRocks also supports queries on data of the DECIMAL and ARRAY types from Apache Hive™. For more information, see [Apache Hive™ external table](../using_starrocks/External_table.md).
+- When queries from Apache Hive™ are run by using external tables, StarRocks automatically performs incremental updates to the cached metadata by consuming Hive metastore events such as data changes and partition changes. StarRocks also supports queries on data of the DECIMAL and ARRAY types from Apache Hive™. For more information, see [Apache Hive™ external table](../data_source/External_table.md).
 
 - The UNION ALL operator is optimized to run 2 to 25 times faster than before.
 
@@ -215,6 +273,6 @@ Flink-connector-starrocks supports Apache Flink® v1.14.
 
 ### Upgrade notes
 
-- If you use a StarRocks version later than 2.0.4 or a StarRocks version 2.1.x later than 2.1.6, see [Upgrade notes for StarRocks](https://forum.starrocks.com/t/topic/2228).
+- If you use a StarRocks version later than 2.0.4 or a StarRocks version 2.1.x later than 2.1.6, you can disable the tablet clone feature before the upgrade (`ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");` and `ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");`). After the upgrade, you can enable this feature (`ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");` and `ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");`).
 
 - To roll back to the previous version that was used before the upgrade, add the `ignore_unknown_log_id` parameter to the **fe.conf** file of each FE and set the parameter to `true`. The parameter is required because new types of logs are added in StarRocks v2.2.0. If you do not add the parameter, you cannot roll back to the previous version. We recommend that you set the `ignore_unknown_log_id` parameter to `false` in the **fe.conf** file of each FE after checkpoints are created. Then, restart the FEs to restore the FEs to the previous configurations.

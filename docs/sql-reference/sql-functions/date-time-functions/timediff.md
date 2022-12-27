@@ -8,7 +8,7 @@ The return value must be of the TIME type.
 
 ## Syntax
 
-```sql
+```Haskell
 TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
 ```
 

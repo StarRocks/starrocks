@@ -17,9 +17,13 @@ public:
     virtual Status get_current(simdjson::ondemand::object* row) noexcept = 0;
     // next forwards the inner iterator.
     virtual Status advance() noexcept = 0;
+    // left_bytes_string returns bytes not parsed in std:string.
+    virtual std::string left_bytes_string(size_t sz) noexcept = 0;
 
 protected:
     simdjson::ondemand::parser* const _parser;
+    uint8_t* _data = nullptr;
+    size_t _len = 0;
 };
 
 // JsonDocumentStreamParser parse json in document stream (ndjson).
@@ -31,10 +35,9 @@ public:
     Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
+    std::string left_bytes_string(size_t sz) noexcept override;
 
 private:
-    uint8_t* _data = nullptr;
-
     // data is parsed as a document stream.
 
     // iterator context for document stream.
@@ -61,6 +64,7 @@ public:
     Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
+    std::string left_bytes_string(size_t sz) noexcept override;
 
 private:
     uint8_t* _data = nullptr;

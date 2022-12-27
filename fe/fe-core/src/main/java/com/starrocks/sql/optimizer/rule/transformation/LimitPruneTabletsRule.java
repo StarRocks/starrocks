@@ -79,7 +79,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
 
         // 1. Don't select any tablet
         // 2. selected tablets don't change
-        if (result.isEmpty() || result.equals(olapScanOperator.getSelectedTabletId())) {
+        if (totalRow < limit || result.isEmpty() || result.equals(olapScanOperator.getSelectedTabletId())) {
             return Collections.emptyList();
         }
 

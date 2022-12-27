@@ -1839,7 +1839,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (properties != null) {
                     hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                 }
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                        DataProperty.getInferredDefaultDataProperty());
                 if (hasMedium) {
                     olapTable.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -1959,7 +1960,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                                DataProperty.DEFAULT_DATA_PROPERTY);
+                                DataProperty.getInferredDefaultDataProperty());
                         DynamicPartitionUtil
                                 .checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
@@ -3816,7 +3817,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             // replace
-            truncateTableInternal(olapTable, newPartitions, truncateEntireTable);
+            truncateTableInternal(olapTable, newPartitions, truncateEntireTable, false);
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
@@ -3830,7 +3831,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
     }
 
-    private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions, boolean isEntireTable) {
+    private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
+                                       boolean isEntireTable, boolean isReplay) {
         // use new partitions to replace the old ones.
         Set<Long> oldTabletIds = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
@@ -3851,6 +3853,13 @@ public class LocalMetastore implements ConnectorMetadata {
         // remove the tablets in old partitions
         for (Long tabletId : oldTabletIds) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            // Ensure that only the leader records truncate information.
+            // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
+            // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
+            // solution.
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentInvertedIndex().markTabletTruncated(tabletId);
+            }
         }
     }
 
@@ -3859,7 +3868,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTblId());
-            truncateTableInternal(olapTable, info.getPartitions(), info.isEntireTable());
+            truncateTableInternal(olapTable, info.getPartitions(), info.isEntireTable(), true);
 
             if (!GlobalStateMgr.isCheckpointThread()) {
                 // add tablet to inverted index

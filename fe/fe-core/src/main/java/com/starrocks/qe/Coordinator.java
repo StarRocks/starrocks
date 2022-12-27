@@ -72,6 +72,7 @@ import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -275,7 +276,7 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+        this.usePipeline = false;
     }
 
     public long getJobId() {
@@ -423,20 +424,24 @@ public class Coordinator {
                     DebugUtil.printId(queryId), descTable);
         }
 
-        // prepare information
-        prepare();
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+            // prepare information
+            prepare();
 
-        // prepare workgroup
-        this.workGroup = prepareWorkGroup(connectContext);
+            // prepare workgroup
+            this.workGroup = prepareWorkGroup(connectContext);
 
-        // compute Fragment Instance
-        computeScanRangeAssignment();
+            // compute Fragment Instance
+            computeScanRangeAssignment();
 
-        computeFragmentExecParams();
+            computeFragmentExecParams();
 
-        traceInstance();
+            traceInstance();
+        }
 
-        prepareResultSink();
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+            prepareResultSink();
+        }
     }
 
     public static WorkGroup prepareWorkGroup(ConnectContext connect) {
@@ -1271,7 +1276,13 @@ public class Coordinator {
 
                 if (dopAdaptionEnabled) {
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
-                    maxParallelism = hostSet.size();
+                    // If the fragment use instance parallel, maxParallelism should be still equal to
+                    // the max total degree of parallelism.
+                    if (fragment.getParallelExecNum() > 1) {
+                        Preconditions.checkState(fragment.getPipelineDop() == 1);
+                    } else {
+                        maxParallelism = hostSet.size();
+                    }
                 }
 
                 // AddAll() soft copy()

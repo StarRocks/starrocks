@@ -8,6 +8,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -47,7 +48,24 @@ public class ShowCreateViewStmtTest {
                         "    PARTITION p2 values less than('2020-03-01')\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');");
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE if not exists t0(\n" +
+                        "dt DATE NOT NULL,\n" +
+                        "c1 VARCHAR NOT NULL,\n" +
+                        "c2 VARCHAR  NOT NULL,\n" +
+                        "c3 VARCHAR NOT NULL,\n" +
+                        "c4 VARCHAR  NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`dt`, `c1`, `c2`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PARTITION BY RANGE(dt) (\n" +
+                        "  START (\"2022-01-01\") END (\"2022-03-01\") EVERY (INTERVAL 1 day))\n" +
+                        "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 2\n" +
+                        "PROPERTIES(\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"default\"\n" +
+                        ");");
     }
 
     @AfterClass
@@ -79,4 +97,52 @@ public class ShowCreateViewStmtTest {
                 " `test`.`tbl1`.`v1` AS `v1` FROM `test`.`tbl1`;", res.get(0));
     }
 
+    @Test
+    public void testViewOfThreeUnionAllWithConstNullOutput() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createViewSql = "create view v2 as \n" +
+                "select \n" +
+                "\tt0.c1 as a,\n" +
+                "\tNULL as b,\n" +
+                "\tNULL as c,\n" +
+                "\tNULL as d\n" +
+                "from t0\n" +
+                "UNION ALL\n" +
+                "select \n" +
+                "\tNULL as a,\n" +
+                "\tt0.c2 as b,\n" +
+                "\tNULL as c,\n" +
+                "\tNULL as d\n" +
+                "from t0\n" +
+                "UNION ALL\n" +
+                "select \n" +
+                "\tNULL as a,\n" +
+                "\tNULL as b,\n" +
+                "\tt0.c3 as c,\n" +
+                "\tt0.c4 as d\n" +
+                "from t0";
+        CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
+        GlobalStateMgr.getCurrentState().createView(createViewStmt);
+
+        String descViewSql = "describe v2";
+
+        StatementBase statement =
+                com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable().getSqlMode()).get(0);
+        Analyzer.analyze(statement, ctx);
+        String query = "select * from v2 union all select c1 as a, c2 as b, NULL as c, c4 as d from t0";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
+        plan = plan.replaceAll("\\[\\d+,\\s*", "")
+                .replaceAll("VARCHAR\\(\\d+\\)", "VARCHAR")
+                .replaceAll(",\\s*(true|false)]", "");
+        String snippet = "  0:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |  pass-through-operands: all";
+        Assert.assertTrue(plan.contains(snippet));
+
+        DropTableStmt dropViewStmt = new DropTableStmt(
+                false, new TableName("default_cluster:test", "v2"), true, true);
+        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+    }
 }

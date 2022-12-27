@@ -7,6 +7,8 @@
 
 #include <unordered_set>
 
+#include "column/const_column.h"
+
 namespace starrocks::vectorized {
 
 namespace {
@@ -1848,6 +1850,21 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
         EXPECT_TRUE(result->get(1).is_null());
         EXPECT_TRUE(result->get(2).is_null());
     }
+    // array_remove(NULL,1)
+    {
+        auto array = ColumnHelper::create_const_null_column(3);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        target->append_datum(Datum((int8_t)2));
+        target->append_datum(Datum((int8_t)4));
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        EXPECT_TRUE(result->get(0).is_null());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
+    }
 }
 
 // NOLINTNEXTLINE
@@ -1953,6 +1970,22 @@ TEST_F(ArrayFunctionsTest, array_append) {
         EXPECT_EQ(13, row[1].get_array()[1].get_int32());
         EXPECT_EQ(14, row[2].get_array()[0].get_int32());
         EXPECT_EQ(15, row[2].get_array()[1].get_int32());
+    }
+
+    // array_append(NULL,1)
+    {
+        auto array = ColumnHelper::create_const_null_column(3);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        target->append_datum(Datum((int8_t)2));
+        target->append_datum(Datum((int8_t)4));
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_append(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        EXPECT_TRUE(result->get(0).is_null());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
     }
 }
 

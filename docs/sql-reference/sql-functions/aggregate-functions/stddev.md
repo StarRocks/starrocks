@@ -1,17 +1,17 @@
 
 # STDDEV,STDDEV_POP
 
-## description
+## Description
 
-### Syntax
+Returns the standard deviation of the expr expression.
+
+## Syntax
 
 ```Haskell
 STDDEV(expr)
 ```
 
-It returns the standard deviation of the expr expression.
-
-## example
+## Examples
 
 ```plain text
 MySQL > select stddev(scan_rows)

@@ -70,7 +70,7 @@ public enum PrimitiveType {
     BINARY("BINARY", -1, TPrimitiveType.BINARY),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
-    UNKNOWN_TYPE("UNKNOWN_TYPE", 0, TPrimitiveType.INVALID_TYPE);
+    UNKNOWN_TYPE("UNKNOWN_TYPE", -1, TPrimitiveType.INVALID_TYPE);
 
     private static final int DATE_INDEX_LEN = 3;
     private static final int DATETIME_INDEX_LEN = 8;

@@ -2,8 +2,13 @@ name: FE Sonar Build
 on:
   push:
     branches:
-      - branch-2.3
+      - main
+    paths:
+      - 'fe/**.java'
+      - 'fe/**.xml'
   pull_request:
+    branches:
+      - main
     paths:
       - 'fe/**.java'
       - 'fe/**.xml'
@@ -44,7 +49,7 @@ jobs:
       - name: Analyze FE
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: 391d6539e2d09aed3d187353bfd85fefa7a4c281 # ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169 # ${{ secrets.SONAR_TOKEN }}
         run: |
           thrift --version
           whereis thrift

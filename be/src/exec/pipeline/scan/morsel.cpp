@@ -33,13 +33,7 @@ void _convert_morsels_to_olap_scan_ranges(const Morsels& morsels, std::vector<TI
 
 std::vector<TInternalScanRange*> FixedMorselQueue::olap_scan_ranges() const {
     std::vector<TInternalScanRange*> res;
-    if (_assign_morsels) {
-        for (auto& [_, morsels] : _morsels_per_operator) {
-            _convert_morsels_to_olap_scan_ranges(morsels, &res);
-        }
-    } else {
-        _convert_morsels_to_olap_scan_ranges(_morsels, &res);
-    }
+    _convert_morsels_to_olap_scan_ranges(_morsels, &res);
     return res;
 }
 
@@ -48,15 +42,14 @@ FixedMorselQueue::FixedMorselQueue(Morsels&& morsels, int dop)
     int io_parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
     if (dop > 1 && _num_morsels <= io_parallelism) {
         for (int i = 0; i < dop; i++) {
-            _next_morsel_index_per_operator[i] = 0;
+            _next_idx_per_operator[i] = 0;
         }
         int operator_seq = 0;
         for (int i = 0; i < _morsels.size(); i++) {
-            _morsels_per_operator[operator_seq].push_back(std::move(_morsels[i]));
+            _morsel_idxs_per_operator[operator_seq].push_back(i);
             operator_seq = (operator_seq + 1) % _scan_dop;
         }
 
-        _morsels.clear();
         _assign_morsels = true;
     } else {
         _assign_morsels = false;
@@ -65,8 +58,8 @@ FixedMorselQueue::FixedMorselQueue(Morsels&& morsels, int dop)
 
 bool FixedMorselQueue::empty() const {
     if (_assign_morsels) {
-        for (auto& [seq, index] : _next_morsel_index_per_operator) {
-            if (index.load() < _morsels_per_operator.at(seq).size()) {
+        for (const auto& [seq, index] : _next_idx_per_operator) {
+            if (index.load() < _morsel_idxs_per_operator.at(seq).size()) {
                 return false;
             }
         }
@@ -78,17 +71,22 @@ bool FixedMorselQueue::empty() const {
 
 StatusOr<MorselPtr> FixedMorselQueue::try_get(int driver_seq) {
     if (_assign_morsels) {
-        auto& next_index = _next_morsel_index_per_operator[driver_seq];
-        auto& morsels = _morsels_per_operator[driver_seq];
+        auto& next_index = _next_idx_per_operator[driver_seq];
+        auto& morsel_idxs = _morsel_idxs_per_operator[driver_seq];
         int idx = next_index.load();
-        if (idx >= morsels.size()) {
+        if (idx >= morsel_idxs.size()) {
             return nullptr;
         }
         idx = next_index.fetch_add(1);
-        if (idx >= morsels.size()) {
+        if (idx >= morsel_idxs.size()) {
             return nullptr;
         }
-        return std::move(morsels[idx]);
+
+        int morsel_idx = morsel_idxs[idx];
+        if (!_tablet_rowsets.empty()) {
+            _morsels[morsel_idx]->set_rowsets(std::move(_tablet_rowsets[morsel_idx]));
+        }
+        return std::move(_morsels[morsel_idx]);
     } else {
         auto idx = _pop_index.load();
         // prevent _num_morsels from superfluous addition
@@ -97,6 +95,9 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get(int driver_seq) {
         }
         idx = _pop_index.fetch_add(1);
         if (idx < _num_morsels) {
+            if (!_tablet_rowsets.empty()) {
+                _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+            }
             return std::move(_morsels[idx]);
         } else {
             return nullptr;
@@ -167,7 +168,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get(int driver_seq) {
             rowset->rowset_id(), rowset->segments()[_segment_idx]->id(), std::move(taken_range));
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
-
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     return morsel;
 }
 

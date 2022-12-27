@@ -802,16 +802,16 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
         os << "!=";
         break;
     case PredicateType::kGT:
-        os << "<";
-        break;
-    case PredicateType::kGE:
-        os << "<=";
-        break;
-    case PredicateType::kLT:
         os << ">";
         break;
-    case PredicateType::kLE:
+    case PredicateType::kGE:
         os << ">=";
+        break;
+    case PredicateType::kLT:
+        os << "<";
+        break;
+    case PredicateType::kLE:
+        os << "<=";
         break;
 
     case PredicateType::kInList:

@@ -35,6 +35,7 @@
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
 #include "udf/udf.h"
+#include "util/defer_op.h"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
 
@@ -67,16 +68,18 @@ struct UDFFunctionCallHelper {
         // each input arguments as three local references (nullcolumn, offsetcolumn, bytescolumn)
         // result column as a ref
         env->PushLocalFrame((num_cols + 1) * 3 + 1);
+        auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
         // convert input columns to object columns
         std::vector<jobject> input_col_objs;
-        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
-                                                      &input_col_objs);
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
+                                                                &input_col_objs);
+        RETURN_IF_UNLIKELY(!st.ok(), ColumnHelper::create_const_null_column(size));
+
         // call UDF method
         jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
-
+        RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
-        env->PopLocalFrame(nullptr);
         return result_cols;
     }
 
@@ -143,7 +146,6 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
     context->fn_context(_fn_context_index)->set_is_udf(true);
 
     _func_desc = std::make_shared<JavaUDFContext>();
-
     // TODO:
     _is_returning_random_value = false;
     return Status::OK();
@@ -236,7 +238,9 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         }
         return Status::OK();
     };
-    RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
+    }
     return Status::OK();
 }
 

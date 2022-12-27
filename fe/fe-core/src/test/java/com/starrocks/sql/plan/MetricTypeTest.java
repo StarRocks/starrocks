@@ -81,7 +81,7 @@ public class MetricTypeTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("binary type bitmap with type varchar(-1) is invalid.");
 
         sql = "select * from test.bitmap_table a join test.hll_table b where a.id2 in (1, 2, 3)";
-        starRocksAssert.query(sql).analysisError("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
+        starRocksAssert.query(sql).analysisError("HLL, BITMAP, PERCENTILE and ARRAY, MAP, STRUCT type couldn't as Predicate");
     }
 
 }

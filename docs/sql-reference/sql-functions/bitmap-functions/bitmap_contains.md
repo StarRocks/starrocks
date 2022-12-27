@@ -1,14 +1,16 @@
 # bitmap_contains
 
-## description
+## Description
 
-### Syntax
+Calculates whether the input value is in the bitmap column, and returns a Boolean value.
 
-`B00LEAN BITMAP_CONTAINS(BITMAP bitmap, BIGINT input)`
+## Syntax
 
-Calculate whether the input value is in the bitmap column, and return a Boolean value
+```Haskell
+B00LEAN BITMAP_CONTAINS(BITMAP bitmap, BIGINT input)
+```
 
-## example
+## Examples
 
 ```Plain Text
 MySQL > select bitmap_contains(to_bitmap(1),2) cnt;

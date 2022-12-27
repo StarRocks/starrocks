@@ -10,7 +10,7 @@ Note: Only the date parts of the values are used in the calculation.
 
 ## Syntax
 
-```sql
+```Haskell
 INT DATEDIFF(DATETIME expr1,DATETIME expr2)`
 ```
 

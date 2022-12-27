@@ -1,6 +1,6 @@
 # ALTER TABLE
 
-## description
+## Description
 
 This statement is used to modify an existing table. If no rollup index is specified, the default operation is base index.
 
@@ -246,7 +246,7 @@ Rollup supports the following creation modes:
 
     rename supports modification of the following names:
 
-## example
+## Examples
 
 1. Modify the table name
 

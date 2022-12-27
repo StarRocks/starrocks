@@ -1,12 +1,15 @@
 # DROP FUNCTION
 
-## description
+## Description
+
+Deletes a custom function. The function can only be deleted when its name and parameter type are consistent.
+
+Only the owner of the custom function have the permissions to delete the function.
 
 ### Syntax
 
 ```sql
-DROP FUNCTION function_name
-(arg_type [, ...])
+DROP FUNCTION function_name(arg_type [, ...])
 ```
 
 ### Parameters
@@ -15,9 +18,7 @@ DROP FUNCTION function_name
 
 `arg_type`: the argument type of function to be dropped.
 
-Delete a custom function. It can only be deleted when its name and parameter type are consistent.
-
-## example
+## Examples
 
 1. Drop a function.
 

@@ -4,10 +4,12 @@
 #include <random>
 
 #include "exec/pipeline/query_context.h"
+#include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
+#include "testutil/assert.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
+
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
     {
@@ -206,5 +208,78 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
     query_ctx_mgr->remove(query_id);
     ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
 }
-} // namespace pipeline
-} // namespace starrocks
+
+QueryContext* gen_query_ctx(MemTracker* parent_mem_tracker, QueryContextManager* query_ctx_mgr, int64_t query_id_hi,
+                            int64_t query_id_lo, size_t total_fragments, size_t delivery_expire_seconds,
+                            size_t query_expire_seconds) {
+    TUniqueId query_id;
+    query_id.hi = query_id_hi;
+    query_id.lo = query_id_lo;
+
+    auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+    query_ctx->set_total_fragments(total_fragments);
+    query_ctx->set_delivery_expire_seconds(delivery_expire_seconds);
+    query_ctx->set_query_expire_seconds(query_expire_seconds);
+    query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker);
+    query_ctx->extend_delivery_lifetime();
+    query_ctx->extend_query_lifetime();
+    query_ctx->count_down_fragments();
+
+    return query_ctx;
+}
+
+TEST(QueryContextManagerTest, testSetWorkgroup) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
+    auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+    ASSERT_TRUE(query_ctx_mgr->init().ok());
+
+    workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>("wg1", 1, 1, 1, 1, 1 /* concurrency_limit */,
+                                                                        workgroup::WorkGroupType::WG_NORMAL);
+
+    auto* query_ctx1 = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 0, 1, 3, 60, 300);
+    auto* query_ctx_overloaded = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 1, 2, 3, 60, 300);
+    const auto query_id1 = query_ctx1->query_id();
+
+    /// Case 1: When all the fragments have come and finished, wg.num_running_queries should become to zero.
+    ASSERT_OK(query_ctx1->init_query_once(wg.get()));
+    ASSERT_OK(query_ctx1->init_query_once(wg.get()));              // None-first invocations have no side-effects.
+    ASSERT_ERROR(query_ctx_overloaded->init_query_once(wg.get())); // Exceed concurrency_limit.
+    ASSERT_EQ(1, wg->num_running_queries());
+    ASSERT_EQ(1, wg->concurrency_overflow_count());
+    // All the fragments comes.
+    for (int i = 1; i < query_ctx1->total_fragments(); ++i) {
+        auto* cur_query_ctx = query_ctx_mgr->get_or_register(query_id1);
+        ASSERT_EQ(query_ctx1, cur_query_ctx);
+    }
+    while (!query_ctx1->has_no_active_instances()) {
+        query_ctx1->count_down_fragments();
+    }
+    ASSERT_TRUE(query_ctx1->is_dead()); // All the fragments have come and finished.
+    query_ctx_mgr->remove(query_id1);
+    ASSERT_TRUE(query_ctx_mgr->get(query_id1) == nullptr);
+    ASSERT_EQ(0, wg->num_running_queries());
+
+    /// Case 2: When some fragments don't come but delivery timeout has expired,
+    /// wg.num_running_queries should also become to zero.
+    auto* query_ctx2 =
+            gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 3, 4, 3, 0 /* delivery_timeout */, 300);
+    const auto query_id2 = query_ctx2->query_id();
+    ASSERT_OK(query_ctx2->init_query_once(wg.get()));
+    ASSERT_OK(query_ctx2->init_query_once(wg.get())); // None-first invocations have no side-effects.
+    ASSERT_EQ(1, wg->num_running_queries());
+    for (int i = 2; i < query_ctx2->total_fragments(); ++i) {
+        auto* cur_query_ctx = query_ctx_mgr->get_or_register(query_id2);
+        ASSERT_EQ(query_ctx2, cur_query_ctx);
+    }
+    while (!query_ctx2->has_no_active_instances()) {
+        query_ctx2->count_down_fragments();
+    }
+    ASSERT_FALSE(query_ctx2->is_dead());
+    query_ctx_mgr->remove(query_id2);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_FALSE(query_ctx_mgr->remove(query_id2)); // Trigger _clean_slot.
+    ASSERT_EQ(0, wg->num_running_queries());
+}
+
+} // namespace starrocks::pipeline

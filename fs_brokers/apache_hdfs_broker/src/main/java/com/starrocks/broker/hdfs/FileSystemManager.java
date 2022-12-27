@@ -108,6 +108,7 @@ public class FileSystemManager {
     private static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
     private static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
     private static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
+    private static final String FS_S3A_PATH_STYLE_ACCESS = "fs.s3a.path.style.access";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
     private static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
@@ -331,6 +332,8 @@ public class FileSystemManager {
                 if (authentication.equals(AUTHENTICATION_KERBEROS)) {
                     conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                             AUTHENTICATION_KERBEROS);
+                    conf.set(CommonConfigurationKeysPublic.HADOOP_KERBEROS_KEYTAB_LOGIN_AUTORENEWAL_ENABLED,
+                            "true");
 
                     String principal = preparePrincipal(properties.get(KERBEROS_PRINCIPAL));
                     String keytab = "";
@@ -359,7 +362,7 @@ public class FileSystemManager {
                     ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
                     if (!hasSetGlobalUGI) {
                         // set a global ugi so that other components(kms for example) can get the kerberos token.
-                        UserGroupInformation.setLoginUser(ugi);
+                        UserGroupInformation.loginUserFromKeytab(principal, keytab);
                         hasSetGlobalUGI = true;
                     }
                     if (properties.containsKey(KERBEROS_KEYTAB_CONTENT)) {
@@ -471,6 +474,7 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_S3A_ENDPOINT, "");
+        String pathStyleAccess = properties.getOrDefault(FS_S3A_PATH_STYLE_ACCESS, "false");
         String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = properties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
         String awsCredProvider = properties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
@@ -500,6 +504,7 @@ public class FileSystemManager {
                 conf.set(FS_S3A_ACCESS_KEY, accessKey);
                 conf.set(FS_S3A_SECRET_KEY, secretKey);
                 conf.set(FS_S3A_ENDPOINT, endpoint);
+                conf.set(FS_S3A_PATH_STYLE_ACCESS, pathStyleAccess);
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 if (awsCredProvider != null) {

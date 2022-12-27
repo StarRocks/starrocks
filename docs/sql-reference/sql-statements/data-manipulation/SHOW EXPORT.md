@@ -1,6 +1,6 @@
 # SHOW EXPORT
 
-## description
+## Description
 
 This statement is used to display the execution of the specified export task
 
@@ -27,7 +27,7 @@ Note：
 4. If ILIMIT is specified, limit matching records will be displayed. Otherwise, all are displayed
 ```
 
-## example
+## Examples
 
 1. Show all export tasks of the default db
 

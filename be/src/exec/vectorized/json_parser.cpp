@@ -12,7 +12,10 @@ const size_t MAX_RAW_JSON_LEN = 64;
 
 Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
-        _doc_stream = _parser->iterate_many(data, len);
+        _data = data;
+        _len = len;
+
+        _doc_stream = _parser->iterate_many(data, len, len);
 
         _doc_stream_itr = _doc_stream.begin();
 
@@ -35,12 +38,6 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
     try {
         if (_doc_stream_itr != _doc_stream.end()) {
             simdjson::ondemand::document_reference doc = *_doc_stream_itr;
-
-            if (doc.type() != simdjson::ondemand::json_type::object) {
-                auto err_msg = fmt::format("the value should be object type in json document stream, value: {}",
-                                           JsonFunctions::to_json_string(doc, MAX_RAW_JSON_LEN));
-                return Status::DataQualityError(err_msg);
-            }
 
             _curr = doc.get_object();
             *row = _curr;
@@ -72,9 +69,24 @@ Status JsonDocumentStreamParser::advance() noexcept {
     return Status::EndOfFile("all documents of the stream are iterated");
 }
 
+std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
+    if (_len == 0) {
+        return {};
+    }
+
+    auto off = _doc_stream_itr.current_index();
+    if (off >= _len) {
+        return {};
+    }
+    return std::string(reinterpret_cast<char*>(_data) + off, _len - off);
+}
+
 Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
         _doc = _parser->iterate(data, len, allocated);
+
+        _data = data;
+        _len = len;
 
         if (_doc.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format("the value should be array type with strip_outer_array=true, value: {}",
@@ -108,12 +120,6 @@ Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
 
         simdjson::ondemand::value val = *_array_itr;
 
-        if (val.type() != simdjson::ondemand::json_type::object) {
-            auto err_msg = fmt::format("the value should be object type in json array, value: {}",
-                                       JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
-            return Status::DataQualityError(err_msg);
-        }
-
         _curr = val.get_object();
         *row = _curr;
         _curr_ready = true;
@@ -138,6 +144,25 @@ Status JsonArrayParser::advance() noexcept {
                 strings::Substitute("Failed to iterate json as array. error: $0", simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
+}
+
+std::string JsonArrayParser::left_bytes_string(size_t sz) noexcept {
+    if (_len == 0) {
+        return {};
+    }
+
+    const char* loc;
+    auto err = _doc.current_location().get(loc);
+    if (err) {
+        return {};
+    }
+    auto off = loc - reinterpret_cast<const char*>(_data);
+
+    if (off < 0 || off >= _len) {
+        return {};
+    }
+
+    return std::string(reinterpret_cast<const char*>(_data) + off, _len - off);
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {

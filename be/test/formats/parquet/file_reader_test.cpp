@@ -50,7 +50,8 @@ private:
     HdfsScannerContext* _create_context_for_late_materialization();
 
     HdfsScannerContext* _create_file4_base_context();
-    HdfsScannerContext* _create_context_for_struct_solumn();
+    HdfsScannerContext* _create_context_for_struct_column();
+    HdfsScannerContext* _create_context_for_upper_pred();
 
     HdfsScannerContext* _create_file5_base_context();
     HdfsScannerContext* _create_file6_base_context();
@@ -61,6 +62,7 @@ private:
                                       std::vector<ExprContext*>* conjunct_ctxs);
 
     static vectorized::ChunkPtr _create_chunk();
+    static vectorized::ChunkPtr _create_multi_page_chunk();
     static vectorized::ChunkPtr _create_struct_chunk();
     static vectorized::ChunkPtr _create_required_array_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
@@ -98,20 +100,20 @@ private:
 
     // Description: A parquet file contains multiple pages
     //
-    // c1      c2      c3      c4
-    // -------------------------------------------
-    // 0       10      a       2022-07-12 03:52:14
-    // 1       11      a       2022-07-12 03:52:14
-    // 2       12      a       2022-07-12 03:52:14
-    // 3       13      c       2022-07-12 03:52:14
-    // 4       14      c       2022-07-12 03:52:14
-    // 5       15      c       2022-07-12 03:52:14
-    // 6       16      a       2022-07-12 03:52:14
+    // c1      c2      c3      c4                       c5
+    // -------------------------------------------------------------------------
+    // 0       10      a       2022-07-12 03:52:14  {"e": 0, "f": 10, "g": 20}
+    // 1       11      a       2022-07-12 03:52:14  {"e": 1, "f": 11, "g": 21}
+    // 2       12      a       2022-07-12 03:52:14  {"e": 2, "f": 12, "g": 22}
+    // 3       13      c       2022-07-12 03:52:14  {"e": 3, "f": 13, "g": 23}
+    // 4       14      c       2022-07-12 03:52:14  {"e": 4, "f": 14, "g": 24}
+    // 5       15      c       2022-07-12 03:52:14  {"e": 5, "f": 15, "g": 25}
+    // 6       16      a       2022-07-12 03:52:14  {"e": 6, "f": 16, "g": 26}
     // ...    ...     ...      ...
-    // 4092   4102     a       2022-07-12 03:52:14
-    // 4093   4103     a       2022-07-12 03:52:14
-    // 4094   4104     a       2022-07-12 03:52:14
-    // 4095   4105     a       2022-07-12 03:52:14
+    // 4092   4102     a       2022-07-12 03:52:14  {"e": 4092, "f": 4102, "g": 4112}
+    // 4093   4103     a       2022-07-12 03:52:14  {"e": 4093, "f": 4103, "g": 4113}
+    // 4094   4104     a       2022-07-12 03:52:14  {"e": 4094, "f": 4104, "g": 4114}
+    // 4095   4105     a       2022-07-12 03:52:14  {"e": 4095, "f": 4105, "g": 4115}
     std::string _file3_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet3";
 
     // Description: A complex parquet file contains contains struct, array and uppercase columns
@@ -342,6 +344,7 @@ HdfsScannerContext* FileReaderTest::_create_file3_base_context() {
             {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
             {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
             {""},
     };
     ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
@@ -405,11 +408,19 @@ HdfsScannerContext* FileReaderTest::_create_file5_base_context() {
     return ctx;
 }
 
-HdfsScannerContext* FileReaderTest::_create_context_for_struct_solumn() {
+HdfsScannerContext* FileReaderTest::_create_context_for_struct_column() {
     auto* ctx = _create_file4_base_context();
     // create conjuncts
     // c3 = "c", c2 is not in slots, so the slot_id=1
     _create_string_conjunct_ctxs(TExprOpcode::EQ, 1, "c", &ctx->conjunct_ctxs_by_slot[1]);
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_context_for_upper_pred() {
+    auto* ctx = _create_file4_base_context();
+    // create conjuncts
+    // B1 = "C", c2,c4 is not in slots, so the slot_id=2
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 2, "C", &ctx->conjunct_ctxs_by_slot[2]);
     return ctx;
 }
 
@@ -549,6 +560,16 @@ vectorized::ChunkPtr FileReaderTest::_create_chunk() {
     _append_column_for_chunk(PrimitiveType::TYPE_BIGINT, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_DATETIME, &chunk);
+    return chunk;
+}
+
+vectorized::ChunkPtr FileReaderTest::_create_multi_page_chunk() {
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_BIGINT, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_DATETIME, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
     return chunk;
 }
 
@@ -699,8 +720,11 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_chunk();
@@ -771,8 +795,11 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // c0 is conjunct filter column
     ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
@@ -780,7 +807,7 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
     // get next
-    auto chunk = _create_chunk();
+    auto chunk = _create_multi_page_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(2, chunk->num_rows());
@@ -808,7 +835,7 @@ TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
 
     // get next
     while (!status.is_end_of_file()) {
-        auto chunk = _create_chunk();
+        auto chunk = _create_multi_page_chunk();
         status = file_reader->get_next(&chunk);
         if (!status.ok()) {
             break;
@@ -825,18 +852,51 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file4_path));
     // init
-    auto* ctx = _create_context_for_struct_solumn();
+    auto* ctx = _create_context_for_struct_column();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    {
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+    }
 
     // get next
     auto chunk = _create_struct_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+
+    ColumnPtr int_col = chunk->get_column_by_slot_id(0);
+    int i = int_col->get(0).get_int32();
+    EXPECT_EQ(i, 3);
+
+    ColumnPtr char_col = chunk->get_column_by_slot_id(2);
+    Slice s = char_col->get(0).get_slice();
+    std::string res(s.data, s.size);
+    EXPECT_EQ(res, "C");
+}
+
+TEST_F(FileReaderTest, TestReadWithUpperPred) {
+    auto file = _create_file(_file4_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file4_path));
+
+    // init
+    auto* ctx = _create_context_for_upper_pred();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // get next
+    auto chunk = _create_struct_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    LOG(ERROR) << "status: " << status.get_error_msg();
     ASSERT_EQ(3, chunk->num_rows());
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -910,5 +970,4 @@ TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
 }
-
 } // namespace starrocks::parquet

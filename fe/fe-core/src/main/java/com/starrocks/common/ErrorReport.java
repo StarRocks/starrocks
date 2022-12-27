@@ -23,6 +23,8 @@ package com.starrocks.common;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.optimizer.validate.ValidateException;
 
 // Used to report error happened when execute SQL of user
 public class ErrorReport {
@@ -78,6 +80,10 @@ public class ErrorReport {
     public static void reportDdlException(String pattern, ErrorCode errorCode, Object... objs)
             throws DdlException {
         throw new DdlException(reportCommon(pattern, errorCode, objs));
+    }
+
+    public static void reportValidateException(ErrorCode errorCode, ErrorType errorType, Object... objs) {
+        throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
     }
 
     public static void report(String pattern, Object... objs) {

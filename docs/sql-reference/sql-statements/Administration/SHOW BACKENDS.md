@@ -1,6 +1,6 @@
 # SHOW BACKENDS
 
-## description
+## Description
 
 This statement is used to view BE node om tje cluster syntax:
 Syntax:

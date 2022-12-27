@@ -1,6 +1,6 @@
 # RESTORE
 
-## description
+## Description
 
 1. RESTORE
 
@@ -31,7 +31,7 @@ Note:
   - "timeout" = "3600": Task timeout. Default time: one day. Unit: second.
   - "meta_version": Use specified meta_version to read the metadata before backup. Please note that this parameter is just a temporary solution and is only used to restore data backed up from the previous version of StarRocks. Backup data from the latest version already includes meta version and does not need to be specified.
 
-## example
+## Examples
 
 1. Restore table backup_tbl in backup snapshot_1 from example_repo to database example_ab1 with the time version of "2018-05-04-16-45-08". Restore it as 1 replica.
 

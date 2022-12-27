@@ -61,7 +61,7 @@ SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHER
 
 Cross join can produce a lot of results, so cross join should be used with caution.
 
-Even if you need to use cross join, you need to use filter conditions and ensure that fewer results are returned. For example:
+Even if you need to use cross join, you need to use filter conditions and ensure that fewer results are returned. Example:
 
 ```sql
 SELECT * FROM t1, t2;
@@ -89,7 +89,7 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 
 #### Outer join
 
-Outer join returns the left or right table or all rows of both. If there is no matching data in another table, set it to NULL. For example:
+Outer join returns the left or right table or all rows of both. If there is no matching data in another table, set it to NULL. Example:
 
 ```sql
 SELECT * FROM t1 LEFT OUTER JOIN t2 ON t1.id = t2.id;
@@ -105,7 +105,7 @@ Usually, users use the most equal join, which requires the operator of the join 
 
 Unequal join can be used on join conditions!=, Equal sign. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
 
-Use with caution. Unequal join only supports inner join. For example:
+Use with caution. Unequal join only supports inner join. Example:
 
 ```sql
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
@@ -119,7 +119,7 @@ Left semi join returns only the rows in the left table that match the data in th
 
 This row of the left table is returned at most once. Right semi join works similarly, except that the data returned is a right table.
 
-For example:
+Example:
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
@@ -129,37 +129,47 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
 
 Left anti join only returns rows from the left table that do not match the right table.
 
-Right anti join reverses this comparison, returning only rows from the right table that do not match the left table. For example:
+Right anti join reverses this comparison, returning only rows from the right table that do not match the left table. Example:
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 ```
 
-### Order by
+### ORDER BY
 
-Order by sorts the result set by comparing the sizes of one or more columns.
+The ORDER BY clause of a SELECT statement sorts the result set by comparing the values from one or more columns.
 
-Order by is a time-consuming and resource-consuming operation because all data needs to be sent to one node before it can be sorted, and sorting requires more memory than unsorted operations.
+ORDER BY is a time- and resource-consuming operation because all the results must be sent to one node for merging before the results can be sorted. Sorting consumes more memory resources than a query without ORDER BY.
 
-If you need to return the first N sort results, you need to use the LIMIT clause; To limit memory usage, if the user does not specify a LIMIT clause, the first 65535 sort results are returned by default.
+Therefore, if you only need the first `N` results from the sorted result set, you can use the LIMIT clause, which reduces memory usage and network overhead. If the LIMIT clause is not specified, the first 65535 results are returned by default.
 
-The Order by syntax is defined as follows:
+Syntax:
 
 ```sql
-ORDER BY col [ASC | DESC]
+ORDER BY <column_name> 
+    [ASC | DESC]
+    [NULLS FIRST | NULLS LAST]
 ```
 
-The default sort order is ASC (ascending). Example:
+`ASC` specifies that the results should be returned in ascending order. `DESC` specifies that the results should be returned in descending order. If the order is not specified, ASC (ascending) is the default. Example:
 
 ```sql
 select * from big_table order by tiny_column, short_column desc;
 ```
 
-### Group by
+Sort order for NULL values: `NULLS FIRST` indicates that NULL values should be returned before non-NULL values. `NULLS LAST` indicates that NULL values should be returned after non-NULL values.
 
-Group by clauses are often used with aggregate functions such as COUNT(), SUM(), AVG(), MIN(), and MAX().
+Example:
 
-The column specified by group by will not participate in the aggregation operation. The group by clause can be added with the Having clause to filter the results produced by the aggregate function. for example:
+```sql
+select  *  from  sales_record  order by  employee_id  nulls first;
+```
+
+### GROUP BY
+
+The GROUP BY clause is often used with aggregate functions such as COUNT(), SUM(), AVG(), MIN(), and MAX().
+
+The column specified by GROUP BY will not participate in the aggregation operation. The GROUP BY clause can be added with the Having clause to filter the results produced by the aggregate function. Example:
 
 ```sql
 select tiny_column, sum(short_column)
@@ -178,11 +188,11 @@ group by tiny_column;
 2 rows in set (0.07 sec)
 ```
 
-### Having
+### HAVING
 
-The Having clause does not filter row data in a table, but filters the results of aggregate functions.
+The HAVING clause does not filter row data in a table, but filters the results of aggregate functions.
 
-Generally speaking, having is used with aggregate functions (such as COUNT(), SUM(), AVG(), MIN(), MAX()) and group by clauses.
+Generally speaking, HAVING is used with aggregate functions (such as COUNT(), SUM(), AVG(), MIN(), MAX()) and GROUP BY clauses.
 
 Example：
 
@@ -220,9 +230,9 @@ having tiny_column > 1;
 1 row in set (0.07 sec)
 ```
 
-### Limit
+### LIMIT
 
-Limit clauses are used to limit the maximum number of rows returned. Setting the maximum number of rows returned can help StarRocks optimize memory usage.
+LIMIT clauses are used to limit the maximum number of rows returned. Setting the maximum number of rows returned can help StarRocks optimize memory usage.
 
 This clause is mainly used in the following scenarios:
 
@@ -232,7 +242,7 @@ Think about what's included in the table below.
 
 The size of the query result set needs to be limited because of the large amount of data in the table or because the where clause does not filter too much data.
 
-Instructions for use: The value of the limit clause must be a numeric literal constant.
+Instructions for use: The value of the LIMIT clause must be a numeric literal constant.
 
 Example：
 
@@ -261,15 +271,13 @@ mysql> select tiny_column from small_table limit 10000;
 2 rows in set (0.01 sec)
 ```
 
-#### Offset
+#### OFFSET
 
-Offset
-
-The Offset clause causes the result set to skip the first few rows and return the following results directly.
+The OFFSET clause causes the result set to skip the first few rows and return the following results directly.
 
 The result set defaults to start at line 0, so offset 0 and no offset return the same results.
 
-Generally speaking, offset clauses need to be used with order by clauses and limit clauses to be valid.
+Generally speaking, OFFSET clauses need to be used with ORDER BY and LIMIT clauses to be valid.
 
 Example：
 
@@ -329,9 +337,11 @@ In this case, only the limit value is taken, and the offset value is ignored. So
 
 Offset exceeds the maximum number of rows in the result set and is still a result. It is recommended that users use offset with order by.
 
-### Union
+### UNION
 
-Union clauses are used to merge the result sets of multiple queries. The syntax is defined as follows:
+UNION clauses are used to merge the result sets of multiple queries. 
+
+Syntax:
 
 ```sql
 query_1 UNION [DISTINCT | ALL] query_2
@@ -339,11 +349,11 @@ query_1 UNION [DISTINCT | ALL] query_2
 
 Instructions:
 
-Using only union keywords and union distinct works the same way. Since de-duplication is memory intensive,
+Using only the UNION keyword and UNION DISTINCT works the same way. Since de-duplication is memory intensive,
 
-As a result, queries using union all operations are faster and consume less memory. If the user wants to order by and limit the returned result set,
+As a result, queries using UNION ALL operations are faster and consume less memory. If the user wants to order by and limit the returned result set,
 
-You need to place the union operation in the subquery, then select from the subquery, and finally place the subquery and order by outside the subquery.
+You need to place the UNION operation in the subquery, then select from the subquery, and finally place the subquery and order by outside the subquery.
 
 Example：
 
@@ -394,9 +404,9 @@ order by tiny_column limit 4;
 4 rows in set (0.11 sec)
 ```
 
-### Distinct
+### DISTINCT
 
-The distinct operator deduplicates the result set. Example:
+The DISTINCT operator deduplicates the result set. Example:
 
 ```SQL
 -- Returns the unique values from one column.
@@ -406,7 +416,7 @@ select distinct tiny_column from big_table limit 2;
 select distinct tiny_column, int_column from big_table limit 2;
 ```
 
-distinct can be used with aggregate functions (usually count functions), and count (distinct) is used to calculate how many different combinations are contained on one or more columns.
+DISTINCT can be used with aggregate functions (usually count functions), and count (distinct) is used to calculate how many different combinations are contained on one or more columns.
 
 ```SQL
 -- Counts the unique values from one column.
@@ -466,7 +476,7 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 
 Subqueries also support scalar quantum queries. It can be divided into irrelevant scalar quantum query, related scalar quantum query and scalar quantum query as parameters of the general function.
 
-For example：
+Example:
 
 1. Uncorrelated scalar quantum query with predicate = sign. For example, output information about the person with the highest wage.
 
@@ -509,9 +519,9 @@ Example：
 ```sql
 -- Define one subquery at the outer level, and another at the inner level as part of the
 -- initial stage of the UNION ALL query.
-with t1 as (select 1) (with t2 as (select 2)
 
-select * from t2) union all select * from t1;
+with t1 as (select 1),t2 as (select 2)
+select * from t1 union all select * from t2;
 ```
 
 ### Where and Operator
@@ -554,7 +564,9 @@ For example, we don't have the MOD() function to represent the% operator. Conver
 
 #### Between Operator
 
-In a where clause, expressions may be compared with both upper and lower bounds. If the expression is greater than or equal to the lower bound and less than or equal to the upper bound, the result of the comparison is true. The syntax is defined as follows:
+In a where clause, expressions may be compared with both upper and lower bounds. If the expression is greater than or equal to the lower bound and less than or equal to the upper bound, the result of the comparison is true.
+
+Syntax:
 
 ```sql
 expression BETWEEN lower_bound AND upper_bound
@@ -576,7 +588,7 @@ select c1 from t1 where month between 1 and 6;
 
 The comparison operator is used to determine whether columns and columns are equal or to sort them. =,!=, >= All data types are available.
 
-Where <>sign is not equal to meaning, and!= The functions are consistent. The IN and BETWEEN operators provide shorter expressions to describe the comparison of relationships such as equality, less than, size, and so on.
+The `<>` and `!=` operators indicate that value `a` is not equal to value `b`.
 
 In Operator
 
@@ -584,7 +596,7 @@ The In operator compares to the VALUE collection and returns TRUE if it can matc
 
 Parameters and VALUE collections must be comparable. All expressions using the IN operator can be written as equivalent comparisons connected with OR, but the syntax of IN is simpler, more precise, and easier for StarRocks to optimize.
 
-For example:
+Example:
 
 ```sql
 select * from small_table where tiny_column in (1,2);

@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,6 +53,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 
 /**
  * Materialized view is performed to materialize the results of query.
@@ -297,7 +299,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
             }
-
             Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             if (tables.size() != 1) {
                 throw new SemanticException("The materialized view only support one table in from clause.");
@@ -313,6 +314,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             statement.setDBName(context.getDatabase());
 
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+            if (!(selectRelation.getRelation() instanceof TableRelation)) {
+                throw new SemanticException("Materialized view query statement only support direct query from table.");
+            }
             int beginIndexOfAggregation = genColumnAndSetIntoStmt(statement, selectRelation);
             if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
                 statement.setMvKeysType(KeysType.AGG_KEYS);
@@ -347,6 +351,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         boolean meetAggregate = false;
         Set<String> mvColumnNameSet = Sets.newHashSet();
         int beginIndexOfAggregation = -1;
+        StringJoiner joiner = new StringJoiner(", ", "[", "]");
 
         List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
         for (int i = 0; i < selectListItems.size(); ++i) {
@@ -361,12 +366,14 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         + "Error column: " + selectListItemExpr.toSql());
             }
             if (selectListItemExpr instanceof SlotRef) {
-                if (meetAggregate) {
-                    throw new SemanticException("The aggregate column should be after the single column");
-                }
                 SlotRef slotRef = (SlotRef) selectListItemExpr;
-                // check duplicate column
                 String columnName = slotRef.getColumnName().toLowerCase();
+                joiner.add(columnName);
+                if (meetAggregate) {
+                    throw new SemanticException("Any single column should be before agg column. " +
+                            "Column %s at wrong location", columnName);
+                }
+                // check duplicate column
                 if (!mvColumnNameSet.add(columnName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnName);
                 }
@@ -409,10 +416,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 }
                 meetAggregate = true;
                 mvColumnItemList.add(buildMVColumnItem(functionCallExpr, statement.isReplay()));
+                joiner.add(functionCallExpr.toSqlImpl());
             }
         }
         if (beginIndexOfAggregation == 0) {
-            throw new SemanticException("The materialized view must contain at least one key column");
+            throw new SemanticException("Only %s found in the select list. " +
+                    "Please add group by clause and at least one group by column in the select list", joiner);
         }
         statement.setMvColumnItemList(mvColumnItemList);
         return beginIndexOfAggregation;

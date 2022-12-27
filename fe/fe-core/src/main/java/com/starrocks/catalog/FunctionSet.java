@@ -76,6 +76,7 @@ public class FunctionSet {
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
     public static final String PERCENTILE_UNION = "percentile_union";
+    public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String BITMAP_UNION = "bitmap_union";
     public static final String BITMAP_UNION_COUNT = "bitmap_union_count";
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
@@ -708,8 +709,22 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
                 Type.ARRAY_BOOLEAN, Type.BIGINT, false, false, false));
 
+        // PercentileCont
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DATE, Type.DOUBLE), Type.DATE, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DATETIME, Type.DOUBLE), Type.DATETIME, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
+                false, false, false));
+
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
+        addBuiltin(AggregateFunction.createBuiltin(AVG,
+                Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
+                false, true, false));
         addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.BOOLEAN), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
@@ -733,9 +748,6 @@ public class FunctionSet {
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.FLOAT), Type.DOUBLE, Type.VARCHAR,
-                false, true, false));
-        addBuiltin(AggregateFunction.createBuiltin(AVG,
-                Lists.newArrayList(Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
                 false, true, false));
         addBuiltin(AggregateFunction.createBuiltin(AVG,
                 Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.VARCHAR,

@@ -44,7 +44,7 @@ The preceding privileges can be classified into the following three categories:
 
 The database and table. This parameter supports the following three formats:
 
-- `*.*`: indicates all databases and tables.
+- `*.*`: indicates all databases and tables. If this format is specified, the global privilege is granted.
 - `db.*`: indicates a specific database and all tables in this database.
 - `db.tbl`: indicates a specific table in a specific database.
 

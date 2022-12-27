@@ -23,6 +23,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -259,19 +261,32 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     private void refreshSchemaCache(List<FieldSchema> unpartHiveCols, List<FieldSchema> allHiveColumns)
             throws DdlException {
-        fullSchema.clear();
-        nameToColumn.clear();
+        ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
+        ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
+        ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
+
         for (FieldSchema fieldSchema : allHiveColumns) {
             Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
-            fullSchema.add(column);
-            nameToColumn.put(column.getName(), column);
+            Column baseColumn = nameToColumn.get(column.getName());
+            if (baseColumn != null) {
+                column.setComment(baseColumn.getComment());
+            }
+            fullSchemaTemp.add(column);
+            nameToColumnTemp.put(column.getName(), column);
         }
 
-        dataColumnNames.clear();
         for (FieldSchema s : unpartHiveCols) {
-            this.dataColumnNames.add(s.getName());
+            dataColumnNamesTemp.add(s.getName());
         }
+
+        fullSchema.clear();
+        nameToColumn.clear();
+        dataColumnNames.clear();
+
+        fullSchema.addAll(fullSchemaTemp.build());
+        nameToColumn.putAll(nameToColumnTemp.build());
+        dataColumnNames.addAll(dataColumnNamesTemp.build());
     }
 
     @Override

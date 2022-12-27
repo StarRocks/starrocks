@@ -797,7 +797,8 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
                                               const EditVersion& version,
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
-                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
+                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                              const RowsetMetaPB* rowset_meta) {
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
@@ -830,6 +831,16 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto meta_key = encode_persistent_index_key(tsid.tablet_id);
         auto meta_value = index_meta.SerializeAsString();
         st = batch.Put(handle, meta_key, meta_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+            return to_status(st);
+        }
+    }
+
+    if (rowset_meta != nullptr) {
+        string rowset_key = encode_meta_rowset_key(tablet_id, rowset_meta->rowset_seg_id());
+        auto rowset_value = rowset_meta->SerializeAsString();
+        st = batch.Put(handle, rowset_key, rowset_value);
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
             return to_status(st);
@@ -936,6 +947,62 @@ StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(KVStore* meta, TTa
         return st;
     }
     return std::move(ret);
+}
+
+StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* meta, TTabletId tablet_id,
+                                                                     int64_t version) {
+    DeleteVectorList ret;
+    std::string lower = encode_del_vector_key(tablet_id, 0, INT64_MAX);
+    std::string upper = encode_del_vector_key(tablet_id, UINT32_MAX, 0);
+    std::map<uint32_t, std::vector<int64_t>> segments;
+    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
+                                  [&](std::string_view key, std::string_view value) -> bool {
+                                      TTabletId dummy;
+                                      uint32_t segment_id;
+                                      int64_t version;
+                                      decode_del_vector_key(key, &dummy, &segment_id, &version);
+                                      DCHECK_EQ(tablet_id, dummy);
+                                      segments[segment_id].push_back(version);
+                                      return true;
+                                  });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb for delete_del_vector_before_version. tablet_id=" << tablet_id;
+        return st;
+    }
+    size_t num_delete = 0;
+    WriteBatch batch;
+    auto cf_handle = meta->handle(META_COLUMN_FAMILY_INDEX);
+    std::ostringstream vlog_delvec_maplist;
+    for (auto& segment : segments) {
+        auto& versions = segment.second;
+        bool del = false;
+        bool added = false;
+        for (size_t i = 0; i < versions.size(); i++) {
+            if (del) {
+                std::string key = encode_del_vector_key(tablet_id, segment.first, versions[i]);
+                rocksdb::Status st = batch.Delete(cf_handle, key);
+                if (!st.ok()) {
+                    return to_status(st);
+                }
+                num_delete++;
+                if (!added) {
+                    vlog_delvec_maplist << " " << segment.first << ":" << versions[i];
+                    added = true;
+                } else {
+                    vlog_delvec_maplist << "," << versions[i];
+                }
+            } else if (versions[i] <= version) {
+                // versions after this version can be deleted
+                del = true;
+            }
+        }
+    }
+    RETURN_IF_ERROR(meta->write_batch(&batch));
+    if (num_delete > 0) {
+        LOG(INFO) << "delete_del_vector_before_version version:" << version << " tablet:" << tablet_id
+                  << vlog_delvec_maplist.str();
+    }
+    return num_delete;
 }
 
 Status TabletMetaManager::delete_del_vector_range(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
@@ -1169,6 +1236,25 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
     return Status::OK();
 }
 
+Status TabletMetaManager::remove_primary_key_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
+    if (!clear_log(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear_log add to batch failed";
+    }
+    if (!clear_del_vector(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear delvec add to batch failed";
+    }
+    if (!clear_rowset(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear rowset add to batch failed";
+    }
+    if (!clear_pending_rowset(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear rowset add to batch failed";
+    }
+    if (!clear_persistent_index(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear persistent index add to batch failed";
+    }
+    return Status::OK();
+}
+
 Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     KVStore* meta = store->get_meta();
     WriteBatch batch;
@@ -1201,19 +1287,57 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     string prefix = strings::Substitute("$0$1_", HEADER_PREFIX, tablet_id);
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, prefix, traverse_tabletmeta_func));
     if (is_primary) {
-        if (!clear_log(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear_log add to batch failed";
-        }
-        if (!clear_del_vector(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear delvec add to batch failed";
-        }
-        if (!clear_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch failed";
-        }
-        if (!clear_pending_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch failed";
-        }
+        remove_primary_key_meta(store, &batch, tablet_id);
     }
+    return meta->write_batch(&batch);
+}
+
+Status TabletMetaManager::remove_table_meta(DataDir* store, TTableId table_id) {
+    KVStore* meta = store->get_meta();
+    WriteBatch batch;
+    bool is_primary = false;
+    std::vector<int64_t> delete_tablet;
+    rocksdb::ColumnFamilyHandle* cf = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
+        TabletMetaPB tablet_meta_pb;
+        bool parsed = tablet_meta_pb.ParseFromArray(value.data(), value.size());
+        if (!parsed) {
+            LOG(WARNING) << "bad tablet meta pb data, tablet_meta key: " << key;
+        } else {
+            is_primary = tablet_meta_pb.schema().keys_type() == KeysType::PRIMARY_KEYS;
+            if (tablet_meta_pb.table_id() == table_id) {
+                auto st = batch.Delete(cf, string(key));
+                if (!st.ok()) {
+                    LOG(WARNING) << "batch.Delete failed, key:" << key;
+                } else if (is_primary) {
+                    remove_primary_key_meta(store, &batch, tablet_meta_pb.tablet_id());
+                }
+            }
+        }
+        return true;
+    };
+    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
+    return meta->write_batch(&batch);
+}
+
+Status TabletMetaManager::remove_table_persistent_index_meta(DataDir* store, TTableId table_id) {
+    KVStore* meta = store->get_meta();
+    WriteBatch batch;
+    auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
+        TabletMetaPB tablet_meta_pb;
+        bool parsed = tablet_meta_pb.ParseFromArray(value.data(), value.size());
+        if (!parsed) {
+            LOG(WARNING) << "bad tablet meta pb data, tablet_meta key: " << key;
+        } else {
+            if (tablet_meta_pb.table_id() == table_id) {
+                if (!clear_persistent_index(store, &batch, tablet_meta_pb.tablet_id()).ok()) {
+                    LOG(WARNING) << "clear persistent index add to batch failed";
+                }
+            }
+        }
+        return true;
+    };
+    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
     return meta->write_batch(&batch);
 }
 

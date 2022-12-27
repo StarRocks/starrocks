@@ -1486,10 +1486,14 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testSumString() throws Exception {
+    public void testSumAvgString() throws Exception {
         String sql = "select sum(N_COMMENT) from nation";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "output: sum(CAST(4: N_COMMENT AS DOUBLE))");
+
+        sql = "select avg(N_COMMENT) from nation";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: avg(CAST(4: N_COMMENT AS DOUBLE))");
     }
 
     @Test

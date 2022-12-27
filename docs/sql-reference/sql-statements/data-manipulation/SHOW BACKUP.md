@@ -1,6 +1,6 @@
 # SHOW BACKUP
 
-## description
+## Description
 
 This statement is used to view BACKUP tasks
 
@@ -34,7 +34,7 @@ Status：                 Display failure information if job fails
 Timeout：                Job timeout in seconds
 ```
 
-## example
+## Examples
 
 1. View example_ db Last BACKUP task.
 

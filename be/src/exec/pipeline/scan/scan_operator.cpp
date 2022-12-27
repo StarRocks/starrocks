@@ -50,7 +50,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
-    _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
+    _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT,
+                                                                         RuntimeProfile::ROOT_COUNTER, true);
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitIOTaskCount", TUnit::UNIT);
 
@@ -85,15 +86,16 @@ void ScanOperator::close(RuntimeState* state) {
         }
     }
 
-    _default_buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
+    _default_buffer_capacity_counter =
+            ADD_COUNTER_SKIP_MERGE(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
     COUNTER_SET(_default_buffer_capacity_counter, static_cast<int64_t>(_buffer_limiter->default_capacity()));
-    _buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
+    _buffer_capacity_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
     COUNTER_SET(_buffer_capacity_counter, static_cast<int64_t>(_buffer_limiter->capacity()));
 
-    _tablets_counter = ADD_COUNTER(_unique_metrics, "TabletCount", TUnit::UNIT);
+    _tablets_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT);
     COUNTER_SET(_tablets_counter, static_cast<int64_t>(_morsel_queue->num_original_morsels()));
 
-    _merge_chunk_source_profiles();
+    _merge_chunk_source_profiles(state);
 
     do_close(state);
     Operator::close(state);
@@ -279,10 +281,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _is_io_task_running[chunk_source_index] = true;
 
     bool offer_task_success = false;
-    // to avoid holding mutex in bthread, we choose to initialize lazily here instead of in prepare
-    if (is_uninitialized(_query_ctx)) {
-        _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
-    }
     int32_t driver_id = CurrentThread::current().get_driver_id();
     if (_workgroup != nullptr) {
         workgroup::ScanTask task =
@@ -393,7 +391,17 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     return Status::OK();
 }
 
-void ScanOperator::_merge_chunk_source_profiles() {
+void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
+    auto query_ctx = _query_ctx.lock();
+    // _query_ctx uses lazy initialization, maybe it is not initialized
+    // under certain circumstances
+    if (query_ctx == nullptr) {
+        query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+        DCHECK(query_ctx != nullptr);
+    }
+    if (!query_ctx->is_report_profile()) {
+        return;
+    }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
     for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
         profiles[i] = _chunk_source_profiles[i].get();
@@ -404,6 +412,10 @@ void ScanOperator::_merge_chunk_source_profiles() {
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
+}
+
+void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
+    _query_ctx = query_ctx;
 }
 
 // ========== ScanOperatorFactory ==========

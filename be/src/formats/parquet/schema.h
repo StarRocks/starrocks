@@ -64,21 +64,13 @@ public:
     SchemaDescriptor() = default;
     ~SchemaDescriptor() = default;
 
-    Status from_thrift(const std::vector<tparquet::SchemaElement>& t_schemas);
+    Status from_thrift(const std::vector<tparquet::SchemaElement>& t_schemas, bool case_sensitive);
 
     std::string debug_string() const;
 
-    int get_column_index(const std::string& column, bool case_sensitive) const;
+    int get_column_index(const std::string& column) const;
     const ParquetField* get_stored_column_by_idx(int idx) const { return &_fields[idx]; }
-
-    const ParquetField* resolve_by_name(const std::string& name) const {
-        auto it = _field_by_name.find(name);
-        if (it != _field_by_name.end()) {
-            return it->second;
-        }
-        return nullptr;
-    }
-
+    const ParquetField* resolve_by_name(const std::string& name) const;
     void get_field_names(std::unordered_set<std::string>* names) const;
 
 private:
@@ -102,8 +94,9 @@ private:
 
     std::vector<ParquetField> _fields;
     std::vector<ParquetField*> _physical_fields;
+    std::unordered_map<std::string, int> _field_idx_by_name;
 
-    std::unordered_map<std::string, const ParquetField*> _field_by_name;
+    bool _case_sensitive = false;
 };
 
 template <typename T>

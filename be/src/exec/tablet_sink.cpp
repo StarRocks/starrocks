@@ -28,6 +28,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -51,10 +52,10 @@ static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
 namespace starrocks::stream_load {
 
-NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id, int32_t schema_hash)
-        : _parent(parent), _index_id(index_id), _node_id(node_id), _schema_hash(schema_hash) {
+NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id)
+        : _parent(parent), _index_id(index_id), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
+    _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() {
@@ -189,6 +190,9 @@ bool NodeChannel::is_open_done() {
 }
 
 Status NodeChannel::open_wait() {
+    if (_open_closure == nullptr) {
+        return _err_st;
+    }
     _open_closure->join();
     if (_open_closure->cntl.Failed()) {
         _cancelled = true;
@@ -215,7 +219,8 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
 
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
-        StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+        StatusOr<ChunkPB> res = Status::OK();
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
             _cancelled = true;
             _err_st = res.status();
@@ -315,8 +320,8 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
         }
 
     } else {
-        if (_chunk_queue.size() == 0) {
-            if (_cur_chunk.get() == nullptr) {
+        if (_chunk_queue.empty()) {
+            if (_cur_chunk == nullptr) {
                 _cur_chunk = std::make_unique<vectorized::Chunk>();
             }
             _mem_tracker->consume(_cur_chunk->memory_usage());
@@ -551,21 +556,6 @@ void NodeChannel::cancel(const Status& err_st) {
     request.release_id();
 }
 
-Status NodeChannel::none_of(std::initializer_list<bool> vars) {
-    bool none = std::none_of(vars.begin(), vars.end(), [](bool var) { return var; });
-    Status st = Status::OK();
-    if (!none) {
-        std::string vars_str;
-        std::for_each(vars.begin(), vars.end(), [&vars_str](bool var) -> void { vars_str += (var ? "1/" : "0/"); });
-        if (!vars_str.empty()) {
-            vars_str.pop_back(); // 0/1/0/ -> 0/1/0
-        }
-        st = Status::InternalError(vars_str);
-    }
-
-    return st;
-}
-
 IndexChannel::~IndexChannel() = default;
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets) {
@@ -581,7 +571,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
-                auto channel_ptr = std::make_unique<NodeChannel>(_parent, _index_id, node_id, _schema_hash);
+                auto channel_ptr = std::make_unique<NodeChannel>(_parent, _index_id, node_id);
                 channel = channel_ptr.get();
                 _node_channels.emplace(node_id, std::move(channel_ptr));
             } else {
@@ -604,15 +594,11 @@ bool IndexChannel::has_intolerable_failure() {
     return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
 }
 
-OlapTableSink::OlapTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& texprs,
-                             Status* status)
-        : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024) {
+OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
     }
 }
-
-OlapTableSink::~OlapTableSink() {}
 
 Status OlapTableSink::init(const TDataSink& t_sink) {
     DCHECK(t_sink.__isset.olap_table_sink);
@@ -736,7 +722,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 tablets.emplace_back(std::move(tablet_with_partition));
             }
         }
-        auto channel = std::make_unique<IndexChannel>(this, index->index_id, index->schema_hash);
+        auto channel = std::make_unique<IndexChannel>(this, index->index_id);
         RETURN_IF_ERROR(channel->init(state, tablets));
         _channels.emplace_back(std::move(channel));
     }
@@ -765,12 +751,15 @@ Status OlapTableSink::try_open(RuntimeState* state) {
 }
 
 bool OlapTableSink::is_open_done() {
-    bool open_done = true;
-    for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([&open_done](NodeChannel* ch) { open_done &= ch->is_open_done(); });
+    if (!_open_done) {
+        bool open_done = true;
+        for (auto& index_channel : _channels) {
+            index_channel->for_each_node_channel([&open_done](NodeChannel* ch) { open_done &= ch->is_open_done(); });
+        }
+        _open_done = open_done;
     }
 
-    return open_done;
+    return _open_done;
 }
 
 Status OlapTableSink::open_wait() {
@@ -978,12 +967,15 @@ Status OlapTableSink::try_close(RuntimeState* state) {
 }
 
 bool OlapTableSink::is_close_done() {
-    bool close_done = true;
-    for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([&close_done](NodeChannel* ch) { close_done &= ch->is_close_done(); });
+    if (!_close_done) {
+        bool close_done = true;
+        for (auto& index_channel : _channels) {
+            index_channel->for_each_node_channel([&close_done](NodeChannel* ch) { close_done &= ch->is_close_done(); });
+        }
+        _close_done = close_done;
     }
 
-    return close_done;
+    return _close_done;
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
@@ -1195,7 +1187,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
             }
             chunk->update_column(nullable->data_column(), desc->id());
         } else if (column_ptr->has_null()) {
-            vectorized::NullableColumn* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
             vectorized::NullData& nulls = nullable->null_column_data();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
@@ -1212,7 +1204,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         case TYPE_VARCHAR: {
             uint32_t len = desc->type().len;
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::BinaryColumn* binary = down_cast<vectorized::BinaryColumn*>(data_column);
+            auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
             vectorized::Offsets& offset = binary->get_offset();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (_validate_selection[j] == VALID_SEL_OK) {

@@ -29,6 +29,7 @@ import java.util.List;
 public class Counter {
     private volatile long value;
     private volatile int type;
+    private volatile boolean skipMerge = false;
 
     public long getValue() {
         return value;
@@ -44,6 +45,14 @@ public class Counter {
 
     public void setType(TUnit type) {
         this.type = type.getValue();
+    }
+
+    public boolean isSkipMerge() {
+        return skipMerge;
+    }
+
+    public void setSkipMerge(boolean skipMerge) {
+        this.skipMerge = skipMerge;
     }
 
     public Counter(TUnit type, long value) {
