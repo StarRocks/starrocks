@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.common.UserException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -50,11 +51,12 @@ public class GlobalFunctionMgrTest {
     }
 
     @Test
-    public void testAddAndDropFunction() {
+    public void testAddAndDropFunction() throws UserException {
         Type[] argTypes = new Type[2];
         argTypes[0] = Type.INT;
         argTypes[1] = Type.INT;
-        FunctionName name = new FunctionName(FunctionName.GLOBAL_UDF_DB, "addIntInt");
+        FunctionName name = new FunctionName(null, "addIntInt");
+        name.setAsGlobalFunction();
         Function f = new Function(name, argTypes, Type.INT, false);
 
         // add global udf function.

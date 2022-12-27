@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TablePattern;
@@ -982,7 +981,7 @@ public class PrivilegeChecker {
         public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
             // No need to check privilege when `show global functions`
-            if (FunctionName.GLOBAL_UDF_DB.equals(dbName)) {
+            if (statement.getIsGlobal()) {
                 return null;
             }
 
