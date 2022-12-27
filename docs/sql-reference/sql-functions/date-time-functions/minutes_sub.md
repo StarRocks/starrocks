@@ -2,7 +2,7 @@
 
 ## Description
 
-Sub the specified minute from the date, accurate to the minute.
+Subtracts specified minute from the date, accurate to the minute.
 
 ## Syntax
 
@@ -31,12 +31,14 @@ select minutes_sub('2022-01-01 01:03:01', 2);
 +---------------------------------------+
 | 2022-01-01 01:01:01                   |
 +---------------------------------------+
+
 select minutes_sub('2022-01-01 01:01:01', -1);
 +----------------------------------------+
 | minutes_sub('2022-01-01 01:01:01', -1) |
 +----------------------------------------+
 | 2022-01-01 01:02:01                    |
 +----------------------------------------+
+
 select minutes_sub('2022-01-01', 1);
 +------------------------------+
 | minutes_sub('2022-01-01', 1) |
