@@ -60,7 +60,6 @@ protected:
         params->sql_aggregate_functions = "";
         params->conjuncts = {};
         params->is_testing = true;
-        params->is_stream_mv = true;
         // TODO: test more cases.
         params->is_append_only = false;
         params->is_generate_retract = is_generate_retract;
