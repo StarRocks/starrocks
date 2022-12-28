@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.privilege;
 
 import com.starrocks.analysis.UserIdentity;
@@ -98,7 +97,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException {
+    public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr)
+            throws PrivilegeException {
         PrivilegeType type = PrivilegeType.valueOf(typeStr);
         switch (type) {
             case TABLE:
@@ -124,6 +124,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(mgr, objectTokens);
+
+            case GLOBAL_FUNCTION:
+                return GlobalFunctionPEntryObject.generate(mgr, objectTokens);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
@@ -172,12 +175,16 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(allTypes, restrictType, restrictName);
 
+            case GLOBAL_FUNCTION:
+                return GlobalFunctionPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
     }
 
     private static final List<String> BAD_SYSTEM_ACTIONS = Arrays.asList("GRANT", "NODE");
+
     @Override
     public void validateGrant(String type, List<String> actions, List<PEntryObject> objects) throws PrivilegeException {
         if (type.equals("SYSTEM")) {

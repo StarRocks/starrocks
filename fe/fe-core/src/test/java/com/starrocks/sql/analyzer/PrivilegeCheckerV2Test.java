@@ -122,18 +122,18 @@ public class PrivilegeCheckerV2Test {
 
     private static void createMvForTest(ConnectContext connectContext) throws Exception {
         starRocksAssert.withTable("CREATE TABLE db3.tbl1\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values less than('2020-02-01'),\n" +
-                        "    PARTITION p2 values less than('2020-03-01')\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');");
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values less than('2020-02-01'),\n" +
+                "    PARTITION p2 values less than('2020-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
         String sql = "create materialized view db3.mv1 " +
                 "partition by k1 " +
                 "distributed by hash(k2) " +
@@ -2183,6 +2183,25 @@ public class PrivilegeCheckerV2Test {
                 "DROP FUNCTION db1.MY_UDF_JSON_GET(string, string);",
                 "grant drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) to test",
                 "revoke drop on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test",
+                "Access denied; you need (at least one of) the DROP FUNCTION privilege(s) for this operation");
+    }
+
+    @Test
+    public void testDropGlobalFunc() throws Exception {
+
+        FunctionName fn = FunctionName.createFnName("my_udf_json_get");
+        fn.setAsGlobalFunction();
+        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+        } catch (Throwable e) {
+            // ignore
+        }
+
+        verifyGrantRevoke(
+                "drop global function my_udf_json_get (int, int);",
+                "grant drop on ALL FUNCTIONS in database db1 to test",
+                "revoke drop on ALL FUNCTIONS in database db1 from test",
                 "Access denied; you need (at least one of) the DROP FUNCTION privilege(s) for this operation");
     }
 

@@ -1650,6 +1650,9 @@ public class PrivilegeCheckerV2 {
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
             // TODO(yanz): privilege checker for global function.
             FunctionName functionName = statement.getFunctionName();
+            if (functionName.isGlobalFunction()) {
+                return null;
+            }
             Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
             Function function = db.getFunction(statement.getFunction());
             if (null == function) {

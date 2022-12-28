@@ -27,7 +27,8 @@ public enum PrivilegeType {
     CATALOG(7, CatalogAction.actionMap(), "CATALOGS"),
     MATERIALIZED_VIEW(8, MaterializedViewAction.actionMap(), "MATERIALIZED_VIEWS"),
     FUNCTION(9, FunctionAction.actionMap(), "FUNCTIONS"),
-    RESOURCE_GROUP(10, ResourceGroupAction.actionMap(), "RESOURCE_GROUPS");
+    RESOURCE_GROUP(10, ResourceGroupAction.actionMap(), "RESOURCE_GROUPS"),
+    GLOBAL_FUNCTION(11, GlobalFunctionAction.actionMap(), "GLOBAL_FUNCTIONS");
 
     private final int id;
     private final Map<String, Action> actionMap;
@@ -256,6 +257,24 @@ public enum PrivilegeType {
         private final int id;
 
         FunctionAction(int id) {
+            this.id = id;
+        }
+
+        public static Map<String, Action> actionMap() {
+            Map<String, Action> ret = new HashMap<>();
+            for (FunctionAction action : FunctionAction.values()) {
+                ret.put(action.toString(), new Action((short) action.id, action.toString()));
+            }
+            return ret;
+        }
+    }
+
+    public enum GlobalFunctionAction {
+        USAGE(1),
+        DROP(2);
+        private final int id;
+
+        GlobalFunctionAction(int id) {
             this.id = id;
         }
 

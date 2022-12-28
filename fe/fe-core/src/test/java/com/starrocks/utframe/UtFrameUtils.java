@@ -320,6 +320,7 @@ public class UtFrameUtils {
 
     /**
      * Validate whether all the fragments belong to the fragment tree.
+     *
      * @param plan The plan need to validate.
      */
     public static void validatePlanConnectedness(ExecPlan plan) {
@@ -346,7 +347,8 @@ public class UtFrameUtils {
     /*
      * Return analyzed statement and execution plan for MV maintenance
      */
-    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext, String sql)
+    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
+                                                                                    String sql)
             throws DdlException, CloneNotSupportedException {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
 
@@ -365,7 +367,8 @@ public class UtFrameUtils {
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
+                                true);
                     }
                     connectContext.setSessionVariable(sessionVariable);
                 }
