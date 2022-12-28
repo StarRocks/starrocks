@@ -21,6 +21,7 @@
 #include "absl/strings/str_format.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "file_store.pb.h"
 #include "fmt/format.h"
 
 namespace starrocks {
@@ -128,11 +129,25 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
                 if (!s3_info.endpoint().empty()) {
                     localconf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
                 }
-                if (!s3_info.access_key().empty()) {
-                    localconf[fslib::kS3AccessKeyId] = s3_info.access_key();
-                }
-                if (!s3_info.access_key_secret().empty()) {
-                    localconf[fslib::kS3AccessKeySecret] = s3_info.access_key_secret();
+                if (s3_info.has_credential()) {
+                    auto credential = s3_info.credential();
+                    if (credential.has_default_credential()) {
+                        localconf[fslib::kS3CredentialType] = "default";
+                    } else if (credential.has_simple_credential()) {
+                        localconf[fslib::kS3CredentialType] = "simple";
+                        auto simple_credential = credential.simple_credential();
+                        localconf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
+                        localconf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
+                    } else if (credential.has_profile_credential()) {
+                        localconf[fslib::kS3CredentialType] = "instance_profile";
+                    } else if (credential.has_assume_role_credential()) {
+                        localconf[fslib::kS3CredentialType] = "assume_role";
+                        auto role_credential = credential.assume_role_credential();
+                        localconf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
+                        localconf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
+                    } else {
+                        localconf[fslib::kS3CredentialType] = "default";
+                    }
                 }
             }
             break;
