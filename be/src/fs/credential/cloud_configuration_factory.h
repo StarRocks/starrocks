@@ -51,46 +51,42 @@ static const std::string AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
 
 class CloudConfigurationFactory {
 public:
-    static const std::shared_ptr<CloudConfiguration> create(const TCloudConfiguration& t_cloud_configuration) {
+    static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration) {
         DCHECK(t_cloud_configuration.__isset.cloud_type);
-        DCHECK(t_cloud_configuration.__isset.cloud_properties);
+        DCHECK(t_cloud_configuration.cloud_type == TCloudType::AWS);
         std::unordered_map<std::string, std::string> properties;
-        for (const auto& property : t_cloud_configuration.cloud_properties) {
-            properties.insert({property.key, property.value});
-        }
+        _insert_properties(properties, t_cloud_configuration);
 
-        if (t_cloud_configuration.cloud_type == TCloudType::AWS) {
-            return CloudConfigurationFactory::create_aws(properties);
-        }
-        DCHECK(false) << "Unreachable";
-        return nullptr;
+        AWSCloudConfiguration aws_cloud_configuration{};
+        AWSCloudCredential aws_cloud_credential{};
+
+        // Set aws cloud configuration first
+        aws_cloud_configuration.enable_path_style_access =
+                get_or_default(properties, AWS_S3_ENABLE_PATH_STYLE_ACCESS, false);
+        aws_cloud_configuration.enable_ssl = get_or_default(properties, AWS_S3_ENABLE_SSL, true);
+
+        // Set aws cloud credential next
+        aws_cloud_credential.use_aws_sdk_default_behavior =
+                get_or_default(properties, AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, false);
+        aws_cloud_credential.use_instance_profile = get_or_default(properties, AWS_S3_USE_INSTANCE_PROFILE, false);
+        aws_cloud_credential.access_key = get_or_default(properties, AWS_S3_ACCESS_KEY, std::string());
+        aws_cloud_credential.secret_key = get_or_default(properties, AWS_S3_SECRET_KEY, std::string());
+        aws_cloud_credential.iam_role_arn = get_or_default(properties, AWS_S3_IAM_ROLE_ARN, std::string());
+        aws_cloud_credential.external_id = get_or_default(properties, AWS_S3_EXTERNAL_ID, std::string());
+        aws_cloud_credential.region = get_or_default(properties, AWS_S3_REGION, std::string());
+        aws_cloud_credential.endpoint = get_or_default(properties, AWS_S3_ENDPOINT, std::string());
+
+        aws_cloud_configuration.aws_cloud_credential = aws_cloud_credential;
+        return aws_cloud_configuration;
     }
 
 private:
-    static const std::shared_ptr<AWSCloudConfiguration> create_aws(
-            const std::unordered_map<std::string, std::string>& properties) {
-        std::shared_ptr<AWSCloudConfiguration> aws_cloud_configuration = std::make_shared<AWSCloudConfiguration>();
-        std::shared_ptr<AWSCloudCredential> aws_cloud_credential = std::make_shared<AWSCloudCredential>();
-
-        // Set aws cloud configuration first
-        aws_cloud_configuration->enable_path_style_access =
-                get_or_default(properties, AWS_S3_ENABLE_PATH_STYLE_ACCESS, false);
-        aws_cloud_configuration->enable_ssl = get_or_default(properties, AWS_S3_ENABLE_SSL, true);
-
-        // Set aws cloud credential next
-        aws_cloud_credential->use_aws_sdk_default_behavior =
-                get_or_default(properties, AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, false);
-        aws_cloud_credential->use_instance_profile = get_or_default(properties, AWS_S3_USE_INSTANCE_PROFILE, false);
-        aws_cloud_credential->access_key = get_or_default(properties, AWS_S3_ACCESS_KEY, std::string());
-        aws_cloud_credential->secret_key = get_or_default(properties, AWS_S3_SECRET_KEY, std::string());
-        aws_cloud_credential->iam_role_arn = get_or_default(properties, AWS_S3_IAM_ROLE_ARN, std::string());
-        aws_cloud_credential->external_id = get_or_default(properties, AWS_S3_EXTERNAL_ID, std::string());
-        aws_cloud_credential->region = get_or_default(properties, AWS_S3_REGION, std::string());
-        aws_cloud_credential->endpoint = get_or_default(properties, AWS_S3_ENDPOINT, std::string());
-
-        aws_cloud_configuration->aws_cloud_credential = aws_cloud_credential;
-
-        return aws_cloud_configuration;
+    static void _insert_properties(std::unordered_map<std::string, std::string>& properties,
+                                   const TCloudConfiguration& t_cloud_configuration) {
+        DCHECK(t_cloud_configuration.__isset.cloud_properties);
+        for (const auto& property : t_cloud_configuration.cloud_properties) {
+            properties.insert({property.key, property.value});
+        }
     }
 
     template <typename ReturnType>
