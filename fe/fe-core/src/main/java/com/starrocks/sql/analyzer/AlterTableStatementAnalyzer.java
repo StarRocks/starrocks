@@ -42,7 +42,6 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
-import edu.umd.cs.findbugs.annotations.CheckForNull;
 
 import java.util.List;
 import java.util.Map;
@@ -99,7 +98,6 @@ public class AlterTableStatementAnalyzer {
 
         @Override
         public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
-            @CheckForNull
             Map<String, String> properties = clause.getProperties();
             if (properties.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");

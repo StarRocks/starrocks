@@ -30,7 +30,7 @@ public class HudiSliceScannerFactory implements ScannerFactory {
 
     /**
      * Hudi scanner uses own independent classloader to find all classes
-     * due to hadoop class conflicts with JNI launcher of libhdfs (hadoop-3.x).
+     * due to hadoop version (hadoop-2.x) conflicts with JNI launcher of libhdfs (hadoop-3.x).
      */
     @Override
     public Class getScannerClass() throws ClassNotFoundException {
