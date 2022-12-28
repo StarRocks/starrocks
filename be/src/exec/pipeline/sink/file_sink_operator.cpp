@@ -45,7 +45,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) override;
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -72,9 +72,9 @@ Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_pro
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const ChunkPtr>>();
-    int ret = bthread::execution_queue_start<const ChunkPtr>(_exec_queue_id.get(), &options,
-                                                             &FileSinkIOBuffer::execute_io_task, this);
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
+                                                       &FileSinkIOBuffer::execute_io_task, this);
     if (ret != 0) {
         _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
@@ -114,7 +114,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) {
+void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     --_num_pending_chunks;
     // close is already done, just skip
     if (_is_finished) {

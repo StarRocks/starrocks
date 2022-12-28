@@ -42,7 +42,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) override;
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
 
     Status _open_file_writer(int timeout_ms);
 
@@ -63,9 +63,9 @@ Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_p
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const ChunkPtr>>();
-    int ret = bthread::execution_queue_start<const ChunkPtr>(_exec_queue_id.get(), &options,
-                                                             &SinkIOBuffer::execute_io_task, this);
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
+                                                       &ExportSinkIOBuffer::execute_io_task, this);
     if (ret != 0) {
         return Status::InternalError("start execution queue error");
     }
@@ -81,7 +81,7 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) {
+void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     --_num_pending_chunks;
     if (_is_finished) {
         return;

@@ -43,7 +43,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) override;
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
 
     Status _open_mysql_table_writer();
 
@@ -62,9 +62,9 @@ Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* pare
 
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const ChunkPtr>>();
-    int ret = bthread::execution_queue_start<const ChunkPtr>(_exec_queue_id.get(), &options,
-                                                             &MysqlTableSinkIOBuffer::execute_io_task, this);
+    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
+    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
+                                                       &MysqlTableSinkIOBuffer::execute_io_task, this);
     if (ret != 0) {
         _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
@@ -78,7 +78,7 @@ void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const ChunkPtr>& iter) {
+void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     --_num_pending_chunks;
     if (_is_finished) {
         return;
