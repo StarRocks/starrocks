@@ -282,13 +282,10 @@
       + [minutes_diff](./sql-reference/sql-functions/date-time-functions/minutes_diff.md)
       + [minutes_sub](./sql-reference/sql-functions/date-time-functions/minutes_sub.md)
       + [month](./sql-reference/sql-functions/date-time-functions/month.md)
+      + [monthname](./sql-reference/sql-functions/date-time-functions/monthname.md)
       + [months_add](./sql-reference/sql-functions/date-time-functions/months_add.md)
       + [months_diff](./sql-reference/sql-functions/date-time-functions/months_diff.md)
-<<<<<<< HEAD
-      + [monthname](./sql-reference/sql-functions/date-time-functions/monthname.md)
-=======
       + [months_sub](./sql-reference/sql-functions/date-time-functions/months_sub.md)
->>>>>>> 80d40b0ef ([Doc] Add months_sub (#15489))
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
