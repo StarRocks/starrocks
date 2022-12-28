@@ -307,6 +307,14 @@ Status SegmentReplicateExecutor::init(const std::vector<DataDir*>& data_dirs) {
             .build(&_replicate_pool);
 }
 
+Status SegmentReplicateExecutor::update_max_threads(int max_threads) {
+    if (_replicate_pool != nullptr) {
+        return _replicate_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
+}
+
 std::unique_ptr<ReplicateToken> SegmentReplicateExecutor::create_replicate_token(
         const DeltaWriterOptions* opt, ThreadPool::ExecutionMode execution_mode) {
     return std::make_unique<ReplicateToken>(_replicate_pool->new_token(execution_mode), opt);

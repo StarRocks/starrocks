@@ -56,6 +56,8 @@ public:
     // because it needs path hash of each data dir.
     Status init(const std::vector<DataDir*>& data_dirs);
 
+    Status update_max_threads(int max_threads);
+
     std::unique_ptr<SegmentFlushToken> create_flush_token(
             const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer,
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::CONCURRENT);

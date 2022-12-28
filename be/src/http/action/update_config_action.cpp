@@ -36,7 +36,12 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "storage/compaction_manager.h"
+#include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
+#include "storage/segment_flush_executor.h"
+#include "storage/segment_replicate_executor.h"
+#include "storage/storage_engine.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -55,6 +60,22 @@ void UpdateConfigAction::handle(HttpRequest* req) {
             int64_t cache_limit = _exec_env->get_storage_page_cache_size();
             cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
+        });
+        _config_callback.emplace("max_compaction_concurrency", [&]() {
+            StorageEngine::instance()->compaction_manager()->update_max_threads(config::max_compaction_concurrency);
+        });
+        _config_callback.emplace("flush_thread_num_per_store", [&]() {
+            const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
+            StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
+                    config::flush_thread_num_per_store * dir_cnt);
+            StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
+                    config::flush_thread_num_per_store * dir_cnt);
+            StorageEngine::instance()->segment_flush_executor()->update_max_threads(config::flush_thread_num_per_store *
+                                                                                    dir_cnt);
+        });
+        _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
+            StorageEngine::instance()->increase_update_compaction_thread(
+                    config::update_compaction_num_threads_per_disk);
         });
     });
 

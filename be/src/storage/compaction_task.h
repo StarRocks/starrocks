@@ -53,6 +53,7 @@ struct CompactionTaskInfo {
     CompactionTaskState state;
     uint64_t task_id;
     Version output_version;
+<<<<<<< HEAD
     uint64_t elapsed_time;
     int64_t tablet_id;
     double compaction_score;
@@ -69,6 +70,24 @@ struct CompactionTaskInfo {
     size_t filtered_rows;
     size_t output_num_rows;
     CompactionType compaction_type;
+=======
+    uint64_t elapsed_time{0};
+    int64_t tablet_id{0};
+    double compaction_score{0};
+    int64_t start_time{0};
+    int64_t end_time{0};
+    size_t input_rows_num{0};
+    uint32_t input_rowsets_num{0};
+    size_t input_rowsets_size{0};
+    size_t input_segments_num{0};
+    uint32_t segment_iterator_num{0};
+    uint32_t output_segments_num{0};
+    uint32_t output_rowset_size{0};
+    size_t merged_rows{0};
+    size_t filtered_rows{0};
+    size_t output_num_rows{0};
+    CompactionType compaction_type{CompactionType::INVALID_COMPACTION};
+>>>>>>> 20e10b25b ([Enhancement] support dynamic change max thread num of thread pool (#14093))
 
     // for vertical compaction
     size_t column_group_size;
