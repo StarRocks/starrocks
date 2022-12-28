@@ -64,7 +64,3 @@ ${BUILD_DIR}/gen_cpp/%_types.cpp: ${CURDIR}/%.thrift | ${BUILD_DIR}/gen_cpp
 ${BUILD_DIR}/gen_cpp/StatusCode_types.cpp: ${CURDIR}/StatusCode.thrift | ${BUILD_DIR}/gen_cpp
 	${THRIFT} ${THRIFT_CPP_ARGS} $<
 	patch -p0 -d ${BUILD_DIR}/gen_cpp < StatusCode_types.diff 2>&1 1>/dev/null
-	
-${BUILD_DIR}/gen_cpp/Types_types.cpp: ${CURDIR}/Types.thrift | ${BUILD_DIR}/gen_cpp
-	${THRIFT} ${THRIFT_CPP_ARGS} $<
-	cat Types_types.diff.cpp >> ${BUILD_DIR}/gen_cpp/Types_types.cpp
