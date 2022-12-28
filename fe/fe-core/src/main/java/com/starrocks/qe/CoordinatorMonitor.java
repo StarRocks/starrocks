@@ -4,6 +4,7 @@ package com.starrocks.qe;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Queues;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,7 +42,7 @@ public class CoordinatorMonitor {
     }
 
     public boolean addDeadBackend(Long backendID) {
-        if (GlobalStateMgr.isCheckpointThread()) {
+        if (Catalog.isCheckpointThread()) {
             return false;
         }
         LOG.info("add backend {} to dead backend queue", backendID);
