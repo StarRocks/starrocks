@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableMap;
@@ -101,9 +100,11 @@ public class PrivilegeCheckerV2Test {
                 "    \"dynamic_partition.prefix\" = \"p\",\n" +
                 "    \"dynamic_partition.buckets\" = \"32\"" + ");";
         String createTblStmtStr2 = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                +
+                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                +
+                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
@@ -189,11 +190,11 @@ public class PrivilegeCheckerV2Test {
         mockRepository();
         ctxToRoot();
         String createBackupSql = "BACKUP SNAPSHOT " + dbName + ".backup_name1 " +
-                                 "TO example_repo " +
-                                 "ON (tbl1) " +
-                                 "PROPERTIES ('type' = 'full');";
+                "TO example_repo " +
+                "ON (tbl1) " +
+                "PROPERTIES ('type' = 'full');";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createBackupSql,
-                                                                      starRocksAssert.getCtx());
+                starRocksAssert.getCtx());
         DDLStmtExecutor.execute(statement, starRocksAssert.getCtx());
         String showBackupSql = "SHOW BACKUP FROM " + dbName + ";";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
@@ -201,12 +202,14 @@ public class PrivilegeCheckerV2Test {
         ShowResultSet set = executor.execute();
         Assert.assertTrue(set.getResultRows().size() > 0);
     }
+
     private static void mockBroker() {
         new MockUp<BrokerMgr>() {
             @Mock
             public FsBroker getAnyBroker(String brokerName) {
                 return new FsBroker();
             }
+
             @Mock
             public FsBroker getBroker(String brokerName, String host) throws AnalysisException {
                 return new FsBroker();
@@ -226,8 +229,8 @@ public class PrivilegeCheckerV2Test {
 
     private static void grantOrRevoke(String sql) throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql,
-                                                                    starRocksAssert.getCtx()),
-                                starRocksAssert.getCtx());
+                        starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
     }
 
     private static void createUsers() throws Exception {
@@ -1442,7 +1445,6 @@ public class PrivilegeCheckerV2Test {
         PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
     }
 
-
     @Test
     public void testAdminOperateStmt() throws Exception {
         // AdminSetConfigStmt
@@ -1455,7 +1457,7 @@ public class PrivilegeCheckerV2Test {
         // AdminSetReplicaStatusStmt
         verifyGrantRevoke(
                 "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"10003\", " +
-                    "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
+                        "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
                 "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
@@ -1503,16 +1505,15 @@ public class PrivilegeCheckerV2Test {
                 "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
     }
 
-
     @Test
     public void testAlterSystemStmt() throws Exception {
         // AlterSystemStmt
         verifyNODEAndGRANT("ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
-                           "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
 
         // CancelAlterSystemStmt
         verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";",
-                           "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+                "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
     }
 
     @Test
@@ -1535,7 +1536,6 @@ public class PrivilegeCheckerV2Test {
                 "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
     }
 
-
     @Test
     public void testSetStmt() throws Exception {
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
@@ -1547,9 +1547,9 @@ public class PrivilegeCheckerV2Test {
     public void testRoutineLoadStmt() throws Exception {
         // CREATE ROUTINE LOAD STMT
         String createSql = "CREATE ROUTINE LOAD db1.job_name2 ON tbl1 " +
-                           "COLUMNS(c1) FROM KAFKA " +
-                           "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
-                           " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+                "COLUMNS(c1) FROM KAFKA " +
+                "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
+                " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
         verifyGrantRevoke(
                 createSql,
                 "grant insert on db1.tbl1 to test",
@@ -1572,7 +1572,8 @@ public class PrivilegeCheckerV2Test {
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + alterSql);
-            Assert.assertTrue(e.getMessage().contains("Routine load job [job_name2] not found when checking privilege"));
+            Assert.assertTrue(
+                    e.getMessage().contains("Routine load job [job_name2] not found when checking privilege"));
         }
         ctxToRoot();
         starRocksAssert.withRoutineLoad(createSql);
@@ -1619,9 +1620,9 @@ public class PrivilegeCheckerV2Test {
     public void testRoutineLoadShowStmt() throws Exception {
         ctxToRoot();
         String createSql = "CREATE ROUTINE LOAD db1.job_name1 ON tbl1 " +
-                           "COLUMNS(c1) FROM KAFKA " +
-                           "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
-                           " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+                "COLUMNS(c1) FROM KAFKA " +
+                "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
+                " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
@@ -1632,7 +1633,8 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.withRoutineLoad(createSql);
 
         String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = 'job_name1';";
-        StatementBase statementTask = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
+        StatementBase statementTask =
+                UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
         ShowResultSet set = executor.execute();
         for (int i = 0; i < 30; i++) {
@@ -1651,46 +1653,46 @@ public class PrivilegeCheckerV2Test {
         set = executorBeforeGrant.execute();
         Assert.assertEquals(0, set.getResultRows().size());
         ctxToRoot();
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
-                                starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(
+                UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
         ctxToTestUser();
         ShowExecutor executorAfterGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
         set = executorAfterGrant.execute();
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
-                                                                    starRocksAssert.getCtx()),
-                                starRocksAssert.getCtx());
+                        starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
         ctxToTestUser();
     }
-
 
     @Test
     public void testLoadStmt() throws Exception {
         // LOAD STMT
         // create resource
-        String createResourceStmt = "CREATE EXTERNAL RESOURCE \"my_spark\""  +
-                                    "PROPERTIES (" +
-                                    "\"type\" = \"spark\"," +
-                                    "\"spark.master\" = \"yarn\", " +
-                                    "\"spark.submit.deployMode\" = \"cluster\", " +
-                                    "\"spark.executor.memory\" = \"1g\", " +
-                                    "\"spark.yarn.queue\" = \"queue0\", " +
-                                    "\"spark.hadoop.yarn.resourcemanager.address\" = \"resourcemanager_host:8032\", " +
-                                    "\"spark.hadoop.fs.defaultFS\" = \"hdfs://namenode_host:9000\", " +
-                                    "\"working_dir\" = \"hdfs://namenode_host:9000/tmp/starrocks\", " +
-                                    "\"broker\" = \"broker0\", " +
-                                    "\"broker.username\" = \"user0\", " +
-                                    "\"broker.password\" = \"password0\"" +
-                                    ");";
+        String createResourceStmt = "CREATE EXTERNAL RESOURCE \"my_spark\"" +
+                "PROPERTIES (" +
+                "\"type\" = \"spark\"," +
+                "\"spark.master\" = \"yarn\", " +
+                "\"spark.submit.deployMode\" = \"cluster\", " +
+                "\"spark.executor.memory\" = \"1g\", " +
+                "\"spark.yarn.queue\" = \"queue0\", " +
+                "\"spark.hadoop.yarn.resourcemanager.address\" = \"resourcemanager_host:8032\", " +
+                "\"spark.hadoop.fs.defaultFS\" = \"hdfs://namenode_host:9000\", " +
+                "\"working_dir\" = \"hdfs://namenode_host:9000/tmp/starrocks\", " +
+                "\"broker\" = \"broker0\", " +
+                "\"broker.username\" = \"user0\", " +
+                "\"broker.password\" = \"password0\"" +
+                ");";
         starRocksAssert.withResource(createResourceStmt);
         // create load & check resource privilege
         String createSql = "LOAD LABEL db1.job_name1" +
-                           "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
-                           "INTO TABLE tbl1) " +
-                           "WITH RESOURCE 'my_spark'" +
-                           "('username' = 'test_name','password' = 'pwd') " +
-                           "PROPERTIES ('timeout' = '3600');";
+                "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                "INTO TABLE tbl1) " +
+                "WITH RESOURCE 'my_spark'" +
+                "('username' = 'test_name','password' = 'pwd') " +
+                "PROPERTIES ('timeout' = '3600');";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createSql, starRocksAssert.getCtx());
         ctxToTestUser();
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -1705,25 +1707,24 @@ public class PrivilegeCheckerV2Test {
         }
         // create load & check table privilege
         createSql = "LOAD LABEL db1.job_name1" +
-                    "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
-                    "INTO TABLE tbl1) " +
-                    "WITH BROKER 'my_broker'" +
-                    "('username' = 'test_name','password' = 'pwd') " +
-                    "PROPERTIES ('timeout' = '3600');";
+                "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                "INTO TABLE tbl1) " +
+                "WITH BROKER 'my_broker'" +
+                "('username' = 'test_name','password' = 'pwd') " +
+                "PROPERTIES ('timeout' = '3600');";
         verifyGrantRevoke(
                 createSql,
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
                 "INSERT command denied to user 'test'@'localhost' for table '[tbl1]'");
 
-
         // create broker load
         createSql = "LOAD LABEL db1.job_name1" +
-                    "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
-                    "INTO TABLE tbl1) " +
-                    "WITH RESOURCE 'my_spark'" +
-                    "('username' = 'test_name','password' = 'pwd') " +
-                    "PROPERTIES ('timeout' = '3600');";
+                "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                "INTO TABLE tbl1) " +
+                "WITH RESOURCE 'my_spark'" +
+                "('username' = 'test_name','password' = 'pwd') " +
+                "PROPERTIES ('timeout' = '3600');";
         starRocksAssert.withLoad(createSql);
 
         // ALTER LOAD STMT
@@ -1751,8 +1752,8 @@ public class PrivilegeCheckerV2Test {
         // prepare
         mockBroker();
         String createExportSql = "EXPORT TABLE db1.tbl1 " +
-                                 "TO 'hdfs://hdfs_host:port/a/b/c/' " +
-                                 "WITH BROKER 'broker0'";
+                "TO 'hdfs://hdfs_host:port/a/b/c/' " +
+                "WITH BROKER 'broker0'";
         starRocksAssert.withExport(createExportSql);
         String showExportSql = "SHOW EXPORT FROM db1";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showExportSql, starRocksAssert.getCtx());
@@ -1774,16 +1775,17 @@ public class PrivilegeCheckerV2Test {
         ShowExecutor executorBeforeGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         set = executorBeforeGrant.execute();
         Assert.assertEquals(0, set.getResultRows().size());
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
-                                starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(
+                UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
         ctxToTestUser();
         ShowExecutor executorAfterGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         set = executorAfterGrant.execute();
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
-                                                                    starRocksAssert.getCtx()),
-                                starRocksAssert.getCtx());
+                        starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
         ctxToTestUser();
 
         // CANCEL EXPORT STMT
@@ -1802,8 +1804,8 @@ public class PrivilegeCheckerV2Test {
 
         mockBroker();
         String createExportSql = "EXPORT TABLE db1.tbl1 " +
-                                 "TO 'hdfs://hdfs_host:port/a/b/c/' " +
-                                 "WITH BROKER 'broker0'";
+                "TO 'hdfs://hdfs_host:port/a/b/c/' " +
+                "WITH BROKER 'broker0'";
         String expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) for this operation";
         verifyGrantRevoke(
                 createExportSql,
@@ -1818,10 +1820,10 @@ public class PrivilegeCheckerV2Test {
         String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) for this operation";
 
         String createRepoSql = "CREATE REPOSITORY `oss_repo` WITH BROKER `broker0` " +
-                               "ON LOCATION 'oss://starRocks_backup' PROPERTIES ( " +
-                               "'fs.oss.accessKeyId' = 'xxx'," +
-                               "'fs.oss.accessKeySecret' = 'yyy'," +
-                               "'fs.oss.endpoint' = 'oss-cn-beijing.aliyuncs.com');";
+                "ON LOCATION 'oss://starRocks_backup' PROPERTIES ( " +
+                "'fs.oss.accessKeyId' = 'xxx'," +
+                "'fs.oss.accessKeySecret' = 'yyy'," +
+                "'fs.oss.endpoint' = 'oss-cn-beijing.aliyuncs.com');";
         // CREATE REPOSITORY STMT
         verifyGrantRevoke(
                 createRepoSql,
@@ -1851,14 +1853,14 @@ public class PrivilegeCheckerV2Test {
         mockRepository();
         String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) for this operation";
         String createBackupSql = "BACKUP SNAPSHOT db1.backup_name1 " +
-                                 "TO example_repo " +
-                                 "ON (tbl1) " +
-                                 "PROPERTIES ('type' = 'full');";
+                "TO example_repo " +
+                "ON (tbl1) " +
+                "PROPERTIES ('type' = 'full');";
 
         // check REPOSITORY privilege
         ctxToTestUser();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createBackupSql,
-                                                                      starRocksAssert.getCtx());
+                starRocksAssert.getCtx());
         try {
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
             Assert.fail();
@@ -1933,9 +1935,9 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         String cancelBackupSql = "CANCEL BACKUP FROM db2;";
         verifyGrantRevoke(cancelBackupSql,
-                          "grant export on db2.tbl1 to test",
-                          "revoke export on db2.tbl1 from test",
-                          "EXPORT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "grant export on db2.tbl1 to test",
+                "revoke export on db2.tbl1 from test",
+                "EXPORT command denied to user 'test'@'localhost' for table 'tbl1'");
         ctxToRoot();
         grantOrRevoke("revoke repository on system from test");
     }
@@ -1945,8 +1947,8 @@ public class PrivilegeCheckerV2Test {
 
         ctxToTestUser();
         String restoreSql = "RESTORE SNAPSHOT db1.`snapshot_1` FROM `example_repo` " +
-                            "ON ( `tbl1` ) " +
-                            "PROPERTIES ( 'backup_timestamp' = '2018-05-04-16-45-08', 'replication_num' = '1');";
+                "ON ( `tbl1` ) " +
+                "PROPERTIES ( 'backup_timestamp' = '2018-05-04-16-45-08', 'replication_num' = '1');";
 
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(restoreSql, starRocksAssert.getCtx());
 
@@ -1974,9 +1976,9 @@ public class PrivilegeCheckerV2Test {
         grantOrRevoke("grant create_view on database db1 to test");
 
         verifyGrantRevoke(restoreSql,
-                          "grant SELECT,INSERT on db1.tbl1 to test",
-                          "revoke SELECT,INSERT on db1.tbl1 from test",
-                          "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
         // revoke
         ctxToRoot();
         grantOrRevoke("revoke repository on system from test");
@@ -1988,15 +1990,15 @@ public class PrivilegeCheckerV2Test {
 
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv1 " +
-                           "distributed by hash(k2)" +
-                           "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
-                           "PROPERTIES (\n" +
-                           "\"replication_num\" = \"1\"\n" +
-                           ") " +
-                           "as select k1, db1.tbl1.k2 from db1.tbl1;";
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
 
         String expectError = "Access denied; you need (at least one of) the " +
-                             "CREATE MATERIALIZED VIEW privilege(s) for this operation";
+                "CREATE MATERIALIZED VIEW privilege(s) for this operation";
         verifyGrantRevoke(
                 createSql,
                 "grant create_materialized_view on db1 to test",
@@ -2009,19 +2011,19 @@ public class PrivilegeCheckerV2Test {
 
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv1 " +
-                           "distributed by hash(k2)" +
-                           "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
-                           "PROPERTIES (\n" +
-                           "\"replication_num\" = \"1\"\n" +
-                           ") " +
-                           "as select k1, db1.tbl1.k2 from db1.tbl1;";
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedStatementView(createSql);
         verifyGrantRevoke(
                 "alter materialized view db1.mv1 rename mv2;",
                 "grant alter on materialized_view db1.mv1 to test",
                 "revoke alter on materialized_view db1.mv1 from test",
                 "Access denied; you need (at least one of) the ALTER " +
-                "MATERIALIZED VIEW privilege(s) for this operation");
+                        "MATERIALIZED VIEW privilege(s) for this operation");
         ctxToRoot();
         starRocksAssert.dropMaterializedView("db1.mv1");
         ctxToTestUser();
@@ -2033,12 +2035,12 @@ public class PrivilegeCheckerV2Test {
         ctxToRoot();
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv2 " +
-                           "distributed by hash(k2)" +
-                           "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
-                           "PROPERTIES (\n" +
-                           "\"replication_num\" = \"1\"\n" +
-                           ") " +
-                           "as select k1, db1.tbl1.k2 from db1.tbl1;";
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedStatementView(createSql);
         verifyGrantRevoke(
                 "REFRESH MATERIALIZED VIEW db1.mv2;",
@@ -2061,12 +2063,12 @@ public class PrivilegeCheckerV2Test {
         ctxToRoot();
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv3 " +
-                           "distributed by hash(k2)" +
-                           "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
-                           "PROPERTIES (\n" +
-                           "\"replication_num\" = \"1\"\n" +
-                           ") " +
-                           "as select k1, db1.tbl1.k2 from db1.tbl1;";
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedStatementView(createSql);
         String showBackupSql = "SHOW MATERIALIZED VIEW FROM db1;";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
@@ -2097,12 +2099,12 @@ public class PrivilegeCheckerV2Test {
         ctxToRoot();
         Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv4 " +
-                           "distributed by hash(k2)" +
-                           "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
-                           "PROPERTIES (\n" +
-                           "\"replication_num\" = \"1\"\n" +
-                           ") " +
-                           "as select k1, db1.tbl1.k2 from db1.tbl1;";
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedStatementView(createSql);
         verifyGrantRevoke(
                 "DROP MATERIALIZED VIEW db1.mv4;",
@@ -2125,15 +2127,37 @@ public class PrivilegeCheckerV2Test {
         };
 
         String createSql = "CREATE FUNCTION db1.MY_UDF_JSON_GET(string, string) RETURNS string " +
-                           "properties ( " +
-                           "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
-                           ")";
+                "properties ( " +
+                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                ")";
         String expectError = "Access denied; you need (at least one of) the " +
-                             "CREATE FUNCTION privilege(s) for this operation";
+                "CREATE FUNCTION privilege(s) for this operation";
         verifyGrantRevoke(
                 createSql,
                 "grant create_function on db1 to test",
                 "revoke create_function on db1 from test",
+                expectError);
+    }
+
+    @Test
+    public void testCreateGlobalFunc() throws Exception {
+
+        new MockUp<CreateFunctionStmt>() {
+            @Mock
+            public void analyze(ConnectContext context) throws AnalysisException {
+            }
+        };
+
+        String createSql = "CREATE GLOBAL FUNCTION MY_UDF_JSON_GET(string, string) RETURNS string " +
+                "properties ( " +
+                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                ")";
+        String expectError = "Access denied; you need (at least one of) the " +
+                "CREATE_GLOBAL_FUNCTION privilege(s) for this operation";
+        verifyGrantRevoke(
+                createSql,
+                "grant create_global_function on system to test",
+                "revoke create_global_function on system from test",
                 expectError);
     }
 

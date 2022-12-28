@@ -154,14 +154,16 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowFunctionsStatement(ShowFunctionsStmt node, ConnectContext context) {
-            String dbName = node.getDbName();
-            if (Strings.isNullOrEmpty(dbName)) {
-                dbName = context.getDatabase();
+            if (!node.getIsGlobal() && !node.getIsBuiltin()) {
+                String dbName = node.getDbName();
                 if (Strings.isNullOrEmpty(dbName)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                    dbName = context.getDatabase();
+                    if (Strings.isNullOrEmpty(dbName)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                    }
                 }
+                node.setDbName(dbName);
             }
-            node.setDbName(dbName);
 
             if (node.getExpr() != null) {
                 ErrorReport.reportSemanticException(ERR_UNSUPPORTED_SQL_PATTERN);
@@ -463,7 +465,8 @@ public class ShowStmtAnalyzer {
 
         private void descExternalCatalogTable(DescribeStmt node, String catalogName, String dbName, String tbl) {
             // show external table schema only
-            String procString = "/catalog/" + catalogName + "/" + dbName + "/" + tbl + "/" + ExternalTableProcDir.SCHEMA;
+            String procString =
+                    "/catalog/" + catalogName + "/" + dbName + "/" + tbl + "/" + ExternalTableProcDir.SCHEMA;
             try {
                 node.setNode(ProcService.getInstance().open(procString));
             } catch (AnalysisException e) {
@@ -496,7 +499,8 @@ public class ShowStmtAnalyzer {
             }
 
             BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
-            if (!(binaryPredicate.getChild(0) instanceof SlotRef && binaryPredicate.getChild(1) instanceof LiteralExpr)) {
+            if (!(binaryPredicate.getChild(0) instanceof SlotRef &&
+                    binaryPredicate.getChild(1) instanceof LiteralExpr)) {
                 throw new SemanticException("Only support column = \"string literal\" format predicate");
             }
         }
@@ -652,7 +656,8 @@ public class ShowStmtAnalyzer {
                 try {
                     user.analyze();
                 } catch (AnalysisException e) {
-                    SemanticException exception = new SemanticException("failed to show authentication for " + user.toString());
+                    SemanticException exception =
+                            new SemanticException("failed to show authentication for " + user.toString());
                     exception.initCause(e);
                     throw exception;
                 }

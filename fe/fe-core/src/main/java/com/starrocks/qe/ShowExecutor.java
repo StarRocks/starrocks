@@ -357,8 +357,8 @@ public class ShowExecutor {
                     AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                     mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
                         if (!PrivilegeManager.checkTableAction(ctx, db.getFullName(),
-                                                               baseTableInfo.getTableName(),
-                                                               PrivilegeType.TableAction.SELECT)) {
+                                baseTableInfo.getTableName(),
+                                PrivilegeType.TableAction.SELECT)) {
                             baseTableHasPrivilege.set(false);
                         }
                     });
@@ -366,7 +366,7 @@ public class ShowExecutor {
                         continue;
                     }
                     if (!PrivilegeManager.checkAnyActionOnMaterializedView(ctx, db.getFullName(),
-                                                                           mvTable.getName())) {
+                            mvTable.getName())) {
                         continue;
                     }
                 }
@@ -489,10 +489,16 @@ public class ShowExecutor {
     // Handle show functions
     private void handleShowFunctions() throws AnalysisException {
         ShowFunctionsStmt showStmt = (ShowFunctionsStmt) stmt;
-        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDbName());
-        MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
-        List<Function> functions = showStmt.getIsBuiltin() ? ctx.getGlobalStateMgr().getBuiltinFunctions() :
-                db.getFunctions();
+        List<Function> functions = null;
+        if (showStmt.getIsBuiltin()) {
+            functions = ctx.getGlobalStateMgr().getBuiltinFunctions();
+        } else if (showStmt.getIsGlobal()) {
+            functions = ctx.getGlobalStateMgr().getGlobalFunctionMgr().getFunctions();
+        } else {
+            Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDbName());
+            MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
+            functions = db.getFunctions();
+        }
 
         List<List<Comparable>> rowSet = Lists.newArrayList();
         for (Function function : functions) {
@@ -1067,8 +1073,8 @@ public class ShowExecutor {
                 RoutineLoadJob routineLoadJob = iterator.next();
                 try {
                     if (!PrivilegeManager.checkAnyActionOnTable(ctx,
-                                                                routineLoadJob.getDbFullName(),
-                                                                routineLoadJob.getTableName())) {
+                            routineLoadJob.getDbFullName(),
+                            routineLoadJob.getTableName())) {
                         iterator.remove();
                     }
                 } catch (MetaNotFoundException e) {
@@ -1133,13 +1139,13 @@ public class ShowExecutor {
             }
         } else {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                                                         dbFullName,
-                                                                         tableName,
-                                                                         PrivPredicate.LOAD)) {
+                    dbFullName,
+                    tableName,
+                    PrivPredicate.LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                                                    ConnectContext.get().getQualifiedUser(),
-                                                    ConnectContext.get().getRemoteIP(),
-                                                    tableName);
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        tableName);
             }
         }
         // get routine load task info
@@ -1554,7 +1560,7 @@ public class ShowExecutor {
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
                 if (!PrivilegeManager.checkTableAction(ctx, tableName.getDb(), tableName.getTbl(),
-                                                       PrivilegeType.TableAction.EXPORT)) {
+                        PrivilegeType.TableAction.EXPORT)) {
                     privilegeDeny.set(true);
                 }
             });
