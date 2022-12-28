@@ -694,5 +694,4 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
     }
 
-
 }
