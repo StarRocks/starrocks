@@ -121,7 +121,7 @@ private:
 
     std::mutex _lock;
     int _items{0};
-    // _configs[i] is the client configuration of |_clients[i].
+    // _client_cache_keys[i] is the client cache key of |_clients[i].
     ClientCacheKey _client_cache_keys[kMaxItems];
     S3ClientPtr _clients[kMaxItems];
     Random _rand;
