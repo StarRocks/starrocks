@@ -91,7 +91,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             newScanColumnRefs.put(metaColumn, metaScan.getColRefToColumnMetaMap().get(usedColumn));
 
             Function aggFunction = aggCall.getFunction();
-            // DictMerge meta aggregate function is special, need change the are type from
+            // DictMerge meta aggregate function is special, need change their types from
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
                 aggFunction = Expr.getBuiltinFunction(aggCall.getFnName(),
@@ -106,11 +106,9 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator newMetaScan =
                 new LogicalMetaScanOperator(metaScan.getTable(), newScanColumnRefs, aggColumnIdToNames);
 
-        OptExpression newProject = new OptExpression(project);
-        newProject.getInputs().add(OptExpression.create(newMetaScan));
-
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
                 agg.getType(), agg.getGroupingKeys(), newAggCalls);
-        return Lists.newArrayList(OptExpression.create(newAggOperator, newProject));
+        // all used columns from aggCalls are from newMetaScan, we can remove the old project directly.
+        return Lists.newArrayList(OptExpression.create(newAggOperator, OptExpression.create(newMetaScan)));
     }
 }

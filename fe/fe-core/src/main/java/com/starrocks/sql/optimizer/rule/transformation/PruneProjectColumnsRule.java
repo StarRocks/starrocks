@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -64,7 +63,6 @@ public class PruneProjectColumnsRule extends TransformationRule {
             }
         }));
 
-        LogicalOperator inputOp = (LogicalOperator) input.inputAt(0).getOp();
         if (newMap.isEmpty()) {
             ColumnRefOperator constCol = context.getColumnRefFactory()
                     .create("auto_fill_col", Type.TINYINT, true);
