@@ -85,6 +85,8 @@ public:
 
     void schedule();
 
+    Status update_max_threads(int max_threads);
+
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
