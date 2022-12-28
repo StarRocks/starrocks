@@ -42,6 +42,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -326,7 +328,19 @@ public class Auth implements Writable {
         // }
         readLock();
         try {
-            return userPrivTable.checkPassword(remoteUser, remoteHost, remotePasswd, randomString, currentUser);
+            if (!userPrivTable.allowLoginAttempt(remoteUser, remoteHost)) {
+                // too many failed attempts
+                return false;
+            }
+            if (userPrivTable.checkPassword(remoteUser, remoteHost, remotePasswd, randomString, currentUser)) {
+                // password is correct
+                userPrivTable.clearFailedAttemptRecords(remoteUser);
+                return true;
+            }
+            // password is wrong
+            userPrivTable.recordFailedAttempt(remoteUser);
+            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, remoteHost, remotePasswd);
+            return false;
         } finally {
             readUnlock();
         }
