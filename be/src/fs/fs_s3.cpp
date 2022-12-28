@@ -213,10 +213,12 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     bool path_style_access = config::object_storage_endpoint_path_style_access;
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
     if (hdfs_properties != nullptr) {
-        DCHECK(hdfs_properties->__isset.access_key);
-        DCHECK(hdfs_properties->__isset.secret_key);
-        access_key_id = hdfs_properties->access_key;
-        secret_access_key = hdfs_properties->secret_key;
+        if (hdfs_properties->__isset.access_key) {
+            access_key_id = hdfs_properties->access_key;
+        }
+        if (hdfs_properties->__isset.secret_key) {
+            secret_access_key = hdfs_properties->secret_key;
+        }
     } else {
         access_key_id = config::object_storage_access_key_id;
         secret_access_key = config::object_storage_secret_access_key;
