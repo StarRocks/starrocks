@@ -41,6 +41,7 @@
 
 ### 问题修复
 
+- 修复开启资源隔离后，多个资源组同时执行查询，可能会导致 BE 挂死的问题。[#14905](https://github.com/StarRocks/starrocks/pull/14905)
 - 修复在 UNION ALL 之上建立的 view 中，当 UNION ALL 输入列有常量 NULL，则 view 的 schema 错误，正常情况下列的类型是 UNION ALL 所有输入列的类型，但实际上是 NULL_TYPE 的问题。[#13917](https://github.com/StarRocks/starrocks/pull/13917)
 - 修复 `SELECT * FROM ...` 和 `SELECT * FROM ... LIMIT ...` 查询结果不一致的问题。[#13585](https://github.com/StarRocks/starrocks/pull/13585)
 - 修复 FE 同步外表 tablet 元数据时可能会覆盖本地 tablet 元数据导致从 Flink 导入数据失败的问题。[#12579](https://github.com/StarRocks/starrocks/pull/12579)
