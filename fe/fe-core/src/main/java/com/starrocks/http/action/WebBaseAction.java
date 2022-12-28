@@ -53,6 +53,7 @@ import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -179,8 +180,13 @@ public class WebBaseAction extends BaseAction {
             authInfo = getAuthorizationInfo(request);
             UserIdentity currentUser = checkPassword(authInfo);
             if (needAdmin()) {
-                checkGlobalAuth(currentUser, PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                        Privilege.NODE_PRIV), Operator.OR));
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    checkUserOwnsAdminRole(currentUser);
+                    checkActionOnSystem(currentUser, PrivilegeType.SystemAction.NODE);
+                } else {
+                    checkGlobalAuth(currentUser, PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
+                            Privilege.NODE_PRIV), Operator.OR));
+                }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
@@ -211,10 +217,24 @@ public class WebBaseAction extends BaseAction {
             if (sessionValue == null) {
                 return false;
             }
-            if (GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(sessionValue.currentUser,
-                    PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                                    Privilege.NODE_PRIV),
-                            Operator.OR))) {
+
+            boolean authorized = false;
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                try {
+                    checkUserOwnsAdminRole(sessionValue.currentUser);
+                    checkActionOnSystem(sessionValue.currentUser, PrivilegeType.SystemAction.NODE);
+                    authorized = true;
+                } catch (UnauthorizedException e) {
+                    // ignore
+                }
+            } else {
+                if (GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(sessionValue.currentUser,
+                        PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV, Privilege.NODE_PRIV), Operator.OR))) {
+                    authorized = true;
+                }
+            }
+
+            if (authorized) {
                 response.updateCookieAge(request, STARROCKS_SESSION_ID, STARROCKS_SESSION_EXPIRED_TIME);
                 request.setAuthorized(true);
 

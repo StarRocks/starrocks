@@ -1453,6 +1453,7 @@ public class DatabaseTransactionMgr {
                 for (Long tblId : tblIds) {
                     Table tbl = db.getTable(tblId);
                     if (tbl != null) {
+                        // won't check privilege in new RBAC framework
                         if (!GlobalStateMgr.getCurrentState().getAuth()
                                 .checkTblPriv(ConnectContext.get(), db.getFullName(),
                                         tbl.getName(), PrivPredicate.SHOW)) {

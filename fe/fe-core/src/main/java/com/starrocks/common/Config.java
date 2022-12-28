@@ -1068,9 +1068,9 @@ public class Config extends ConfigBase {
 
     /**
      * if this is set to true
-     * all pending load job will failed when call begin txn api
-     * all prepare load job will failed when call commit txn api
-     * all committed load job will waiting to be published
+     * all pending load job will fail when call begin txn api
+     * all prepare load job will fail when call commit txn api
+     * all committed load job will wait to be published
      */
     @ConfField(mutable = true)
     public static boolean disable_load_job = false;
@@ -1083,7 +1083,7 @@ public class Config extends ConfigBase {
     public static int db_used_data_quota_update_interval_secs = 300;
 
     /**
-     * Load using hadoop cluster will be deprecated in future.
+     * Load using hadoop cluster will be deprecated in the future.
      * Set to true to disable this kind of load.
      */
     @ConfField(mutable = true)
@@ -1108,7 +1108,7 @@ public class Config extends ConfigBase {
     public static boolean tablet_sched_disable_balance = false;
 
     /**
-     * The following 1 configs can set to true to disable the automatic colocate tables's relocate and balance.
+     * The following configuration can set to true to disable the automatic colocate tables' relocation and balance.
      * if *disable_colocate_balance* is set to true, ColocateTableBalancer will not balance colocate tables.
      */
     @ConfField(mutable = true, aliases = {"disable_colocate_balance"})
@@ -1293,7 +1293,7 @@ public class Config extends ConfigBase {
     public static int max_running_rollup_job_num_per_table = 1;
 
     /**
-     * if set to false, auth check will be disable, in case some goes wrong with the new privilege system.
+     * if set to false, auth check will be disabled, in case something goes wrong with the new privilege system.
      */
     @ConfField
     public static boolean enable_auth_check = true;

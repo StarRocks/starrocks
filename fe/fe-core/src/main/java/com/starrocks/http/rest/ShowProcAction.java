@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -74,7 +75,12 @@ public class ShowProcAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         // check authority
-        checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
+        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            checkUserOwnsAdminRole(currentUser);
+        } else {
+            checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
+        }
 
         String path = request.getSingleParameter("path");
         String forward = request.getSingleParameter("forward");

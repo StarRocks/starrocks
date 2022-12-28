@@ -25,6 +25,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
@@ -124,7 +125,11 @@ public class PrivilegeStmtAnalyzerV2 {
                 info.setAuthPlugin(pluginName);
                 info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
-            } catch (AuthenticationException e) {
+                if (stmt instanceof AlterUserStmt) {
+                    session.getGlobalStateMgr().getAuthenticationManager().checkPasswordReuse(
+                            userIdentity, stmt.getOriginalPassword());
+                }
+            } catch (AuthenticationException | DdlException e) {
                 SemanticException exception = new SemanticException("invalidate authentication: " + e.getMessage());
                 exception.initCause(e);
                 throw exception;

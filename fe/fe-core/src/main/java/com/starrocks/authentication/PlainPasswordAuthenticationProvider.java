@@ -20,13 +20,15 @@ import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Password;
 
+import java.nio.charset.StandardCharsets;
+
 public class PlainPasswordAuthenticationProvider implements AuthenticationProvider {
     public static final String PLUGIN_NAME = "MYSQL_NATIVE_PASSWORD";
 
     /**
      * check password complexity if `enable_validate_password` is set
      *
-     * The rules is hard-coded for temporary, will change to a plugin config later
+     * The rules are hard-coded for temporary, will change to a plugin config later
      **/
     protected void validatePassword(String password) throws AuthenticationException {
         if (!Config.enable_validate_password) {
@@ -78,15 +80,23 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             byte[] remotePassword,
             byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
+        // The password sent by mysql client has already been scrambled(encrypted) using random string,
+        // so we don't need to scramble it again.
+        if (randomString != null) {
+            byte[] saltPassword = MysqlPassword.getSaltFromPassword(authenticationInfo.getPassword());
+            if (saltPassword.length != remotePassword.length) {
+                throw new AuthenticationException("password length mismatch!");
+            }
 
-        byte[] saltPassword = MysqlPassword.getSaltFromPassword(authenticationInfo.getPassword());
-        if (saltPassword.length != remotePassword.length) {
-            throw new AuthenticationException("password length mismatch!");
-        }
-
-        if (remotePassword.length > 0
-                && !MysqlPassword.checkScramble(remotePassword, randomString, saltPassword)) {
-            throw new AuthenticationException("password mismatch!");
+            if (remotePassword.length > 0
+                    && !MysqlPassword.checkScramble(remotePassword, randomString, saltPassword)) {
+                throw new AuthenticationException("password mismatch!");
+            }
+        } else {
+            // Plain remote password, scramble it first.
+            byte[] scrambledRemotePass =
+                    MysqlPassword.makeScrambledPassword(new String(remotePassword, StandardCharsets.UTF_8));
+            MysqlPassword.checkScrambledPlainPass(authenticationInfo.getPassword(), scrambledRemotePass);
         }
     }
 
