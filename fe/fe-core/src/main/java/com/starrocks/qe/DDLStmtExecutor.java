@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
 import com.starrocks.analysis.FunctionName;
@@ -188,11 +187,15 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateFunctionStatement(CreateFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
-                Database db = context.getGlobalStateMgr().getDb(name.getDb());
-                if (db == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                if (name.isGlobalFunction()) {
+                    context.getGlobalStateMgr().getGlobalFunctionMgr().userAddFunction(stmt.getFunction());
+                } else {
+                    Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                    if (db == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                    }
+                    db.addFunction(stmt.getFunction());
                 }
-                db.addFunction(stmt.getFunction());
             });
             return null;
         }
@@ -200,13 +203,16 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropFunctionStatement(DropFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-
                 FunctionName name = stmt.getFunctionName();
-                Database db = context.getGlobalStateMgr().getDb(name.getDb());
-                if (db == null) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                if (name.isGlobalFunction()) {
+                    context.getGlobalStateMgr().getGlobalFunctionMgr().userDropFunction(stmt.getFunction());
+                } else {
+                    Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                    if (db == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                    }
+                    db.dropFunction(stmt.getFunction());
                 }
-                db.dropFunction(stmt.getFunction());
             });
             return null;
         }
@@ -244,7 +250,8 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt, ConnectContext context) {
+        public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt,
+                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().createMaterializedView(stmt);
             });
@@ -260,7 +267,8 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
+        public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt,
+                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().alterMaterializedView(stmt);
             });
@@ -443,7 +451,8 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
+        public ShowResultSet visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt,
+                                                                ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
                     if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
@@ -519,7 +528,8 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement stmt, ConnectContext context) {
+        public ShowResultSet visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement stmt,
+                                                               ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().renameDatabase(stmt);
             });
@@ -622,7 +632,8 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt, ConnectContext context) {
+        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt,
+                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getTabletChecker().cancelRepairTable(stmt);
             });
@@ -686,7 +697,8 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt stmt, ConnectContext context) {
+        public ShowResultSet visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt stmt,
+                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().setReplicaStatus(stmt);
             });

@@ -364,6 +364,7 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.parquet.Strings;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -3758,6 +3759,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowFunctionsStatement(StarRocksParser.ShowFunctionsStatementContext context) {
         boolean isBuiltIn = context.BUILTIN() != null;
+        boolean isGlobal = context.GLOBAL() != null;
         boolean isVerbose = context.FULL() != null;
 
         String dbName = null;
@@ -3775,20 +3777,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             where = (Expr) visit(context.expression());
         }
 
-        return new ShowFunctionsStmt(dbName, isBuiltIn, isVerbose, pattern, where);
+        return new ShowFunctionsStmt(dbName, isBuiltIn, isGlobal, isVerbose, pattern, where);
     }
 
     @Override
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        boolean isGlobal = context.GLOBAL() != null;
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (isGlobal) {
+            if (!Strings.isNullOrEmpty(fnName.getDb())) {
+                throw new IllegalArgumentException(
+                        "Global function name does not support qualified name: " + functionName);
+            }
+            fnName.setAsGlobalFunction();
+        }
 
-        return new DropFunctionStmt(FunctionName.createFnName(functionName),
-                getFunctionArgsDef(context.typeList()));
+        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()));
     }
 
     @Override
     public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
         String functionType = "SCALAR";
+        boolean isGlobal = context.GLOBAL() != null;
         if (context.functionType != null) {
             functionType = context.functionType.getText();
         }
@@ -3808,7 +3819,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateFunctionStmt(functionType, FunctionName.createFnName(functionName),
+
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (isGlobal) {
+            if (!Strings.isNullOrEmpty(fnName.getDb())) {
+                throw new IllegalArgumentException(
+                        "Global function name does not support qualified name: " + functionName);
+            }
+            fnName.setAsGlobalFunction();
+        }
+
+        return new CreateFunctionStmt(functionType, fnName,
                 getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
     }
 
