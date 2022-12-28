@@ -2,7 +2,7 @@
 
 ## Description
 
-Return the total number of rows of the distinct expr, equivalent to count(distinct expr)
+Returns the total number of rows of the distinct `expr`, equivalent to count(distinct expr).
 
 ## Syntax
 
@@ -20,7 +20,7 @@ Returns a numeric value. If no rows can be found, 0 is returned. This function i
 
 ## Examples
 
-Suppose there is a table named `test`. Query the category, and supplier of each order by `id`.
+Suppose there is a table named `test`. Query the category and supplier of each order by `id`.
 
 ~~~Plain
 select * from test order by id;
