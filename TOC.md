@@ -361,10 +361,6 @@
         + [json_exists](/sql-reference/sql-functions/json-functions/json-processing-functions/json_exist.md)
         + [json_query](/sql-reference/sql-functions/json-functions/json-processing-functions/json_query.md)
         + [json_string](/sql-reference/sql-functions/json-functions/json-processing-functions/json_string.md)
-    + Map 函数
-      + [map_keys](/sql-reference/sql-functions/map-functions/map_keys.md)
-      + [map_size](/sql-reference/sql-functions/map-functions/map_size.md)
-      + [map_values](/sql-reference/sql-functions/map-functions/map_values.md)
     + 模糊/正则匹配函数
       + [like](/sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](/sql-reference/sql-functions/like_predicate-functions/regexp.md)
@@ -373,7 +369,6 @@
     + 工具函数
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
       + [version](/sql-reference/sql-functions/utility-functions/version.md)
-      + [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](/sql-reference/sql-functions/utility-functions/sleep.md)
