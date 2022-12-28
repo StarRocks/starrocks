@@ -186,7 +186,7 @@ under the License.
             <dependency>
                 <groupId>commons-net</groupId>
                 <artifactId>commons-net</artifactId>
-                <version>3.7.2</version>
+                <version>3.9.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->

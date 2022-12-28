@@ -246,6 +246,7 @@ public:
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool has_intolerable_failure();
+    bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
 private:
     friend class OlapTableSink;
