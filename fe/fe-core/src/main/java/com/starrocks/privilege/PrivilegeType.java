@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.privilege;
 
 import java.util.HashMap;
@@ -35,6 +34,7 @@ public enum PrivilegeType {
 
     // used in ALL statement, e.g. grant select on all tables in all databases
     private final String plural;
+
     PrivilegeType(int id, Map<String, Action> actionMap, String plural) {
         this.id = id;
         this.actionMap = actionMap;
@@ -113,7 +113,9 @@ public enum PrivilegeType {
         OPERATE(7),
         CREATE_EXTERNAL_CATALOG(8),
         REPOSITORY(9),
-        CREATE_RESOURCE_GROUP(10); // AND MORE...
+        CREATE_RESOURCE_GROUP(10),
+        CREATE_GLOBAL_FUNCTION(11);
+        // AND MORE...
 
         private final int id;
 

@@ -36,6 +36,7 @@ import java.util.Objects;
  * db.function_name.
  */
 public class FunctionName implements Writable {
+    public static final String GLOBAL_UDF_DB = "__global_udf_db__";
     private String db_;
     private String fn_;
 
@@ -104,6 +105,14 @@ public class FunctionName implements Writable {
 
     public boolean isFullyQualified() {
         return db_ != null;
+    }
+
+    public boolean isGlobalFunction() {
+        return GLOBAL_UDF_DB.equals(db_);
+    }
+
+    public void setAsGlobalFunction() {
+        db_ = GLOBAL_UDF_DB;
     }
 
     @Override
