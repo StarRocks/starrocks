@@ -48,6 +48,12 @@ public:
     void add_blocked_driver(const DriverRawPtr driver);
     // remove blocked driver from poller
     void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
+
+    // add parked driver to poller
+    void add_parked_driver(const DriverRawPtr driver);
+    // remove blocked driver from poller
+    void active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func);
+
     // only used for collect metrics
     size_t blocked_driver_queue_len() const {
         std::shared_lock guard(_local_mutex);
@@ -65,6 +71,9 @@ private:
     mutable std::mutex _global_mutex;
     std::condition_variable _cond;
     DriverList _blocked_drivers;
+
+    mutable std::mutex _global_parked_mutex;
+    DriverList _parked_drivers;
 
     mutable std::shared_mutex _local_mutex;
     DriverList _local_blocked_drivers;

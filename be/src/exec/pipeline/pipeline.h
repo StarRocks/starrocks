@@ -28,6 +28,8 @@ class RuntimeState;
 
 namespace pipeline {
 
+enum PipelineKind { PIPELINE = 0, STREAM_PIPELINE = 1 };
+
 class Pipeline {
 public:
     Pipeline() = delete;

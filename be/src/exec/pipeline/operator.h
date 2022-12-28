@@ -39,6 +39,7 @@ using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
 class Operator {
     friend class PipelineDriver;
+    friend class StreamPipelineDriver;
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
@@ -188,6 +189,13 @@ public:
     RuntimeState* runtime_state() const;
 
     void set_prepare_time(int64_t cost_ns);
+
+    // MV Methods
+    virtual bool is_epoch_finishing() const { return false; }
+    virtual bool is_epoch_finished() const { return false; }
+    virtual Status set_epoch_finishing(RuntimeState* state) { return Status::OK(); }
+    virtual Status set_epoch_finished(RuntimeState* state) { return Status::OK(); }
+    virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
 protected:
     OperatorFactory* _factory;

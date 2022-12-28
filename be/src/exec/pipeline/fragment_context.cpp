@@ -16,6 +16,7 @@
 
 #include "exec/data_sink.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/stream_pipeline_driver.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -247,6 +248,17 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
     if (_runtime_state) {
         _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
     }
+}
+
+Status FragmentContext::reset_epoch() {
+    for (const auto& pipeline : _pipelines) {
+        for (const auto& driver : pipeline->drivers()) {
+            DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
+            auto* stream_driver = dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get());
+            RETURN_IF_ERROR(stream_driver->reset_epoch(_runtime_state.get()));
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline
