@@ -2,27 +2,27 @@
 
 ## Description
 
-Returns the value of `x` raised to the power of `y`.
+Returns the result of `x` raised to the power of `y`.
 
 ## Syntax
 
-```SQL
-POW(x,y);
-POWER(x,y);
+```Haskell
+POW(x,y);POWER(x,y);
 ```
 
 ## Parameters
 
-- `x`: The data type is DOUBLE.
-- `y`: The data type is DOUBLE.
+`x`: supports the DOUBLE data type.
+
+`y`: supports the DOUBLE data type.
 
 ## Return value
 
 Returns a value of the DOUBLE data type.
 
-## Example
+## Examples
 
-```
+```Plain
 mysql> select pow(2,2);
 +-----------+
 | pow(2, 2) |
