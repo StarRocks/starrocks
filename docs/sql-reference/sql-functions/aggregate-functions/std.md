@@ -16,10 +16,15 @@ Returns a `double` value which is the standard deviation of the selected field.
 
 ## Examples
 
+<<<<<<< HEAD
 Sample dataset
 
 ```sql
 MySQL [test]> select * from std_test;
+=======
+```plain
+MySQL > select * from std_test;
+>>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
 +------+------+
 | col0 | col1 |
 +------+------+
@@ -31,10 +36,14 @@ MySQL [test]> select * from std_test;
 +------+------+
 ```
 
+<<<<<<< HEAD
 Calculate the standard deviation of col0 and col1.
+=======
+Calculate the standard deviation of `col0` and `col1`.
+>>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
 
 ```sql
-MySQL [test]> select std(col0) as std_of_col0, std(col1) as std_of_col1 from std_test;
+MySQL > select std(col0) as std_of_col0, std(col1) as std_of_col1 from std_test;
 +--------------------+--------------------+
 | std_of_col0        | std_of_col1        |
 +--------------------+--------------------+
@@ -43,4 +52,8 @@ MySQL [test]> select std(col0) as std_of_col0, std(col1) as std_of_col1 from std
 ```
 
 ## keyword
+<<<<<<< HEAD
+=======
+
+>>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
 STD
