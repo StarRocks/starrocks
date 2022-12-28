@@ -119,6 +119,15 @@ public:
         do_update<true>(ctx, columns, state, row_num);
     }
 
+    AggStateTableKind agg_state_table_kind(bool is_append_only) const override {
+        return AggStateTableKind::INTERMEDIATE;
+    }
+
+    void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        do_update<false>(ctx, columns, state, row_num);
+    }
+
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
