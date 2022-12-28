@@ -1956,6 +1956,18 @@ public class Config extends ConfigBase {
     public static String ssl_key_password = "";
 
     /**
+     * the truststore file path
+     */
+    @ConfField
+    public static String ssl_truststore_location = "";
+
+    /**
+     * the password of truststore file
+     */
+    @ConfField
+    public static String ssl_truststore_password = "";
+
+    /**
      * ignore check db status when show proc '/catalog/catalog_name'
      */
     @ConfField(mutable = true)
