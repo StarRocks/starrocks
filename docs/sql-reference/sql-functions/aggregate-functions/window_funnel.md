@@ -70,8 +70,12 @@ mysql> select * from action;
 Execute the following statement:
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='Browse', event_type='Click', 
-        event_type='Order', event_type='Pay']) AS level from action group by uid order by uid; 
+select uid,
+       window_funnel(1800,time,0,[event_type='Browse', event_type='Click', 
+        event_type='Order', event_type='Pay']) AS level
+from action
+group by uid
+order by uid; 
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -121,8 +125,12 @@ mysql> select * from action1 order by time;
 Execute the following statement:
 
 ```Plaintext
-mysql> select uid, window_funnel(1800,time,0,[event_type='Browse', 
-        event_type='Click', event_type='Order', event_type='Pay']) AS level from action1 group by uid order by uid;
+select uid,
+       window_funnel(1800,time,0,[event_type='Browse', 
+        event_type='Click', event_type='Order', event_type='Pay']) AS level
+from action1
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -169,8 +177,12 @@ mysql> select * from action2 order by time;
 Execute the following statement:
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,0,[event_type='Browse', event_type='Click', 
-        event_type='Order', event_type='Pay']) AS level from action2 group by uid order by uid;
+select uid,
+       window_funnel(1900,time,0,[event_type='Browse', event_type='Click', 
+        event_type='Order', event_type='Pay']) AS level
+from action2
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+
@@ -185,8 +197,12 @@ mysql> select uid, window_funnel(1900,time,0,[event_type='Browse', event_type='C
 Change `mode` to `2` and execute the statement again.
 
 ```Plaintext
-mysql> select uid, window_funnel(1900,time,2,[event_type='Browse', event_type='Click', 
-        event_type='Order', event_type='Pay']) AS level from action2 group by uid order by uid;
+select uid,
+       window_funnel(1900,time,2,[event_type='Browse', event_type='Click', 
+        event_type='Order', event_type='Pay']) AS level
+from action2
+group by uid
+order by uid;
 +------+-------+
 | uid  | level |
 +------+-------+

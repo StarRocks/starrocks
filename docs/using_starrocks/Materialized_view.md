@@ -429,10 +429,12 @@ StarRocks 2.4 supports creating asynchronous materialized views for multiple bas
 As for the current version, multi-table materialized views support two refresh strategies:
 
 - **Async refresh**
-  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
+
+  Async refresh strategy allows materialized views to refresh through asynchronous refresh tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views.
 
 - **Manual refresh**
-  With manual refresh strategy, you can trigger a refresh task for a materialized view by running a SQL command. It does not guarantee strict consistency between the base table and its subordinate materialized views.
+
+  You can manually trigger a refresh task for an async materialized view. It does not guarantee strict consistency between the base table and its subordinate materialized views.
 
 ### Preparation
 
