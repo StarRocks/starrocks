@@ -211,13 +211,12 @@ void LoadChannel::abort() {
     }
 }
 
-void LoadChannel::abort(int64_t index_id, int64_t tablet_id) {
-    std::lock_guard l(_lock);
-    auto it = _tablets_channels.find(index_id);
-    if (it != _tablets_channels.end()) {
-        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(it->second.get());
+void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
+    auto channel = get_tablets_channel(index_id);
+    if (channel != nullptr) {
+        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(channel.get());
         if (local_tablets_channel != nullptr) {
-            local_tablets_channel->abort(tablet_id);
+            local_tablets_channel->abort(tablet_ids);
         }
     }
 }
