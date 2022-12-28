@@ -81,7 +81,6 @@ public class MysqlProto {
                 scramble, randomString, currentUserIdentity)) {
             checkPassWordFailCount.incrementAndGet();
             LOG.warn("{} consecutive failed logins", checkPassWordFailCount.intValue());
-            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
             return false;
         }
         checkPassWordFailCount.set(0);

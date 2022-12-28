@@ -112,6 +112,8 @@ public class AuthTest {
     @Before
     public void setUp() throws NoSuchMethodException, SecurityException {
         auth = new Auth();
+        // unlimited failed login attempts
+        Config.max_failed_login_attempts = -1;
 
         new Expectations() {
             {
@@ -2155,5 +2157,53 @@ public class AuthTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         auth.createUser(createUserStmt);
         Assert.assertNotNull(auth.getUserProperties("'12345'@'%'"));
+    }
+
+    @Test
+    public void testLoginFailed() throws Exception {
+        // 1. create user with no role
+        String userName = "test_user";
+        String password = "123456AAbb";
+        UserIdentity user = new UserIdentity(userName, "%");
+        user.analyze();
+        UserDesc userDesc = new UserDesc(user, password, true);
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user test_user identified by '123456AAbb'", ctx);
+        auth.createUser(createUserStmt);
+        String userFullName = user.getQualifiedUser();
+        String host = "data01.com";
+        String badpassword = "12345";
+        List<UserIdentity> currentUser = Lists.newArrayList();
+        byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes("utf-8");
+        Assert.assertTrue(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, password), seed, currentUser));
+
+        Config.max_failed_login_attempts = 2;
+        Config.password_lock_interval_seconds = 60;
+
+        // 1. normal login
+        Assert.assertTrue(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, password), seed, currentUser));
+
+        // 2. failed login, first time
+        Assert.assertFalse(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, badpassword), seed, currentUser));
+        Assert.assertTrue(ConnectContext.get().getState().getErrorMessage().contains("password"));
+
+        // 3. normal login
+        Assert.assertTrue(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, password), seed, currentUser));
+
+        // 4. failed login, first time
+        Assert.assertFalse(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, badpassword), seed, currentUser));
+        Assert.assertTrue(ConnectContext.get().getState().getErrorMessage().contains("password"));
+        // 5. failed login, second time
+        Assert.assertFalse(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, badpassword), seed, currentUser));
+        Assert.assertTrue(ConnectContext.get().getState().getErrorMessage().contains("password"));
+        // 6. failed login, third time, locked
+        Assert.assertFalse(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, password), seed, currentUser));
+        Assert.assertTrue(ConnectContext.get().getState().getErrorMessage().contains("Account is blocked"));
+
+        // 7. timeout & relogin
+        Config.password_lock_interval_seconds = 1;
+        Thread.sleep(1000);
+        Assert.assertTrue(auth.checkPassword(userFullName, host, MysqlPassword.scramble(seed, password), seed, currentUser));
+
     }
 }
