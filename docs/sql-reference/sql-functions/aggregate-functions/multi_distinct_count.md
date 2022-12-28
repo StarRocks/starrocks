@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the total number of rows of the distinct `expr`, equivalent to count(distinct expr).
+Returns the total number of rows of the `expr`, equivalent to count(distinct expr).
 
 ## Syntax
 
