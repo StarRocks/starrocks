@@ -14,8 +14,6 @@
 
 #include "exec/hdfs_scanner.h"
 
-#include <boost/algorithm/string.hpp>
-
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "io/compressed_input_stream.h"

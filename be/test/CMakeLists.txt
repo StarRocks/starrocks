@@ -42,6 +42,7 @@ set(EXEC_FILES
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/stream/mem_state_table_test.cpp
+        ./exec/stream/stream_aggregator_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/analytor_test.cpp

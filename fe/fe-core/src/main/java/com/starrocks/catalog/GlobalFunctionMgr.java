@@ -14,14 +14,17 @@
 
 package com.starrocks.catalog;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -144,6 +147,28 @@ public class GlobalFunctionMgr {
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
+    }
+
+    public long loadGlobalFunctions(DataInputStream dis, long checksum) throws IOException {
+        int count = dis.readInt();
+        checksum ^= count;
+        for (long i = 0; i < count; ++i) {
+            Function f = Function.read(dis);
+            replayAddFunction(f);
+        }
+        return checksum;
+    }
+
+    public long saveGlobalFunctions(DataOutputStream dos, long checksum) throws IOException {
+        List<Function> functions = getFunctions();
+        int size = functions.size();
+        checksum ^= size;
+        dos.writeInt(size);
+
+        for (Function f : functions) {
+            f.write(dos);
+        }
+        return checksum;
     }
 }
 

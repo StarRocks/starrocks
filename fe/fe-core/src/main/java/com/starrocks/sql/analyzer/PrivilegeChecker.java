@@ -901,6 +901,16 @@ public class PrivilegeChecker {
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
             // check operation privilege
+            // global function.
+            if (statement.getFunctionName().isGlobalFunction()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth()
+                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.DROP)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+                }
+                return null;
+            }
+
+            // db function.
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
@@ -911,6 +921,16 @@ public class PrivilegeChecker {
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
             // check operation privilege
+            // global function.
+            if (statement.getFunctionName().isGlobalFunction()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth()
+                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.CREATE)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
+                }
+                return null;
+            }
+
+            // db function.
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
