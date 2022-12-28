@@ -37,12 +37,14 @@ MySQL > select substring("starrockscluster", 1, 9);
 +-------------------------------------+
 | starrocks                           |
 +-------------------------------------+
+
 MySQL > select substring("starrocks", -5, 5);
 +-------------------------------+
 | substring('starrocks', -5, 5) |
 +-------------------------------+
 | rocks                         |
 +-------------------------------+
+
 MySQL > select substring("apple", 1, 9);
 +--------------------------+
 | substring('apple', 1, 9) |
