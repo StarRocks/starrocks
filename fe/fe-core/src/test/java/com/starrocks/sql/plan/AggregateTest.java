@@ -133,7 +133,7 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupByAsAnalyze() throws Exception {
         String sql = "select BITOR(825279661, 1960775729) as a from test_all_type group by a";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "group by: 11: bitor");
+        assertContains(plan, "group by: 11: expr");
     }
 
     @Test
