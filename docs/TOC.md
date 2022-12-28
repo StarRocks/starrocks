@@ -248,7 +248,9 @@
       + [microseconds_add](./sql-reference/sql-functions/date-time-functions/microseconds_add.md)
       + [microseconds_sub](./sql-reference/sql-functions/date-time-functions/microseconds_sub.md)
       + [minute](./sql-reference/sql-functions/date-time-functions/minute.md)
+      + [minutes_add](./sql-reference/sql-functions/date-time-functions/minutes_add.md)
       + [minutes_diff](./sql-reference/sql-functions/date-time-functions/minutes_diff.md)
+      + [minutes_sub](./sql-reference/sql-functions/date-time-functions/minutes_sub.md)
       + [month](./sql-reference/sql-functions/date-time-functions/month.md)
       + [months_add](./sql-reference/sql-functions/date-time-functions/months_add.md)
       + [months_diff](./sql-reference/sql-functions/date-time-functions/months_diff.md)
@@ -345,6 +347,11 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
+<<<<<<< HEAD
+=======
+      + [trim](./sql-reference/sql-functions/string-functions/trim.md)
+      + [substring](./sql-reference/sql-functions/string-functions/substring.md)
+>>>>>>> 8bcaaa98c ([Doc] Add substring (#15689))
     + JSON Functions
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
