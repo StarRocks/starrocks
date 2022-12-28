@@ -153,20 +153,6 @@ public class MetadataMgr {
                 metadata.getTableStatistics(session, table, columns, partitionKeys)).orElse(null);
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
-        if (connectorMetadata.isPresent()) {
-            try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys).forEach(files::add);
-            } catch (Exception e) {
-                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);
-                throw e;
-            }
-        }
-        return ImmutableList.copyOf(files.build());
-    }
-
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
                                                    TimeTravelSpec timeTravelSpec) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);

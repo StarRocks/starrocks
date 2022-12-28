@@ -33,6 +33,7 @@ import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -106,7 +107,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(com.starrocks.catalog.Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(com.starrocks.catalog.Table table, List<PartitionKey> partitionKeys,
+                                                   TimeTravelSpec timeTravelSpec) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         int size = partitionKeys.size();
         return MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).partitions.subList(0, size);

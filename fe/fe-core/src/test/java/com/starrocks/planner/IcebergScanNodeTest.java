@@ -15,6 +15,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.TimeTravelSpec;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -133,12 +134,13 @@ public class IcebergScanNodeTest {
     }
 
     private void setUpMock(boolean isPosDelete, com.starrocks.catalog.IcebergTable table,
-                           Table iTable, Snapshot snapshot) {
+                           Table iTable, Snapshot snapshot, TimeTravelSpec timeTravelSpec) {
         new MockUp<IcebergUtil>() {
             @Mock
             public TableScan getTableScan(Table table,
                                           Snapshot snapshot,
-                                          Expression icebergPredicate) {
+                                          Expression icebergPredicate,
+                                          TimeTravelSpec timeTravelSpec) {
                 return new DataTableScan(null, iTable);
             }
         };
@@ -206,13 +208,14 @@ public class IcebergScanNodeTest {
     @Test
     public void testGetScanRangeLocations(@Mocked com.starrocks.catalog.IcebergTable table,
                                           @Mocked Table iTable,
-                                          @Mocked Snapshot snapshot) throws UserException {
+                                          @Mocked Snapshot snapshot,
+                                          @Mocked TimeTravelSpec timeTravelSpec) throws UserException {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         tupleDesc.setTable(table);
 
-        setUpMock(true, table, iTable, snapshot);
+        setUpMock(true, table, iTable, snapshot, timeTravelSpec);
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
         scanNode.getScanRangeLocations();
@@ -232,13 +235,14 @@ public class IcebergScanNodeTest {
     @Test
     public void testGetScanRangeLocationsWithEquality(@Mocked com.starrocks.catalog.IcebergTable table,
                                           @Mocked Table iTable,
-                                          @Mocked Snapshot snapshot) throws UserException {
+                                          @Mocked Snapshot snapshot,
+                                          @Mocked TimeTravelSpec timeTravelSpec) throws UserException {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         tupleDesc.setTable(table);
 
-        setUpMock(false, table, iTable, snapshot);
+        setUpMock(false, table, iTable, snapshot, timeTravelSpec);
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
         scanNode.getScanRangeLocations();
@@ -256,13 +260,14 @@ public class IcebergScanNodeTest {
                                           @Mocked Snapshot snapshot,
                                           @Mocked PhysicalIcebergScanOperator node,
                                           @Mocked ColumnRefFactory columnRefFactory,
-                                          @Mocked ExecPlan context) throws UserException {
+                                          @Mocked ExecPlan context,
+                                          @Mocked TimeTravelSpec timeTravelSpec) throws UserException {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         tupleDesc.setTable(table);
 
-        setUpMock(false, table, iTable, snapshot);
+        setUpMock(false, table, iTable, snapshot, timeTravelSpec);
 
         Map<ColumnRefOperator, Column> columnMap = new HashMap<>();
         Map<ColumnRefOperator, Expr> columnRefOperatorExprMap = new HashMap<>();

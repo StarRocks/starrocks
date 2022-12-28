@@ -164,7 +164,7 @@ public class HiveMetadataTest {
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
-                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);

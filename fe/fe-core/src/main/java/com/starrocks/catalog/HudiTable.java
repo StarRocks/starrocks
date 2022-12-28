@@ -230,7 +230,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         List<RemoteFileInfo> hudiPartitions;
         try {
             hudiPartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
+                    .getRemoteFileInfos(getCatalogName(), this, partitionKeys, null);
         } catch (StarRocksConnectorException e) {
             LOG.warn("Table {} gets partition info failed.", name, e);
             return null;

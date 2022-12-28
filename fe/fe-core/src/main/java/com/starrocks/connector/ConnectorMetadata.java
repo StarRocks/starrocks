@@ -92,16 +92,7 @@ public interface ConnectorMetadata {
      * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
      * @param table
      * @param partitionKeys selected columns
-     * @return the remote file information of the query to scan.
-     */
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
-        return Lists.newArrayList();
-    }
-
-    /**
-     * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
-     * @param table
-     * @param partitionKeys selected columns
+     * @param timeTravelSpec
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
