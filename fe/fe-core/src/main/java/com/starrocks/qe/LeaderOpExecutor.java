@@ -38,8 +38,10 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TQueryOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 
 public class LeaderOpExecutor {
@@ -113,9 +115,6 @@ public class LeaderOpExecutor {
 
     // Send request to Leader
     private void forward() throws Exception {
-        String leaderHost = ctx.getGlobalStateMgr().getLeaderIp();
-        int leaderRpcPort = ctx.getGlobalStateMgr().getLeaderRpcPort();
-        TNetworkAddress thriftAddress = new TNetworkAddress(leaderHost, leaderRpcPort);
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         params.setSql(originStmt.originStmt);
@@ -142,12 +141,27 @@ public class LeaderOpExecutor {
         if (setStmt != null) {
             params.setModified_variables_sql(AST2SQL.toString(setStmt));
         }
-        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
-        result = FrontendServiceProxy.call(thriftAddress,
-                thriftTimeoutMs,
-                Config.thrift_rpc_retry_times,
-                client -> client.forward(params));
+        for (int i = 0; i < 3; i++) {
+            String leaderHost = ctx.getGlobalStateMgr().getLeaderIp();
+            int leaderRpcPort = ctx.getGlobalStateMgr().getLeaderRpcPort();
+            TNetworkAddress thriftAddress = new TNetworkAddress(leaderHost, leaderRpcPort);
+            LOG.info("Forward statement {} to Master {}, retried times: {}", ctx.getStmtId(), thriftAddress, i);
+            try {
+                result = FrontendServiceProxy.call(thriftAddress,
+                        thriftTimeoutMs,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.forward(params));
+            } catch (TTransportException te) {
+                if (te.getCause() instanceof SocketTimeoutException) {
+                    throw te;
+                } else {
+                    LOG.warn("forward to leader failed", te);
+                }
+            } catch (Exception e) {
+                LOG.warn("forward to leader failed", e);
+            }
+        }
     }
 
     public ByteBuffer getOutputPacket() {
