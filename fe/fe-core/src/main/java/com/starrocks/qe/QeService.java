@@ -36,6 +36,8 @@ import java.security.KeyStore;
 import java.security.SecureRandom;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 
 public class QeService {
     private static final Logger LOG = LogManager.getLogger(QeService.class);
@@ -81,8 +83,35 @@ public class QeService {
         kmf.init(keyStore, Config.ssl_key_password.toCharArray());
 
         SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-        sslContext.init(kmf.getKeyManagers(), null, new SecureRandom());
+        TrustManager[] trustManagers = null;
+        if (!Strings.isNullOrEmpty(Config.ssl_truststore_location)) {
+            trustManagers = createTrustManagers(Config.ssl_truststore_location, Config.ssl_truststore_password);
+        }
+        sslContext.init(kmf.getKeyManagers(), trustManagers, new SecureRandom());
         return sslContext;
+    }
+
+    /**
+     * Creates the trust managers required to initiate the {@link SSLContext}, using a JKS keystore as an input.
+     *
+     * @param filepath - the path to the JKS keystore.
+     * @param keystorePassword - the keystore's password.
+     * @return {@link TrustManager} array, that will be used to initiate the {@link SSLContext}.
+     * @throws Exception
+     */
+    private TrustManager[] createTrustManagers(String filepath, String keystorePassword) throws Exception {
+        KeyStore trustStore = KeyStore.getInstance("JKS");
+        InputStream trustStoreIS = new FileInputStream(filepath);
+        try {
+            trustStore.load(trustStoreIS, keystorePassword.toCharArray());
+        } finally {
+            if (trustStoreIS != null) {
+                trustStoreIS.close();
+            }
+        }
+        TrustManagerFactory trustFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        trustFactory.init(trustStore);
+        return trustFactory.getTrustManagers();
     }
 }
 

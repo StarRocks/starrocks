@@ -1491,4 +1491,16 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String ssl_key_password = "";
+
+    /**
+     * the truststore file path
+     */
+    @ConfField
+    public static String ssl_truststore_location = "";
+
+    /**
+     * the password of truststore file
+     */
+    @ConfField
+    public static String ssl_truststore_password = "";
 }
