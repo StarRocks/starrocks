@@ -58,7 +58,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
-    _init_partition_values();
+    RETURN_IF_ERROR(_init_partition_values());
     if (_filter_by_eval_partition_conjuncts) {
         _no_data = true;
         return Status::OK();
@@ -91,6 +91,12 @@ Status HiveDataSource::_init_partition_values() {
     if (!(_lake_table != nullptr && _has_partition_columns)) return Status::OK();
 
     auto* partition_desc = _lake_table->get_partition(_scan_range.partition_id);
+    if (partition_desc == nullptr) {
+        return Status::InternalError(
+                fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
+                            _scan_range.partition_id));
+    }
+
     const auto& partition_values = partition_desc->partition_key_value_evals();
     _partition_values = partition_values;
 
