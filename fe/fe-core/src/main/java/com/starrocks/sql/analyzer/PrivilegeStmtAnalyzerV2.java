@@ -27,6 +27,7 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.privilege.FunctionPEntryObject;
+import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
@@ -193,7 +194,7 @@ public class PrivilegeStmtAnalyzerV2 {
                 if (function == null) {
                     return privilegeManager.analyzeObject(
                             stmt.getPrivType(),
-                            Arrays.asList(FunctionPEntryObject.FUNC_NOT_FOUND));
+                            Arrays.asList(GlobalFunctionPEntryObject.FUNC_NOT_FOUND));
                 } else {
                     return privilegeManager.analyzeObject(
                             stmt.getPrivType(),

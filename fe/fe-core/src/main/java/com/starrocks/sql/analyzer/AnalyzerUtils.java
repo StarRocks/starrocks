@@ -45,6 +45,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -172,14 +173,20 @@ public class AnalyzerUtils {
             return null;
         }
 
+        String name = fn.signatureString();
         if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             if (!session.getGlobalStateMgr().getAuth().checkGlobalPriv(session, PrivPredicate.USAGE)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE priv for GLOBAL", fnName),
+                        "Found UDF: %s and need the USAGE priv for GLOBAL", name),
                         ErrorType.USER_ERROR);
             }
         } else {
-            // TODO(yanz): priv check V2 for using global function.
+            if (!PrivilegeManager.checkGlobalFunctionAction(session, name,
+                    PrivilegeType.GlobalFunctionAction.USAGE)) {
+                throw new StarRocksPlannerException(String.format("Access denied. " +
+                                "Found UDF: %s and need the USAGE priv for GLOBAL FUNCTION",
+                        name), ErrorType.USER_ERROR);
+            }
         }
         return fn;
     }

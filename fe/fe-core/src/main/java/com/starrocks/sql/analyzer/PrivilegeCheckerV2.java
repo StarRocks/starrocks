@@ -23,6 +23,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -1648,11 +1649,23 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
-            // TODO(yanz): privilege checker for global function.
             FunctionName functionName = statement.getFunctionName();
+            // global function.
             if (functionName.isGlobalFunction()) {
+                FunctionSearchDesc desc = statement.getFunction();
+                Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(desc);
+                if (function == null) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_FUNC_NOT_FOUND);
+                }
+                if (!PrivilegeManager.checkGlobalFunctionAction(context, function.signatureString(),
+                        PrivilegeType.GlobalFunctionAction.DROP)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "DROP GLOBAL FUNCTION");
+                }
                 return null;
             }
+
+            // db function.
             Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
             Function function = db.getFunction(statement.getFunction());
             if (null == function) {
