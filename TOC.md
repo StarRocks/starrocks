@@ -267,10 +267,10 @@
       + [current_timestamp](/sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](/sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](/sql-reference/sql-functions/date-time-functions/date_add.md)
-      + [datediff](/sql-reference/sql-functions/date-time-functions/datediff.md)
       + [date_format](/sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_sub, subdate](/sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_trunc](/sql-reference/sql-functions/date-time-functions/date_trunc.md)
+      + [datediff](/sql-reference/sql-functions/date-time-functions/datediff.md)
       + [day](/sql-reference/sql-functions/date-time-functions/day.md)
       + [days_diff](/sql-reference/sql-functions/date-time-functions/days_diff.md)
       + [days_sub](/sql-reference/sql-functions/date-time-functions/days_sub.md)
@@ -407,7 +407,6 @@
     + 工具函数
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
       + [version](/sql-reference/sql-functions/utility-functions/version.md)
-      + [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](/sql-reference/sql-functions/utility-functions/sleep.md)
@@ -439,6 +438,7 @@
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](/sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Bitmap 函数
+      + [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
       + [bitmap_and](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](/sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](/sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)
@@ -461,7 +461,6 @@
       + [bitmap_xor](/sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [intersect_count](/sql-reference/sql-functions/bitmap-functions/intersect_count.md)
       + [to_bitmap](/sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
-      + [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
     + 数组函数
       + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)
