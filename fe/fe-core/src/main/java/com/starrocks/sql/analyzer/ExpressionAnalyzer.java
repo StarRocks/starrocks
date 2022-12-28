@@ -524,6 +524,7 @@ public class ExpressionAnalyzer {
                     case BIT_SHIFT_RIGHT:
                     case BIT_SHIFT_RIGHT_LOGICAL:
                         lhsType = t1;
+                        // only support bigint function
                         rhsType = Type.BIGINT;
                         break;
                     default:
@@ -735,13 +736,7 @@ public class ExpressionAnalyzer {
             Function fn;
             String fnName = node.getFnName().getFunction();
 
-            if (ArithmeticExpr.isArithmeticExpr(fnName)) {
-                Expr l = node.getChild(0);
-                Expr r = node.getChildren().size() > 1 ? node.getChild(1) : null;
-                ArithmeticExpr arithmetic = new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName), l, r);
-                visitArithmeticExpr(arithmetic, scope);
-                fn = arithmetic.getFn();
-            } else if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
+            if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
