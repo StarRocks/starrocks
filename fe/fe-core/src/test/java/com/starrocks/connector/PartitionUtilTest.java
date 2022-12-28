@@ -16,6 +16,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
@@ -126,7 +127,7 @@ public class PartitionUtilTest {
     }
 
     @Test
-    public void testGetPartitionRange(@Mocked Table table) throws AnalysisException {
+    public void testGetPartitionRange(@Mocked Table table) throws UserException {
         Column partitionColumn = new Column("date", Type.DATE);
         List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
                 "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
@@ -141,6 +142,10 @@ public class PartitionUtilTest {
             {
                 table.getType();
                 result = Table.TableType.HIVE;
+                minTimes = 0;
+
+                table.isHiveTable();
+                result = true;
                 minTimes = 0;
             }
         };
