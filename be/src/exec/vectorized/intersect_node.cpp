@@ -229,6 +229,7 @@ Status IntersectNode::close(RuntimeState* state) {
 
 pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+
     IntersectPartitionContextFactoryPtr intersect_partition_ctx_factory =
             std::make_shared<IntersectPartitionContextFactory>(_tuple_id, _children.size() - 1);
 
@@ -237,27 +238,26 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
             std::make_shared<RcRfProbeCollector>(num_operators_generated, std::move(this->runtime_filter_collector()));
 
     // Use the first child to build the hast table by IntersectBuildSinkOperator.
-    OpFactories operators_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
-    operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
-            runtime_state(), operators_with_intersect_build_sink, _child_expr_lists[0]);
-    operators_with_intersect_build_sink.emplace_back(std::make_shared<IntersectBuildSinkOperatorFactory>(
+    OpFactories ops_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
+    ops_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
+            runtime_state(), ops_with_intersect_build_sink, _child_expr_lists[0]);
+    ops_with_intersect_build_sink.emplace_back(std::make_shared<IntersectBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(operators_with_intersect_build_sink.back().get(), context,
-                                           rc_rf_probe_collector);
-    context->add_pipeline(operators_with_intersect_build_sink);
+    this->init_runtime_filter_for_operator(ops_with_intersect_build_sink.back().get(), context, rc_rf_probe_collector);
+    context->add_pipeline(ops_with_intersect_build_sink);
 
     // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        OpFactories operators_with_intersect_probe_sink = child(i)->decompose_to_pipeline(context);
-        operators_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
-                runtime_state(), operators_with_intersect_probe_sink, _child_expr_lists[i]);
-        operators_with_intersect_probe_sink.emplace_back(std::make_shared<IntersectProbeSinkOperatorFactory>(
+        OpFactories ops_with_intersect_probe_sink = child(i)->decompose_to_pipeline(context);
+        ops_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
+                runtime_state(), ops_with_intersect_probe_sink, _child_expr_lists[i]);
+        ops_with_intersect_probe_sink.emplace_back(std::make_shared<IntersectProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_with_intersect_probe_sink.back().get(), context,
+        this->init_runtime_filter_for_operator(ops_with_intersect_probe_sink.back().get(), context,
                                                rc_rf_probe_collector);
-        context->add_pipeline(operators_with_intersect_probe_sink);
+        context->add_pipeline(ops_with_intersect_probe_sink);
     }
 
     // IntersectOutputSourceOperator is used to assemble the undeleted keys to output chunks.
