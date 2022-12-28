@@ -149,7 +149,9 @@ public abstract class StatisticsCollectJob {
                 splitSize = columns.size();
             }
         }
-        return (int) splitSize;
+        // Supports a maximum of 1024 tasks for a union,
+        // preventing unexpected situations caused by too many tasks being executed at one time
+        return (int) Math.min(1024, splitSize);
     }
 
     protected String build(VelocityContext context, String template) {
