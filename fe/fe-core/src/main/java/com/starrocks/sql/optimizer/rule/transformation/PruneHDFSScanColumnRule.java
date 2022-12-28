@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -129,8 +130,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
     private void checkPartitionColumnType(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumnRefOperators,
                                           OptimizerContext context) {
         Table table = scanOperator.getTable();
-        List<Column> partitionColumns = table.getPartitionColumnNames().stream().map(table::getColumn).
-                collect(Collectors.toList());
+        List<Column> partitionColumns = table.getPartitionColumnNames().stream().filter(Objects::nonNull)
+                .map(table::getColumn).collect(Collectors.toList());
         List<Column> scanColumns = scanColumnRefOperators.stream().map(col -> context.getColumnRefFactory().getColumn(col)).
                 collect(Collectors.toList());
         partitionColumns.retainAll(scanColumns);
