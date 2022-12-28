@@ -146,6 +146,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
         }
 
         String userRealm = password.getUserForAuthPlugin();
+        // TODO(yiming): support kerberos in new RBAC privilege framework later
         Class<?> authClazz = GlobalStateMgr.getCurrentState().getAuth().getAuthClazz();
         Method method = authClazz.getMethod("buildKrb5HandshakeRequest", String.class, String.class);
         byte[] packet = (byte[]) method.invoke(null, Config.authentication_kerberos_service_principal, userRealm);
