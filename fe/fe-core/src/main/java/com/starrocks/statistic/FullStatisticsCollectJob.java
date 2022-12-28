@@ -33,10 +33,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         this.partitionIdList = partitionIdList;
     }
 
-    public List<Long> getPartitionIdList() {
-        return partitionIdList;
-    }
-
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long finishedSQLNum = 0;
