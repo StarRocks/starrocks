@@ -7,7 +7,6 @@ import com.google.common.collect.Queues;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
