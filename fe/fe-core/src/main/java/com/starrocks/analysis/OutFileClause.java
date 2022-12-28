@@ -170,16 +170,12 @@ public class OutFileClause implements ParseNode {
         }
 
         Map<String, String> brokerProps = Maps.newHashMap();
-        Iterator<Map.Entry<String, String>> iter = properties.entrySet().iterator();
-        while (iter.hasNext()) {
-            Map.Entry<String, String> entry = iter.next();
-            if (!entry.getKey().equals(PROP_BROKER_NAME)) {
-                if (entry.getKey().startsWith(OLD_BROKER_PROP_PREFIX)) {
-                    brokerProps.put(entry.getKey().substring(OLD_BROKER_PROP_PREFIX.length()), entry.getValue());
-                } else {
-                    // Put new properties without "broker." prefix
-                    brokerProps.put(entry.getKey(), entry.getValue());
-                }
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(OLD_BROKER_PROP_PREFIX)) {
+                brokerProps.put(entry.getKey().substring(OLD_BROKER_PROP_PREFIX.length()), entry.getValue());
+            } else {
+                // Put new properties without "broker." prefix
+                brokerProps.put(entry.getKey(), entry.getValue());
             }
         }
         if (!outfile_without_broker) {
