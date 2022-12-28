@@ -1,6 +1,26 @@
 # StarRocks version 2.5
 
-## 2.5.0 RC
+## 2.5.0 RC 02
+
+发布日期： 2022 年 12 月 28 日
+
+### 功能优化
+
+- 优化了 FE 日志，去掉了部分冗余信息。[#15374](https://github.com/StarRocks/starrocks/pull/15374)
+- 函数相关使用优化，`current_date`、`current_timestamp`、`current_time`、`localtimestamp`、`localtime` 函数后不加`()`即可执行。例如 `select current_date;`。[#14319](https://github.com/StarRocks/starrocks/pull/14319)
+
+### 问题修复
+
+- 修复 FE 生成的执行计划缺少 partition ID，导致 BE 获取 Hive partition 数据失败的问题。[#15486](https://github.com/StarRocks/starrocks/pull/15486)
+- 修复 SHOW CREATE TABLE 返回结果中 ORDER BY 子句位置错误的问题。[#13809](https://github.com/StarRocks/starrocks/pull/13809)
+- 修复当查询改写涉及基于物化视图的 Union Rewrite 时，StarRocks 无法在 UNION 算子中找到谓词改写后引用的列，从而导致列的统计信息收集失败的问题。 [#15167](https://github.com/StarRocks/starrocks/pull/15167)
+
+### 行为变更
+
+- 新增 `CURRENT_DATE`,`CURRENT_TIME`,`LOCALTIME`,`LOCALTIMESTAMP`四个关键字。[#14319](https://github.com/StarRocks/starrocks/pull/14319)
+- 表名和库名的长度限制放宽，为不超过 1023 字符。 [#14929](https://github.com/StarRocks/starrocks/pull/14929) [#15020](https://github.com/StarRocks/starrocks/pull/15020)
+
+## 2.5.0 RC 01
 
 发布日期： 2022 年 12 月 15 日
 
