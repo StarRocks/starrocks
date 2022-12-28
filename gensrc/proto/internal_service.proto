@@ -61,9 +61,6 @@ message PTransmitDataParams {
     // Different per packet.
     required int64 packet_seq = 7;
     optional PQueryStatistics query_statistics = 8;
-
-    // Whether it is epoch finished which is used in Incremenetal MV.
-    optional bool is_epoch_eos = 9;
 };
 
 // Transmit vectorized data chunks between Backends.
@@ -93,9 +90,6 @@ message PTransmitChunkParams {
     optional bool is_pipeline_level_shuffle = 10 [default = false];
     // Driver sequences of pipeline level shuffle.
     repeated int32 driver_sequences = 11;
-
-    // Whether it is epoch finished which is used in Incremenetal MV.
-    optional bool is_epoch_eos = 12;
 };
 
 message PTransmitDataResult {
