@@ -28,13 +28,18 @@ using namespace starrocks;
 namespace starrocks::pipeline {
 Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+
+    _sort_context->ref();
+    _sort_context->incr_sinker();
     _chunks_sorter->setup_runtime(_unique_metrics.get());
+
     return Status::OK();
 }
 
 void PartitionSortSinkOperator::close(RuntimeState* state) {
     _sort_context->unref(state);
     _chunks_sorter.reset();
+
     Operator::close(state);
 }
 
@@ -93,7 +98,6 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
                                                        &_is_asc_order, &_is_null_first, _sort_keys);
     }
     auto sort_context = _sort_context_factory->create(driver_sequence);
-
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<PartitionSortSinkOperator>(this, _id, _plan_node_id, driver_sequence, chunks_sorter,
                                                            _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,

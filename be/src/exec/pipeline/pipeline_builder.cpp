@@ -143,8 +143,7 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     local_shuffle_source->set_partition_type(pred_source_op->partition_type());
 
     auto local_shuffle =
-            std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs,
-                                                 pred_source_op->degree_of_parallelism());
+            std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs);
 
     // Append local shuffle sink to the tail of the current pipeline, which comes to end.
     auto local_shuffle_sink =

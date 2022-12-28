@@ -185,6 +185,9 @@ private:
     /// Initialize NUMA-related state - called from Init();
     static void _init_numa();
 
+    /// Initialize num cores taking cgroup config into consideration
+    static void _init_num_cores_with_cgroup();
+
     /// Initialize 'numa_node_to_cores_' based on 'max_num_numa_nodes_' and
     /// 'core_to_numa_node_'. Called from InitNuma();
     static void _init_numa_node_to_cores();

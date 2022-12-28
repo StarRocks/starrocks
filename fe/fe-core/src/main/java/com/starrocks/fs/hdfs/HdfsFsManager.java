@@ -17,6 +17,7 @@
 
 package com.starrocks.fs.hdfs;
 
+import com.amazonaws.util.AwsHostNameUtils;
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
@@ -66,14 +67,24 @@ class ConfigurationWrap extends Configuration {
         super(loadDefaults);
     }
 
-    public String parseRegionFromEndpoint(String endPoint) {
-        if (endPoint.contains("oss")) {
+    public String parseRegionFromEndpoint(TObjectStoreType tObjectStoreType, String endPoint) {
+        if (tObjectStoreType == TObjectStoreType.S3) {
+            return AwsHostNameUtils.parseRegionFromAwsPartitionPattern(endPoint);
+        } else if (tObjectStoreType == TObjectStoreType.OSS) {
             String[] hostSplit = endPoint.split("\\.");
             String regionId = hostSplit[0];
             if (regionId.contains("-internal")) {
                 return regionId.substring(0, regionId.length() - "-internal".length());
             } else {
                 return regionId;
+            }
+        } else if (tObjectStoreType == TObjectStoreType.KS3) {
+            String[] hostSplit = endPoint.split("\\.");
+            String regionId = hostSplit[0];
+            if (regionId.contains("-internal")) {
+                return regionId.substring(4, regionId.length() - "-internal".length() - 4);
+            } else {
+                return regionId.substring(4);
             }
         } else {
             String[] hostSplit = endPoint.split("\\.");
@@ -100,7 +111,7 @@ class ConfigurationWrap extends Configuration {
                             break;
                         case HdfsFsManager.FS_S3A_ENDPOINT:
                             tProperties.setEnd_point(value);
-                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            tProperties.setRegion(parseRegionFromEndpoint(tObjectStoreType, value));
                             break;
                         case HdfsFsManager.FS_S3A_IMPL_DISABLE_CACHE:
                             tProperties.setDisable_cache(Boolean.parseBoolean(value));
@@ -122,7 +133,7 @@ class ConfigurationWrap extends Configuration {
                             break;
                         case HdfsFsManager.FS_OSS_ENDPOINT:
                             tProperties.setEnd_point(value);
-                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            tProperties.setRegion(parseRegionFromEndpoint(tObjectStoreType, value));
                             break;
                         case HdfsFsManager.FS_OSS_IMPL_DISABLE_CACHE:
                             tProperties.setDisable_cache(Boolean.parseBoolean(value));
@@ -142,7 +153,7 @@ class ConfigurationWrap extends Configuration {
                             break;
                         case HdfsFsManager.FS_COS_ENDPOINT:
                             tProperties.setEnd_point(value);
-                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            tProperties.setRegion(parseRegionFromEndpoint(tObjectStoreType, value));
                             break;
                         case HdfsFsManager.FS_COS_IMPL_DISABLE_CACHE:
                             tProperties.setDisable_cache(Boolean.parseBoolean(value));
@@ -162,7 +173,7 @@ class ConfigurationWrap extends Configuration {
                             break;
                         case HdfsFsManager.FS_KS3_ENDPOINT:
                             tProperties.setEnd_point(value);
-                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            tProperties.setRegion(parseRegionFromEndpoint(tObjectStoreType, value));
                             break;
                         case HdfsFsManager.FS_KS3_IMPL_DISABLE_CACHE:
                             tProperties.setDisable_cache(Boolean.parseBoolean(value));
@@ -182,7 +193,7 @@ class ConfigurationWrap extends Configuration {
                             break;
                         case HdfsFsManager.FS_OBS_ENDPOINT:
                             tProperties.setEnd_point(value);
-                            tProperties.setRegion(parseRegionFromEndpoint(value));
+                            tProperties.setRegion(parseRegionFromEndpoint(tObjectStoreType, value));
                             break;
                         case HdfsFsManager.FS_OBS_IMPL_DISABLE_CACHE:
                             tProperties.setDisable_cache(Boolean.parseBoolean(value));
@@ -253,6 +264,7 @@ public class HdfsFsManager {
     public static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
     public static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
     public static final String FS_S3A_MAX_CONNECTION = "fs.s3a.connection.maximum";
+    public static final String FS_S3A_AWS_CRED_PROVIDER = "fs.s3a.aws.credentials.provider";
 
     // arguments for ks3
     public static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
@@ -506,6 +518,7 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_S3A_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
+        String awsCredProvider = loadProperties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
 
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.tryBuildForStorage(loadProperties);
@@ -513,18 +526,6 @@ public class HdfsFsManager {
             String host = S3A_SCHEME + "://" + pathUri.getUri().getHost();
             fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toString());
         } else {
-            if (accessKey.equals("")) {
-                LOG.warn("Invalid load_properties, S3 must provide access_key");
-                throw new UserException("Invalid load_properties, S3 must provide access_key");
-            }
-            if (secretKey.equals("")) {
-                LOG.warn("Invalid load_properties, S3 must provide secret_key");
-                throw new UserException("Invalid load_properties, S3 must provide secret_key");
-            }
-            if (endpoint.equals("")) {
-                LOG.warn("Invalid load_properties, S3 must provide endpoint");
-                throw new UserException("Invalid load_properties, S3 must provide endpoint");
-            }
             // endpoint is the server host, pathUri.getUri().getHost() is the bucket
             // we should use these two params as the host identity, because FileSystem will
             // cache both.
@@ -558,6 +559,9 @@ public class HdfsFsManager {
                     conf.set(FS_S3A_ENDPOINT, endpoint);
                     // Only set ssl for origin logic
                     conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                    if (awsCredProvider != null) {
+                        conf.set(FS_S3A_AWS_CRED_PROVIDER, awsCredProvider);
+                    }
                 }
 
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
@@ -608,18 +612,6 @@ public class HdfsFsManager {
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
-        if (accessKey.equals("")) {
-            LOG.warn("Invalid load_properties, KS3 must provide access_key");
-            throw new UserException("Invalid load_properties, KS3 must provide access_key");
-        }
-        if (secretKey.equals("")) {
-            LOG.warn("Invalid load_properties, KS3 must provide secret_key");
-            throw new UserException("Invalid load_properties, KS3 must provide secret_key");
-        }
-        if (endpoint.equals("")) {
-            LOG.warn("Invalid load_properties, KS3 must provide endpoint");
-            throw new UserException("Invalid load_properties, KS3 must provide endpoint");
-        }
         String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String ks3aUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, ks3aUgi);
@@ -688,18 +680,6 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_OBS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_OBS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_OBS_CONNECTION_SSL_ENABLED, "false");
-        if (accessKey.equals("")) {
-            LOG.warn("Invalid load_properties, OBS must provide access_key");
-            throw new UserException("Invalid load_properties, OBS must provide access_key");
-        }
-        if (secretKey.equals("")) {
-            LOG.warn("Invalid load_properties, OBS must provide secret_key");
-            throw new UserException("Invalid load_properties, OBS must provide secret_key");
-        }
-        if (endpoint.equals("")) {
-            LOG.warn("Invalid load_properties, OBS must provide endpoint");
-            throw new UserException("Invalid load_properties, OBS must provide endpoint");
-        }
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
@@ -773,18 +753,6 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_OSS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_OSS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_OSS_CONNECTION_SSL_ENABLED, "false");
-        if (accessKey.equals("")) {
-            LOG.warn("Invalid load_properties, OSS must provide access_key");
-            throw new UserException("Invalid load_properties, OBS must provide access_key");
-        }
-        if (secretKey.equals("")) {
-            LOG.warn("Invalid load_properties, OSS must provide secret_key");
-            throw new UserException("Invalid load_properties, OBS must provide secret_key");
-        }
-        if (endpoint.equals("")) {
-            LOG.warn("Invalid load_properties, OSS must provide endpoint");
-            throw new UserException("Invalid load_properties, OBS must provide endpoint");
-        }
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
@@ -850,18 +818,6 @@ public class HdfsFsManager {
         String endpoint = loadProperties.getOrDefault(FS_COS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_COS_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_COS_CONNECTION_SSL_ENABLED, "false");
-        if (accessKey.equals("")) {
-            LOG.warn("Invalid load_properties, COS must provide access_key");
-            throw new UserException("Invalid load_properties, COS must provide access_key");
-        }
-        if (secretKey.equals("")) {
-            LOG.warn("Invalid load_properties, COS must provide secret_key");
-            throw new UserException("Invalid load_properties, COS must provide secret_key");
-        }
-        if (endpoint.equals("")) {
-            LOG.warn("Invalid load_properties, COS must provide endpoint");
-            throw new UserException("Invalid load_properties, COS must provide endpoint");
-        }
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.

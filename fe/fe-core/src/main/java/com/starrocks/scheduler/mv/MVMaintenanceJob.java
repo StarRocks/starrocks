@@ -283,6 +283,7 @@ public class MVMaintenanceJob implements Writable {
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(queryCoordinator.getQueryId());
             request.setTask_type(MVTaskType.START_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(taskId);
@@ -325,6 +326,7 @@ public class MVMaintenanceJob implements Writable {
         for (MVMaintenanceTask task : taskMap.values()) {
             long beId = task.getBeId();
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(connectContext.getExecutionId());
             request.setTask_type(MVTaskType.STOP_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(task.getTaskId());
@@ -391,12 +393,20 @@ public class MVMaintenanceJob implements Writable {
         return jobId;
     }
 
+    public TUniqueId getQueryId() {
+        return connectContext.getExecutionId();
+    }
+
     public CoordinatorPreprocessor getQueryCoordinator() {
         return queryCoordinator;
     }
 
     public Map<Long, MVMaintenanceTask> getTasks() {
         return taskMap;
+    }
+
+    public MVMaintenanceTask getTask(long taskId) {
+        return taskMap.get(taskId);
     }
 
     private JobState getSerializedState() {

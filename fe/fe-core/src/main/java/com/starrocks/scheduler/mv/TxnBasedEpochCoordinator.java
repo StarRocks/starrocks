@@ -154,12 +154,14 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(mvMaintenanceJob.getQueryId());
             request.setTask_type(MVTaskType.START_EPOCH);
             request.setTask_id(taskId);
             request.setJob_id(mvMaintenanceJob.getJobId());
             request.setMv_name(mvMaintenanceJob.getView().getName());
             TMVStartEpochTask taskMsg = new TMVStartEpochTask();
             taskMsg.setEpoch(epoch.toThrift());
+            taskMsg.setPer_node_scan_ranges(task.getBinlogConsumeState());
             taskMsg.setMax_exec_millis(MAX_EXEC_MILLIS);
             taskMsg.setMax_scan_rows(MAX_SCAN_ROWS);
             // TODO(murphy) set binlog offset here

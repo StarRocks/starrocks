@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;

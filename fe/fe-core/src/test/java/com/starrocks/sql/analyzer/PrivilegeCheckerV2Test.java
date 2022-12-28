@@ -34,13 +34,16 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -56,14 +59,17 @@ import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.spark.sql.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -101,14 +107,48 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
+        starRocksAssert.withDatabase("db3");
         starRocksAssert.withTable(createTblStmtStr1);
         starRocksAssert.withTable(createTblStmtStr2);
         starRocksAssert.withTable(createTblStmtStr3);
+        createMvForTest(starRocksAssert.getCtx());
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         privilegeManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
+    }
+
+    private static void createMvForTest(ConnectContext connectContext) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE db3.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String sql = "create materialized view db3.mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from db3.tbl1;";
+        createMaterializedView(sql, connectContext);
+    }
+
+    private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
+        Config.enable_experimental_mv = true;
+        CreateMaterializedViewStatement createMaterializedViewStatement =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
     }
 
     private static void mockRepository() {
@@ -476,12 +516,14 @@ public class PrivilegeCheckerV2Test {
                 Arrays.asList(
                         "grant SELECT,INSERT on db1.tbl1 to test",
                         "grant SELECT,INSERT on db1.tbl2 to test",
-                        "grant SELECT,INSERT on db2.tbl1 to test"
+                        "grant SELECT,INSERT on db2.tbl1 to test",
+                        "grant SELECT,INSERT on db3.tbl1 to test"
                 ),
                 Arrays.asList(
                         "revoke SELECT,INSERT on db1.tbl1 from test",
                         "revoke SELECT,INSERT on db1.tbl2 from test",
-                        "revoke SELECT,INSERT on db2.tbl1 from test"
+                        "revoke SELECT,INSERT on db2.tbl1 from test",
+                        "revoke SELECT,INSERT on db3.tbl1 from test"
                 ),
                 "SELECT command denied to user 'test'");
 
@@ -544,9 +586,11 @@ public class PrivilegeCheckerV2Test {
         analyzeManager.addAnalyzeJob(analyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
+            System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db2.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
@@ -554,6 +598,7 @@ public class PrivilegeCheckerV2Test {
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db3.tbl1 from test");
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db1 = globalStateMgr.getDb("db1");
@@ -717,6 +762,11 @@ public class PrivilegeCheckerV2Test {
                 "grant update on db1.tbl1 to test",
                 "revoke update on db1.tbl1 from test",
                 "UPDATE command denied to user 'test'");
+        verifyGrantRevoke(
+                "select k1, k2 from db3.mv1",
+                "grant select on materialized_view db3.mv1 to test",
+                "revoke select on materialized_view db3.mv1 from test",
+                "SELECT command denied to user 'test'@'localhost' for materialized view 'db3.mv1'");
     }
 
     @Test
@@ -891,12 +941,15 @@ public class PrivilegeCheckerV2Test {
     public void testResourceStmt() throws Exception {
         String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
                 "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
+        String createResourceStmt1 = "create external resource 'hive1' PROPERTIES(" +
+                "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9084\")";
         verifyGrantRevoke(
                 createResourceStmt,
                 "grant create_resource on system to test",
                 "revoke create_resource on system from test",
                 "Access denied; you need (at least one of) the CREATE_RESOURCE privilege(s) for this operation");
         starRocksAssert.withResource(createResourceStmt);
+        starRocksAssert.withResource(createResourceStmt1);
 
         verifyGrantRevoke(
                 "alter RESOURCE hive0 SET PROPERTIES (\"hive.metastore.uris\" = \"thrift://10.10.44.91:9083\");",
@@ -916,6 +969,71 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on all resources to test",
                 "revoke drop on all resources from test",
                 "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        // check show resources only show resource the user has any privilege on
+        grantRevokeSqlAsRoot("grant alter on resource 'hive1' to test");
+        ctxToTestUser();
+        List<List<String>> results = GlobalStateMgr.getCurrentState().getResourceMgr().getResourcesInfo();
+        grantRevokeSqlAsRoot("revoke alter on resource 'hive1' from test");
+        System.out.println(results);
+        Assert.assertTrue(results.size() > 0);
+        Assert.assertTrue(results.stream().anyMatch(m -> m.contains("hive1")));
+        Assert.assertFalse(results.stream().anyMatch(m -> m.contains("hive0")));
+    }
+
+    @Test
+    public void testShowProcessList(@Mocked MysqlChannel channel,
+                                    @Mocked SocketChannel socketChannel) throws Exception {
+        new Expectations() {
+            {
+                channel.getRemoteHostPortString();
+                minTimes = 0;
+                result = "127.0.0.1:12345";
+
+                channel.close();
+                minTimes = 0;
+
+                channel.getRemoteIp();
+                minTimes = 0;
+                result = "192.168.1.1";
+            }
+        };
+
+        ConnectContext ctx1 = new ConnectContext(socketChannel);
+        ctx1.setQualifiedUser("test");
+        ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx1.setConnectionId(1);
+        ConnectContext ctx2 = new ConnectContext(socketChannel);
+        ctx2.setQualifiedUser("test2");
+        ctx2.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx2.setConnectionId(2);
+
+        // State
+        Assert.assertNotNull(ctx1.getState());
+
+        ConnectScheduler connectScheduler = new ConnectScheduler(Config.qe_max_connection);
+        connectScheduler.registerConnection(ctx1);
+        connectScheduler.registerConnection(ctx2);
+
+        // Without operate privilege on system, test can only see its own process list
+        ctxToTestUser();
+        List<ConnectContext.ThreadInfo> results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        long nowMs = System.currentTimeMillis();
+        for (ConnectContext.ThreadInfo threadInfo : results) {
+            System.out.println(threadInfo.toRow(nowMs, true));
+        }
+        Assert.assertEquals(1, results.size());
+        Assert.assertEquals("test", results.get(0).toRow(nowMs, true).get(1));
+
+        // With operate privilege on system, test can only see all the process list
+        grantRevokeSqlAsRoot("grant operate on system to test");
+        results = connectScheduler.listConnection(starRocksAssert.getCtx(), "test");
+        for (ConnectContext.ThreadInfo threadInfo : results) {
+            System.out.println(threadInfo.toRow(nowMs, true));
+        }
+        Assert.assertEquals(2, results.size());
+        Assert.assertEquals("test2", results.get(01).toRow(nowMs, true).get(1));
+        grantRevokeSqlAsRoot("revoke operate on system from test");
     }
 
     @Test
