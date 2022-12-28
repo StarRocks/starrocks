@@ -461,6 +461,7 @@ public class GlobalStateMgr {
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
+    private GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
     private ShardManager shardManager;
@@ -599,6 +600,7 @@ public class GlobalStateMgr {
 
         this.stat = new TabletSchedulerStat();
         this.nodeMgr = new NodeMgr(isCheckpointCatalog, this);
+        this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
@@ -699,7 +701,7 @@ public class GlobalStateMgr {
     }
 
     public GlobalFunctionMgr getGlobalFunctionMgr() {
-        return nodeMgr.getGlobalFunctionMgr();
+        return globalFunctionMgr;
     }
 
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
@@ -1332,7 +1334,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = MVManager.getInstance().reload(dis, checksum);
             remoteChecksum = dis.readLong();
-            nodeMgr.loadGlobalFunctions(dis, checksum);
+            globalFunctionMgr.loadGlobalFunctions(dis, checksum);
             // TODO put this at the end of the image before 3.0 release
             loadRBACPrivilege(dis);
         } catch (EOFException exception) {
@@ -1601,7 +1603,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = MVManager.getInstance().store(dos, checksum);
             dos.writeLong(checksum);
-            nodeMgr.saveGlobalFunctions(dos, checksum);
+            globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
 
