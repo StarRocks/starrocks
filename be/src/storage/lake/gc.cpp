@@ -247,7 +247,7 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
 
     auto check_delvecs = [&](const TabletMetadataPtr metadata) {
         for (const auto& delvec : metadata->delvec_meta().delvecs()) {
-            const std::string& delvec_name = tablet_delvec_filename(metadata->id(), delvec.page().version());
+            std::string delvec_name = tablet_delvec_filename(metadata->id(), delvec.page().version());
             datafiles.erase(delvec_name);
         }
     };
@@ -312,7 +312,7 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
     return datafiles;
 }
 
-Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
+Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 
     const auto owned_tablets = tablet_mgr->owned_tablets();
@@ -367,7 +367,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     RETURN_IF_ERROR(write_orphan_list_file(orphan_datafiles, orphan_list_file.get()));
     // Delete orphan segment files and del files
     for (auto& file : orphan_datafiles) {
-        LOG(INFO) << "Deleting orphan data files " << file;
+        LOG(INFO) << "Deleting orphan data file: " << file;
         auto location = join_path(segment_root_location, file);
         auto st = fs->delete_file(location);
         LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << file << ": " << st;

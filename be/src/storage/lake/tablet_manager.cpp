@@ -861,7 +861,7 @@ static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& root
     for (const auto& root : roots) {
         auto st = thread_pool->submit_func([&, root]() {
             auto t1 = std::chrono::steady_clock::now();
-            auto r = segment_gc(root, tablet_mgr);
+            auto r = datafile_gc(root, tablet_mgr);
             auto t2 = std::chrono::steady_clock::now();
             auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
             if (r.ok()) {

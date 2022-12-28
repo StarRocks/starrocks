@@ -28,11 +28,24 @@ public:
 
     [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const VectorizedSchema& schema, const RowsetReadOptions& options);
 
+    // only used for updatable tablets' rowset, for update state load, it wouldn't load delvec
+    // simply get iterators to iterate all rows without complex options like predicates
+    // |schema| read schema
+    // |stats| used for iterator read stats
+    // return iterator list, an iterator for each segment,
+    // if the segment is empty, it wouln't add this iterator to iterator list
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const VectorizedSchema& schema,
                                                                                     OlapReaderStatistics* stats);
 
+    // used for primary index load, it will get segment iterator by specifice version and it's delvec,
+    // without complex options like predicates
+    // |schema| read schema
+    // |version| read version, use for get delvec
+    // |stats| used for iterator read stats
+    // return iterator list, an iterator for each segment,
+    // if the segment is empty, it wouln't add this iterator to iterator list
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
-            const VectorizedSchema& schema, const int64_t version, OlapReaderStatistics* stats);
+            const VectorizedSchema& schema, int64_t version, OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
 

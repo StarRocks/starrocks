@@ -52,12 +52,8 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
     rowset->set_id(_tablet_meta->next_rowset_id());
-    if (op_write.rowset().num_rows() > 0) {
-        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
-    } else {
-        // delete
-        _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + 1);
-    }
+    // if rowset don't contain segment files, still inc next_rowset_id
+    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
 }
 
 Status MetaFileBuilder::_finalize_delvec(LocationProvider* location_provider, int64_t version) {

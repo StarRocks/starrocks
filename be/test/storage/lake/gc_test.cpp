@@ -163,7 +163,7 @@ TEST_F(GCTest, test_metadata_gc) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(GCTest, test_segment_gc) {
+TEST_F(GCTest, test_datafile_gc) {
     auto fs = FileSystem::Default();
     auto tablet_id_1 = next_id();
     auto tablet_id_2 = next_id();
@@ -242,7 +242,7 @@ TEST_F(GCTest, test_segment_gc) {
 
     // Orphan segments have not timed out yet
     config::lake_gc_segment_expire_seconds = 600;
-    ASSERT_OK(segment_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
     for (const auto& seg : segments) {
         auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), seg);
         ASSERT_OK(fs->path_exists(location));
@@ -250,14 +250,14 @@ TEST_F(GCTest, test_segment_gc) {
 
     // Segment GC on tablet_manager_2 should not delete any file
     config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(segment_gc(kTestDir, tablet_manager_2.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_2.get()));
     for (const auto& seg : segments) {
         auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), seg);
         ASSERT_OK(fs->path_exists(location));
     }
 
     // Segment GC on tablet_manager_1
-    ASSERT_OK(segment_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
     for (int i = 0, sz = segments.size(); i < sz; i++) {
         auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), segments[i]);
         if (i < valid_segment_cnt) {
@@ -310,7 +310,7 @@ TEST_F(GCTest, test_dels_gc) {
 
     // Orphan dels have not timed out yet
     config::lake_gc_segment_expire_seconds = 600;
-    ASSERT_OK(segment_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
     for (const auto& del : dels) {
         auto location = tablet_manager_1->segment_location(tablet_id_1, del);
         ASSERT_OK(fs->path_exists(location));
@@ -318,7 +318,7 @@ TEST_F(GCTest, test_dels_gc) {
 
     // Orphan dels have been deleted
     config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(segment_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
     for (int i = 0; i < dels.size(); i++) {
         auto location = tablet_manager_1->segment_location(tablet_id_1, dels[i]);
         if (i < 5) {
@@ -357,7 +357,7 @@ TEST_F(GCTest, test_delvec_gc) {
     }
     // gc
     config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(segment_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
     for (int i = 1; i < 10; i++) {
         auto location = location_provider_1->tablet_delvec_location(tablet_id_1, i);
         if (i < 5) {
