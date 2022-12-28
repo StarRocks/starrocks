@@ -136,6 +136,30 @@ enum AggrMode {
     AM_STREAMING_POST_CACHE
 };
 
+enum AggrAutoState { INIT_BUILD = 0, ADJUST, PASS_THROUGH, FORCE_BUILD, BUILD, SELECTIVE_BUILD };
+
+struct AggrAutoContext {
+    constexpr static size_t ContinuousUpperLimit = 100000;
+    constexpr static  int BuildLimit = 3;
+    constexpr static  double LowReduction = 0.3;
+    constexpr static  double HighReduction = 0.8;
+    constexpr static  size_t MaxHtSize = 100 * 1024 * 1024;
+    constexpr static  int AdjustLimit = 5;
+    std::string get_auto_state_string(const AggrAutoState& state);
+    size_t get_continuous_limit();
+    void update_continuous_limit();
+    bool high_reduction(const size_t agg_count, const size_t chunk_size);
+    bool low_reduction(const size_t agg_count, const size_t chunk_size);
+    size_t init_build_count = 0;
+    size_t adjust_count = 0;
+    size_t pass_through_count = 0;
+    size_t force_build_count = 0;
+    size_t build_count = 0;
+    size_t selective_build_count = 0;
+    size_t continuous_limit = 1000;
+
+};
+
 struct StreamingHtMinReductionEntry {
     int min_ht_mem;
     double streaming_ht_min_reduction;
@@ -396,7 +420,9 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
 protected:
-    bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+    bool _reached_limit() {
+        return _limit != -1 && _num_rows_returned >= _limit;
+    }
 
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {
@@ -428,12 +454,22 @@ protected:
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
                                  bool use_intermediate);
 
-    void _set_passthrough(bool flag) { _is_passthrough = flag; }
-    bool is_passthrough() const { return _is_passthrough; }
+    void _set_passthrough(bool flag) {
+        _is_passthrough = flag;
+    }
+    bool is_passthrough() const {
+        return _is_passthrough;
+    }
 
-    void begin_pending_reset_state() { _is_pending_reset_state = true; }
-    void end_pending_reset_state() { _is_pending_reset_state = false; }
-    bool is_pending_reset_state() { return _is_pending_reset_state; }
+    void begin_pending_reset_state() {
+        _is_pending_reset_state = true;
+    }
+    void end_pending_reset_state() {
+        _is_pending_reset_state = false;
+    }
+    bool is_pending_reset_state() {
+        return _is_pending_reset_state;
+    }
 
     void _reset_groupby_exprs();
     Status _evaluate_group_by_exprs(Chunk* chunk);

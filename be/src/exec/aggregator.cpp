@@ -31,6 +31,40 @@
 
 namespace starrocks {
 
+std::string AggrAutoContext::get_auto_state_string(const AggrAutoState& state) {
+    switch (state) {
+    case INIT_BUILD:
+        return "INIT_BUILD";
+    case ADJUST:
+        return "ADJUST";
+    case PASS_THROUGH:
+        return "PASS_THROUGH";
+    case FORCE_BUILD:
+        return "FORCE_BUILD";
+    case BUILD:
+        return "BUILD";
+    case SELECTIVE_BUILD:
+        return "SELECTIVE_BUILD";
+    }
+    return "UNKNOWN";
+}
+
+void AggrAutoContext::update_continuous_limit() {
+    continuous_limit = continuous_limit * 2 > ContinuousUpperLimit ? ContinuousUpperLimit : continuous_limit * 2;
+}
+
+size_t AggrAutoContext::get_continuous_limit() {
+    return continuous_limit;
+}
+
+bool AggrAutoContext::high_reduction(const size_t agg_count, const size_t chunk_size) {
+    return agg_count >= HighReduction * chunk_size;
+}
+
+bool AggrAutoContext::low_reduction(const size_t agg_count, const size_t chunk_size) {
+    return agg_count <= LowReduction * chunk_size;
+}
+
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          FunctionContext* context);
 

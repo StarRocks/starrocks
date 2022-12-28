@@ -470,7 +470,8 @@ struct TEqJoinCondition {
 enum TStreamingPreaggregationMode {
   AUTO,
   FORCE_STREAMING,
-  FORCE_PREAGGREGATION
+  FORCE_PREAGGREGATION,
+  AUTO_NEW
 }
 
 enum TJoinOp {

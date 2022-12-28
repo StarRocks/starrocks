@@ -225,9 +225,12 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
         } else if (streamingPreaggregationMode.equalsIgnoreCase("force_preaggregation")) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_PREAGGREGATION);
+        } else if (streamingPreaggregationMode.equalsIgnoreCase("auto_new")) {
+            msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO_NEW);
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
+
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
