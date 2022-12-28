@@ -65,7 +65,7 @@ public class PruneProjectColumnsRule extends TransformationRule {
 
         if (newMap.isEmpty()) {
             ColumnRefOperator constCol = context.getColumnRefFactory()
-                    .create("auto_fill_col", Type.TINYINT, true);
+                    .create("auto_fill_col", Type.TINYINT, false);
             newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
         }
 
