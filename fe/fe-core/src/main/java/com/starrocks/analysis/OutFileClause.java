@@ -132,7 +132,7 @@ public class OutFileClause implements ParseNode {
             return;
         }
 
-        getBrokerProperties();
+        setBrokerProperties();
         if (brokerDesc == null) {
             return;
         }
@@ -159,7 +159,7 @@ public class OutFileClause implements ParseNode {
         }
     }
 
-    private void getBrokerProperties() {
+    private void setBrokerProperties() {
         boolean outfile_without_broker = false;
         if (!properties.containsKey(PROP_BROKER_NAME)) {
             outfile_without_broker = true;
