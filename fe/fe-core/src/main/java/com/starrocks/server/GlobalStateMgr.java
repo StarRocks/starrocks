@@ -1507,6 +1507,10 @@ public class GlobalStateMgr {
             resourceMgr = ResourceMgr.read(in);
         }
         LOG.info("finished replay resources from image");
+
+        LOG.info("start to replay resource mapping catalog");
+        catalogMgr.loadResourceMappingCatalog();
+        LOG.info("finished replaying resource mapping catalogs from resources");
         return checksum;
     }
 
