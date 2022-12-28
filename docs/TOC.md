@@ -267,7 +267,7 @@
       + [str_to_date](./sql-reference/sql-functions/date-time-functions/str_to_date.md)
       + [str2date](./sql-reference/sql-functions/date-time-functions/str2date.md)
       + [time_slice](./sql-reference/sql-functions/date-time-functions/time_slice.md)
-      + [time_to_sec](./sql-reference/sql-functions/date-time-functions/time_to_sec.md))
+      + [time_to_sec](./sql-reference/sql-functions/date-time-functions/time_to_sec.md)
       + [timediff](./sql-reference/sql-functions/date-time-functions/timediff.md)
       + [timestamp](./sql-reference/sql-functions/date-time-functions/timestamp.md)
       + [timestampadd](./sql-reference/sql-functions/date-time-functions/timestampadd.md)
