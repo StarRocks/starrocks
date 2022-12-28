@@ -141,7 +141,6 @@ public class LeaderOpExecutor {
         if (setStmt != null) {
             params.setModified_variables_sql(AST2SQL.toString(setStmt));
         }
-        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
         for (int i = 0; i < 3; i++) {
             String leaderHost = ctx.getGlobalStateMgr().getLeaderIp();
