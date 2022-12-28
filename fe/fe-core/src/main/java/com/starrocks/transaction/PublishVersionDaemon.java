@@ -50,6 +50,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+import java.util.Iterator;
+>>>>>>> 3dcf5e7eb (Fix NPE when publish version with mv (#15795))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -388,11 +393,18 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return;
             }
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            for (MvId mvId : relatedMvs) {
+            Iterator<MvId> mvIdIterator = relatedMvs.iterator();
+            while (mvIdIterator.hasNext()) {
+                MvId mvId = mvIdIterator.next();
                 Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
                 mvDb.readLock();
                 try {
                     MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+                    if (materializedView == null) {
+                        LOG.warn("materialized view {} does not exists.", mvId.getId());
+                        mvIdIterator.remove();
+                        continue;
+                    }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(),
