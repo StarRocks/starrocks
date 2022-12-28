@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-class SchemaColumnsScanner : public SchemaScanner {
+class SchemaColumnsScanner : public SchemaScanner {c
 public:
     SchemaColumnsScanner();
     ~SchemaColumnsScanner() override;

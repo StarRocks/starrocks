@@ -42,6 +42,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
@@ -59,7 +60,6 @@ import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
@@ -161,7 +161,7 @@ public class UtFrameUtils {
     public static ConnectContext createDefaultCtx() {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setQualifiedUser(Auth.ROOT_USER);
+        ctx.setQualifiedUser(AuthenticationManager.ROOT_USER);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
