@@ -2,7 +2,7 @@
 
 ## Description
 
-Subtract the specified month(s) from the date.
+Subtracts specified months from the date.
 
 ## Syntax
 
