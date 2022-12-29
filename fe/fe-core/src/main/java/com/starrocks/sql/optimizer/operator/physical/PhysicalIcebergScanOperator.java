@@ -41,17 +41,15 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
                                        ScanOperatorPredicates predicates,
                                        long limit,
                                        ScalarOperator predicate,
-                                       Projection projection) {
+                                       Projection projection,
+                                       TimeTravelSpec timeTravelSpec) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, table, columnRefMap, limit, predicate, projection);
         this.predicates = predicates;
+        this.timeTravelSpec = timeTravelSpec;
     }
 
     public TimeTravelSpec getTimeTravelSpec() {
         return timeTravelSpec;
-    }
-
-    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
-        this.timeTravelSpec = timeTravelSpec;
     }
 
     @Override

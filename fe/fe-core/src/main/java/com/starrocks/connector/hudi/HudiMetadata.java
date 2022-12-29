@@ -112,7 +112,9 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, TimeTravelSpec timeTravelSpec) {
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table,
+                                                   List<PartitionKey> partitionKeys,
+                                                   TimeTravelSpec timeTravelSpec) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 

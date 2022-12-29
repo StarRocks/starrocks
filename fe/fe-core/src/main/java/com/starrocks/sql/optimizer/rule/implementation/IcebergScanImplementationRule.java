@@ -44,11 +44,8 @@ public class IcebergScanImplementationRule extends ImplementationRule {
                     scan.getScanOperatorPredicates(),
                     scan.getLimit(),
                     scan.getPredicate(),
-                    scan.getProjection());
-
-            if (scan.getTimeTravelSpec() != null) {
-                physicalIcebergScan.setTimeTravelSpec(scan.getTimeTravelSpec());
-            }
+                    scan.getProjection(),
+                    scan.getTimeTravelSpec());
 
             result = new OptExpression(physicalIcebergScan);
         }

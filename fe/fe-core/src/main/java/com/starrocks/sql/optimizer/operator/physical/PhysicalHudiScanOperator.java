@@ -40,9 +40,11 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
                                     ScanOperatorPredicates predicates,
                                     long limit,
                                     ScalarOperator predicate,
-                                    Projection projection) {
+                                    Projection projection,
+                                    TimeTravelSpec timeTravelSpec) {
         super(OperatorType.PHYSICAL_HUDI_SCAN, table, columnRefMap, limit, predicate, projection);
         this.predicates = predicates;
+        this.timeTravelSpec = timeTravelSpec;
     }
 
     @Override
@@ -53,10 +55,6 @@ public class PhysicalHudiScanOperator extends PhysicalScanOperator {
     @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
-    }
-
-    public void setTimeTravelSpec(TimeTravelSpec timeTravelSpec) {
-        this.timeTravelSpec = timeTravelSpec;
     }
 
     public TimeTravelSpec getTimeTravelSpec() {

@@ -23,14 +23,6 @@ public class TimeTravelSpec {
         this.timestamp = timestamp;
     }
 
-    public void setVersion(String version) {
-        this.version = version;
-    }
-
-    public void setTimestamp(String timestamp) {
-        this.timestamp = timestamp;
-    }
-
     public String getVersion() {
         return version;
     }

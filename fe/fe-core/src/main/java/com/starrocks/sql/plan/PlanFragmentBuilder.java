@@ -785,9 +785,7 @@ public class PlanFragmentBuilder {
                     new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
             hudiScanNode.computeStatistics(optExpression.getStatistics());
 
-            if (node.getTimeTravelSpec() != null) {
-                hudiScanNode.setTimeTravelSpec(node.getTimeTravelSpec());
-            }
+            hudiScanNode.setTimeTravelSpec(node.getTimeTravelSpec());
 
             try {
                 HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getScanNodePredicates();
@@ -960,11 +958,8 @@ public class PlanFragmentBuilder {
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
             icebergScanNode.computeStatistics(optExpression.getStatistics());
 
-            if (node.getTimeTravelSpec() != null) {
-                icebergScanNode.setTimeTravelSpec(node.getTimeTravelSpec());
-            }
+            icebergScanNode.setTimeTravelSpec(node.getTimeTravelSpec());
 
-            LOG.info("node.getTimeTravelSpec():" + node.getTimeTravelSpec());
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =

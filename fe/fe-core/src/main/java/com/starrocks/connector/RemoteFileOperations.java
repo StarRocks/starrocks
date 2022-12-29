@@ -57,10 +57,6 @@ public class RemoteFileOperations {
         this.timeTravelSpec = timeTravelSpec;
     }
 
-    public TimeTravelSpec getTimeTravelSpec() {
-        return timeTravelSpec;
-    }
-
     public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {

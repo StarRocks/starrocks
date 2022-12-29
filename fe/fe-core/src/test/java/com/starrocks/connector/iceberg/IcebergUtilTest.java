@@ -40,6 +40,7 @@ import java.util.Map;
 import static com.starrocks.connector.iceberg.IcebergUtil.convertColumnType;
 import static com.starrocks.connector.iceberg.IcebergUtil.convertIcebergPartitionToPartitionName;
 import static com.starrocks.connector.iceberg.IcebergUtil.formatQueryInstantToTimeStamp;
+import static com.starrocks.connector.iceberg.IcebergUtil.formatQueryVersionToSnapshotId;
 
 public class IcebergUtilTest {
 
@@ -165,5 +166,19 @@ public class IcebergUtilTest {
         long startTimeStamp = formatQueryInstantToTimeStamp(startInstantTime);
         long endTimeStamp = formatQueryInstantToTimeStamp(endInstantTime);
         Assert.assertEquals(1100, endTimeStamp - startTimeStamp);
+        String illegalTimeStamp = "20201212";
+        Assert.assertThrows("Unsupported query instant time format",
+                IllegalArgumentException.class,
+                () -> formatQueryInstantToTimeStamp(illegalTimeStamp));
+    }
+
+    @Test
+    public void testFormatQueryVersionToSnapshotId() {
+        String version = "8263546889800136858";
+        String illegalTimeStamp = "826354688980013685a";
+        Assert.assertEquals(8263546889800136858L, formatQueryVersionToSnapshotId(version));
+        Assert.assertThrows("Unsupported query version format",
+                IllegalArgumentException.class,
+                () -> formatQueryVersionToSnapshotId(illegalTimeStamp));
     }
 }

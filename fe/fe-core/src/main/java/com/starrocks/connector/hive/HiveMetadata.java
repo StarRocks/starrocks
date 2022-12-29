@@ -108,7 +108,8 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table,
+                                                   List<PartitionKey> partitionKeys,
                                                    TimeTravelSpec timeTravelSpec) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
