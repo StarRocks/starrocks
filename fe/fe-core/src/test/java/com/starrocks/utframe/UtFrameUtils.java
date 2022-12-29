@@ -54,6 +54,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.InsertPlanner;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -76,6 +77,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.StatsConstants;
@@ -296,6 +298,7 @@ public class UtFrameUtils {
 
     /**
      * Validate whether all the fragments belong to the fragment tree.
+     *
      * @param plan The plan need to validate.
      */
     public static void validatePlanConnectedness(ExecPlan plan) {
@@ -319,12 +322,57 @@ public class UtFrameUtils {
                 plan.getFragments().size(), visitedFragments.size());
     }
 
+<<<<<<< HEAD
+=======
+    /*
+     * Return analyzed statement and execution plan for MV maintenance
+     */
+    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
+                                                                                    String sql)
+            throws DdlException, CloneNotSupportedException {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+        connectContext.getDumpInfo().setOriginStmt(sql);
+        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        StatementBase statementBase = statements.get(0);
+
+        try {
+            // update session variable by adding optional hints.
+            if (statementBase instanceof QueryStatement &&
+                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
+                if (optHints != null) {
+                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
+                    for (String key : optHints.keySet()) {
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
+                                true);
+                    }
+                    connectContext.setSessionVariable(sessionVariable);
+                }
+            }
+
+            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
+            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
+            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
+        } finally {
+            // before returning we have to restore session variable.
+            connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
+>>>>>>> 88315ba5e ([Enhancement] Imporve or predicate statistics check (#15580))
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
 
-        List<StatementBase> statements =
-                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
+        List<StatementBase> statements;
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
+            statements = SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
+        }
         connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
@@ -345,30 +393,12 @@ public class UtFrameUtils {
                 }
             }
 
-            ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
-
-            if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
-                    !statementBase.isExplain()) {
-                String viewName = "view" + INDEX.getAndIncrement();
-                String createView = "create view " + viewName + " as " + originStmt;
-                CreateViewStmt createTableStmt;
-                try {
-                    createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
-                    try {
-                        StatementBase viewStatement =
-                                com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
-                                        connectContext.getSessionVariable().getSqlMode()).get(0);
-                        com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
-                    } catch (Exception e) {
-                        System.out.println(e.getMessage());
-                        throw e;
-                    }
-                } catch (SemanticException | AnalysisException e) {
-                    if (!e.getMessage().contains("Duplicate column name")) {
-                        throw e;
-                    }
-                }
+            ExecPlan execPlan;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Planner")) {
+                execPlan = StatementPlanner.plan(statementBase, connectContext);
             }
+
+            testView(connectContext, originStmt, statementBase);
 
             validatePlanConnectedness(execPlan);
             return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
@@ -378,6 +408,39 @@ public class UtFrameUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
+            throws Exception {
+        if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
+                !statementBase.isExplain()) {
+            String viewName = "view" + INDEX.getAndIncrement();
+            String createView = "create view " + viewName + " as " + originStmt;
+            CreateViewStmt createTableStmt;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Test View")) {
+                createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                try {
+                    StatementBase viewStatement =
+                            SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
+                } catch (Exception e) {
+                    System.out.println(e.getMessage());
+                    throw e;
+                }
+            } catch (SemanticException | AnalysisException e) {
+                if (!e.getMessage().contains("Duplicate column name")) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    public static String printPlan(ExecPlan plan) {
+        return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
+    }
+
+>>>>>>> 88315ba5e ([Enhancement] Imporve or predicate statistics check (#15580))
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())

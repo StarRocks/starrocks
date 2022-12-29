@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 88315ba5e ([Enhancement] Imporve or predicate statistics check (#15580))
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
@@ -16,6 +32,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
@@ -127,13 +144,13 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         return predicate;
     }
 
-    /**
+    /*
      * Rewrite column ref into comparison predicate *
      * Before
      * example:
-     * IN
-     * / |  \
-     * left 1  a  b
+     *         IN
+     *        / | \
+     * left  1  a  b
      * After rule:
      * left = 1 OR left = a OR left = b
      */
@@ -151,7 +168,18 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         ScalarOperator lhs = predicate.getChild(0);
         boolean isIn = !predicate.isNotIn();
 
-        for (ScalarOperator child : predicate.getChildren().subList(1, predicate.getChildren().size())) {
+        List<ScalarOperator> constants = predicate.getChildren().stream().skip(1).filter(ScalarOperator::isConstant)
+                .collect(Collectors.toList());
+        if (constants.size() == 1) {
+            BinaryPredicateOperator.BinaryType op =
+                    isIn ? BinaryPredicateOperator.BinaryType.EQ : BinaryPredicateOperator.BinaryType.NE;
+            result.add(new BinaryPredicateOperator(op, lhs, constants.get(0)));
+        } else if (!constants.isEmpty()) {
+            constants.add(0, lhs);
+            result.add(new InPredicateOperator(predicate.isNotIn(), constants));
+        }
+
+        predicate.getChildren().stream().skip(1).filter(ScalarOperator::isVariable).forEach(child -> {
             BinaryPredicateOperator newOp;
             if (isIn) {
                 newOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, lhs, child);
@@ -159,7 +187,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                 newOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE, lhs, child);
             }
             result.add(newOp);
-        }
+        });
+
         return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
     }
 }

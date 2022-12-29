@@ -211,7 +211,6 @@ public class ConnectContext {
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
-        plannerProfile.init(this);
 
         mysqlChannel = new MysqlChannel(channel);
         if (channel != null) {

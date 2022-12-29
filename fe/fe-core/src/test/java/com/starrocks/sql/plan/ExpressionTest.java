@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 88315ba5e ([Enhancement] Imporve or predicate statistics check (#15580))
 
 package com.starrocks.sql.plan;
 
@@ -229,7 +245,8 @@ public class ExpressionTest extends PlanTestBase {
                 new ColumnRefOperator(100000, Type.INT, "x", true),
                 ConstantOperator.createInt(1));
         ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
-        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        LambdaFunctionOperator lambda =
+                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
         variableToSlotRef.clear();
         projectMap.clear();
         context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
@@ -663,7 +680,7 @@ public class ExpressionTest extends PlanTestBase {
                         "c5 IN ('292278994-08-17', '1970-02-01') AND " +
                         "c5 IN ('292278994-08-17', '1970-02-01')  " +
                         " FROM test_in_pred_norm",
-                "<slot 7> : ((5: c4 = 8: cast) OR (5: c4 = '1970-02-01')) AND ((6: c5 = 8: cast) OR (6: c5 = '1970-02-01'))");
+                "<slot 7> : ((5: c4 = '1970-02-01') OR (5: c4 = 8: cast)) AND ((6: c5 = '1970-02-01') OR (6: c5 = 8: cast))");
 
         String plan = getFragmentPlan("SELECT " +
                 "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
@@ -1277,4 +1294,12 @@ public class ExpressionTest extends PlanTestBase {
             assertContains(plan, "<slot 2> : assert_true(FALSE)");
         }
     }
+
+    @Test
+    public void testInPredicate() throws Exception {
+        String sql = "select * from t0 where v1 in (v2, v3, 3, 4, 5) ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: ((1: v1 IN (3, 4, 5)) OR (1: v1 = 2: v2)) OR (1: v1 = 3: v3)");
+    }
+
 }

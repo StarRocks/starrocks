@@ -1122,6 +1122,21 @@ public class PlanTestBase {
         return planCount;
     }
 
+
+    public String getSQLFile(String filename) {
+        String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
+        File file = new File(path + "/" + filename + ".sql");
+
+        String sql;
+        try (BufferedReader re = new BufferedReader(new FileReader(file))) {
+            sql = re.lines().collect(Collectors.joining());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return sql;
+    }
+
     public void runFileUnitTest(String filename, boolean debug) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");

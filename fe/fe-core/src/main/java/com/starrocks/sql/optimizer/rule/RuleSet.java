@@ -255,9 +255,13 @@ public class RuleSet {
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
+<<<<<<< HEAD
                 // Commented out because of UTs in `ExternalTableTest.java`
                 // PushDownPredicateScanRule.MYSQL_SCAN,
                 // PushDownPredicateScanRule.JDBC_SCAN,
+=======
+                PushDownPredicateScanRule.BINLOG_SCAN,
+>>>>>>> 88315ba5e ([Enhancement] Imporve or predicate statistics check (#15580))
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),
