@@ -34,10 +34,10 @@ broker;
     ```
 
     配置项：
-  - `column_separator`: 指定导出的列分隔符，默认为`\t`。
-  - `line_delimiter`: 指定导出的行分隔符，默认为`\n`。
+  - `column_separator`: 指定导出的列分隔符，默认为 `\t`。
+  - `line_delimiter`: 指定导出的行分隔符，默认为 `\n`。
   - `load_mem_limit`: 导出在单个 BE 节点的内存使用上限，默认为 2 GB，单位为字节。
-  - `timeout`：导出作业的超时时间，单位：秒。默认值为`86400`（1天）。
+  - `timeout`：导出作业的超时时间，单位：秒。默认值为 `86400`（1 天）。
   - `include_query_id`: 导出文件名中是否包含 `query_id`，默认为 `true`，表示包含。
 
 - `broker`：导出使用的 Broker。
@@ -85,7 +85,7 @@ PROPERTIES ("column_separator"=",")
 WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
 ```
 
-2.将 `testTbl` 表中的所有数据导出到 HDFS 上，以 Hive 默认分隔符`\x01`作为列分隔符。
+2.将 `testTbl` 表中的所有数据导出到 HDFS 上，以 Hive 默认分隔符 `\x01` 作为列分隔符。
 
 ```sql
 EXPORT TABLE testTbl 
