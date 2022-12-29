@@ -46,6 +46,10 @@
 
 namespace starrocks {
 
+#ifdef USE_STAROS
+extern bool sDisableStarOSMetrics;
+#endif
+
 // Mock part
 const char* s_expect_response = nullptr;
 
@@ -60,12 +64,15 @@ public:
     void SetUp() override {
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
 #ifdef USE_STAROS
-        // clear staros metrics to avoid confusing the test result.
-        staros::starlet::metrics::MetricsSystem::instance()->clear();
+        // disable staros metrics output to avoid confusing the test result.
+        sDisableStarOSMetrics = true;
 #endif
     }
 
     void TearDown() override {
+#ifdef USE_STAROS
+        sDisableStarOSMetrics = false;
+#endif
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
         }
