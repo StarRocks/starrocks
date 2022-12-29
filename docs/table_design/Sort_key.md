@@ -33,7 +33,7 @@ The following examples show allowed sort key columns and unallowed sort key colu
   - `city_code` and `user_name`
   - `site_id`, `city_code`, and `pv`
 
-The following sections provide examples of how to define sort key columns when you create tables that use various data models.
+The following sections provide examples of how to define sort key columns when you create tables that use various data models. These examples are suitable for StarRocks clusters that have at least three BEs.
 
 ### Duplicate Key
 
