@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
-import avro.shaded.com.google.common.collect.Sets;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.ibm.icu.impl.Assert;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardInfo;
