@@ -8,7 +8,17 @@ Broker Load supports loading one or more data files at a time. Additionally, Bro
 
 ## Background information
 
-Broker Load requires a broker to set up a connection between your StarRocks cluster and your storage system. A broker is an independent, stateless service that is integrated with a file-system interface. With a broker, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+
+From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+
+> **NOTE**
+>
+> Loading without brokers may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using brokers.
+
+If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
+
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -44,7 +54,7 @@ After you submit a load job to an FE, the FE generates a query plan, splits the 
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/4.3-1.png)
+![Workflow of Broker Load](../assets/4.3-1-en.png)
 
 ## Basic operations
 
@@ -153,7 +163,10 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> - The S3A protocol is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
 
 #### Load data from Google GCS
 
