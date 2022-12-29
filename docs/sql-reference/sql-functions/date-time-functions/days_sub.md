@@ -2,7 +2,7 @@
 
 ## Description
 
-Subtracts specified days from a date or datetime to get a new datetime.
+Subtracts specified number of days from a date or datetime to get a new datetime.
 
 ## Syntax
 
@@ -11,11 +11,6 @@ DATETIME days_sub(DATETIME|DATE d, INT n);
 ```
 
 ## Parameters
-<<<<<<< HEAD
-
-`d`: the date or datetime expression.
-=======
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
 
 `d`: the date or datetime expression.
 
