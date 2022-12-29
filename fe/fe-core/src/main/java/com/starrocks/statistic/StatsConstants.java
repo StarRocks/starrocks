@@ -21,6 +21,7 @@ public class StatsConstants {
     public static final int STATISTIC_DATA_VERSION = 1;
     public static final int STATISTIC_DICT_VERSION = 101;
     public static final int STATISTIC_HISTOGRAM_VERSION = 2;
+    public static final int STATISTIC_TABLE_VERSION = 3;
 
     public static final String STATISTICS_DB_NAME = "_statistics_";
     public static final String SAMPLE_STATISTICS_TABLE_NAME = "table_statistic_v1";

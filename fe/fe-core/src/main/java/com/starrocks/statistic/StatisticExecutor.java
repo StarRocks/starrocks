@@ -31,7 +31,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
@@ -169,6 +171,16 @@ public class StatisticExecutor {
         }
     }
 
+    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId) {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId);
+        return executeDQL(context, sql);
+    }
+
+    public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId, Long partitionId) {
+        String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId, partitionId);
+        return executeDQL(context, sql);
+    }
+
     private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
         List<TStatisticData> statistics = Lists.newArrayList();
 
@@ -183,7 +195,8 @@ public class StatisticExecutor {
 
         if (version == StatsConstants.STATISTIC_DATA_VERSION
                 || version == StatsConstants.STATISTIC_DICT_VERSION
-                || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION) {
+                || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
+                || version == StatsConstants.STATISTIC_TABLE_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -194,6 +207,8 @@ public class StatisticExecutor {
                     statistics.add(sd);
                 }
             }
+        } else {
+            throw new StarRocksPlannerException("Unknnow statistics type " + version, ErrorType.INTERNAL_ERROR);
         }
 
         return statistics;

@@ -15,6 +15,7 @@
 package com.starrocks.connector.parser.trino;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -24,7 +25,9 @@ public class TrinoTPCHTest extends TrinoTestBase {
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
+        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);

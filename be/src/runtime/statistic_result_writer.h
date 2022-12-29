@@ -51,6 +51,9 @@ private:
 
     Status _fill_statistic_histogram(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
 
+    Status _fill_table_statistic_data(int version, const Columns& columns, const Chunk* chunk,
+                                      TFetchDataResult* result);
+
 private:
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
