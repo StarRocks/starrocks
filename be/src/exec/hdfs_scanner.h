@@ -46,6 +46,9 @@ struct HdfsScanStats {
     int64_t column_convert_ns = 0;
     int64_t reader_init_ns = 0;
 
+    int64_t delete_build_ns = 0;
+    int64_t delete_file_per_scan = 0;
+
     // parquet only!
     // read & decode
     int64_t request_bytes_read = 0;
@@ -77,6 +80,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
     RuntimeProfile::Counter* expr_filter_timer = nullptr;
+    RuntimeProfile::Counter* delete_build_timer = nullptr;
+    RuntimeProfile::Counter* delete_file_per_scan_counter = nullptr;
 
     RuntimeProfile::Counter* io_timer = nullptr;
     RuntimeProfile::Counter* io_counter = nullptr;
@@ -297,6 +302,7 @@ protected:
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
+    std::set<std::int64_t> _need_skip_rowids;
 };
 
 } // namespace starrocks
