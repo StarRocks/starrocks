@@ -2939,7 +2939,9 @@ void TabletUpdates::_remove_unused_rowsets() {
     while (_unused_rowsets.try_get(&rowset) == 1) {
         if (rowset.use_count() > 1) {
             LOG(WARNING) << "rowset " << rowset->rowset_id() << " still been referenced"
-                         << " tablet:" << _tablet.tablet_id();
+                         << " tablet:" << _tablet.tablet_id() << " rowset_id:" << rowset->rowset_id().id()
+                         << " use_count: " << rowset.use_count() << " refs_by_reader:" << rowset->refs_by_reader()
+                         << " version:" << rowset->version();
             skipped_rowsets.emplace_back(std::move(rowset));
             continue;
         }
@@ -3232,7 +3234,9 @@ Status TabletUpdates::clear_meta() {
     // TODO: tablet is already marked to be deleted, so maybe don't need to clear unused rowsets here
     _remove_unused_rowsets();
     if (_unused_rowsets.get_size() != 0) {
-        return Status::InternalError("some unused rowset cannot be removed");
+        //return Status::InternalError("some unused rowset cannot be removed");
+        LOG(WARNING) << "_unused_rowsets is not empty, size: " << _unused_rowsets.get_size()
+                     << " version_info: " << _debug_version_info(false);
     }
 
     WriteBatch wb;
@@ -3256,6 +3260,7 @@ Status TabletUpdates::clear_meta() {
     }
     // Clear cached primary index.
     StorageEngine::instance()->update_manager()->index_cache().remove_by_key(_tablet.tablet_id());
+    _unused_rowsets.clear();
     STLClearObject(&_rowsets);
     STLClearObject(&_rowset_stats);
     // If this get cleared, every other thread that uses variable should recheck it's valid state after acquiring _lock
