@@ -14,7 +14,7 @@ DATETIME days_sub(DATETIME|DATE d, INT n);
 
 `d`: the date or datetime expression.
 
-`n`: the number of days to subtract from the `d`.
+`n`: the number of days to subtract from `d`.
 
 ## Return value
 
