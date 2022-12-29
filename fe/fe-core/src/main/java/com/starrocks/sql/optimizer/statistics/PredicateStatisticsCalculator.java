@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
@@ -41,29 +40,30 @@ public class PredicateStatisticsCalculator {
         }
 
         // The time-complexity of PredicateStatisticsCalculatingVisitor OR row-count is O(2^n), n is OR number
-        if (countOrNode(predicate, 0) > StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT) {
+        if (countDisConsecutiveOr(predicate, 0, false) > StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT) {
             return predicate.accept(new LargeOrCalculatingVisitor(statistics), null);
         } else {
-            return predicate.accept(new PredicateStatisticsCalculatingVisitor(statistics), null);
+            return predicate.accept(new BaseCalculatingVisitor(statistics), null);
         }
     }
 
-    private static long countOrNode(ScalarOperator root, long count) {
-        if (OperatorType.COMPOUND.equals(root.getOpType()) && ((CompoundPredicateOperator) root).isOr()) {
+    private static long countDisConsecutiveOr(ScalarOperator root, long count, boolean isConsecutive) {
+        boolean isOr = OperatorType.COMPOUND.equals(root.getOpType()) && ((CompoundPredicateOperator) root).isOr();
+        if (isOr && !isConsecutive) {
             count = count + 1;
         }
 
         for (ScalarOperator child : root.getChildren()) {
-            count = countOrNode(child, count);
+            count = countDisConsecutiveOr(child, count, isOr);
         }
 
         return count;
     }
 
-    private static class PredicateStatisticsCalculatingVisitor extends ScalarOperatorVisitor<Statistics, Void> {
+    private static class BaseCalculatingVisitor extends ScalarOperatorVisitor<Statistics, Void> {
         protected final Statistics statistics;
 
-        public PredicateStatisticsCalculatingVisitor(Statistics statistics) {
+        public BaseCalculatingVisitor(Statistics statistics) {
             this.statistics = statistics;
         }
 
@@ -281,21 +281,21 @@ public class PredicateStatisticsCalculator {
             if (predicate.isAnd()) {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
-                Statistics andStatistics = predicate.getChild(1)
-                        .accept(new PredicateStatisticsCalculatingVisitor(leftStatistics), null);
+                Statistics andStatistics =
+                        predicate.getChild(1).accept(new BaseCalculatingVisitor(leftStatistics), null);
                 return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
 
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
-                Statistics cumulativeStatistics = predicate.getChild(0).accept(this, null);
+                Statistics cumulativeStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = cumulativeStatistics.getOutputRowCount();
 
                 for (int i = 1; i < disjunctive.size(); ++i) {
                     Statistics orItemStatistics = disjunctive.get(i).accept(this, null);
-                    Statistics andStatistics = disjunctive.get(i).accept(
-                            new PredicateStatisticsCalculatingVisitor(cumulativeStatistics), null);
+                    Statistics andStatistics =
+                            disjunctive.get(i).accept(new BaseCalculatingVisitor(cumulativeStatistics), null);
                     rowCount = cumulativeStatistics.getOutputRowCount() + orItemStatistics.getOutputRowCount() -
                             andStatistics.getOutputRowCount();
                     rowCount = Math.min(rowCount, statistics.getOutputRowCount());
@@ -350,7 +350,7 @@ public class PredicateStatisticsCalculator {
         }
     }
 
-    private static class LargeOrCalculatingVisitor extends PredicateStatisticsCalculatingVisitor {
+    private static class LargeOrCalculatingVisitor extends BaseCalculatingVisitor {
         public LargeOrCalculatingVisitor(Statistics statistics) {
             super(statistics);
         }
@@ -372,7 +372,7 @@ public class PredicateStatisticsCalculator {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
 
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
-                Statistics baseStatistics = predicate.getChild(0).accept(this, null);
+                Statistics baseStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = baseStatistics.getOutputRowCount();
 
                 for (int i = 1; i < disjunctive.size(); ++i) {
