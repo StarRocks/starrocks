@@ -29,8 +29,8 @@
 #include "common/statusor.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
-#include "exec/pipeline/context_with_dependency.h"
 #include "exec/aggregator_allocator.h"
+#include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
@@ -385,7 +385,9 @@ protected:
     void _reset_exprs();
     Status _evaluate_exprs(Chunk* chunk);
 
-    Status _prepare_agg_fn_types(RuntimeState* state, size_t agg_size, bool has_outer_join_child);
+    Status _prepare_groupby_exprs(RuntimeState* state);
+    Status _prepare_conjuncts_exprs(RuntimeState* state);
+    Status _prepare_agg_exprs(RuntimeState* state);
 
     void _init_state_allocator(size_t key_type_size);
 

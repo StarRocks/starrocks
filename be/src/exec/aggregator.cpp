@@ -166,9 +166,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _intermediate_tuple_id = _params->intermediate_tuple_id;
     _output_tuple_id = _params->output_tuple_id;
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs, state));
-
     // add profile attributes
     if (!_params->sql_grouping_keys.empty()) {
         _runtime_profile->add_info_string("GroupingKeys", _params->sql_grouping_keys);
@@ -177,9 +174,33 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         _runtime_profile->add_info_string("AggregateFunctions", _params->sql_aggregate_functions);
     }
 
-    bool has_outer_join_child = _params->has_outer_join_child;
-    VLOG_ROW << "has_outer_join_child " << has_outer_join_child;
+    _mem_pool = std::make_unique<MemPool>();
+    _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
 
+    _agg_stat = _pool->add(new AggStatistics(_runtime_profile));
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+
+    _intermediate_tuple_desc = state->desc_tbl().get_tuple_descriptor(_intermediate_tuple_id);
+    _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
+    DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
+
+    RETURN_IF_ERROR(_prepare_groupby_exprs(state));
+    RETURN_IF_ERROR(_prepare_agg_exprs(state));
+    RETURN_IF_ERROR(_prepare_conjuncts_exprs(state));
+
+    return Status::OK();
+}
+
+Status Aggregator::_prepare_conjuncts_exprs(RuntimeState* state) {
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    return Status::OK();
+}
+
+Status Aggregator::_prepare_groupby_exprs(RuntimeState* state) {
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs, state));
+    bool has_outer_join_child = _params->has_outer_join_child;
+    VLOG_ROW << "has_outer_join_child=" << has_outer_join_child;
     auto& grouping_exprs = _params->grouping_exprs;
     size_t group_by_size = _group_by_expr_ctxs.size();
     _group_by_columns.resize(group_by_size);
@@ -189,23 +210,28 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         _group_by_types[i].result_type = TypeDescriptor::from_thrift(expr.type);
         _group_by_types[i].is_nullable = expr.is_nullable || has_outer_join_child;
         _has_nullable_key = _has_nullable_key || _group_by_types[i].is_nullable;
-        VLOG_ROW << "group by column " << i << " result_type " << _group_by_types[i].result_type << " is_nullable "
-                 << expr.is_nullable;
+        VLOG_ROW << "group by column=" << i << " result_type=" << _group_by_types[i].result_type
+                 << " is_nullable=" << expr.is_nullable;
     }
-    VLOG_ROW << "has_nullable_key " << _has_nullable_key;
+    VLOG_ROW << "has_nullable_key=" << _has_nullable_key;
+    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state));
+    return Status::OK();
+}
 
-    _tmp_agg_states.resize(_state->chunk_size());
-
+Status Aggregator::_prepare_agg_exprs(RuntimeState* state) {
     auto& aggregate_functions = _params->aggregate_functions;
     size_t agg_size = aggregate_functions.size();
+    bool has_outer_join_child = _params->has_outer_join_child;
+
     _agg_fn_ctxs.resize(agg_size);
     _agg_functions.resize(agg_size);
     _agg_expr_ctxs.resize(agg_size);
+    _is_merge_funcs.resize(agg_size);
     _agg_input_columns.resize(agg_size);
     _agg_input_raw_columns.resize(agg_size);
     _agg_fn_types.resize(agg_size);
-    _agg_states_offsets.resize(agg_size);
-    _is_merge_funcs.resize(agg_size);
+
+    _tmp_agg_states.resize(_state->chunk_size());
 
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = aggregate_functions[i];
@@ -294,19 +320,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         }
     }
 
-    _mem_pool = std::make_unique<MemPool>();
-
-    _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
-
-    _agg_stat = _pool->add(new AggStatistics(_runtime_profile));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    _intermediate_tuple_desc = state->desc_tbl().get_tuple_descriptor(_intermediate_tuple_id);
-    _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
-    DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
-
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state));
-
     for (const auto& ctx : _agg_expr_ctxs) {
         RETURN_IF_ERROR(Expr::prepare(ctx, state));
     }
@@ -314,8 +327,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (const auto& ctx : _intermediate_agg_expr_ctxs) {
         RETURN_IF_ERROR(Expr::prepare(ctx, state));
     }
-
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -326,15 +337,16 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     }
 
     // save TFunction object
-    _fns.reserve(_agg_fn_ctxs.size());
+    _fns.resize(_agg_fn_ctxs.size());
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
+        _fns[i] = aggregate_functions[i].nodes[0].fn;
     }
 
     return Status::OK();
 }
 
 void Aggregator::_init_state_allocator(size_t key_type_size) {
+    _agg_states_offsets.resize(_params->aggregate_functions.size());
     //  use hashtable key size as align
     _agg_states_total_size = key_type_size;
     if (_agg_fn_ctxs.size() > 0) {
