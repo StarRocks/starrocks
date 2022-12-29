@@ -177,7 +177,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 - `max_running_txn_num_per_db`
 
-  StarRocks 集群每个数据库中正在运行的导入作业的最大个数，默认值为 100。当数据库中正在运行的导入作业达到最大个数限制时，后续提交的导入作业不会执行。如果是同步的导入作业，作业会被拒绝；如果是异步的导入作业，作业会在队列中等待。
+  StarRocks 集群每个数据库中正在进行的导入事务的最大个数（一个导入作业可能包含多个事务），默认值为 100。当数据库中正在运行的导入事务达到最大个数限制时，后续提交的导入作业不会执行。如果是同步的导入作业，作业会被拒绝；如果是异步的导入作业，作业会在队列中等待。
 
   > **说明**
   >
@@ -212,9 +212,9 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
   用于导入的最大内存使用量和最大内存使用百分比，用来限制单个 BE 上所有导入作业的内存总和的使用上限。StarRocks 系统会在两个参数中取较小者，作为最终的使用上限。
 
   - `load_process_max_memory_limit_bytes`：指定 BE 上最大内存使用量，默认为 100 GB。
-  - `load_process_max_memory_limit_percent`：指定 BE 上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。
+  - `load_process_max_memory_limit_percent`：指定 BE 上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 90% x 90%。
 
-    假设 BE 所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 80% x 30%`。
+    假设 BE 所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 90% x 90% x 30%`。
 
 ## 常见问题
 
