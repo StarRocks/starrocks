@@ -1013,7 +1013,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         IndexDef indexDef;
-        if (context.indexType().FULLTEXT() != null) {
+        if (context.indexType() != null && context.indexType().FULLTEXT() != null) {
             indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
                 IndexDef.IndexType.FULLTEXT,

@@ -1488,7 +1488,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
         newIndexes.add(alterClause.getIndex());
 
-        olapTable.setIndexes(newIndexes);
+        if (fullTextMock) {
+            olapTable.setIndexes(newIndexes);
+        }
 
         return fullTextMock;
     }
