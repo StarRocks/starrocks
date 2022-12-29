@@ -1326,6 +1326,34 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testArithmeticExpressions() throws Exception {
+        String sql = "select multiply(400, 500);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 200000");
+
+        sql = "select subtract(-30000, 40000);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : -70000");
+
+        sql = "select int_divide(128, 100);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 1");
+
+        sql = "select multiply(200, 50);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 10000");
+
+        sql = "select multiply(429496, 429496);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 184466814016");
+    }
+
+    @Test
     public void testInPredicate() throws Exception {
         String sql = "select * from t0 where v1 in (v2, v3, 3, 4, 5) ";
         String plan = getFragmentPlan(sql);
