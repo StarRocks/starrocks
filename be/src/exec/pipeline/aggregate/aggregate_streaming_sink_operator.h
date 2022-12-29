@@ -56,6 +56,8 @@ private:
 
     Status _push_chunk_by_auto_new(ChunkPtr chunk, const size_t chunk_size);
 
+    Status _push_chunk_by_selective_preaggregation(const size_t chunk_size, bool need_build);
+
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),

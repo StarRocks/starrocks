@@ -140,11 +140,11 @@ enum AggrAutoState { INIT_BUILD = 0, ADJUST, PASS_THROUGH, FORCE_BUILD, BUILD, S
 
 struct AggrAutoContext {
     constexpr static size_t ContinuousUpperLimit = 100000;
-    constexpr static  int BuildLimit = 3;
-    constexpr static  double LowReduction = 0.3;
-    constexpr static  double HighReduction = 0.8;
-    constexpr static  size_t MaxHtSize = 100 * 1024 * 1024;
-    constexpr static  int AdjustLimit = 5;
+    constexpr static int BuildLimit = 3;
+    constexpr static double LowReduction = 0.3;
+    constexpr static double HighReduction = 0.8;
+    constexpr static size_t MaxHtSize = 100 * 1024 * 1024;
+    constexpr static int AdjustLimit = 5;
     std::string get_auto_state_string(const AggrAutoState& state);
     size_t get_continuous_limit();
     void update_continuous_limit();
@@ -157,7 +157,6 @@ struct AggrAutoContext {
     size_t build_count = 0;
     size_t selective_build_count = 0;
     size_t continuous_limit = 1000;
-
 };
 
 struct StreamingHtMinReductionEntry {
