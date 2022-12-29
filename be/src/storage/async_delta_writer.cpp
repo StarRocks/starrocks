@@ -78,9 +78,11 @@ Status AsyncDeltaWriter::_init() {
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, _execute, _writer.get()); r != 0) {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
-    _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
-    if (_segment_flush_executor == nullptr) {
-        return Status::InternalError("SegmentFlushExecutor init failed");
+    if (replica_state() == Secondary) {
+        _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
+        if (_segment_flush_executor == nullptr) {
+            return Status::InternalError("SegmentFlushExecutor init failed");
+        }
     }
     return Status::OK();
 }
