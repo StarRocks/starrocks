@@ -326,11 +326,8 @@
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
-<<<<<<< HEAD
-=======
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
@@ -434,16 +431,11 @@
       + [bitmap_to_array](./sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
       + [bitmap_to_base64](./sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)
       + [bitmap_to_string](./sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
-<<<<<<< HEAD
-      + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
-      + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
-=======
       + [bitmap_union](./sql-reference/sql-functions/bitmap-functions/bitmap_union.md)
       + [bitmap_union_count](./sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)
       + [bitmap_union_int](./sql-reference/sql-functions/bitmap-functions/bitmap_union_int.md)
       + [bitmap_xor](./sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [intersect_count](./sql-reference/sql-functions/bitmap-functions/intersect_count.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
     + Array Functions
@@ -534,10 +526,7 @@
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
-<<<<<<< HEAD
-=======
       + [version](./sql-reference/sql-functions/utility-functions/version.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
