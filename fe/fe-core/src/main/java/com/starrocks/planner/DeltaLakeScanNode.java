@@ -13,6 +13,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -124,6 +125,8 @@ public class DeltaLakeScanNode extends ScanNode {
                             deltaLakeTable.getType());
             addPartitionLocations(partitionKeys, partitionKey, descTbl, file, metadata);
         }
+
+        scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
     }
 
     private void addPartitionLocations(Map<PartitionKey, Long> partitionKeys, PartitionKey partitionKey,
@@ -197,9 +200,12 @@ public class DeltaLakeScanNode extends ScanNode {
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
+        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        scanNodePredicates.getIdToPartitionKey().size()));
+                        partitionNames.size()));
         output.append("\n");
 
         // TODO: support it in verbose
