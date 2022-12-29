@@ -179,6 +179,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -1989,6 +1990,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
                 listPartitionDesc.findAllPartitionNames()
                         .forEach(partitionName -> partitionNameToId.put(partitionName, getNextId()));
+            } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                for (SingleRangePartitionDesc desc : expressionPartitionDesc.getRangePartitionDesc()
+                        .getSingleRangePartitionDescs()) {
+                    long partitionId = getNextId();
+                    partitionNameToId.put(desc.getPartitionName(), partitionId);
+                }
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
@@ -2673,7 +2681,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         int bucketNum = distributionInfo.getBucketNum();
-        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
+        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, replicationNum,
                 table.getPartitionFilePathInfo(), table.getPartitionFileCacheInfo(partitionId), shardGroupId);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
@@ -3389,6 +3397,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+                boolean forceExternalTableQueryReWrite = PropertyAnalyzer.
+                        analyzeForceExternalTableQueryRewrite(properties);
+                materializedView.getTableProperty().getProperties().
+                        put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
+                                String.valueOf(forceExternalTableQueryReWrite));
+                materializedView.getTableProperty().setForceExternalTableQueryRewrite(forceExternalTableQueryReWrite);
             }
             if (!properties.isEmpty()) {
                 // here, all properties should be checked

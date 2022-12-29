@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 
 namespace starrocks {
 

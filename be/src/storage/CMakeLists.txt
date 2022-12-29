@@ -81,6 +81,8 @@ add_library(Storage STATIC
     rowset/indexed_column_writer.cpp
     rowset/map_column_writer.cpp
     rowset/map_column_iterator.cpp
+    rowset/struct_column_writer.cpp
+    rowset/struct_column_iterator.cpp
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp

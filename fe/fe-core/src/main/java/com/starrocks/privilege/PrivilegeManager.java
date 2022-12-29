@@ -641,6 +641,21 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkAnyActionOnResource(ConnectContext context, String name) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            // 1. check for any action on resource
+            PEntryObject resourceObject = manager.provider.generateObject(
+                    PrivilegeType.RESOURCE.name(), Arrays.asList(name), manager.globalStateMgr);
+            short resourceTypeId = manager.analyzeType(PrivilegeType.RESOURCE.name());
+            return manager.provider.searchAnyActionOnObject(resourceTypeId, resourceObject, collection);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when checking any action on resource {}", name, e);
+            return false;
+        }
+    }
+
     public static boolean checkResourceGroupAction(ConnectContext context, String name,
                                                    PrivilegeType.ResourceGroupAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -799,8 +814,18 @@ public class PrivilegeManager {
                     db,
                     manager.globalStateMgr);
             short viewTypeId = manager.analyzeType(PrivilegeType.VIEW.name());
-            return manager.provider.searchAnyActionOnObject(viewTypeId, allViewInDbObject, collection);
-            // TODO(yiming): 4. check for any action on any mv in this db
+            if (manager.provider.searchAnyActionOnObject(viewTypeId, allViewInDbObject, collection)) {
+                return true;
+            }
+            // 4. check for any action on any mv in this db
+            PEntryObject allMvInDbObject = manager.provider.generateObject(
+                    PrivilegeType.MATERIALIZED_VIEW.name(),
+                    Arrays.asList(PrivilegeType.MATERIALIZED_VIEW.getPlural()),
+                    PrivilegeType.DATABASE.name(),
+                    db,
+                    manager.globalStateMgr);
+            short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
+            return manager.provider.searchAnyActionOnObject(mvTypeId, allMvInDbObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on or in db {}", db, e);
             return false;
@@ -843,7 +868,21 @@ public class PrivilegeManager {
                     return true;
                 }
             }
-            // TODO(yiming): 3. check for specified action on any mv in this db
+
+            // 3. check for specified action on any mv in this db
+            if (EnumUtils.isValidEnum(PrivilegeType.ViewAction.class, actionName)) {
+                PEntryObject allMvInDbObject = manager.provider.generateObject(
+                        PrivilegeType.MATERIALIZED_VIEW.name(),
+                        Arrays.asList(PrivilegeType.MATERIALIZED_VIEW.getPlural()),
+                        PrivilegeType.DATABASE.name(),
+                        db,
+                        manager.globalStateMgr);
+                short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
+                Action want = manager.provider.getAction(mvTypeId, actionName);
+                if (manager.provider.searchActionOnObject(mvTypeId, allMvInDbObject, collection, want)) {
+                    return true;
+                }
+            }
             return false;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action {} in db {}", actionName, db, e);
@@ -1396,12 +1435,7 @@ public class PrivilegeManager {
     }
 
     private void removeInvalidRolesUnlocked(Set<Long> roleIds) {
-        Iterator<Long> roleIdIter = roleIds.iterator();
-        while (roleIdIter.hasNext()) {
-            if (!roleIdToPrivilegeCollection.containsKey(roleIdIter.next())) {
-                roleIdIter.remove();
-            }
-        }
+        roleIds.removeIf(aLong -> !roleIdToPrivilegeCollection.containsKey(aLong));
     }
 
     /**
@@ -1653,7 +1687,7 @@ public class PrivilegeManager {
     }
 
     // This function only change data in parent roles
-    // Child role will be update as a whole by upgradeRoleInitPrivilegeUnlock
+    // Child role will be updated as a whole by upgradeRoleInitPrivilegeUnlock
     public void upgradeParentRoleRelationUnlock(long parentRoleId, long subRoleId) {
         roleIdToPrivilegeCollection.get(parentRoleId).addSubRole(subRoleId);
     }

@@ -178,6 +178,8 @@ StarRocks supports two policies to update cached metadata: asynchronous update a
     | ---------------------------------- | ------------ | ------------------------------------------------------------ |
     | enable_hms_events_incremental_sync | No           | Whether the automatic incremental update policy is enabled. Valid values:<ul><li>`TRUE`: means enabled.</li><li>`FALSE`: means disabled. The value of the parameter defaults to `FALSE`.</li></ul>To enable the automatic incremental update policy for the Hive catalog, set the value of this parameter to `TRUE`. |
 
+After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
+
 ## Update policies for cached metadata
 
 StarRocks develops a query execution plan based on the following data:
@@ -267,10 +269,6 @@ You can also tune the following parameters in the **$FE_HOME/conf/fe.conf** file
 | hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
 | enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
 | hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |
-
-## What to do next
-
-After you complete all the preceding operations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

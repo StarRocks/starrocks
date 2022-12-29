@@ -17,10 +17,10 @@
 #include <filesystem>
 
 #include "exec/exec_node.h"
-#include "exec/vectorized/hdfs_scanner_orc.h"
-#include "exec/vectorized/hdfs_scanner_parquet.h"
-#include "exec/vectorized/hdfs_scanner_text.h"
-#include "exec/vectorized/jni_scanner.h"
+#include "exec/hdfs_scanner_orc.h"
+#include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_text.h"
+#include "exec/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -289,7 +289,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path));
+    const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
+    FSOptions fsOptions =
+            FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
+
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;

@@ -147,11 +147,6 @@ public class Statistics {
             return this.columnStatistics.get(columnRefOperator);
         }
 
-        public Builder removeColumnStatistics(ColumnRefOperator column) {
-            columnStatistics.remove(column);
-            return this;
-        }
-
         public Statistics build() {
             return new Statistics(this);
         }

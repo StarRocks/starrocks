@@ -18,10 +18,10 @@
 
 #include <atomic>
 
+#include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 

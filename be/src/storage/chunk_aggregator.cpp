@@ -15,7 +15,7 @@
 #include "storage/chunk_aggregator.h"
 
 #include "common/config.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "gutil/casts.h"
 #include "storage/column_aggregate_func.h"
 

@@ -413,7 +413,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             auto tablet_metadata = tablet->get_metadata(version);
             if (!tablet_metadata.ok()) {
                 LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
-                             << ", error: " << tablet.status();
+                             << ", error: " << tablet_metadata.status();
                 latch.count_down();
                 return;
             }

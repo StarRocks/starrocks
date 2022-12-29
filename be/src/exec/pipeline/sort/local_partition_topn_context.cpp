@@ -14,11 +14,11 @@
 
 #include "exec/pipeline/sort/local_partition_topn_context.h"
 
-#include <exec/vectorized/partition/chunks_partitioner.h>
+#include <exec/partition/chunks_partitioner.h>
 
 #include <utility>
 
-#include "exec/vectorized/chunks_sorter_topn.h"
+#include "exec/chunks_sorter_topn.h"
 
 namespace starrocks::pipeline {
 
@@ -135,13 +135,12 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
 }
 
 LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
-        const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
-        const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-        std::string sort_keys, int64_t offset, int64_t partition_limit, const TTopNType::type topn_type,
-        const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-        const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc)
-        : _ctxs(degree_of_parallelism),
-          _t_partition_exprs(t_partition_exprs),
+        const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
+        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
+        int64_t partition_limit, const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
+        TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
+        const RowDescriptor& parent_node_child_row_desc)
+        : _t_partition_exprs(t_partition_exprs),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
           _is_null_first(std::move(is_null_first)),
@@ -151,15 +150,16 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
           _topn_type(topn_type) {}
 
 LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driver_sequence) {
-    DCHECK_LT(driver_sequence, _ctxs.size());
-
-    if (_ctxs[driver_sequence] == nullptr) {
-        _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _sort_exprs,
-                                                                             _is_asc_order, _is_null_first, _sort_keys,
-                                                                             _offset, _partition_limit, _topn_type);
+    if (auto it = _ctxs.find(driver_sequence); it != _ctxs.end()) {
+        return it->second.get();
     }
 
-    return _ctxs[driver_sequence].get();
+    auto ctx =
+            std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _sort_exprs, _is_asc_order, _is_null_first,
+                                                        _sort_keys, _offset, _partition_limit, _topn_type);
+    auto* ctx_raw_ptr = ctx.get();
+    _ctxs.emplace(driver_sequence, std::move(ctx));
+    return ctx_raw_ptr;
 }
 
 Status LocalPartitionTopnContextFactory::prepare(RuntimeState* state) {

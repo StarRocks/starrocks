@@ -111,6 +111,9 @@ public class ShardDeleter extends LeaderDaemon {
                 }
             } catch (Throwable e) {
                 LOG.error(e);
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 continue;
             }
 

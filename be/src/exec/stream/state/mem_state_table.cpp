@@ -63,7 +63,6 @@ Status MemStateTable::commit(RuntimeState* state) {
 bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumRow key) const {
     for (auto i = 0; i < key.size(); i++) {
         if (!key[i].equal_datum_key(m_k[i])) {
-            VLOG_ROW << "[_equal_keys]  not equal:" << i;
             return false;
         }
     }
@@ -71,7 +70,6 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumRow key) cons
 }
 
 ChunkPtrOr MemStateTable::seek(const DatumRow& key) const {
-    VLOG_ROW << "[seek] lookup key size:" << key.size() << ", k_num:" << _k_num;
     // point seek
     DCHECK_EQ(key.size(), _k_num);
     auto key_row = _convert_datum_row_to_key(key, 0, _k_num);
@@ -113,10 +111,8 @@ ChunkIteratorPtrOr MemStateTable::prefix_scan(const DatumRow& key) const {
         }
     }
     if (rows.empty()) {
-        VLOG_ROW << "[prefix_scan] empty row";
         return Status::EndOfFile("");
     }
-    VLOG_ROW << "[prefix_scan] row size:" << rows.size();
     auto schema = _make_schema_from_slots(std::vector<SlotDescriptor*>{_slots.begin() + key.size(), _slots.end()});
     return std::make_shared<DatumRowIterator>(schema, std::move(rows));
 }
@@ -146,7 +142,6 @@ DatumRow MemStateTable::_make_datum_row(Chunk* chunk, size_t start, size_t end, 
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
         auto& column = chunk->get_column_by_index(i);
-        VLOG_ROW << "[make_datum_row] i:" << i << ", row_idx:" << row_idx;
         row.push_back(column->get(row_idx));
     }
     return row;
@@ -157,7 +152,6 @@ DatumKeyRow MemStateTable::_make_datum_key_row(Chunk* chunk, size_t start, size_
     for (size_t i = start; i < end; i++) {
         DCHECK_LT(i, chunk->num_columns());
         auto& column = chunk->get_column_by_index(i);
-        VLOG_ROW << "[make_datum_key_row] i:" << i << ", row_idx:" << row_idx;
         row.push_back((column->get(row_idx)).convert2DatumKey());
     }
     return row;

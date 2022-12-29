@@ -21,7 +21,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_chunk_reader.h"
@@ -889,8 +889,8 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
         ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
     }
 
@@ -964,8 +964,8 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
         ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
     }
 
@@ -1025,8 +1025,8 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
 
     // c3 is dict filter column
     {
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_column_indices.size());
-        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_column_indices[0];
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices.size());
+        int col_idx = file_reader->_row_group_readers[0]->_dict_filter_ctx._dict_column_indices[0];
         ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
     }
 

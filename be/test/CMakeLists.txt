@@ -42,24 +42,25 @@ set(EXEC_FILES
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/stream/mem_state_table_test.cpp
+        ./exec/stream/stream_aggregator_test.cpp
         ./exec/tablet_info_test.cpp
-        ./exec/vectorized/agg_hash_map_test.cpp
-        ./exec/vectorized/analytor_test.cpp
-        ./exec/vectorized/analytor_test.cpp
-        ./exec/vectorized/arrow_converter_test.cpp
-        ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
-        ./exec/vectorized/chunks_sorter_test.cpp
-        ./exec/vectorized/csv_scanner_test.cpp
-        ./exec/vectorized/file_scan_node_test.cpp
-        ./exec/vectorized/hdfs_scanner_test.cpp
-        ./exec/vectorized/hdfs_scan_node_test.cpp
-        ./exec/vectorized/join_hash_map_test.cpp
-        ./exec/vectorized/json_parser_test.cpp
-        ./exec/vectorized/json_scanner_test.cpp
-        ./exec/vectorized/parquet_scanner_test.cpp
-        ./exec/vectorized/repeat_node_test.cpp
-        ./exec/vectorized/sorting_test.cpp
-        ./exec/vectorized/table_function_node_test.cpp
+        ./exec/agg_hash_map_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/arrow_converter_test.cpp
+        ./exec/chunks_sorter_heap_sort_test.cpp
+        ./exec/chunks_sorter_test.cpp
+        ./exec/csv_scanner_test.cpp
+        ./exec/file_scan_node_test.cpp
+        ./exec/hdfs_scanner_test.cpp
+        ./exec/hdfs_scan_node_test.cpp
+        ./exec/join_hash_map_test.cpp
+        ./exec/json_parser_test.cpp
+        ./exec/json_scanner_test.cpp
+        ./exec/parquet_scanner_test.cpp
+        ./exec/repeat_node_test.cpp
+        ./exec/sorting_test.cpp
+        ./exec/table_function_node_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/arithmetic_expr_test.cpp
@@ -201,6 +202,7 @@ set(EXEC_FILES
         ./storage/rowset/segment_rewriter_test.cpp
         ./storage/rowset/segment_test.cpp
         ./storage/rowset/segment_iterator_test.cpp
+        ./storage/rowset/struct_column_rw_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/default_value_column_iterator_test.cpp
@@ -263,7 +265,7 @@ set(EXEC_FILES
         ./runtime/type_descriptor_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
-        ./runtime/vectorized/sorted_chunks_merger_test.cpp
+        ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
@@ -379,4 +381,4 @@ TARGET_LINK_LIBRARIES(bytes_test
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
 # you can simply add test case as single binary without adding `main`
-# ADD_BE_TEST(exec/vectorized/sorting_test)
+# ADD_BE_TEST(exec/sorting_test)

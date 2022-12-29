@@ -155,6 +155,8 @@ public:
 
     const VectorizedField& sub_field(int i) const;
 
+    const std::vector<VectorizedField>& sub_fields() const { return *_sub_fields; }
+
     ColumnPtr create_column() const;
 
     static VectorizedFieldPtr convert_to_dict_field(const VectorizedField& field) {

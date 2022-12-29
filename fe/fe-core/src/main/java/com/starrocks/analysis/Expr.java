@@ -236,10 +236,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return id;
     }
 
-    protected void setId(ExprId id) {
-        this.id = id;
-    }
-
     public Type getType() {
         return type;
     }

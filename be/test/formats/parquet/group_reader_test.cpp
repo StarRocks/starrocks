@@ -19,7 +19,7 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 
@@ -375,14 +375,11 @@ TEST_F(GroupReaderTest, TestInit) {
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
     group_reader->_active_column_indices.clear();
-    group_reader->_use_as_dict_filter_column.resize(param->read_cols.size());
+    group_reader->_dict_filter_ctx.init(param->read_cols.size());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto r = std::make_unique<MockColumnReader>(param->read_cols[i].col_type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
         group_reader->_active_column_indices.push_back(i);
-    }
-    for (size_t i = 0; i < param->read_cols.size(); i++) {
-        group_reader->_direct_read_column_indices.push_back(i);
     }
 }
 

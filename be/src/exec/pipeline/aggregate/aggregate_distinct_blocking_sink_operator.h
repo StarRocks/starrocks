@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
-#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 class AggregateDistinctBlockingSinkOperator : public Operator {

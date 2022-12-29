@@ -97,9 +97,16 @@ BuiltinFunctions::FunctionTables BuiltinFunctions::_fn_tables = {
 """)
 
 function_list = list()
+function_set = set()
 
 def add_function(fn_data):
     entry = dict()
+    if fn_data[0] in function_set:
+        print("=================================================================")
+        print("Duplicated function id: " + str(fn_data))
+        print("=================================================================")
+        exit(1)
+    function_set.add(fn_data[0])
     entry["id"] = fn_data[0]
     entry["name"] = fn_data[1]
     entry["ret"] = fn_data[2]

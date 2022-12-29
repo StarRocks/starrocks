@@ -14,6 +14,8 @@
 #include <string_view>
 
 #include "common/statusor.h"
+#include "fs/credential/cloud_configuration_factory.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
 #include "runtime/descriptors.h"
@@ -41,27 +43,32 @@ struct SpaceInfo {
 struct FSOptions {
 private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
-              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download)
+              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
+              const TCloudConfiguration* cloud_configuration)
             : scan_range_params(scan_range_params),
               export_sink(export_sink),
               result_file_options(result_file_options),
               upload(upload),
-              download(download) {}
+              download(download),
+              cloud_configuration(cloud_configuration) {}
 
 public:
-    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr) {}
+    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
 
     FSOptions(const TBrokerScanRangeParams* scan_range_params)
-            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr) {}
+            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr, nullptr) {}
 
-    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr) {}
+    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr, nullptr) {}
 
     FSOptions(const ResultFileOptions* result_file_options)
-            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr) {}
+            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr, nullptr) {}
 
-    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr) {}
+    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr, nullptr) {}
 
-    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download) {}
+    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download, nullptr) {}
+
+    FSOptions(const TCloudConfiguration* cloud_configuration)
+            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
 
     const THdfsProperties* hdfs_properties() const;
 
@@ -70,6 +77,7 @@ public:
     const ResultFileOptions* result_file_options;
     const TUploadReq* upload;
     const TDownloadReq* download;
+    const TCloudConfiguration* cloud_configuration;
 };
 
 struct FileStatus {

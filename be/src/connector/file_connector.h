@@ -16,7 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "exec/vectorized/file_scanner.h"
+#include "exec/file_scanner.h"
 
 namespace starrocks::connector {
 

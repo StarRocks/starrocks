@@ -159,11 +159,12 @@ class PipelineDriver {
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   int32_t driver_id)
+                   Pipeline* pipeline, int32_t driver_id)
             : _operators(operators),
 
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
+              _pipeline(pipeline),
               _source_node_id(operators[0]->get_plan_node_id()),
               _driver_id(driver_id) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
@@ -174,7 +175,8 @@ public:
     }
 
     PipelineDriver(const PipelineDriver& driver)
-            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
+            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
+                             driver._driver_id) {}
 
     ~PipelineDriver() noexcept;
 
@@ -413,6 +415,7 @@ private:
     size_t _first_unfinished{0};
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
+    Pipeline* _pipeline;
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;

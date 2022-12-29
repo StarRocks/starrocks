@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
@@ -126,6 +125,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -150,6 +150,7 @@ import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -211,7 +212,7 @@ public class PrivilegeCheckerV2 {
         String actionStr = action.toString();
         if (!PrivilegeManager.checkTableAction(context, dbName, tableName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                                                actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
+                    actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
     }
 
@@ -229,7 +230,24 @@ public class PrivilegeCheckerV2 {
     static void checkAnyActionOnTable(ConnectContext context, String dbName, String tableName) {
         if (!PrivilegeManager.checkAnyActionOnTable(context, dbName, tableName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
-                                                context.getQualifiedUser(), tableName);
+                    context.getQualifiedUser(), tableName);
+        }
+    }
+
+    public static void checkMvAction(ConnectContext context,
+                                     TableName tableName,
+                                     PrivilegeType.MaterializedViewAction action) {
+        String catalogName = tableName.getCatalog();
+        if (catalogName == null) {
+            catalogName = context.getCurrentCatalog();
+        }
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+        }
+        String actionStr = action.toString();
+        if (!PrivilegeManager.checkMaterializedViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_MV_ACCESS_DENIED_ERROR,
+                    actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
     }
 
@@ -339,7 +357,7 @@ public class PrivilegeCheckerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null && !db.isInfoSchemaDb()) {
                 Table table = db.getTable(tableId);
-                if (table != null) {
+                if (table != null && table.isOlapOrLakeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
                 }
@@ -360,6 +378,9 @@ public class PrivilegeCheckerV2 {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
         if (db != null && !db.isInfoSchemaDb()) {
             for (Table table : db.getTables()) {
+                if (table == null || !table.isOlapOrLakeTable()) {
+                    continue;
+                }
                 TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         db.getFullName(), table.getName());
                 tableNames.add(tableNameNew);
@@ -397,7 +418,7 @@ public class PrivilegeCheckerV2 {
             }
         } else if (analyzeJob != null) {
             Set<TableName> tableNames = PrivilegeCheckerV2.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
-                                                                                             analyzeJob.getTableId());
+                    analyzeJob.getTableId());
             tableNames.forEach(tableName -> {
                 Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
                 if (db != null) {
@@ -415,19 +436,19 @@ public class PrivilegeCheckerV2 {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_DB_NOT_FOUND, dbName);
         }
         List<LoadJob> loadJobs = globalStateMgr.getLoadManager().
-                                                getLoadJobsByDb(db.getId(), label, false);
+                getLoadJobsByDb(db.getId(), label, false);
         List<String> forbiddenInsertTableList = new ArrayList<>();
         List<String> forbiddenUseResourceList = new ArrayList<>();
         loadJobs.forEach(loadJob -> {
             try {
                 if (loadJob instanceof SparkLoadJob &&
                         !PrivilegeManager.checkResourceAction(context, loadJob.getResourceName(),
-                                                              PrivilegeType.ResourceAction.USAGE)) {
+                                PrivilegeType.ResourceAction.USAGE)) {
                     forbiddenUseResourceList.add(loadJob.getResourceName());
                 }
                 loadJob.getTableNames().forEach(tableName -> {
                     if (!PrivilegeManager.checkTableAction(context, dbName, tableName,
-                                                           PrivilegeType.TableAction.INSERT)) {
+                            PrivilegeType.TableAction.INSERT)) {
                         forbiddenInsertTableList.add(tableName);
                     }
                 });
@@ -437,17 +458,17 @@ public class PrivilegeCheckerV2 {
         });
         if (forbiddenUseResourceList.size() > 0) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED,
-                                                PrivilegeType.ResourceAction.USAGE.toString(),
-                                                context.getQualifiedUser(),
-                                                context.getRemoteIP(),
-                                                forbiddenUseResourceList.toString());
+                    PrivilegeType.ResourceAction.USAGE.toString(),
+                    context.getQualifiedUser(),
+                    context.getRemoteIP(),
+                    forbiddenUseResourceList.toString());
         }
         if (forbiddenInsertTableList.size() > 0) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                                                PrivilegeType.TableAction.INSERT.toString(),
-                                                context.getQualifiedUser(),
-                                                context.getRemoteIP(),
-                                                forbiddenInsertTableList.toString());
+                    PrivilegeType.TableAction.INSERT.toString(),
+                    context.getQualifiedUser(),
+                    context.getRemoteIP(),
+                    forbiddenInsertTableList.toString());
         }
     }
 
@@ -641,7 +662,11 @@ public class PrivilegeCheckerV2 {
 
             @Override
             public Void visitTable(TableRelation node, Void context) {
-                checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
+                if (node.getTable().isMaterializedView()) {
+                    checkMvAction(session, node.getName(), PrivilegeType.MaterializedViewAction.SELECT);
+                } else {
+                    checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
+                }
                 return null;
             }
         }
@@ -711,6 +736,13 @@ public class PrivilegeCheckerV2 {
                     context, statement.getResourceName(), PrivilegeType.ResourceAction.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowResourceStatement(ShowResourcesStmt statement, ConnectContext context) {
+            // `show resources` only show resource that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowResources()` for details.
             return null;
         }
 
@@ -1232,6 +1264,13 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
+        @Override
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
+            // `show alter table` only show tables/views/mvs that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowAlter()` for details.
+            return null;
+        }
+
         // ---------------------------------------- Show Variables Statement ------------------------------
 
         @Override
@@ -1270,7 +1309,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
-                                                                ConnectContext context) {
+                                                               ConnectContext context) {
             checkStmtOperatePrivilege(context);
             return null;
         }
@@ -1352,9 +1391,9 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkTableAction(context,
-                                                   statement.getTblName().getDb(),
-                                                   statement.getTblName().getTbl(),
-                                                   PrivilegeType.TableAction.EXPORT)) {
+                    statement.getTblName().getDb(),
+                    statement.getTblName().getTbl(),
+                    PrivilegeType.TableAction.EXPORT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
             }
             return null;
@@ -1365,18 +1404,18 @@ public class PrivilegeCheckerV2 {
             ExportJob exportJob = null;
             try {
                 exportJob = GlobalStateMgr.getCurrentState().getExportMgr().getExportJob(statement.getDbName(),
-                                                                                         statement.getQueryId());
+                        statement.getQueryId());
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
             }
             if (null == exportJob) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND,
-                                                    statement.getQueryId().toString());
+                        statement.getQueryId().toString());
             }
             if (!PrivilegeManager.checkTableAction(context,
-                                                   exportJob.getTableName().getDb(),
-                                                   exportJob.getTableName().getTbl(),
-                                                   PrivilegeType.TableAction.EXPORT)) {
+                    exportJob.getTableName().getDb(),
+                    exportJob.getTableName().getTbl(),
+                    PrivilegeType.TableAction.EXPORT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXPORT");
             }
             return null;
@@ -1414,9 +1453,9 @@ public class PrivilegeCheckerV2 {
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
                 checkTableAction(context,
-                                 tableName.getDb(),
-                                 tableName.getTbl(),
-                                 PrivilegeType.TableAction.EXPORT);
+                        tableName.getDb(),
+                        tableName.getTbl(),
+                        PrivilegeType.TableAction.EXPORT);
             });
             return null;
         }
@@ -1449,9 +1488,9 @@ public class PrivilegeCheckerV2 {
                 tableRefs.forEach(tableRef -> {
                     TableName tableName = tableRef.getName();
                     checkTableAction(context,
-                                     tableName.getDb(),
-                                     tableName.getTbl(),
-                                     PrivilegeType.TableAction.EXPORT);
+                            tableName.getDb(),
+                            tableName.getTbl(),
+                            PrivilegeType.TableAction.EXPORT);
                 });
             }
             return null;
@@ -1464,15 +1503,15 @@ public class PrivilegeCheckerV2 {
             // Step 2 check any action on db
             if (!PrivilegeManager.checkAnyActionOnDb(context, statement.getDbName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                                                    context.getQualifiedUser(), statement.getDbName());
+                        context.getQualifiedUser(), statement.getDbName());
             }
             // Step 3 check table.insert
             List<TableRef> tableRefs = statement.getTableRefs();
             for (TableRef tableRef : tableRefs) {
                 checkTableAction(context,
-                                 statement.getDbName(),
-                                 tableRef.getName().getTbl(),
-                                 PrivilegeType.TableAction.INSERT);
+                        statement.getDbName(),
+                        tableRef.getName().getTbl(),
+                        PrivilegeType.TableAction.INSERT);
             }
             return null;
         }
@@ -1485,10 +1524,12 @@ public class PrivilegeCheckerV2 {
 
         // ---------------------------------------- Materialized View stmt --------------------------------
         @Override
-        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
+                                                         ConnectContext context) {
             if (!PrivilegeManager.checkDbAction(context, statement.getTableName().getDb(),
-                                                PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE MATERIALIZED VIEW");
+                    PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE MATERIALIZED VIEW");
             }
             return null;
         }
@@ -1496,21 +1537,24 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkMaterializedViewAction(context,
-                                                              statement.getMvName().getDb(),
-                                                              statement.getMvName().getTbl(),
-                                                              PrivilegeType.MaterializedViewAction.ALTER)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER MATERIALIZED VIEW");
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.MaterializedViewAction.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "ALTER MATERIALIZED VIEW");
             }
             return null;
         }
 
         @Override
-        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
             if (!PrivilegeManager.checkMaterializedViewAction(context,
-                                                              statement.getMvName().getDb(),
-                                                              statement.getMvName().getTbl(),
-                                                              PrivilegeType.MaterializedViewAction.REFRESH)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "REFRESH MATETIALIZED VIEW");
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.MaterializedViewAction.REFRESH)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "REFRESH MATETIALIZED VIEW");
             }
             return null;
         }
@@ -1519,10 +1563,11 @@ public class PrivilegeCheckerV2 {
         public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
                                                                 ConnectContext context) {
             if (!PrivilegeManager.checkMaterializedViewAction(context,
-                                                              statement.getMvName().getDb(),
-                                                              statement.getMvName().getTbl(),
-                                                              PrivilegeType.MaterializedViewAction.REFRESH)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "REFRESH MATETIALIZED VIEW");
+                    statement.getMvName().getDb(),
+                    statement.getMvName().getTbl(),
+                    PrivilegeType.MaterializedViewAction.REFRESH)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "REFRESH MATETIALIZED VIEW");
             }
             return null;
         }
@@ -1538,30 +1583,42 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkMaterializedViewAction(context,
-                                                              statement.getDbName(),
-                                                              statement.getMvName(),
-                                                              PrivilegeType.MaterializedViewAction.DROP)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP MATETIALIZED VIEW");
+                    statement.getDbName(),
+                    statement.getMvName(),
+                    PrivilegeType.MaterializedViewAction.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "DROP MATETIALIZED VIEW");
             }
             return null;
         }
 
         // ---------------------------------------- FUNC stmt --------------------------------------------------
-
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
             FunctionName name = statement.getFunctionName();
-            if (!PrivilegeManager.checkDbAction(context, name.getDb(), PrivilegeType.DbAction.CREATE_FUNCTION)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE FUNCTION");
+            if (name.isGlobalFunction()) {
+                if (!PrivilegeManager.checkSystemAction(
+                        context, PrivilegeType.SystemAction.CREATE_GLOBAL_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "CREATE_GLOBAL_FUNCTION");
+                }
+            } else {
+                if (!PrivilegeManager.checkDbAction(context, name.getDb(), PrivilegeType.DbAction.CREATE_FUNCTION)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE FUNCTION");
+                }
             }
             return null;
         }
 
         @Override
         public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
+            // Don't do any privilege check on show global functions.
+            if (statement.getIsGlobal()) {
+                return null;
+            }
             if (!PrivilegeManager.checkAnyActionOnDb(context, statement.getDbName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                                                    context.getQualifiedUser(), statement.getDbName());
+                        context.getQualifiedUser(), statement.getDbName());
             }
             List<Table> tableList = GlobalStateMgr.getCurrentState().getDb(statement.getDbName()).getTables();
             boolean hasPrivilege = false;
@@ -1572,7 +1629,8 @@ public class PrivilegeCheckerV2 {
                         break;
                     }
                 } else if (table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
-                    if (PrivilegeManager.checkAnyActionOnMaterializedView(context, statement.getDbName(), table.getName())) {
+                    if (PrivilegeManager.checkAnyActionOnMaterializedView(context, statement.getDbName(),
+                            table.getName())) {
                         hasPrivilege = true;
                         break;
                     }
@@ -1590,6 +1648,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
+            // TODO(yanz): privilege checker for global function.
             FunctionName functionName = statement.getFunctionName();
             Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
             Function function = db.getFunction(statement.getFunction());
@@ -1597,7 +1656,7 @@ public class PrivilegeCheckerV2 {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_FUNC_NOT_FOUND);
             }
             if (!PrivilegeManager.checkFunctionAction(context, functionName.getDb(), function.signatureString(),
-                                                      PrivilegeType.FunctionAction.DROP)) {
+                    PrivilegeType.FunctionAction.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP FUNCTION");
             }
             return null;

@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "exec/aggregator.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 class AggregateStreamingSourceOperator : public SourceOperator {

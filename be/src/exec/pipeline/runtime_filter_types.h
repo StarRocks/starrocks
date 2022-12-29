@@ -18,7 +18,7 @@
 #include <utility>
 
 #include "common/statusor.h"
-#include "exec/vectorized/hash_join_node.h"
+#include "exec/hash_join_node.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"

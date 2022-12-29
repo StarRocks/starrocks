@@ -81,6 +81,9 @@ class DeleteLakeTableTask implements Runnable {
 
         } catch (Throwable ex) {
             LOG.info("Fail to get lake service proxy: {}", ex.getMessage());
+            if (ex instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }
