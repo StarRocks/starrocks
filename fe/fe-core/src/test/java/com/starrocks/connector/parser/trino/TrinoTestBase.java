@@ -372,5 +372,4 @@ public class TrinoTestBase {
                 filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }
-
 }
