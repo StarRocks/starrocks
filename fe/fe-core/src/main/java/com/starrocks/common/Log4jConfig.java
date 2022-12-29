@@ -177,6 +177,14 @@ public class Log4jConfig extends XmlConfiguration {
         String sysRollNum = String.valueOf(Config.sys_log_roll_num);
         String sysDeleteAge = String.valueOf(Config.sys_log_delete_age);
 
+        if (!(sysLogLevel.equalsIgnoreCase("DEBUG") ||
+                sysLogLevel.equalsIgnoreCase("INFO") ||
+                sysLogLevel.equalsIgnoreCase("WARN") ||
+                sysLogLevel.equalsIgnoreCase("ERROR") ||
+                sysLogLevel.equalsIgnoreCase("FATAL"))) {
+            throw new IOException("sys_log_level config error");
+        }
+
         String sysLogRollPattern = "%d{yyyyMMdd}";
         String sysRollMaxSize = String.valueOf(Config.log_roll_size_mb);
         if (Config.sys_log_roll_interval.equals("HOUR")) {
