@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
@@ -39,14 +38,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 // For syntax select * from tbl INTO OUTFILE xxxx
 public class OutFileClause implements ParseNode {
     private static final Logger LOG = LogManager.getLogger(OutFileClause.class);
 
-    private static final String BROKER_PROP_PREFIX = "broker.";
+    // Old properties still use this prefix, new properties will not.
+    private static final String OLD_BROKER_PROP_PREFIX = "broker.";
     private static final String PROP_BROKER_NAME = "broker.name";
     private static final String PROP_COLUMN_SEPARATOR = "column_separator";
     private static final String PROP_LINE_DELIMITER = "line_delimiter";
@@ -121,8 +119,7 @@ public class OutFileClause implements ParseNode {
             return;
         }
 
-        Set<String> processedPropKeys = Sets.newHashSet();
-        getBrokerProperties(filePath, processedPropKeys);
+        setBrokerProperties();
         if (brokerDesc == null) {
             return;
         }
@@ -132,7 +129,6 @@ public class OutFileClause implements ParseNode {
                 throw new AnalysisException(PROP_COLUMN_SEPARATOR + " is only for CSV format");
             }
             columnSeparator = properties.get(PROP_COLUMN_SEPARATOR);
-            processedPropKeys.add(PROP_COLUMN_SEPARATOR);
         }
 
         if (properties.containsKey(PROP_LINE_DELIMITER)) {
@@ -140,7 +136,6 @@ public class OutFileClause implements ParseNode {
                 throw new AnalysisException(PROP_LINE_DELIMITER + " is only for CSV format");
             }
             rowDelimiter = properties.get(PROP_LINE_DELIMITER);
-            processedPropKeys.add(PROP_LINE_DELIMITER);
         }
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
@@ -148,17 +143,10 @@ public class OutFileClause implements ParseNode {
             if (maxFileSizeBytes > MAX_FILE_SIZE_BYTES || maxFileSizeBytes < MIN_FILE_SIZE_BYTES) {
                 throw new AnalysisException("max file size should between 5MB and 2GB. Given: " + maxFileSizeBytes);
             }
-            processedPropKeys.add(PROP_MAX_FILE_SIZE);
-        }
-
-        if (processedPropKeys.size() != properties.size()) {
-            LOG.debug("{} vs {}", processedPropKeys, properties);
-            throw new AnalysisException("Unknown properties: " + properties.keySet().stream()
-                    .filter(k -> !processedPropKeys.contains(k)).collect(Collectors.toList()));
         }
     }
 
-    private void getBrokerProperties(String filePath, Set<String> processedPropKeys) {
+    private void setBrokerProperties() {
         boolean outfile_without_broker = false;
         if (!properties.containsKey(PROP_BROKER_NAME)) {
             outfile_without_broker = true;
@@ -166,16 +154,15 @@ public class OutFileClause implements ParseNode {
         String brokerName = null;
         if (!outfile_without_broker) {
             brokerName = properties.get(PROP_BROKER_NAME);
-            processedPropKeys.add(PROP_BROKER_NAME);
         }
 
         Map<String, String> brokerProps = Maps.newHashMap();
-        Iterator<Map.Entry<String, String>> iter = properties.entrySet().iterator();
-        while (iter.hasNext()) {
-            Map.Entry<String, String> entry = iter.next();
-            if (entry.getKey().startsWith(BROKER_PROP_PREFIX) && !entry.getKey().equals(PROP_BROKER_NAME)) {
-                brokerProps.put(entry.getKey().substring(BROKER_PROP_PREFIX.length()), entry.getValue());
-                processedPropKeys.add(entry.getKey());
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(OLD_BROKER_PROP_PREFIX)) {
+                brokerProps.put(entry.getKey().substring(OLD_BROKER_PROP_PREFIX.length()), entry.getValue());
+            } else {
+                // Put new properties without "broker." prefix
+                brokerProps.put(entry.getKey(), entry.getValue());
             }
         }
         if (!outfile_without_broker) {
