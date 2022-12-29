@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 4819a10ac ([BugFix] Fix expcetion of BitInteger comparing with Boolean (#15925))
 
 package com.starrocks.sql.plan;
 
@@ -1718,4 +1734,90 @@ public class AggregateTest extends PlanTestBase {
         Assert.assertFalse(plan.contains("ANALYTIC"));
         Assert.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSimpleMinMaxAggRewrite() throws Exception {
+        // normal case
+        String sql = "select min(t1b),max(t1b),min(id_datetime) from test_all_type_not_null";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type_not_null\n" +
+                "     <id 16> : min_id_datetime\n" +
+                "     <id 14> : min_t1b\n" +
+                "     <id 15> : max_t1b");
+
+        // The following cases will not use MetaScan because some conditions are not met
+        // with group by key
+        sql = "select t1b,max(id_datetime) from test_all_type_not_null group by t1b";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(8: id_datetime)\n" +
+                "  |  group by: 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type_not_null");
+        // with expr in agg function
+        sql = "select min(t1b+1),max(t1b) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(11: expr), max(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with unsupported type in agg function
+        sql = "select min(t1b),max(t1a) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b), max(1: t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with filter
+        sql = "select min(t1b) from test_all_type_not_null where t1c > 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select min(t1b) from test_all_type_not_null having abs(1) = 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  having: abs(1) = 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with nullable column
+        sql = "select min(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testGroupByLiteral() throws Exception {
+        String sql = "select -9223372036854775808 group by TRUE;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 3> : -9223372036854775808");
+    }
+>>>>>>> 4819a10ac ([BugFix] Fix expcetion of BitInteger comparing with Boolean (#15925))
 }
