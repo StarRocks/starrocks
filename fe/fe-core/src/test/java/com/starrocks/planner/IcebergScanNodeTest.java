@@ -215,7 +215,7 @@ public class IcebergScanNodeTest {
         setUpMock(true, table, iTable, snapshot);
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
-        scanNode.getScanRangeLocations();
+        scanNode.setupScanRangeLocations();
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
         Assert.assertTrue(result.size() > 0);
@@ -241,7 +241,7 @@ public class IcebergScanNodeTest {
         setUpMock(false, table, iTable, snapshot);
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
-        scanNode.getScanRangeLocations();
+        scanNode.setupScanRangeLocations();
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
         TScanRange scanRange = result.get(0).scan_range;
@@ -305,7 +305,7 @@ public class IcebergScanNodeTest {
         };
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
-        scanNode.getScanRangeLocations();
+        scanNode.setupScanRangeLocations();
         scanNode.appendEqualityColumns(node, columnRefFactory, context);
         Assert.assertEquals(context.getColRefToExpr().size(), 1);
     }
