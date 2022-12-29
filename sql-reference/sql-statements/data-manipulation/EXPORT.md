@@ -76,7 +76,7 @@ WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
 
 ### 将表中所有数据导出到 HDFS 并指定分隔符
 
-1.将 `testTbl` 表中的所有数据导出到 HDFS 上，以`,`作为列分隔符。
+1.将 `testTbl` 表中的所有数据导出到 HDFS 上，以 `,` 作为列分隔符。
 
 ```sql
 EXPORT TABLE testTbl 
@@ -96,7 +96,7 @@ WITH BROKER "broker_name";
 
 ### 指定导出文件名前缀
 
-将 `testTbl` 表中的所有数据导出到 HDFS 上，指定导出文件前缀为 testTbl_。
+将 `testTbl` 表中的所有数据导出到 HDFS 上，指定导出文件前缀为 `testTbl_`。
 
 ```sql
 EXPORT TABLE testTbl 
