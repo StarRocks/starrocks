@@ -8,7 +8,10 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -21,8 +24,9 @@ public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
     public static final String DUMMY_THRIFT_URI = "thrift://127.0.0.1:9083";
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("glue", "dlf");
-
+    
     private final Map<String, String> properties;
+    private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
     private final HiveMetadataFactory metadataFactory;
@@ -30,7 +34,9 @@ public class HiveConnector implements Connector {
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
-        this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties);
+        this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+        this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
         validate();
         onCreate();
@@ -82,5 +88,9 @@ public class HiveConnector implements Connector {
         internalMgr.shutdown();
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
     }
 }

@@ -7,7 +7,10 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -18,6 +21,7 @@ public class DeltaLakeConnector implements Connector {
 
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final Map<String, String> properties;
+    private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
     private final DeltaLakeInternalMgr internalMgr;
     private final DeltaLakeMetadataFactory metadataFactory;
@@ -25,7 +29,9 @@ public class DeltaLakeConnector implements Connector {
     public DeltaLakeConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
-        this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties);
+        this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+        this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
         validate();
         onCreate();
@@ -44,16 +50,20 @@ public class DeltaLakeConnector implements Connector {
 
     private DeltaLakeMetadataFactory createMetadataFactory() {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
-
         return new DeltaLakeMetadataFactory(
                 catalogName,
                 metastore,
                 internalMgr.getHiveMetastoreConf(),
-                properties.get(HIVE_METASTORE_URIS)
+                properties.get(HIVE_METASTORE_URIS),
+                internalMgr.getHdfsEnvironment()
         );
     }
 
     public void onCreate() {
+    }
+
+    public CloudConfiguration getCloudConfiguration() {
+        return this.cloudConfiguration;
     }
 
     @Override
