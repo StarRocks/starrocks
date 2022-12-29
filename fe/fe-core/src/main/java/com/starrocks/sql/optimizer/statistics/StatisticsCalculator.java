@@ -125,7 +125,6 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.statistic.StatisticUtils;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
