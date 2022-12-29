@@ -81,7 +81,7 @@ Status ORCScanner::open() {
     for (int i = 0; i < num_columns_from_orc; ++i) {
         _orc_slot_descriptors[i] = _src_slot_descriptors[i];
     }
-    _orc_reader = std::make_unique<OrcChunkReader>(_state, _orc_slot_descriptors);
+    _orc_reader = std::make_unique<OrcChunkReader>(_state->chunk_size(), _orc_slot_descriptors);
     _orc_reader->set_broker_load_mode(_strict_mode);
     _orc_reader->set_timezone(_state->timezone());
     _orc_reader->drop_nanoseconds_in_datetime();
