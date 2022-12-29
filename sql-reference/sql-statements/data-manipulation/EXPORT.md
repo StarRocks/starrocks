@@ -32,11 +32,11 @@ WITH BROKER;
     ```
 
     配置项：
-  - `column_separator`: 指定导出的列分隔符，默认为`\t`。
-  - `line_delimiter`: 指定导出的行分隔符，默认为`\n`。
+  - `column_separator`: 指定导出的列分隔符，默认为 `\t`。
+  - `line_delimiter`: 指定导出的行分隔符，默认为 `\n`。
   - `load_mem_limit`: 导出在单个 BE 节点的内存使用上限，默认为 2 GB，单位为字节。
-  - `timeout`：导出作业的超时时间，单位：秒。默认值为`86400`（1天）。
-  - `include_query_id`: 导出文件名中是否包含 `query_id`，默认为`true`，表示包含。
+  - `timeout`：导出作业的超时时间，单位：秒。默认值为 `86400`（1 天）。
+  - `include_query_id`: 导出文件名中是否包含 `query_id`，默认为 `true`，表示包含。
 
 - `WITH BROKER`：在 StarRocks v2.4 及以前版本，用于指定 Broker 的名称，格式为 `WITH BROKER "<broker_name>"`。自 StarRocks v2.5 起，只保留 `WITH BROKER` 关键字，不再需要提供 `broker_name`。
 
@@ -64,7 +64,7 @@ WITH BROKER ("username"="xxx", "password"="yyy");
 
 ### 将表中所有数据导出到 HDFS 并指定分隔符
 
-1.将 `testTbl` 表中的所有数据导出到 HDFS 上，以`,`作为列分隔符。
+1.将 `testTbl` 表中的所有数据导出到 HDFS 上，以 `,` 作为列分隔符。
 
 ```sql
 EXPORT TABLE testTbl 
@@ -73,7 +73,7 @@ PROPERTIES ("column_separator"=",")
 WITH BROKER ("username"="xxx", "password"="yyy");
 ```
 
-2.将 `testTbl` 表中的所有数据导出到 HDFS 上，以 Hive 默认分隔符`\x01`作为列分隔符。
+2.将 `testTbl` 表中的所有数据导出到 HDFS 上，以 Hive 默认分隔符 `\x01` 作为列分隔符。
 
 ```sql
 EXPORT TABLE testTbl 
@@ -84,7 +84,7 @@ WITH BROKER;
 
 ### 指定导出文件名前缀
 
-将 `testTbl` 表中的所有数据导出到 HDFS 上，指定导出文件前缀为 testTbl_。
+将 `testTbl` 表中的所有数据导出到 HDFS 上，指定导出文件前缀为 `testTbl_`。
 
 ```sql
 EXPORT TABLE testTbl 
