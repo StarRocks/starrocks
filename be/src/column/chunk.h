@@ -146,6 +146,7 @@ public:
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
     bool is_tuple_exist(TupleId id) const { return _tuple_id_to_index.contains(id); }
     void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
+    size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
 
     void set_columns(const Columns& columns) { _columns = columns; }
 
