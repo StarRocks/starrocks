@@ -291,11 +291,8 @@
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
-<<<<<<< HEAD
-=======
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
@@ -397,12 +394,6 @@
       + [bitmap_or](./sql-reference/sql-functions/bitmap-functions/bitmap_or.md)
       + [bitmap_remove](./sql-reference/sql-functions/bitmap-functions/bitmap_remove.md)
       + [bitmap_to_array](./sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
-<<<<<<< HEAD
-      + [bitmap_from_string](./sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md)
-      + [bitmap_to_string](./sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
-      + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
-      + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
-=======
       + [bitmap_to_base64](./sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)
       + [bitmap_to_string](./sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
       + [bitmap_union](./sql-reference/sql-functions/bitmap-functions/bitmap_union.md)
@@ -412,18 +403,14 @@
       + [intersect_count](./sql-reference/sql-functions/bitmap-functions/intersect_count.md)
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
     + Array Functions
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](./sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](./sql-reference/sql-functions/array-functions/array_avg.md)
       + [array_concat](./sql-reference/sql-functions/array-functions/array_concat.md)
       + [array_contains](./sql-reference/sql-functions/array-functions/array_contains.md)
-<<<<<<< HEAD
-=======
       + [array_contains_all](./sql-reference/sql-functions/array-functions/array_contains_all.md)
       + [array_cum_sum](./sql-reference/sql-functions/array-functions/array_cum_sum.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_intersect](./sql-reference/sql-functions/array-functions/array_intersect.md)
@@ -436,10 +423,7 @@
       + [array_slice](./sql-reference/sql-functions/array-functions/array_slice.md)
       + [array_sort](./sql-reference/sql-functions/array-functions/array_sort.md)
       + [array_sum](./sql-reference/sql-functions/array-functions/array_sum.md)
-<<<<<<< HEAD
       + [array_cum_sum](./sql-reference/sql-functions/array-functions/array_cum_sum.md)
-=======
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
       + [arrays_overlap](./sql-reference/sql-functions/array-functions/arrays_overlap.md)
       + [array_to_bitmap](./sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
@@ -494,20 +478,13 @@
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
-<<<<<<< HEAD
-      + [version](./sql-reference/sql-functions/utility-functions/version.md)
-=======
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
-<<<<<<< HEAD
-=======
       + [version](./sql-reference/sql-functions/utility-functions/version.md)
->>>>>>> 121c32444 ( [Doc] fix function bugs (#15934))
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
