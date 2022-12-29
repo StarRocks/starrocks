@@ -27,6 +27,8 @@ StarRocks native storage has a query response time of 21s, that for StarRocks Hi
 - OS version: CentOS Linux released 7.8.2003
 - Software version: StarRocks 2.1, Trino-357, Hive-3.1.2
 
+> StarRocks FE can be separately deployed or hybrid deployed with BEs, which does not affect the test results.
+
 ## 3. Test Data and Results
 
 ### 3.1 Test Data
