@@ -222,7 +222,7 @@ public class DeltaLakeScanNode extends ScanNode {
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        partitionNames.size()));
+                        partitionNames.size() == 0 ? 1 : partitionNames.size()));
         output.append("\n");
 
         // TODO: support it in verbose
