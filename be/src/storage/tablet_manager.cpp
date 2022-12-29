@@ -1457,7 +1457,6 @@ Status TabletManager::_move_tablet_directories_to_trash(const TabletSharedPtr& t
     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         RETURN_IF_ERROR(SnapshotManager::instance()->make_snapshot_on_tablet_meta(tablet));
     } else {
-        auto meta_file_path = fmt::format("{}/{}.hdr", tablet->schema_hash_path(), tablet->tablet_id());
         tablet->tablet_meta()->save(meta_file_path);
     }
     // move tablet directories to ${storage_root_path}/trash

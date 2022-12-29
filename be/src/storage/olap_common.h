@@ -351,4 +351,3 @@ struct hash<starrocks::TabletSegmentId> {
     }
 };
 } // namespace std
-       
