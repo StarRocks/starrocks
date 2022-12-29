@@ -4556,6 +4556,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
+        if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
+            if (context.expression().size() < 1) {
+                throw new ParsingException("Arithmetic expression least one parameter");
+            }
+            
+            Expr e1 = (Expr) visit(context.expression(0));
+            Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
+            return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2);
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
         if (context.over() != null) {
