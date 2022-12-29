@@ -129,7 +129,7 @@ public class IcebergCustomCatalogTest {
         private ClientPool<IMetaStoreClient, TException> clients;
 
         @VisibleForTesting
-        private IcebergCustomTestingCatalog() {
+        public IcebergCustomTestingCatalog() {
         }
 
         @Override

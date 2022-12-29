@@ -3,7 +3,6 @@
 package com.starrocks.connector.iceberg.hive;
 
 import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
-import com.starrocks.connector.iceberg.hive.HiveClientPool;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -137,6 +136,6 @@ public class HiveClientPoolTest {
             }
         };
 
-        Assert.assertEquals(databases, clients.run(client -> client.getAllDatabases()));
+        Assert.assertEquals(databases, clients.run(client -> client.getAllDatabases(), true));
     }
 }
