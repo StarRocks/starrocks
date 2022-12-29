@@ -124,6 +124,8 @@ public class DeltaLakeScanNode extends ScanNode {
                             deltaLakeTable.getType());
             addPartitionLocations(partitionKeys, partitionKey, descTbl, file, metadata);
         }
+
+        scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
     }
 
     private void addPartitionLocations(Map<PartitionKey, Long> partitionKeys, PartitionKey partitionKey,
@@ -197,9 +199,12 @@ public class DeltaLakeScanNode extends ScanNode {
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
+        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        scanNodePredicates.getIdToPartitionKey().size()));
+                        partitionNames.size()));
         output.append("\n");
 
         // TODO: support it in verbose
