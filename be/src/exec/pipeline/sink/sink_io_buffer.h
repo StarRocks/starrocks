@@ -56,6 +56,9 @@ public:
     virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) = 0;
 
     virtual Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+        if (_is_cancelled) {
+            return Status::OK();
+        }
         if (Status status = get_io_status(); !status.ok()) {
             return status;
         }
@@ -83,9 +86,6 @@ public:
 
     virtual void cancel_one_sinker() {
         _is_cancelled = true;
-        if (_exec_queue_id != nullptr) {
-            bthread::execution_queue_stop(*_exec_queue_id);
-        }
     }
 
     virtual void close(RuntimeState* state) {
