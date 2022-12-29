@@ -21,7 +21,6 @@
 
 namespace starrocks {
 using AggDataPtr = uint8_t*;
-
 struct HashTableKeyAllocator;
 
 struct RawHashTableIterator {
@@ -41,6 +40,7 @@ struct HashTableKeyAllocator {
     static auto constexpr alloc_batch_size = 1024;
     // memory aligned when allocate
     static size_t constexpr aligned = 16;
+
     int aggregate_key_size = 0;
     std::vector<std::pair<void*, int>> vecs;
     MemPool* pool = nullptr;

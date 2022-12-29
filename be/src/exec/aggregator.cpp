@@ -174,12 +174,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
         _runtime_profile->add_info_string("AggregateFunctions", _params->sql_aggregate_functions);
     }
 
+    // prepare mem pool & agg stat
     _mem_pool = std::make_unique<MemPool>();
-    _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
-
     _agg_stat = _pool->add(new AggStatistics(_runtime_profile));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
+    // prepare tuple desc
     _intermediate_tuple_desc = state->desc_tbl().get_tuple_descriptor(_intermediate_tuple_id);
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
@@ -187,6 +187,10 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     RETURN_IF_ERROR(_prepare_groupby_exprs(state));
     RETURN_IF_ERROR(_prepare_agg_exprs(state));
     RETURN_IF_ERROR(_prepare_conjuncts_exprs(state));
+
+    // NOTE: Those variables should be prepared after prepare group by exprs/agg exprs.
+    _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
+    _tmp_agg_states.resize(_state->chunk_size());
 
     return Status::OK();
 }
@@ -231,14 +235,12 @@ Status Aggregator::_prepare_agg_exprs(RuntimeState* state) {
     _agg_input_raw_columns.resize(agg_size);
     _agg_fn_types.resize(agg_size);
 
-    _tmp_agg_states.resize(_state->chunk_size());
-
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
         _is_merge_funcs[i] = aggregate_functions[i].nodes[0].agg_expr.is_merge_agg;
-        VLOG_ROW << fn.name.function_name << " is arg nullable " << desc.nodes[0].has_nullable_child;
-        VLOG_ROW << fn.name.function_name << " is result nullable " << desc.nodes[0].is_nullable;
+        VLOG_ROW << fn.name.function_name << " arg nullable=" << desc.nodes[0].has_nullable_child << ", "
+                 << fn.name.function_name << " result nullable =" << desc.nodes[0].is_nullable;
         if (fn.name.function_name == "count") {
             {
                 bool is_input_nullable =

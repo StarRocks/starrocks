@@ -63,12 +63,15 @@ public:
         }
     }
 
-    Status open(RuntimeState* state) { return Aggregator::open(state); }
+    Status open(RuntimeState* state) {
+        RETURN_IF_ERROR(Aggregator::open(state));
+        RETURN_IF_ERROR(_prepare_state_tables(state));
+        return Status::OK();
+    }
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
                    MemTracker* mem_tracker) override {
         RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile, mem_tracker));
-        RETURN_IF_ERROR(_prepare_state_tables(state));
         return Status::OK();
     }
 
