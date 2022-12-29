@@ -18,6 +18,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/tracer.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/segment_flush_executor.h"
@@ -114,6 +115,8 @@ public:
     int64_t partition_id() const;
 
     int64_t node_id() const { return _opt.node_id; }
+
+    const std::vector<PNetworkAddress>& replicas() const { return _opt.replicas; }
 
     const Tablet* tablet() const { return _tablet.get(); }
 

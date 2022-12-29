@@ -88,6 +88,8 @@ public:
 
     State get_state() const { return _writer->get_state(); }
 
+    const std::vector<PNetworkAddress>& replicas() const { return _writer->replicas(); }
+
 private:
     struct private_type {
         explicit private_type(int) {}
