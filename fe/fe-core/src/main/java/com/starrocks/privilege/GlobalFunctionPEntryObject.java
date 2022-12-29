@@ -25,7 +25,7 @@ import java.util.List;
 public class GlobalFunctionPEntryObject implements PEntryObject {
     @SerializedName(value = "f")
     protected String functionSig;
-    protected static final String ALL_FUNCTIONS_SIG = "AS"; // AS represent all functions
+    protected static final String ALL_GLOBAL_FUNCTION_SIGS = "AGFS"; // AS represent all global functions
 
     public static final String FUNC_NOT_FOUND = "funcNotFound";
 
@@ -46,9 +46,9 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
             throws PrivilegeException {
         if (allTypes.size() == 1) {
             if (!StringUtils.isEmpty(restrictType)) {
-                throw new PrivilegeException("ALL GLOBAL FUNCTIONS must be restricted withour any database");
+                throw new PrivilegeException("ALL GLOBAL FUNCTIONS must be restricted without any database");
             }
-            return new GlobalFunctionPEntryObject(ALL_FUNCTIONS_SIG);
+            return new GlobalFunctionPEntryObject(ALL_GLOBAL_FUNCTION_SIGS);
         } else {
             throw new PrivilegeException("invalid ALL statement for functions!");
         }
@@ -64,7 +64,7 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
             return false;
         }
         GlobalFunctionPEntryObject other = (GlobalFunctionPEntryObject) obj;
-        if (other.functionSig.equals(ALL_FUNCTIONS_SIG)) {
+        if (other.functionSig.equals(ALL_GLOBAL_FUNCTION_SIGS)) {
             return true;
         }
         return other.functionSig.equals(this.functionSig);
@@ -72,7 +72,7 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return false;
+        return functionSig.equals(ALL_GLOBAL_FUNCTION_SIGS);
     }
 
     @Override
@@ -81,6 +81,7 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
         for (Function f : globalStateMgr.getGlobalFunctionMgr().getFunctions()) {
             if (f.signatureString().equals(this.functionSig)) {
                 targetFunc = f;
+                break;
             }
         }
         return targetFunc != null;

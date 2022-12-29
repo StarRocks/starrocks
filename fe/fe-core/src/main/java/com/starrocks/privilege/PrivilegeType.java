@@ -280,7 +280,7 @@ public enum PrivilegeType {
 
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
-            for (FunctionAction action : FunctionAction.values()) {
+            for (GlobalFunctionAction action : GlobalFunctionAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;

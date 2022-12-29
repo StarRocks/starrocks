@@ -1649,7 +1649,6 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
-            // TODO(yanz): privilege checker for global function.
             FunctionName functionName = statement.getFunctionName();
             // global function.
             if (functionName.isGlobalFunction()) {
