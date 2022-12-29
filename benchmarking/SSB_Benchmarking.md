@@ -30,7 +30,7 @@ Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用�
 
 StarRocks，Apache Druid 和 ClickHouse 部署在相同配置的机器上分别进行启动测试。
 
-- StarRocks 部署 3BE 1FE；
+- StarRocks 部署 3个BE，1个FE。FE 可以单独部署也可以和 BE 混合部署。
 - ClickHouse 部署三个节点后建立分布式表；
 - Apache Druid 多一台 8core 的 master 主机，部署了 Broker/Coordinator/Overlord/Router（但是测试压力不在 master，影响较小可以忽略），Historical/MiddleManager 混合部署在与 SR，CK 同等配置的主机上。
 
@@ -219,7 +219,7 @@ select count(*) from (select count(*) from lineorder_flat group by substr(lo_shi
 
 ClickHouse 的建表导入参考[官方文档](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)，StarRocks 的数据生成导入流程如下。
 
-### （一）数据生成
+### （一）生成数据
 
 首先下载 ssb-poc 工具包并编译。
 
@@ -269,7 +269,7 @@ bin/gen-ssb.sh 100 data_dir
  bin/create_db_table.sh ddl_100
 ```
 
-以下为"lineorder_flat"表建表语句。在上一步脚本中已经创建"lineorder_flat"表，并进行了默认分桶数配置。您可以删除该表，然后根据集群规模节点配置重新规划分桶数再进行创建，可实现更好测试效果。
+以下为 "lineorder_flat" 表建表语句。在上一步脚本中已经创建"lineorder_flat"表，并进行了默认分桶数配置。您可以删除该表，然后根据集群规模节点配置重新规划分桶数再进行创建，可实现更好测试效果。
 
 ```SQL
 CREATE TABLE `lineorder_flat` (
@@ -368,7 +368,7 @@ CREATE INDEX bitmap_p_container ON lineorder_flat (p_container) USING BITMAP;
 bitmap_max_filter_ratio=1000; 
 ```
 
-### （三）数据导入
+### （三）导入数据
 
 使用 Stream load 导入单表数据。
 
@@ -382,9 +382,9 @@ bin/stream_load.sh data_dir
 bin/flat_insert.sh 
 ```
 
-### （四）数据查询
+### （四）查询数据
 
-1. SSB query
+1. SSB 单表 query
 
    ```Bash
    bin/benchmark.sh -p -d ssb
@@ -392,7 +392,9 @@ bin/flat_insert.sh
    bin/benchmark.sh -p -d ssb-flat
    ```
 
-2. 低基数query
+   > 说明：ssb-flat 指的是宽表查询。
+
+2. 低基数 query
 
    ```Bash
    bin/benchmark.sh -p -d ssb-low_cardinality
