@@ -3234,7 +3234,6 @@ Status TabletUpdates::clear_meta() {
     // TODO: tablet is already marked to be deleted, so maybe don't need to clear unused rowsets here
     _remove_unused_rowsets();
     if (_unused_rowsets.get_size() != 0) {
-        //return Status::InternalError("some unused rowset cannot be removed");
         LOG(WARNING) << "_unused_rowsets is not empty, size: " << _unused_rowsets.get_size()
                      << " version_info: " << _debug_version_info(false);
     }
