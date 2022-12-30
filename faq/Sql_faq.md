@@ -213,3 +213,11 @@ StarRocks 使用 keyword 数据类型对该查询语句进行转换。因为该�
                 }
 
 让其使用 text 类型即可。
+
+## 如何快速统计 StarRocks 库、表的大小，所占的磁盘资源？
+
+查看库、表的存储大小可以用 [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW%20DATA.md) 命令查看。
+
+`SHOW DATA;` 可以展示当前数据库下所有表的数据量和副本数。
+
+`SHOW DATA FROM <db_name>.<table_name>;` 可以展示指定数据库下某个表的数据量、副本数和统计行数。

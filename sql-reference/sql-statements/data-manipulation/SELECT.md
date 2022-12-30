@@ -125,7 +125,7 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 
 | **等值 Join**   | Self Join、Cross Join、Inner Join、Outer Join、Semi Join 和 Anti Join |
 | --------------- | ------------------------------------------------------------ |
-| **非等值 Join** | Cross Join、Inner Join 和 Outer Join                         |
+| **非等值 Join** | Cross Join、Inner Join，LEFT SEMI JOIN， LEFT ANTI JOIN 和 Outer Join  |
 
 - 等值 Join
   
