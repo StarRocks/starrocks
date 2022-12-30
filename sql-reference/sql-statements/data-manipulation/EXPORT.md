@@ -136,3 +136,22 @@ WITH BROKER
 "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
 );
 ```
+
+### 导出数据到 OBS 上
+
+将 `testTbl` 表中的所有数据导出到 OBS。
+
+```sql
+EXPORT TABLE testTbl 
+TO "obs://obs-package/export/"
+WITH BROKER "broker_name"
+(
+"fs.obs.access.key" = "xxx",
+"fs.obs.secret.key" = "yyy",
+"fs.obs.endpoint" = "obs.cn-east-3.myhuaweicloud.com"
+);
+```
+
+> **说明**
+>
+> 导出数据至华为云 OBS 时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径中并重启 Broker。
