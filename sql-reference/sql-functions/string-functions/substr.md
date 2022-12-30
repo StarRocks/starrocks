@@ -9,7 +9,7 @@
 ## 语法
 
 ```Haskell
-substr(str,pos[, len]);
+VARCHAR substr(VARCHAR str, INT pos[, INT len]);
 ```
 
 ## 参数说明

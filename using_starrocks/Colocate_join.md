@@ -4,7 +4,9 @@
 
 Colocate Join 功能是分布式系统实现 Join 数据分布的策略之一，能够减少数据多节点分布时 Join 操作引起的数据移动和网络传输，从而提高查询性能。
 
-在 StarRocks 中使用 Colocate Join 功能，您需要在建表时为其指定一个 Colocation Group（CG），同一 CG 内的表需遵循相同的 Colocation Group Schema（CGS），即表对应的分桶副本具有一致的分桶键、副本数量和副本放置方式。如此可以保证同一 CG 内，所有表的数据分布在相同一组 BE 节点上。当 Join 列为分桶键时，计算节点只需做本地 Join，从而减少数据在节点间的传输耗时，提高查询性能。因此，Colocation Join，相对于其他 Join，例如 Shuffle Join 和 Broadcast Join，可以有效避免数据网络传输开销，提高查询性能。
+在 StarRocks 中使用 Colocate Join 功能，您需要在建表时为其指定一个 Colocation Group（CG），同一 CG 内的表需遵循相同的 Colocation Group Schema（CGS），即表对应的分桶副本具有一致的分桶键、副本数量和副本放置方式。如此可以保证同一 CG 内，所有表的数据分布在相同一组 BE 节点上。当 Join 列为分桶键时，计算节点只需做本地 Join，从而减少数据在节点间的传输耗时，提高查询性能。因此，Colocate Join，相对于其他 Join，例如 Shuffle Join 和 Broadcast Join，可以有效避免数据网络传输开销，提高查询性能。
+
+Colocate Join 支持等值 Join。
 
 ## 使用 Colocate Join 功能
 
