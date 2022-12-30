@@ -178,7 +178,12 @@ public class Alter {
                 if (t instanceof OlapTable) {
                     OlapTable olapTable = (OlapTable) t;
                     for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                        if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
+                        String indexName = olapTable.getIndexNameById(mvIdx.getId());
+                        if (indexName == null) {
+                            LOG.warn("OlapTable {} miss index {}", olapTable.getName(), mvIdx.getId());
+                            continue;
+                        }
+                        if (indexName.equals(stmt.getMvName())) {
                             table = olapTable;
                             hasfindTable = true;
                             break;
