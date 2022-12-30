@@ -72,7 +72,7 @@ void PipelineDriverPoller::run_internal() {
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
 
-                if (driver->is_query_expirable() && driver->query_ctx()->is_query_expired()) {
+                if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                     // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -170,8 +170,8 @@ void PipelineDriverPoller::add_parked_driver(const DriverRawPtr driver) {
     _parked_drivers.push_back(driver);
 }
 
-// remove blocked driver from poller
-void PipelineDriverPoller::active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
+// activate the parked driver from poller
+void PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
     std::vector<DriverRawPtr> ready_drivers;
 
     {

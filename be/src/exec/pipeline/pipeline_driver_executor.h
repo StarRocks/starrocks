@@ -52,7 +52,7 @@ public:
 
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
-    virtual void active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) = 0;
+    virtual void activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) = 0;
 
 protected:
     std::string _name;
@@ -71,7 +71,7 @@ public:
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
-    void active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) override;
+    void activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) override;
 
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;

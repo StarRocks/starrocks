@@ -33,7 +33,6 @@ public:
     Status update_epoch(const TUniqueId& fragment_instance_id, const EpochInfo& epoch_info,
                         const std::unordered_map<int64_t, TabletId2BinlogOffset>& input_epoch_infos) {
         std::unique_lock<std::shared_mutex> l(_epoch_lock);
-        // check
         if (!_node_id_to_scan_ranges.empty() && _node_id_to_scan_ranges.size() != input_epoch_infos.size()) {
             return Status::InternalError("MV Epoch ScanNode's ranges should not change.");
         }
@@ -62,7 +61,7 @@ public:
     }
 
     const BinlogOffset* get_binlog_offset(int64_t scan_node_id, int64_t tablet_id) const {
-        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        std::shared_lock<std::shared_mutex> l(_epoch_lock);
         auto iter = _node_id_to_scan_ranges.find(scan_node_id);
         if (iter == _node_id_to_scan_ranges.end()) {
             return nullptr;
@@ -71,15 +70,15 @@ public:
     }
 
     const TUniqueId& fragment_instance_id() const {
-        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        std::shared_lock<std::shared_mutex> l(_epoch_lock);
         return _fragment_instance_id;
     }
     const EpochInfo& epoch_info() const {
-        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        std::shared_lock<std::shared_mutex> l(_epoch_lock);
         return _epoch_info;
     }
     const std::unordered_map<int64_t, TabletId2BinlogOffset>& node_id_to_scan_ranges() const {
-        std::unique_lock<std::shared_mutex> l(_epoch_lock);
+        std::shared_lock<std::shared_mutex> l(_epoch_lock);
         return _node_id_to_scan_ranges;
     }
 

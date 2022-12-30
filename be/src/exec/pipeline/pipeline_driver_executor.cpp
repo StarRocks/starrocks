@@ -174,8 +174,8 @@ void GlobalDriverExecutor::_worker_thread() {
                 break;
             }
             case EPOCH_FINISH: {
-                _blocked_driver_poller->add_parked_driver(driver);
                 _epoch_finalize_driver(driver, runtime_state, driver_state);
+                _blocked_driver_poller->add_parked_driver(driver);
                 break;
             }
             case INPUT_EMPTY:
@@ -249,8 +249,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
-void GlobalDriverExecutor::active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
-    _blocked_driver_poller->active_parked_driver(predicate_func);
+void GlobalDriverExecutor::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
+    _blocked_driver_poller->activate_parked_driver(predicate_func);
 }
 
 void GlobalDriverExecutor::_epoch_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {

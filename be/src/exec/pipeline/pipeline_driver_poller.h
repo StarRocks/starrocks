@@ -51,8 +51,8 @@ public:
 
     // add parked driver to poller
     void add_parked_driver(const DriverRawPtr driver);
-    // remove blocked driver from poller
-    void active_parked_driver(const ImmutableDriverPredicateFunc& predicate_func);
+    // activate parked driver from poller
+    void activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func);
 
     // only used for collect metrics
     size_t blocked_driver_queue_len() const {

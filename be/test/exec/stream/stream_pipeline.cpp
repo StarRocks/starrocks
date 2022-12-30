@@ -134,7 +134,7 @@ OpFactories StreamPipelineTest::maybe_interpolate_local_passthrough_exchange(OpF
 void StreamPipelineTest::StopMV() {
     VLOG_ROW << "StopMV";
     _fragment_ctx->runtime_state()->epoch_manager()->set_is_finished(true);
-    _exec_env->driver_executor()->active_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
+    _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
 }
 
@@ -160,7 +160,7 @@ Status StreamPipelineTest::StartEpoch(const std::vector<int64_t>& tablet_ids, co
     RETURN_IF_ERROR(_fragment_ctx->reset_epoch());
 
     // step3. active driver
-    _exec_env->driver_executor()->active_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
+    _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
     return Status::OK();
 }
 

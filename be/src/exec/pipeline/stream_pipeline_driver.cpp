@@ -44,7 +44,6 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
     bool should_yield = false;
     size_t num_chunks_moved = 0;
     size_t num_operators = _operators.size();
-    size_t new_first_unfinished = _first_unfinished;
     size_t new_first_epoch_unfinished = _first_epoch_unfinished;
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");

@@ -390,7 +390,7 @@ public:
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
     // Whether the query can be expirable or not.
-    virtual bool is_query_expirable() { return true; }
+    virtual bool is_query_never_expired() { return false; }
     bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
 
 protected:

@@ -298,7 +298,7 @@ enum InternalServiceVersion {
 
 // ExecPlanFragment
 enum TPipelineKind {
-  PIPELINE,
+  OLAP_PIPELINE,
   STREAM_PIPELINE
 }
 
