@@ -45,6 +45,7 @@
 #include "common/status.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
@@ -627,9 +628,15 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
             expire_sec = 360;
         }
         _update_manager->set_cache_expire_ms(expire_sec * 1000);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        ExecEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
+#endif
         int32_t sleep_sec = std::max(1, expire_sec / 2);
         SLEEP_IN_BG_WORKER(sleep_sec);
         _update_manager->expire_cache();
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        ExecEnv::GetInstance()->lake_update_manager()->expire_cache();
+#endif
     }
 
     return nullptr;

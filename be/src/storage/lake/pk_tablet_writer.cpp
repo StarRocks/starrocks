@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/general_tablet_writer.h"
+#include "storage/lake/pk_tablet_writer.h"
 
 #include <fmt/format.h>
 
@@ -25,17 +25,21 @@
 
 namespace starrocks::lake {
 
-GeneralTabletWriter::GeneralTabletWriter(Tablet tablet) : _tablet(tablet) {}
+PkTabletWriter::PkTabletWriter(Tablet tablet, RowsetTxnMetaPB* rowset_txn_meta,
+                               std::shared_ptr<const TabletSchema>& tschema)
+        : _tablet(tablet), _rowset_txn_meta(rowset_txn_meta) {
+    _schema = tschema;
+}
 
-GeneralTabletWriter::~GeneralTabletWriter() = default;
+PkTabletWriter::~PkTabletWriter() = default;
 
 // To developers: Do NOT perform any I/O in this method, because this method may be invoked
 // in a bthread.
-Status GeneralTabletWriter::open() {
+Status PkTabletWriter::open() {
     return Status::OK();
 }
 
-Status GeneralTabletWriter::write(const starrocks::Chunk& data) {
+Status PkTabletWriter::write(const starrocks::Chunk& data) {
     if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
         RETURN_IF_ERROR(flush_segment_writer());
@@ -46,17 +50,31 @@ Status GeneralTabletWriter::write(const starrocks::Chunk& data) {
     return Status::OK();
 }
 
-Status GeneralTabletWriter::flush() {
+Status PkTabletWriter::flush_del_file(const Column& deletes) {
+    auto name = fmt::format("{}.del", generate_uuid_string());
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.del_location(name)));
+    _files.emplace_back(std::move(name));
+    size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
+    std::vector<uint8_t> content(sz);
+    if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
+        return Status::InternalError("deletes column serialize failed");
+    }
+    RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
+    RETURN_IF_ERROR(of->close());
+    return Status::OK();
+}
+
+Status PkTabletWriter::flush() {
     return flush_segment_writer();
 }
 
-Status GeneralTabletWriter::finish() {
+Status PkTabletWriter::finish() {
     RETURN_IF_ERROR(flush_segment_writer());
     _finished = true;
     return Status::OK();
 }
 
-void GeneralTabletWriter::close() {
+void PkTabletWriter::close() {
     if (!_finished && !_files.empty()) {
         // Delete files
         auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
@@ -72,7 +90,7 @@ void GeneralTabletWriter::close() {
     std::swap(tmp, _files);
 }
 
-Status GeneralTabletWriter::reset_segment_writer() {
+Status PkTabletWriter::reset_segment_writer() {
     if (_schema == nullptr) {
         ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
     }
@@ -86,12 +104,18 @@ Status GeneralTabletWriter::reset_segment_writer() {
     return Status::OK();
 }
 
-Status GeneralTabletWriter::flush_segment_writer() {
+Status PkTabletWriter::flush_segment_writer() {
     if (_seg_writer != nullptr) {
         uint64_t segment_size = 0;
         uint64_t index_size = 0;
         uint64_t footer_position = 0;
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
+        // partial update
+        if (_rowset_txn_meta != nullptr) {
+            auto* partial_rowset_footer = _rowset_txn_meta->add_partial_rowset_footers();
+            partial_rowset_footer->set_position(footer_position);
+            partial_rowset_footer->set_size(segment_size - footer_position);
+        }
         _data_size += segment_size;
         _seg_writer.reset();
     }

@@ -21,7 +21,9 @@
 namespace starrocks::lake {
 
 using TabletMetadata = TabletMetadataPB;
-using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
+using TabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
+
+using DelvecPair = DelvecPairPB;
 
 } // namespace starrocks::lake
