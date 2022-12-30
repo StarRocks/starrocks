@@ -2,19 +2,20 @@
 
 ## 功能
 
-该函数是类似于 sum() 的聚合函数，group_concat 将结果集中的多行结果连接成一个字符串，第二个参数 sep 为字符串之间的连接符号，该参数可以省略。
+group_concat 将结果集中的多行结果连接成一个字符串，第二个参数 `sep` 为字符串之间的连接符号，该参数可选。该函数会忽略 null 值。
 
-> 注: 该函数通常需要和 group by 语句一起使用，由于是分布式计算，不能保证 "多行数据是「有序」拼接的"。
+> 注: 该函数通常需要和 group by 语句一起使用。由于是分布式计算，不能保证 "多行数据是「有序」拼接的"。
 
 ## 语法
 
 ```Haskell
-group_concat(str[, VARCHAR sep])
+group_concat(VARCHAR str[, VARCHAR sep])
 ```
 
 ## 参数说明
 
-`str`: 支持的数据类型为 VARCHAR。
+- `str`: 待拼接的一列值。支持的数据类型为 VARCHAR。
+- `sep`: 字符串之间的连接符，可选。如果未指定，默认使用逗号（,）作为连接符。
 
 ## 返回值说明
 
@@ -22,27 +23,51 @@ group_concat(str[, VARCHAR sep])
 
 ## 示例
 
+建表并插入数据。
+
 ```Plain Text
-MySQL > select value from test;
-+-------+
-| value |
-+-------+
-| a     |
-| b     |
-| c     |
-+-------+
+CREATE TABLE IF NOT EXISTS group_concat (
+    id        tinyint(4)      NULL,
+    value   varchar(65533)  NULL
+) ENGINE=OLAP
+DISTRIBUTED BY HASH(id);
 
-MySQL > select group_concat(value) from test;
-+-----------------------+
-| group_concat(`value`) |
-+-----------------------+
-| a, b, c               |
-+-----------------------+
+INSERT INTO group_concat VALUES
+(1,'fruit'),
+(2,'drinks'),
+(3,null),
+(4,'fruit'),
+(5,'meat'),
+(6,'seafood');
 
-MySQL > select group_concat(value, " ") from test;
-+----------------------------+
-| group_concat(`value`, ' ') |
-+----------------------------+
-| a b c                      |
-+----------------------------+
+select * from group_concat order by id;
++------+---------+
+| id   | value   |
++------+---------+
+|    1 | fruit   |
+|    2 | drinks  |
+|    3 | NULL    |
+|    4 | fruit   |
+|    5 | meat    |
+|    6 | seafood |
+```
+
+使用 group_concat 对 value 列中的值进行拼接。
+
+```Plain Text
+-- 不指定连接符，未有序拼接。
+select group_concat(value) from group_concat;
++-------------------------------------+
+| group_concat(value)                 |
++-------------------------------------+
+| meat, fruit, seafood, fruit, drinks |
++-------------------------------------+
+
+-- 指定了空格作为连接符。
+MySQL > select group_concat(value, " ") from group_concat;
++---------------------------------+
+| group_concat(value, ' ')        |
++---------------------------------+
+| fruit meat fruit drinks seafood |
++---------------------------------+
 ```
