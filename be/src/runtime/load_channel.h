@@ -72,6 +72,8 @@ public:
 
     void cancel();
 
+    void abort();
+
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
     const UniqueId& load_id() const { return _load_id; }
