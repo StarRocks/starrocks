@@ -691,6 +691,7 @@ void* StorageEngine::_path_scan_thread_callback(void* arg) {
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(600);
+        break;
     }
 
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
