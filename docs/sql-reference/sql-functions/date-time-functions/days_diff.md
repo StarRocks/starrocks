@@ -20,7 +20,7 @@ BIGINT days_diff(DATETIME expr1,DATETIME expr2);
 
 Returns a BIGINT value.
 
-NULL is returned if the date does not exist, for example, 2022-02-29.
+NULL is returned if the date does not exist, for example, 2022-02-29. days_diff() takes the hour, minute, and second parts into calculation. If the difference is less than 1 day, 0 is returned.
 
 ## Examples
 
