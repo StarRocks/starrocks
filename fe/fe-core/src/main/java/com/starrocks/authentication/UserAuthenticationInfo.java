@@ -89,6 +89,10 @@ public class UserAuthenticationInfo implements Writable {
         return origHost;
     }
 
+    public String getTextForAuthPlugin() {
+        return textForAuthPlugin;
+    }
+
     public void setPassword(byte[] password) {
         this.password = password;
     }

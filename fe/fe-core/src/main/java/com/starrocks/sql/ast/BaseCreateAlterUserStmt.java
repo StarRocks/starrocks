@@ -26,6 +26,10 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     protected byte[] scramblePassword;
     protected boolean isPasswordPlain;
     protected String authPlugin;
+
+    // authString 是命令中 （BY|AS)后面的字符串
+    // IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
+    // 不同的认证方式，这里的含义的值不一样
     protected String authString;
     protected String userForAuthPlugin;
     protected String role;
