@@ -26,9 +26,11 @@ import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.UserIdentity;
@@ -43,6 +45,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
@@ -1181,6 +1184,59 @@ public class AlterTest {
         String renameDb = "alter database test rename test0";
         AlterDatabaseRename renameDbStmt =
                 (AlterDatabaseRename) UtFrameUtils.parseAndAnalyzeStmt(renameDb, starRocksAssert.getCtx());
+    }
+
+    @Test
+    public void testCouldNotFindMaterializedView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.testTable1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.testTable2\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String sql = "create materialized view mv1 " +
+                "as select k1, k2 from test.testTable1 group by k1, k2;";
+
+        Config.enable_experimental_mv = true;
+        starRocksAssert.withMaterializedView(sql);
+
+        sql = "drop materialized view test.mv1";
+        DropMaterializedViewStmt dropMaterializedViewStmt =
+                (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test").getTable("testTable1");
+        // this for mock olapTable.getIndexNameById(mvIdx.getId()) == Null
+        table.deleteIndexInfo("testTable1");
+        try {
+            dropMaterializedViewStmt =
+                    (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+            Assert.fail();
+        } catch (MetaNotFoundException ex) {
+            // pass
+        }
     }
 
 }
