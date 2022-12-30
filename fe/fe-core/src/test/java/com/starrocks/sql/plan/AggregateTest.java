@@ -707,9 +707,12 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testVarianceStddevAnalyze() throws Exception {
         String sql = "select stddev_pop(1222) from (select 1) t;";
-        assertPlanContains(sql, "1:AGGREGATE (update finalize)\n" +
+        assertPlanContains(sql, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: stddev_pop(1222)\n" +
                 "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 5> : 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -1437,13 +1440,12 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select avg(distinct 1), count(distinct null), count(distinct 1) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "15:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "16:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_sum(1)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  14:Project\n" +
-                "  |  <slot 17> : 2: t1b\n" +
-                "  |  ");
+                "  15:Project\n" +
+                "  |  <slot 19> : 15: auto_fill_col");
 
         sql = "select avg(distinct 1), count(distinct null), count(distinct 1), " +
                 "count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
