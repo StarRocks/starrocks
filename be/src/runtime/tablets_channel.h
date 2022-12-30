@@ -38,6 +38,8 @@ public:
                            PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) = 0;
 
     virtual void cancel() = 0;
+
+    virtual void abort() = 0;
 };
 
 struct TabletsChannelKey {
