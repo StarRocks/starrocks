@@ -57,7 +57,6 @@ constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
 constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
 #endif
 constexpr size_t kLongKeySize = 64;
-constexpr size_t kFlushL1SizeMax = 200 * 1024 * 1024;
 
 const char* const kIndexFileMagic = "IDX1";
 
@@ -658,8 +657,6 @@ public:
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
-                //not_found->key_idxes.emplace_back((uint32_t)idx);
-                //not_found->hashes.emplace_back(hash);
             } else {
                 auto old_value = it->second;
                 nfound += old_value.get_value() != NullIndexValue;
