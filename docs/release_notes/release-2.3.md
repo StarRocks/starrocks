@@ -9,7 +9,7 @@ Release date: December 30, 2022
 The following bugs are fixed:
 
 - A column named `a` in a StarRocks table is allowed to be NULL, but the column `a` in a view `t` that is created on that table is incorrectly set to be NOT NULL. [#15749](https://github.com/StarRocks/starrocks/pull/15749)
-- A new tablet version is generated when data is loaded into StarRocks. However, the FE may not yet detect the new tablet version and still requires BEs to read the historical version of the tablet. If the garbage collection mechanism removes the historical version, the query cannot find the historical version and an error "Not found: get_applied_rowsets(version xxxx) failed tablet:xxx #version:x [xxxxxxx]" is returned. [#15726[(https://github.com/StarRocks/starrocks/pull/15726](https://github.com/StarRocks/starrocks/pull/15726))
+- A new tablet version is generated when data is loaded into StarRocks. However, the FE may not yet detect the new tablet version and still requires BEs to read the historical version of the tablet. If the garbage collection mechanism removes the historical version, the query cannot find the historical version and an error "Not found: get_applied_rowsets(version xxxx) failed tablet:xxx #version:x [xxxxxxx]" is returned. [#15726](https://github.com/StarRocks/starrocks/pull/15726)
 - When data is frequently loaded, FE takes up too much memory.  [#15377](https://github.com/StarRocks/starrocks/pull/15377)
 - For aggregation queries and multi-table JOIN queries, the statistics are not collected accurately and CROSS JOIN occurs in the execution plans, resulting in long query latency. [#15497](https://github.com/StarRocks/starrocks/pull/15497)
 
