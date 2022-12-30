@@ -124,6 +124,7 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     UniqueId load_id(request.id());
     if (auto channel = remove_load_channel(load_id); channel != nullptr) {
         channel->cancel();
+        channel->abort();
     }
 }
 
@@ -168,6 +169,9 @@ Status LoadChannelMgr::_start_load_channels_clean() {
     // eg: MemTracker in load channel
     for (auto& channel : timeout_channels) {
         channel->cancel();
+    }
+    for (auto& channel : timeout_channels) {
+        channel->abort();
         LOG(INFO) << "Deleted timeout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
     }
 
