@@ -260,6 +260,7 @@
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
+      + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
