@@ -5,6 +5,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergCustomCatalogTest;
@@ -66,7 +67,8 @@ public class IcebergTableTest {
 
         new MockUp<IcebergUtil>() {
             @Mock
-            public IcebergCatalog getIcebergHiveCatalog(String uris, Map<String, String> icebergProperties) {
+            public IcebergCatalog getIcebergHiveCatalog(String uris, Map<String, String> icebergProperties,
+                                                        HdfsEnvironment hdfsEnvironment) {
                 return icebergCatalog;
             }
         };
@@ -115,7 +117,8 @@ public class IcebergTableTest {
 
         new MockUp<IcebergUtil>() {
             @Mock
-            public IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties) {
+            public IcebergCatalog getIcebergCustomCatalog(String catalogImpl, Map<String, String> icebergProperties,
+                                                          HdfsEnvironment hdfsEnvironment) {
                 return icebergCatalog;
             }
         };

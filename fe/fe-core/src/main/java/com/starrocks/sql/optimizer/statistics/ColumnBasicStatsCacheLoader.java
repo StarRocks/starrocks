@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.statistics;
 
-import avro.shaded.com.google.common.collect.ImmutableList;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;

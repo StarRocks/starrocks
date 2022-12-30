@@ -8,11 +8,8 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.connector.iceberg.IcebergCatalog;
-import com.starrocks.connector.iceberg.IcebergHiveCatalog;
-import com.starrocks.connector.iceberg.IcebergUtil;
-import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
@@ -50,7 +47,8 @@ public class IcebergUtilTest {
     @Test
     public void testGetIcebergHiveCatalog() {
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog("thrift://test:9030", icebergProperties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
+        IcebergCatalog catalog = IcebergUtil.getIcebergHiveCatalog("thrift://test:9030", icebergProperties, hdfsEnvironment);
         Assert.assertTrue(catalog instanceof IcebergHiveCatalog);
     }
 

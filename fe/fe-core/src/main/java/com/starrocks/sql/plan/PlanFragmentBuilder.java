@@ -935,7 +935,7 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(predicates);
-                icebergScanNode.getScanRangeLocations();
+                icebergScanNode.setupScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
