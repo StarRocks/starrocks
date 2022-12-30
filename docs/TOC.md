@@ -259,6 +259,7 @@
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
