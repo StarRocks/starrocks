@@ -277,6 +277,22 @@ INTO TABLE <table_name>
 
 请参见腾讯云官方文档[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。
 
+#### 华为云 OBS
+
+如果数据源为华为云 OBS，需要提供如下配置信息。
+
+| **参数名称**           | **参数说明**                                                 |
+| ---------------------- | ------------------------------------------------------------ |
+| fs.obs.access.key      | 访问华为云 OBS 存储空间的 Access Key ID，与私有访问密钥关联的唯一标识符。|
+| fs.obs.secret.key      | 访问华为云 OBS 存储空间的 Secret Access Key，对请求进行加密签名，可标识发送方，并防止请求被修改。 |
+| fs.obs.endpoint        | 访问华为云 OBS 存储空间的连接地址。                              |
+
+请参见华为云官方文档[通过永久访问密钥访问 OBS](https://support.huaweicloud.com/perms-cfg-obs/obs_40_0007.html)。
+
+> **说明**
+>
+> 使用 Broker Load 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
+
 ### `opt_properties`
 
 用于指定一些导入相关的可选参数，指定的参数设置作用于整个导入作业。语法如下：
