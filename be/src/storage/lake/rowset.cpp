@@ -50,6 +50,14 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
+    if (options.is_primary_keys) {
+        seg_options.is_primary_keys = true;
+        seg_options.is_lake_table = true;
+        seg_options.update_mgr = _tablet->update_mgr();
+        seg_options.version = options.version;
+        seg_options.tablet_id = _tablet->id();
+        seg_options.rowset_id = _rowset_metadata->id();
+    }
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
     }
@@ -112,6 +120,57 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const VectorizedSchema& schema, const Ro
     } else {
         return new_union_iterator(segment_iterators);
     }
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const VectorizedSchema& schema,
+                                                                          OlapReaderStatistics* stats) {
+    std::vector<SegmentPtr> segments;
+    RETURN_IF_ERROR(load_segments(&segments, false));
+    std::vector<ChunkIteratorPtr> seg_iterators;
+    seg_iterators.reserve(segments.size());
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
+    seg_options.stats = stats;
+    for (auto& seg_ptr : segments) {
+        auto res = seg_ptr->new_iterator(schema, seg_options);
+        if (res.status().is_end_of_file()) {
+            continue;
+        }
+        if (!res.ok()) {
+            return res.status();
+        }
+        seg_iterators.push_back(std::move(res).value());
+    }
+    return seg_iterators;
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const VectorizedSchema& schema,
+                                                                                      int64_t version,
+                                                                                      OlapReaderStatistics* stats) {
+    std::vector<SegmentPtr> segments;
+    RETURN_IF_ERROR(load_segments(&segments, false));
+    std::vector<ChunkIteratorPtr> seg_iterators;
+    seg_iterators.reserve(segments.size());
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
+    seg_options.stats = stats;
+    seg_options.is_primary_keys = true;
+    seg_options.is_lake_table = true;
+    seg_options.update_mgr = _tablet->update_mgr();
+    seg_options.version = version;
+    seg_options.tablet_id = _tablet->id();
+    seg_options.rowset_id = _rowset_metadata->id();
+    for (auto& seg_ptr : segments) {
+        auto res = seg_ptr->new_iterator(schema, seg_options);
+        if (res.status().is_end_of_file()) {
+            continue;
+        }
+        if (!res.ok()) {
+            return res.status();
+        }
+        seg_iterators.push_back(std::move(res).value());
+    }
+    return seg_iterators;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {

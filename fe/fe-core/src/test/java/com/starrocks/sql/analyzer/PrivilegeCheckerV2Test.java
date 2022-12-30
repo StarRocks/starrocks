@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -122,18 +123,18 @@ public class PrivilegeCheckerV2Test {
 
     private static void createMvForTest(ConnectContext connectContext) throws Exception {
         starRocksAssert.withTable("CREATE TABLE db3.tbl1\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values less than('2020-02-01'),\n" +
-                        "    PARTITION p2 values less than('2020-03-01')\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');");
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values less than('2020-02-01'),\n" +
+                "    PARTITION p2 values less than('2020-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
         String sql = "create materialized view db3.mv1 " +
                 "partition by k1 " +
                 "distributed by hash(k2) " +
@@ -2187,6 +2188,31 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
+    public void testDropGlobalFunc() throws Exception {
+
+        FunctionName fn = FunctionName.createFnName("my_udf_json_get");
+        fn.setAsGlobalFunction();
+        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+        } catch (Throwable e) {
+            // ignore
+        }
+
+        verifyGrantRevoke(
+                "drop global function my_udf_json_get (string, string);",
+                "grant drop on ALL GLOBAL FUNCTIONS to test",
+                "revoke drop on ALL GLOBAL FUNCTIONS from test",
+                "Access denied; you need (at least one of) the DROP GLOBAL FUNCTION privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "drop global function my_udf_json_get (string, string);",
+                "grant drop on GLOBAL FUNCTION my_udf_json_get(string,string) to test",
+                "revoke drop on GLOBAL FUNCTION my_udf_json_get(string,string) from test",
+                "Access denied; you need (at least one of) the DROP GLOBAL FUNCTION privilege(s) for this operation");
+    }
+
+    @Test
     public void testShowFunc() throws Exception {
 
         Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
@@ -2225,5 +2251,71 @@ public class PrivilegeCheckerV2Test {
         ctxToRoot();
         grantOrRevoke("revoke create_materialized_view on db1 from test");
         grantOrRevoke("revoke select on db1.tbl1 from test");
+    }
+
+    @Test
+    public void testShowGlobalFunc() throws Exception {
+        FunctionName fn = FunctionName.createFnName("my_udf_json_get");
+        fn.setAsGlobalFunction();
+        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+        } catch (Throwable e) {
+            // ignore
+        }
+
+        String showSql = "show full global functions";
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(showSql, starRocksAssert.getCtx());
+        ctxToTestUser();
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+    }
+
+    @Test
+    public void testUseGlobalFunc() throws Exception {
+        FunctionName fn = FunctionName.createFnName("my_udf_json_get");
+        fn.setAsGlobalFunction();
+        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+        } catch (Throwable e) {
+            // ignore
+        }
+
+        ctxToTestUser();
+        String selectSQL = "select my_udf_json_get('hello', 'world')";
+        try {
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (StarRocksPlannerException e) {
+            System.out.println(e.getMessage() + ", sql: " + selectSQL);
+            Assert.assertTrue(e.getMessage().contains("need the USAGE priv for GLOBAL FUNCTION"));
+        }
+
+        // grant usage on global function
+        ctxToRoot();
+        grantOrRevoke("grant usage on global function my_udf_json_get(string,string) to test");
+        ctxToTestUser();
+
+        try {
+            Config.enable_udf = true;
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        } finally {
+            Config.enable_udf = false;
+        }
+
+        // grant on all global functions.
+        ctxToRoot();
+        grantOrRevoke("revoke usage on global function my_udf_json_get(string,string) from test");
+        grantOrRevoke("grant usage on all global functions to test");
+        ctxToTestUser();
+        try {
+            Config.enable_udf = true;
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        } finally {
+            Config.enable_udf = false;
+        }
     }
 }

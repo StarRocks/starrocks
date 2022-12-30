@@ -35,6 +35,14 @@ inline bool is_segment(std::string_view file_name) {
     return HasSuffixString(file_name, ".dat");
 }
 
+inline bool is_del(std::string_view file_name) {
+    return HasSuffixString(file_name, ".del");
+}
+
+inline bool is_delvec(std::string_view file_name) {
+    return HasSuffixString(file_name, ".delvec");
+}
+
 inline bool is_txn_log(std::string_view file_name) {
     return HasSuffixString(file_name, ".log");
 }
@@ -53,6 +61,10 @@ inline bool is_tablet_metadata_lock(std::string_view file_name) {
 
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
+}
+
+inline std::string tablet_delvec_filename(int64_t tablet_id, int64_t version) {
+    return fmt::format("{:016X}_{:016X}.delvec", tablet_id, version);
 }
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {

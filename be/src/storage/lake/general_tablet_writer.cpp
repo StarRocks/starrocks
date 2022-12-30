@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+#include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/rowset/segment_writer.h"
 

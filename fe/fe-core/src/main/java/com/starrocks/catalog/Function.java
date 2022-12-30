@@ -193,7 +193,7 @@ public class Function implements Writable {
     public Type getReturnType() {
         return retType;
     }
-    
+
     public Type[] getArgs() {
         return argTypes;
     }
@@ -767,6 +767,5 @@ public class Function implements Writable {
         }
         return obj != null && obj.getClass() == this.getClass() && isIdentical((Function) obj);
     }
-
 
 }

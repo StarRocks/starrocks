@@ -51,6 +51,8 @@ public:
 
     std::string save() const;
 
+    void save_to(std::string* str);
+
     std::string to_string() const;
 
     bool empty() const { return !_roaring; }

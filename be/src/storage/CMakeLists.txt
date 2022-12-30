@@ -164,6 +164,7 @@ add_library(Storage STATIC
     lake/delta_writer.cpp
     lake/gc.cpp
     lake/general_tablet_writer.cpp
+    lake/pk_tablet_writer.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
@@ -172,4 +173,8 @@ add_library(Storage STATIC
     lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
+    lake/update_manager.cpp
+    lake/rowset_update_state.cpp
+    lake/meta_file.cpp
+    lake/lake_primary_index.cpp
 )

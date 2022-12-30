@@ -825,6 +825,7 @@ public class Database extends MetaObject implements Writable {
         for (Function existFunc : existFuncs) {
             if (function.isIdentical(existFunc)) {
                 func = existFunc;
+                break;
             }
         }
         return func;

@@ -230,7 +230,7 @@ public class CastExpr extends Expr {
     @Override
     public boolean isNullable() {
         Expr fromExpr = getChild(0);
-        if (ScalarType.isImplicitlyCastable(fromExpr.getType(), getType(), true)) {
+        if (ScalarType.isFullyCompatible(fromExpr.getType(), getType())) {
             return fromExpr.isNullable();
         }
         return true;

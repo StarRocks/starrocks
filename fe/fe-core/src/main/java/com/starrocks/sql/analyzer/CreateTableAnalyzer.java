@@ -209,10 +209,6 @@ public class CreateTableAnalyzer {
                 }
             }
             statement.setKeysDesc(keysDesc);
-
-            if (keysDesc.getKeysType() == KeysType.PRIMARY_KEYS && statement.isLakeEngine()) {
-                throw new SemanticException("Lake table does not support primary key type");
-            }
         } else {
             // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {

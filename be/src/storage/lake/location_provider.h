@@ -57,6 +57,10 @@ public:
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(tablet_id, version));
     }
 
+    std::string tablet_delvec_location(int64_t tablet_id, int64_t version) const {
+        return join_path(segment_root_location(tablet_id), tablet_delvec_filename(tablet_id, version));
+    }
+
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const {
         return join_path(txn_log_root_location(tablet_id), txn_log_filename(tablet_id, txn_id));
     }
@@ -67,6 +71,10 @@ public:
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const {
         return join_path(segment_root_location(tablet_id), segment_name);
+    }
+
+    std::string del_location(int64_t tablet_id, std::string_view del_name) const {
+        return join_path(segment_root_location(tablet_id), del_name);
     }
 
     std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const {

@@ -93,7 +93,7 @@ public class FunctionPEntryObject implements PEntryObject {
             return databaseId == other.databaseId;
         }
         return other.databaseId == this.databaseId &&
-               other.functionSig.equals(this.functionSig);
+                other.functionSig.equals(this.functionSig);
     }
 
     @Override
@@ -111,6 +111,7 @@ public class FunctionPEntryObject implements PEntryObject {
         for (Function f : db.getFunctions()) {
             if (f.signatureString().equals(this.functionSig)) {
                 targetFunc = f;
+                break;
             }
         }
         return targetFunc != null;
@@ -136,7 +137,7 @@ public class FunctionPEntryObject implements PEntryObject {
         }
         FunctionPEntryObject that = (FunctionPEntryObject) obj;
         return Objects.equal(functionSig, that.functionSig) &&
-               Objects.equal(databaseId, that.databaseId);
+                Objects.equal(databaseId, that.databaseId);
     }
 
     @Override
