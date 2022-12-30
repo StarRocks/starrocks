@@ -141,6 +141,7 @@ public class Alter {
         db.writeLock();
         try {
             Table table = null;
+<<<<<<< HEAD
             if (stmt.getTblName() != null) {
                 table = db.getTable(stmt.getTblName());
             } else {
@@ -156,6 +157,21 @@ public class Alter {
                             }
                         }
                         if (hasfindTable) {
+=======
+            boolean hasfindTable = false;
+            for (Table t : db.getTables()) {
+                if (t instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) t;
+                    for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
+                        String indexName = olapTable.getIndexNameById(mvIdx.getId());
+                        if (indexName == null) {
+                            LOG.warn("OlapTable {} miss index {}", olapTable.getName(), mvIdx.getId());
+                            continue;
+                        }
+                        if (indexName.equals(stmt.getMvName())) {
+                            table = olapTable;
+                            hasfindTable = true;
+>>>>>>> c0883dff8 (Fix NPE when index name miss (#15911))
                             break;
                         }
                     }
