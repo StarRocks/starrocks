@@ -255,9 +255,10 @@ void GlobalDriverExecutor::active_parked_driver(const ImmutableDriverPredicateFu
 
 void GlobalDriverExecutor::_epoch_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
-    down_cast<StreamPipelineDriver*>(driver)->epoch_finalize(runtime_state, state);
+    DCHECK(down_cast<StreamPipelineDriver*>(driver));
+    StreamPipelineDriver* stream_driver = down_cast<StreamPipelineDriver*>(driver);
+    stream_driver->epoch_finalize(runtime_state, state);
 }
-
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
     _blocked_driver_poller->iterate_immutable_driver(call);
 }

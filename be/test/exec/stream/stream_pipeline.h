@@ -20,7 +20,6 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/stream/stream_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"

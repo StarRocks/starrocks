@@ -159,22 +159,15 @@ void PipelineDriverPoller::run_internal() {
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(_global_mutex);
-#if BE_TEST
-    VLOG_ROW << "Add to blocked driver:" << driver->to_readable_string();
-#endif
     _blocked_drivers.push_back(driver);
     driver->_pending_timer_sw->reset();
     _cond.notify_one();
 }
 
 void PipelineDriverPoller::add_parked_driver(const DriverRawPtr driver) {
-    std::unique_lock<std::mutex> lock(_global_mutex);
-#if BE_TEST
+    std::unique_lock<std::mutex> lock(_global_parked_mutex);
     VLOG_ROW << "Add to parked driver:" << driver->to_readable_string();
-#endif
     _parked_drivers.push_back(driver);
-    driver->_pending_timer_sw->reset();
-    _cond.notify_one();
 }
 
 // remove blocked driver from poller
@@ -187,9 +180,7 @@ void PipelineDriverPoller::active_parked_driver(const ImmutableDriverPredicateFu
         while (driver_it != _parked_drivers.end()) {
             auto driver = *driver_it;
             if (predicate_func(driver)) {
-#if BE_TEST
                 VLOG_ROW << "Active parked driver:" << driver->to_readable_string();
-#endif
                 driver->set_driver_state(DriverState::READY);
                 ready_drivers.push_back(driver);
                 _parked_drivers.erase(driver_it++);
@@ -202,9 +193,6 @@ void PipelineDriverPoller::active_parked_driver(const ImmutableDriverPredicateFu
 
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
     auto& driver = *driver_it;
-#if BE_TEST
-    VLOG_ROW << "Remove from blocked driver:" << driver->to_readable_string();
-#endif
     driver->_pending_timer->update(driver->_pending_timer_sw->elapsed_time());
     local_blocked_drivers.erase(driver_it++);
 }

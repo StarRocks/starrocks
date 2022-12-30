@@ -251,14 +251,23 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 }
 
 Status FragmentContext::reset_epoch() {
+    _num_finished_epoch_pipelines = 0;
     for (const auto& pipeline : _pipelines) {
-        for (const auto& driver : pipeline->drivers()) {
-            DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
-            auto* stream_driver = dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get());
-            RETURN_IF_ERROR(stream_driver->reset_epoch(_runtime_state.get()));
-        }
+        RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
     }
     return Status::OK();
 }
 
+void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
+    VLOG_ROW << "count_down_epoch_pipeline"
+             << ", num_finished_epoch_pipelines:" << _num_finished_epoch_pipelines
+             << ", pipeline size:" << _pipelines.size();
+
+    bool all_pipelines_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == _pipelines.size();
+    if (!all_pipelines_finished) {
+        return;
+    }
+
+    // TODO: do epoch report stats
+}
 } // namespace starrocks::pipeline

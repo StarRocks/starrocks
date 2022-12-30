@@ -60,7 +60,7 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
         DriverPtr driver = nullptr;
-        if (pipeline_kind == PipelineKind::PIPELINE) {
+        if (pipeline_kind == PipelineKind::OLAP_PIPELINE) {
             driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
                                                       fragment_ctx->next_driver_id());
         } else {
@@ -120,6 +120,24 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
         auto& curr_op = operators[i];
         driver->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
     }
+}
+
+void Pipeline::count_down_epoch_finished_driver(RuntimeState* state) {
+    bool all_drivers_finished = ++_num_epoch_finished_drivers == _drivers.size();
+    if (all_drivers_finished) {
+        state->fragment_ctx()->count_down_epoch_pipeline(state);
+    }
+}
+
+Status Pipeline::reset_epoch(RuntimeState* state) {
+    _num_epoch_finished_drivers = 0;
+    for (const auto& driver : drivers()) {
+        DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
+        DCHECK(dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get()));
+        auto* stream_driver = dynamic_cast<pipeline::StreamPipelineDriver*>(driver.get());
+        RETURN_IF_ERROR(stream_driver->reset_epoch(state));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

@@ -130,6 +130,7 @@ public:
     Status reset_epoch();
     void set_pipeline_kind(PipelineKind pipeline_kind) { _pipeline_kind = pipeline_kind; }
     PipelineKind pipeline_kind() const { return _pipeline_kind; }
+    void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
 
 private:
     // Id of this query
@@ -169,7 +170,10 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
-    PipelineKind _pipeline_kind{PipelineKind::PIPELINE};
+    PipelineKind _pipeline_kind{PipelineKind::OLAP_PIPELINE};
+
+    // STREAM MV
+    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
 };
 
 class FragmentContextManager {

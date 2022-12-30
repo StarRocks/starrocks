@@ -42,9 +42,7 @@ Status StreamAggregateOperator::set_finished(RuntimeState* state) {
 }
 
 bool StreamAggregateOperator::is_epoch_finished() const {
-    auto is_epoch_finished = _is_epoch_finished && !_has_output;
-    VLOG_ROW << "is_epoch_finished:" << is_epoch_finished;
-    return is_epoch_finished;
+    return _is_epoch_finished && !_has_output;
 }
 
 Status StreamAggregateOperator::set_epoch_finishing(RuntimeState* state) {
@@ -86,8 +84,9 @@ Status StreamAggregateOperator::push_chunk(RuntimeState* state, const ChunkPtr& 
 StatusOr<ChunkPtr> StreamAggregateOperator::pull_chunk(RuntimeState* state) {
     DCHECK(!_aggregator->is_none_group_by_exprs());
     RETURN_IF_CANCELLED(state);
-    const auto chunk_size = state->chunk_size();
+
     StreamChunkPtr chunk = std::make_shared<StreamChunk>();
+    const auto chunk_size = state->chunk_size();
     RETURN_IF_ERROR(_aggregator->output_changes(chunk_size, &chunk));
 
     // For having

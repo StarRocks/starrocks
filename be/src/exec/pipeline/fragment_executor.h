@@ -83,7 +83,8 @@ public:
 
     const PipelineKind pipeline_kind() const {
         auto pipeline_kind = _common_request.pipeline_kind;
-        return pipeline_kind == TPipelineKind::STREAM_PIPELINE ? PipelineKind::STREAM_PIPELINE : PipelineKind::PIPELINE;
+        return pipeline_kind == TPipelineKind::STREAM_PIPELINE ? PipelineKind::STREAM_PIPELINE
+                                                               : PipelineKind::OLAP_PIPELINE;
     }
 
 private:

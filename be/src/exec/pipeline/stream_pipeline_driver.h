@@ -41,15 +41,14 @@ public:
     void epoch_finalize(RuntimeState* runtime_state, DriverState state);
     Status reset_epoch(RuntimeState* state);
 
-    bool count_down_drivers() { return _num_epoch_finished_drivers.fetch_sub(1) == 1; }
-
 private:
+    StatusOr<DriverState> _handle_finish_operators(RuntimeState* runtime_state);
+
     Status _mark_operator_epoch_finishing(OperatorPtr& op, RuntimeState* state);
     Status _mark_operator_epoch_finished(OperatorPtr& op, RuntimeState* state);
 
 private:
     size_t _first_epoch_unfinished{0};
-    std::atomic<int32_t> _num_epoch_finished_drivers{0};
 };
 
 } // namespace starrocks::pipeline

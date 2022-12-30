@@ -72,9 +72,6 @@ private:
     std::condition_variable _cond;
     DriverList _blocked_drivers;
 
-    mutable std::mutex _global_parked_mutex;
-    DriverList _parked_drivers;
-
     mutable std::shared_mutex _local_mutex;
     DriverList _local_blocked_drivers;
 
@@ -82,5 +79,10 @@ private:
     scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;
+
+    // NOTE: The `driver` can be stored in the parked drivers when it will never not be called to run.
+    // The parked driver needs to be actived when it needs to be triggered again.
+    mutable std::mutex _global_parked_mutex;
+    DriverList _parked_drivers;
 };
 } // namespace starrocks::pipeline

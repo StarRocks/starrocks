@@ -391,6 +391,7 @@ public:
 
     // Whether the query can be expirable or not.
     virtual bool is_query_expirable() { return true; }
+    bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
 
 protected:
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.

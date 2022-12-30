@@ -14,8 +14,6 @@
 
 #include "exec/stream/stream_aggregate_node.h"
 
-#include "exec/pipeline/pipeline_builder.h"
-
 namespace starrocks {
 
 Status StreamAggregateNode::init(const TPlanNode& tnode, RuntimeState* state) {
@@ -50,4 +48,5 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > StreamAggregateNode::de
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }
+
 } // namespace starrocks

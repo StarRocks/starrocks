@@ -60,12 +60,12 @@ public:
     }
 
     void epoch_finish(RuntimeState* state) {
-        if (increment_sink_epoch_finished_number() == _sink_number) {
+        if (incr_epoch_finished_sinker() == _sink_number) {
             for (auto* source : _source->get_sources()) {
                 source->set_epoch_finishing(state);
             }
             // reset the number to be reused in the next epoch.
-            _sink_epoch_finished_number = 0;
+            _epoch_finished_sinker = 0;
         }
     }
 
@@ -73,25 +73,21 @@ public:
 
     bool need_input() const;
 
-    virtual void incr_sinker() {
-        _sink_number++;
-        _sink_finished_number++;
-    }
+    virtual void incr_sinker() { _sink_number++; }
     int32_t decr_sinker() { return _sink_number--; }
 
-    int32_t increment_sink_epoch_finished_number() { return ++_sink_epoch_finished_number; }
-
     int32_t source_dop() const { return _source->get_sources().size(); }
+
+    int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
 
 protected:
     const std::string _name;
     std::shared_ptr<LocalExchangeMemoryManager> _memory_manager;
     std::atomic<int32_t> _sink_number = 0;
-    std::atomic<int32_t> _sink_finished_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
 
     // Stream MV
-    std::atomic<int32_t> _sink_epoch_finished_number = 0;
+    std::atomic<int32_t> _epoch_finished_sinker = 0;
 };
 
 // Exchange the local data for shuffle

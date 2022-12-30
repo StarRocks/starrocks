@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "exec/pipeline/source_operator.h"
 #include "exec/stream/stream_fdw.h"
-#include "exec/stream/stream_operator.h"
 
 namespace starrocks::stream {
 
@@ -32,11 +32,13 @@ struct GeneratorStreamSourceParam {
     int64_t ndv_count{100};
 };
 
-class GeneratorStreamSourceOperator final : public StreamSourceOperator {
+using SourceOperator = pipeline::SourceOperator;
+
+class GeneratorStreamSourceOperator final : public SourceOperator {
 public:
     GeneratorStreamSourceOperator(pipeline::OperatorFactory* factory, int32_t id, const std::string& name,
                                   int32_t plan_node_id, int32_t driver_sequence, GeneratorStreamSourceParam param)
-            : StreamSourceOperator(factory, id, name, plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, name, plan_node_id, driver_sequence),
               _param(param),
               _tablet_id(driver_sequence) {}
 
@@ -93,10 +95,10 @@ private:
     GeneratorStreamSourceParam _param;
 };
 
-class PrinterStreamSinkOperator final : public StreamOperator {
+class PrinterStreamSinkOperator final : public Operator {
 public:
     PrinterStreamSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : StreamOperator(factory, id, "printer_stream_sink", plan_node_id, driver_sequence) {}
+            : Operator(factory, id, "printer_stream_sink", plan_node_id, driver_sequence) {}
 
     ~PrinterStreamSinkOperator() override = default;
 

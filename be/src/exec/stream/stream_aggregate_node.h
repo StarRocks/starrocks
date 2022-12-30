@@ -15,11 +15,7 @@
 #pragma once
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/stream_chunk.h"
-#include "exec/aggregator.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "exec/stream/aggregate/stream_aggregate_operator.h"
 
 namespace starrocks {
@@ -42,4 +38,5 @@ private:
     // pipeline decomposition.
     std::vector<ExprContext*> _group_by_expr_ctxs;
 };
+
 } // namespace starrocks
