@@ -556,7 +556,10 @@
       + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
       + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
     + Percentile Functions
+      + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](./sql-reference/sql-functions/percentile-functions/percentile_empty.md)
+      + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
+      + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Utility Functions
