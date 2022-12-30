@@ -27,7 +27,6 @@ Release date: December 22, 2022
 The following bugs are fixed:
 
 - BEs may hang up when the resource group feature is enabled and multiple resource groups run queries at the same time. [#14905](https://github.com/StarRocks/starrocks/pull/14905)
-- For aggregation queries and multi-table JOIN queries, the statistics are not collected accurately and CROSS JOIN occurs in the execution plan, resulting in long query latency. [#15497](https://github.com/StarRocks/starrocks/pull/15497)
 - When you create a materialized view by using CREATE MATERIALIZED VIEW AS SELECT, if the SELECT clause does not use aggregate functions, and uses GROUP BY, for example `CREATE MATERIALIZED VIEW test_view AS SELECT a,b from test group by b,a order by a;`, then the BE nodes all crash. [#13743](https://github.com/StarRocks/starrocks/pull/13743)
 - If you restart the BE immediately after you use INSERT INTO to frequently load data into the primary key table to make data changes, the BE may restart very slowly. [#15128](https://github.com/StarRocks/starrocks/pull/15128)
 - If only JRE is installed on the environment and JDK is not installed, queries fail after FE restarts. After the bug is fixed, FE cannot restart in that environment and it returns error `JAVA_HOME can not be jre`. To successfully restart FE, you need to install JDK on the environment. [#14332](https://github.com/StarRocks/starrocks/pull/14332)
