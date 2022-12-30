@@ -491,7 +491,7 @@ StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次�
 ```SQL
 LOAD LABEL test_db.label6
 (
-    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example6.csv)
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example6.csv")
     NEGATIVE
     INTO TABLE table6
     COLUMNS TERMINATED BY "\t"
