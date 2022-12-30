@@ -55,6 +55,22 @@ public class GlobalFunctionMgr {
         return Function.getFunction(fns, desc, mode);
     }
 
+    public synchronized Function getFunction(FunctionSearchDesc function) {
+        String functionName = function.getName().getFunction();
+        List<Function> existFuncs = name2Function.get(functionName);
+        if (existFuncs == null) {
+            return null;
+        }
+        Function func = null;
+        for (Function existFunc : existFuncs) {
+            if (function.isIdentical(existFunc)) {
+                func = existFunc;
+                break;
+            }
+        }
+        return func;
+    }
+
     private void addFunction(Function function, boolean isReplay) throws UserException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
