@@ -65,6 +65,7 @@ public class GlobalFunctionMgr {
         for (Function existFunc : existFuncs) {
             if (function.isIdentical(existFunc)) {
                 func = existFunc;
+                break;
             }
         }
         return func;
