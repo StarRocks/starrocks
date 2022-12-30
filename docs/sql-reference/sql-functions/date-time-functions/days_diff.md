@@ -4,6 +4,13 @@
 
 Returns the day difference between two date expressions (`expr1` − `expr2`), accurate to the day.
 
+Difference between days_diff and [datediff](../sql-refernce/sql-functions/date-time-functions/datediff.md):
+
+|Function|Behavior|Example|
+|---|---|---|
+|days_diff| The calculation is accurate to the second and rounded down to the nearest integer.|days_diff between '2020-12-25 23:00:00' and '2020-12-24 23:00:01' is 0.|
+|datediff| The calculation is accurate to the day. |datediff between '2020-12-25 23:00:00' and '2020-12-24 23:00:01' is 1.|
+
 ## Syntax
 
 ```Haskell
