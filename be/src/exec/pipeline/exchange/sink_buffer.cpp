@@ -357,14 +357,12 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.request_attachment().append(request.attachment);
 
         if (bthread_self()) {
-            TRY_CATCH_BAD_ALLOC(
-                    request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure));
+            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         } else {
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            TRY_CATCH_BAD_ALLOC(
-                    request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure));
+            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         }
 
         return Status::OK();
