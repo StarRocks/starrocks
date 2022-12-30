@@ -135,6 +135,37 @@ Right anti join reverses this comparison, returning only rows from the right tab
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 ```
 
+<<<<<<< HEAD
+=======
+#### Equi-join and Non-equi-join
+
+The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
+
+| **Equi****-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
+| -------------------------- | ------------------------------------------------------------ |
+| **Non-****equi****-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
+
+- Equi-joins
+  
+  An equi-join uses a join condition in which two join items are combined by the `=` operator. Example: `a JOIN b ON a.id = b.id`.
+
+- Non-equi-joins
+  
+  A non-equi-join uses a join condition in which two join items are combined by a comparison operator such as `<`, `<=`, `>`, `>=`, or `<>`. Example: `a JOIN b ON a.id < b.id`. Non-equi-joins run slower than equi-joins. We recommend that you exercise caution when you use non-equi-joins.
+
+  The following two examples show how to run non-equi-joins:
+
+  ```SQL
+  SELECT t1.id, c1, c2 
+  FROM t1 
+  INNER JOIN t2 ON t1.id < t2.id;
+    
+  SELECT t1.id, c1, c2 
+  FROM t1 
+  LEFT JOIN t2 ON t1.id > t2.id;
+  ```
+
+>>>>>>> cba93dbd2 (add functions and other updates (#16055))
 ### ORDER BY
 
 The ORDER BY clause of a SELECT statement sorts the result set by comparing the values from one or more columns.
