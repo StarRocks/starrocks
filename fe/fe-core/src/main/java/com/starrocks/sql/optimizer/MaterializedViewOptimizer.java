@@ -27,6 +27,8 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -34,11 +36,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class MaterializedViewOptimizer {
+    private static final Logger LOG = LogManager.getLogger(MaterializedViewOptimizer.class);
+
     private List<ColumnRefOperator> outputExpressions;
 
     public OptExpression optimize(MaterializedView mv,
@@ -77,13 +85,11 @@ public class MaterializedViewOptimizer {
         if (partitionTableAndColumns == null) {
             return false;
         }
-        if (!partitionTableAndColumns.first.isNativeTable()) {
-            // for external table, we can not get modified partitions now.
-            return false;
-        }
-        OlapTable partitionByTable = (OlapTable) partitionTableAndColumns.first;
+
+        Table partitionByTable = partitionTableAndColumns.first;
         List<Range<PartitionKey>> latestBaseTableRanges =
-                getLatestPartitionRangeForTable(partitionByTable, mv, mvPartitionNamesToRefresh);
+                getLatestPartitionRangeForTable(partitionByTable, partitionTableAndColumns.second,
+                        mv, mvPartitionNamesToRefresh);
         if (latestBaseTableRanges.isEmpty()) {
             // if do not have an uptodate partition, do not rewrite
             return false;
@@ -109,12 +115,14 @@ public class MaterializedViewOptimizer {
         return true;
     }
 
-    private List<Range<PartitionKey>> getLatestPartitionRangeForTable(OlapTable partitionByTable,
+    private List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
+                                                                      Column partitionColumn,
                                                                       MaterializedView mv,
                                                                       Set<String> mvPartitionNamesToRefresh) {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
-        List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, modifiedPartitionNames);
-        List<Range<PartitionKey>> mvRanges = getLatestPartitionRange(mv, mvPartitionNamesToRefresh);
+        List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
+                modifiedPartitionNames);
+        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForLocalTable(mv, mvPartitionNamesToRefresh);
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
@@ -125,16 +133,33 @@ public class MaterializedViewOptimizer {
         return latestBaseTableRanges;
     }
 
-    private List<Range<PartitionKey>> getLatestPartitionRange(OlapTable table, Set<String> modifiedPartitionNames) {
+    private List<Range<PartitionKey>> getLatestPartitionRangeForLocalTable(OlapTable partitionTable,
+                                                                           Set<String> modifiedPartitionNames) {
         // partitions that will be excluded
         Set<Long> filteredIds = Sets.newHashSet();
-        for (Partition p : table.getPartitions()) {
+        for (Partition p : partitionTable.getPartitions()) {
             if (modifiedPartitionNames.contains(p.getName()) || !p.hasData()) {
                 filteredIds.add(p.getId());
             }
         }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-        List<Range<PartitionKey>> latestPartitionRanges = rangePartitionInfo.getRangeList(filteredIds, false);
-        return latestPartitionRanges;
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionTable.getPartitionInfo();
+        return rangePartitionInfo.getRangeList(filteredIds, false);
+    }
+
+    private List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
+                                                              Set<String> modifiedPartitionNames) {
+        if (table.isLocalTable()) {
+            return getLatestPartitionRangeForLocalTable((OlapTable) table, modifiedPartitionNames);
+        } else {
+            Map<String, Range<PartitionKey>> partitionMap;
+            try {
+                partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+            } catch (UserException e) {
+                LOG.warn("Materialized view Optimizer compute partition range failed.", e);
+                return Lists.newArrayList();
+            }
+            return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
+                    map(Map.Entry::getValue).collect(Collectors.toList());
+        }
     }
 }

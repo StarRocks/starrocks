@@ -27,18 +27,18 @@
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/in_const_predicate.hpp"
+#include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/miscs.h"
 #include "simd/simd.h"
 #include "storage/column_expr_predicate.h"
+#include "storage/column_predicate.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
@@ -153,7 +153,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             i = pool->add(ptr);
         }
         if (PredicateType::kGE == pred->type() || PredicateType::kGT == pred->type()) {
-            _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
+            _get_segment_dict(&sorted_dicts, _column_iterators[cid].get());
             // use non-padding string value.
             auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
@@ -180,7 +180,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
             }
         }
         if (PredicateType::kLE == pred->type() || PredicateType::kLT == pred->type()) {
-            _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
+            _get_segment_dict(&sorted_dicts, _column_iterators[cid].get());
             // use non-padding string value.
             auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
@@ -217,7 +217,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
         if (PredicateType::kExpr == pred->type()) {
             if (!load_seg_dict_vec) {
                 load_seg_dict_vec = true;
-                _get_segment_dict_vec(_column_iterators[cid], &dict_column, &code_column, field->is_nullable());
+                _get_segment_dict_vec(_column_iterators[cid].get(), &dict_column, &code_column, field->is_nullable());
             }
 
             ColumnPredicate* ptr;
@@ -441,4 +441,4 @@ Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* po
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

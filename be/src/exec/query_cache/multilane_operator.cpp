@@ -161,7 +161,7 @@ Status MultilaneOperator::set_cancelled(RuntimeState* state) {
             state, [](pipeline::OperatorPtr & op, RuntimeState * state) -> auto { return op->set_cancelled(state); });
 }
 
-Status MultilaneOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status MultilaneOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr);
     if (_lane_arbiter->in_passthrough_mode()) {
         if (chunk->is_empty()) {
@@ -207,14 +207,13 @@ Status MultilaneOperator::push_chunk(RuntimeState* state, const vectorized::Chun
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeState* state, Lane& lane,
-                                                                        bool passthrough_mode) {
+StatusOr<ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode) {
     auto processor_is_finished = lane.processor->is_finished();
     auto need_send_eof = !passthrough_mode && processor_is_finished && !lane.eof_sent;
     auto need_send_chunk = !processor_is_finished && lane.processor->has_output();
 
     auto create_eof_chunk = [&lane]() -> auto {
-        auto eof_chunk = std::make_shared<vectorized::Chunk>();
+        auto eof_chunk = std::make_shared<Chunk>();
         eof_chunk->owner_info().set_owner_id(lane.lane_owner, true);
         eof_chunk->owner_info().set_passthrough(false);
         lane.eof_sent = true;
@@ -246,7 +245,7 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeS
     return nullptr;
 }
 
-StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state) {
     const auto passthrough_mode = _lane_arbiter->in_passthrough_mode();
     auto preferred = _lane_arbiter->preferred_lane();
     if (preferred.has_value()) {
@@ -274,7 +273,7 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
 }
 
 Status MultilaneOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner,
-                                     const std::vector<vectorized::ChunkPtr>& chunks) {
+                                     const std::vector<ChunkPtr>& chunks) {
     auto lane_id = _lane_arbiter->must_acquire_lane(lane_owner);
     _owner_to_lanes.erase(lane_owner);
     _owner_to_lanes[lane_owner] = lane_id;

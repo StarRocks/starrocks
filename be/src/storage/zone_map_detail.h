@@ -18,7 +18,7 @@
 
 #include "column/datum.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ZoneMapDetail {
 public:
@@ -57,4 +57,4 @@ private:
     Datum _max_value;
     size_t _num_rows;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

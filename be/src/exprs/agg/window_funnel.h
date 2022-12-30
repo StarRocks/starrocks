@@ -39,7 +39,7 @@
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct ComparePairFirst final {
     template <typename T1, typename T2>
@@ -548,4 +548,4 @@ public:
     std::string get_name() const override { return "window_funnel"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

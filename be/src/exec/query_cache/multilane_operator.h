@@ -66,22 +66,22 @@ public:
     bool need_input() const override;
     bool is_finished() const override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
 
-    Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<vectorized::ChunkPtr>& chunks);
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<ChunkPtr>& chunks);
 
 private:
-    StatusOr<vectorized::ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);
+    StatusOr<ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);
     using FinishCallback = std::function<Status(pipeline::OperatorPtr&, RuntimeState*)>;
     Status _finish(RuntimeState* state, const FinishCallback& finish_cb);
     const size_t _num_lanes;
     LaneArbiterPtr _lane_arbiter = nullptr;
     std::vector<Lane> _lanes;
     std::unordered_map<int64_t, int> _owner_to_lanes;
-    vectorized::ChunkPtr _passthrough_chunk;
+    ChunkPtr _passthrough_chunk;
     const bool _can_passthrough;
     int _passthrough_lane_id = -1;
     bool _input_finished{false};

@@ -134,8 +134,7 @@ void CompactionTask::run() {
 }
 
 bool CompactionTask::should_stop() const {
-    return StorageEngine::instance()->bg_worker_stopped() || config::max_compaction_concurrency == 0 ||
-           BackgroundTask::should_stop();
+    return StorageEngine::instance()->bg_worker_stopped() || BackgroundTask::should_stop();
 }
 
 void CompactionTask::_success_callback() {

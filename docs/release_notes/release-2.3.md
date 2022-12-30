@@ -1,5 +1,47 @@
 # StarRocks version 2.3
 
+## 2.3.7
+
+Release date: December 30, 2022
+
+### Bug fixes
+
+The following bugs are fixed:
+
+- The column that is allowed to be NULL in a StarRocks table is incorrectly set to NOT NULL in a view created from that table. [#15749](https://github.com/StarRocks/starrocks/pull/15749)
+- A new tablet version is generated when data is loaded into StarRocks. However, the FE may not yet detect the new tablet version and still requires BEs to read the historical version of the tablet. If the garbage collection mechanism removes the historical version, the query cannot find the historical version and an error "Not found: get_applied_rowsets(version xxxx) failed tablet:xxx #version:x [xxxxxxx]" is returned. [#15726](https://github.com/StarRocks/starrocks/pull/15726)
+- FE takes up too much memory when data is frequently loaded. [#15377](https://github.com/StarRocks/starrocks/pull/15377)
+- For aggregate queries and multi-table JOIN queries, the statistics are not collected accurately and CROSS JOIN occurs in the execution plans, resulting in long query latency. [#12067](https://github.com/StarRocks/starrocks/pull/12067)  [#14780](https://github.com/StarRocks/starrocks/pull/14780)
+
+## 2.3.6
+
+Release date: December 22, 2022
+
+### Improvements
+
+- The Pipeline execution engine supports INSERT INTO statements. To enable it, set the FE configuration item `enable_pipeline_load_for_insert` to `true`.  [#14723](https://github.com/StarRocks/starrocks/pull/14723)
+- The memory used by Compaction for the primary key table is reduced. [#13861](https://github.com/StarRocks/starrocks/pull/13861)  [#13862](https://github.com/StarRocks/starrocks/pull/13862)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- BEs may hang up when the resource group feature is enabled and multiple resource groups run queries at the same time. [#14905](https://github.com/StarRocks/starrocks/pull/14905)
+- When you create a materialized view by using CREATE MATERIALIZED VIEW AS SELECT, if the SELECT clause does not use aggregate functions, and uses GROUP BY, for example `CREATE MATERIALIZED VIEW test_view AS SELECT a,b from test group by b,a order by a;`, then the BE nodes all crash. [#13743](https://github.com/StarRocks/starrocks/pull/13743)
+- If you restart the BE immediately after you use INSERT INTO to frequently load data into the primary key table to make data changes, the BE may restart very slowly. [#15128](https://github.com/StarRocks/starrocks/pull/15128)
+- If only JRE is installed on the environment and JDK is not installed, queries fail after FE restarts. After the bug is fixed, FE cannot restart in that environment and it returns error `JAVA_HOME can not be jre`. To successfully restart FE, you need to install JDK on the environment. [#14332](https://github.com/StarRocks/starrocks/pull/14332)
+- Queries cause BE crashes. [#14221](https://github.com/StarRocks/starrocks/pull/14221)
+- `exec_mem_limit` cannot be set to an expression. [#13647](https://github.com/StarRocks/starrocks/pull/13647)
+- You cannot create a sync refreshed materialized view based on subquery results. [#13507](https://github.com/StarRocks/starrocks/pull/13507)
+- The comments for columns are deleted after you refresh the Hive external table. [#13742](https://github.com/StarRocks/starrocks/pull/13742)
+- During a correlated JOIN, the right table is processed before the left table and the right table is very large. If compaction is performed on the left table while the right table is being processed, the BE node crashes. [#14070](https://github.com/StarRocks/starrocks/pull/14070)
+- If the Parquet file column names are case-sensitive, and the query condition uses upper-case column names from the Parquet file, the query returns no result. [#13860](https://github.com/StarRocks/starrocks/pull/13860) [#14773](https://github.com/StarRocks/starrocks/pull/14773)
+- During bulk loading, if the number of connections to Broker exceeds the default maximum number of connections, Broker is disconnected and the loading job fails with an error message `list path error`. [#13911](https://github.com/StarRocks/starrocks/pull/13911)
+- When BEs are highly loaded, the metric for resource groups `starrocks_be_resource_group_running_queries` may be incorrect. [#14043](https://github.com/StarRocks/starrocks/pull/14043)
+- If the query statement uses OUTER JOIN, it may cause the BE node to crash. [#14840](https://github.com/StarRocks/starrocks/pull/14840)
+- After you create an asynchronous materialized view by using StarRocks 2.4, and you roll back it to 2.3, you may find FE fails to start. [#14400](https://github.com/StarRocks/starrocks/pull/14400)
+- When the primary key table uses delete_range, and the performance is not good, it may slow down data reading from RocksDB and cause high CPU usage. [#15130](https://github.com/StarRocks/starrocks/pull/15130)
+
 ## 2.3.5
 
 Release date: November 30, 2022
@@ -101,6 +143,10 @@ The following bugs are fixed:
 - StarRocks throws errors for queries on Primary Key tables. [#10811](https://github.com/StarRocks/starrocks/pull/10811)
 - Queries on logical views are not allowed even when you have SELECT permissions on these views. [#10563](https://github.com/StarRocks/starrocks/pull/10563)
 - StarRocks does not impose limits on the naming of logical views. Now logical views need to follow the same naming conventions as tables. [#10558](https://github.com/StarRocks/starrocks/pull/10558)
+
+### Behavior Change
+
+- Add BE configuration `max_length_for_bitmap_function` with a default value 1000000 for bitmap function, and add `max_length_for_to_base64` with a default value 200000 for base64 to prevent crash. [#10851](https://github.com/StarRocks/starrocks/pull/10851)
 
 ## 2.3.1
 

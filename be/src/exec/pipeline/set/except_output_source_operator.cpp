@@ -16,7 +16,7 @@
 
 namespace starrocks::pipeline {
 
-StatusOr<vectorized::ChunkPtr> ExceptOutputSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> ExceptOutputSourceOperator::pull_chunk(RuntimeState* state) {
     return _except_ctx->pull_chunk(state);
 }
 

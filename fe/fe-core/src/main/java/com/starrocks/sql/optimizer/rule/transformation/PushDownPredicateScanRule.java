@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
@@ -53,13 +52,13 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PushDownPredicateScanRule SCHEMA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
-    public static final PushDownPredicateScanRule MYSQL_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final PushDownPredicateScanRule ES_SCAN = new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
     public static final PushDownPredicateScanRule META_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_META_SCAN);
     public static final PushDownPredicateScanRule JDBC_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_JDBC_SCAN);
+    public static final PushDownPredicateScanRule BINLOG_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_BINLOG_SCAN);
 
     public PushDownPredicateScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));

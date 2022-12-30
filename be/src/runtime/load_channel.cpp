@@ -116,7 +116,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     }
 }
 
-void LoadChannel::_add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                              PTabletWriterAddBatchResult* response) {
     _num_chunk++;
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
@@ -131,7 +131,7 @@ void LoadChannel::_add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChu
 
 void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     faststring uncompressed_buffer;
-    vectorized::Chunk chunk;
+    Chunk chunk;
     if (request.has_chunk()) {
         auto& pchunk = request.chunk();
         RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
@@ -150,14 +150,14 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
         return;
     }
     faststring uncompressed_buffer;
-    std::unique_ptr<vectorized::Chunk> chunk;
+    std::unique_ptr<Chunk> chunk;
     for (int i = 0; i < req.requests_size(); i++) {
         auto& request = req.requests(i);
         VLOG_RPC << "tablet writer add chunk, id=" << print_id(request.id()) << ", index_id=" << request.index_id()
                  << ", sender_id=" << request.sender_id() << " request_index=" << i << " eos=" << request.eos();
 
         if (i == 0 && request.has_chunk()) {
-            chunk = std::make_unique<vectorized::Chunk>();
+            chunk = std::make_unique<Chunk>();
             auto& pchunk = request.chunk();
             RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
             RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, *chunk, &uncompressed_buffer), response);
@@ -196,21 +196,27 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
 }
 
 void LoadChannel::cancel() {
-    _span->AddEvent("cancel");
-    auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();
     }
 }
 
-void LoadChannel::cancel(int64_t index_id, int64_t tablet_id) {
+void LoadChannel::abort() {
+    _span->AddEvent("cancel");
+    auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
-    auto it = _tablets_channels.find(index_id);
-    if (it != _tablets_channels.end()) {
-        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(it->second.get());
+    for (auto& it : _tablets_channels) {
+        it.second->abort();
+    }
+}
+
+void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
+    auto channel = get_tablets_channel(index_id);
+    if (channel != nullptr) {
+        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(channel.get());
         if (local_tablets_channel != nullptr) {
-            local_tablets_channel->cancel(tablet_id);
+            local_tablets_channel->abort(tablet_ids);
         }
     }
 }
@@ -246,12 +252,11 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     return Status::OK();
 }
 
-Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,
-                                       faststring* uncompressed_buffer) {
+Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta);
-            StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
+            StatusOr<Chunk> res = des.deserialize(pchunk.data());
             if (!res.ok()) return res.status();
             chunk = std::move(res).value();
         });
@@ -269,7 +274,7 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk&
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta);
-                StatusOr<vectorized::Chunk> res = Status::OK();
+                StatusOr<Chunk> res = Status::OK();
                 TRY_CATCH_BAD_ALLOC(res = des.deserialize(buff));
                 if (!res.ok()) return res.status();
                 chunk = std::move(res).value();

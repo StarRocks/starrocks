@@ -275,15 +275,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE not in ('1998-04-10', '1994-04-11', '1994-04-12');";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(39: count)\n" +
-                "  |  group by: ");
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(*)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 3> : 3: LO_LINENUMBER");
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
+        assertContains(plan, "1:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -294,15 +287,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' " +
                         "and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(39: count)\n" +
-                "  |  group by: ");
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count(*)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 3> : 3: LO_LINENUMBE");
+        assertContains(plan, "3:AGGREGATE (merge finalize)");
+        assertContains(plan, "1:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -539,7 +525,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
         assertContains(plan, "6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [29: cast, BIGINT, true] = [30: add, BIGINT, true]\n" +
+                "  |  equal join conjunct: [29: cast, BIGINT, false] = [30: add, BIGINT, false]\n" +
                 "  |  output columns: 14, 15, 20, 22\n" +
                 "  |  cardinality: 600000000");
         assertContains(plan, "|----5:EXCHANGE\n" +
@@ -552,7 +538,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                         "GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         plan = getCostExplain(sql);
         Assert.assertTrue(
-                plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
+                plan.contains("equal join conjunct: [29: multiply, BIGINT, false] = [30: add, BIGINT, false]\n" +
                         "  |  output columns: 14, 15, 20, 22\n" +
                         "  |  cardinality: 600000000"));
     }
@@ -928,7 +914,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         OlapTable lineitem =
                 (OlapTable) connectContext.getGlobalStateMgr().getDb("test").getTable("lineitem");
 
-        MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
+        MockTpchStatisticStorage mock = new MockTpchStatisticStorage(connectContext, 100);
         connectContext.getGlobalStateMgr().setStatisticStorage(mock);
 
         // ===========================
@@ -986,7 +972,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "     column statistics: \n" +
                 "     * L_SHIPDATE-->[-Infinity, Infinity, 0.0, 8.0, 20000.0] ESTIMATE");
 
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(100));
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 100));
     }
 
     @Test
@@ -1004,7 +990,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select * from lineitem where L_LINENUMBER in (L_RETURNFLAG+1,2+1)";
         plan = getCostExplain(sql);
         Assert.assertTrue("plan is " + plan,
-                plan.contains("* L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 3.0] ESTIMATE"));
+                plan.contains("* L_LINENUMBER-->[1.0, 7.0, 0.0, 4.0, 7.0] ESTIMATE"));
 
         sql = "select * from lineitem where L_LINENUMBER + 1 in (L_RETURNFLAG+1,2+1)";
         plan = getCostExplain(sql);
@@ -1388,5 +1374,25 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 2: P_NAME");
+    }
+
+    @Test
+    public void testManyCrossJoin() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "select t1.LO_ORDERKEY from lineorder_new_l t1 join lineorder_new_l t2 " +
+                "join lineorder_new_l t3 join lineorder_new_l t4 join lineorder_new_l t5 join lineorder_new_l t6 " +
+                "join lineorder_new_l t7 join lineorder_new_l t8 join lineorder_new_l t9 join lineorder_new_l t10 " +
+                "join lineorder_new_l t11 join lineorder_new_l t12 join lineorder_new_l t13 join lineorder_new_l t14 " +
+                "join lineorder_new_l t15 join lineorder_new_l t16 join lineorder_new_l t17 join lineorder_new_l t18 " +
+                "join lineorder_new_l t19 join lineorder_new_l t20 join lineorder_new_l t21 join lineorder_new_l t22 " +
+                "join lineorder_new_l t23 join lineorder_new_l t24 join lineorder_new_l t25 join lineorder_new_l t26 " +
+                "join lineorder_new_l t27 join lineorder_new_l t28 join lineorder_new_l t29 join lineorder_new_l t30 " +
+                "join lineorder_new_l t31 join lineorder_new_l t32 join lineorder_new_l t33 join lineorder_new_l t34 " +
+                "join lineorder_new_l t35 join lineorder_new_l t36 join lineorder_new_l t37 join lineorder_new_l t38";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "148:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: LO_ORDERKEY, INT, false]\n" +
+                "  |  cardinality: 9223372036854775807");
     }
 }

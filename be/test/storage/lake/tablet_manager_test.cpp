@@ -25,6 +25,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -41,13 +42,14 @@ public:
 
     void SetUp() override {
         std::vector<starrocks::StorePath> paths;
-        starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+        CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
         _test_dir = paths[0].path + "/lake";
         _location_provider = new lake::FixedLocationProvider(_test_dir);
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
-        _tablet_manager = new starrocks::lake::TabletManager(_location_provider, 16384);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider);
+        _tablet_manager = new starrocks::lake::TabletManager(_location_provider, _update_manager.get(), 16384);
     }
 
     void TearDown() override {
@@ -59,6 +61,7 @@ public:
     starrocks::lake::TabletManager* _tablet_manager{nullptr};
     std::string _test_dir;
     lake::LocationProvider* _location_provider{nullptr};
+    std::unique_ptr<lake::UpdateManager> _update_manager;
 };
 
 // NOLINTNEXTLINE
@@ -104,6 +107,32 @@ TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     req.__set_version_hash(0);
     req.tablet_schema.schema_hash = 270068375;
     req.tablet_schema.short_key_column_count = 2;
+    req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    auto res = _tablet_manager->get_tablet(65535);
+    EXPECT_TRUE(res.ok());
+
+    starrocks::lake::TxnLog txnLog;
+    txnLog.set_tablet_id(65535);
+    txnLog.set_txn_id(2);
+    EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
+    EXPECT_OK(_tablet_manager->delete_tablet(65535));
+
+    auto st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 1));
+    EXPECT_TRUE(st.is_not_found());
+    st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 2));
+    EXPECT_TRUE(st.is_not_found());
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, create_and_delete_pk_tablet) {
+    TCreateTabletReq req;
+    req.tablet_id = 65535;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.tablet_schema.schema_hash = 270068375;
+    req.tablet_schema.short_key_column_count = 2;
+    req.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
     EXPECT_OK(_tablet_manager->create_tablet(req));
     auto res = _tablet_manager->get_tablet(65535);
     EXPECT_TRUE(res.ok());
@@ -340,6 +369,7 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_schema.__set_id(1);
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
+        req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
@@ -377,6 +407,7 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_schema.__set_id(2);
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
+        req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
@@ -426,6 +457,7 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_schema.__set_id(3);
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
+        req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";

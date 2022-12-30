@@ -23,14 +23,13 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "simd/simd.h"
 #include "util/date_func.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
 
@@ -117,7 +116,7 @@ void ColumnHelper::or_two_filters(size_t count, uint8_t* __restrict data, const 
     }
 }
 
-size_t ColumnHelper::count_nulls(const starrocks::vectorized::ColumnPtr& col) {
+size_t ColumnHelper::count_nulls(const starrocks::ColumnPtr& col) {
     if (!col->is_nullable()) {
         return 0;
     }
@@ -131,7 +130,7 @@ size_t ColumnHelper::count_nulls(const starrocks::vectorized::ColumnPtr& col) {
     return SIMD::count_nonzero(null_data);
 }
 
-size_t ColumnHelper::count_true_with_notnull(const starrocks::vectorized::ColumnPtr& col) {
+size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
     if (col->only_null()) {
         return 0;
     }
@@ -163,7 +162,7 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::vectorized::Column
     }
 }
 
-size_t ColumnHelper::count_false_with_notnull(const starrocks::vectorized::ColumnPtr& col) {
+size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
     if (col->only_null()) {
         return 0;
     }
@@ -274,7 +273,6 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.selected_fields.size());
         Columns columns;
-        BinaryColumn::Ptr field_names = BinaryColumn::create();
         for (size_t i = 0; i < field_size; i++) {
             // TODO(SmithCruise): We still create not selected column, but do append_default instead.
             // We should optimize it in future.
@@ -285,9 +283,8 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
             // Subfield column must be nullable column.
             ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
             columns.emplace_back(field_column);
-            field_names->append_string(type_desc.field_names[i]);
         }
-        p = StructColumn::create(columns, field_names);
+        p = StructColumn::create(columns, type_desc.field_names);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }
@@ -371,9 +368,9 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
         auto* data_column = down_cast<DoubleColumn*>(nullable_column->mutable_data_column());
         res = NullableColumn::create(get_binary_column(data_column, column->size()), nullable_column->null_column());
     } else if (column->is_constant()) {
-        auto* const_column = down_cast<vectorized::ConstColumn*>(column.get());
+        auto* const_column = down_cast<ConstColumn*>(column.get());
         std::string time_str = time_str_from_double(const_column->get(0).get_double());
-        res = vectorized::ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
+        res = ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
     } else {
         auto* data_column = down_cast<DoubleColumn*>(column.get());
         res = get_binary_column(data_column, column->size());
@@ -390,7 +387,7 @@ size_t ChunkSlice::rows() const {
     return chunk->num_rows() - offset;
 }
 
-void ChunkSlice::reset(vectorized::ChunkUniquePtr input) {
+void ChunkSlice::reset(ChunkUniquePtr input) {
     chunk = std::move(input);
 }
 
@@ -406,7 +403,7 @@ size_t ChunkSlice::skip(size_t skip_rows) {
 }
 
 // Cutoff required rows from this chunk
-vectorized::ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
+ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
     DCHECK(!empty());
     size_t cut_rows = std::min(rows(), required_rows);
     auto res = chunk->clone_empty(cut_rows);
@@ -418,4 +415,4 @@ vectorized::ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
     }
     return res;
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -953,15 +953,15 @@ classifier
 // ------------------------------------------- Function ----------------------------------------------------
 
 showFunctionsStatement
-    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropFunctionStatement
-    : DROP FUNCTION qualifiedName '(' typeList ')'
+    : DROP GLOBAL? FUNCTION qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
-    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
     ;
 
 typeList
@@ -1196,6 +1196,9 @@ privilegeActionReserved
     | USAGE
     | CREATE_DATABASE
     | UPDATE
+    | EXPORT
+    | REPOSITORY
+    | CREATE_MATERIALIZED_VIEW
     | ALL
     ;
 
@@ -1214,6 +1217,7 @@ privilegeTypeReserved
     | DATABASE
     | CATALOG
     | DATABASES
+    | FUNCTION
     | RESOURCE_GROUP
     ;
 
@@ -1227,17 +1231,21 @@ grantRevokeClause
     ;
 
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON user TO grantRevokeClause                                               #grantImpersonateBrief
-    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause             #grantTablePrivBrief
-    | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause   #grantPrivWithType
+    : GRANT IMPERSONATE ON user TO grantRevokeClause                                                     #grantImpersonateBrief
+    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause                   #grantTablePrivBrief
+    | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause         #grantPrivWithType
+    | GRANT privilegeActionList ON GLOBAL? privilegeType qualifiedName '(' typeList ')' TO grantRevokeClause     #grantPrivWithFunc
     | GRANT privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? TO grantRevokeClause   #grantOnAll
+    | GRANT privilegeActionList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause   #grantOnAllGlobalFunctions
     ;
 
 revokePrivilegeStatement
-    : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                              #revokeImpersonateBrief
-    | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause            #revokeTablePrivBrief
-    | REVOKE privilegeActionList ON privilegeType (privilegeObjectNameList)? FROM grantRevokeClause  #revokePrivWithType
+    : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                                  #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause                #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON privilegeType (privilegeObjectNameList)? FROM grantRevokeClause      #revokePrivWithType
+    | REVOKE privilegeActionList ON GLOBAL? privilegeType qualifiedName '(' typeList ')' FROM grantRevokeClause  #revokePrivWithFunc
     | REVOKE privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? FROM grantRevokeClause  #revokeOnAll
+    | REVOKE privilegeActionList ON ALL GLOBAL FUNCTIONS FROM grantRevokeClause   #revokeOnAllGlobalFunctions
     ;
 
 grantRoleStatement
@@ -1708,7 +1716,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
-    | base = primaryExpression '.' fieldName = identifier                                 #dereference
+    | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1742,6 +1750,7 @@ functionCall
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
+    | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -1774,12 +1783,19 @@ informationFunctionExpression
     | name = SCHEMA '(' ')'
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
-    | name = CURRENT_USER '(' ')'
+    | name = CURRENT_USER ('(' ')')?
+    ;
+
+specialDateTimeExpression
+    : name = CURRENT_DATE ('(' ')')?
+    | name = CURRENT_TIME ('(' ')')?
+    | name = CURRENT_TIMESTAMP ('(' ')')?
+    | name = LOCALTIME ('(' ')')?
+    | name = LOCALTIMESTAMP ('(' ')')?
     ;
 
 specialFunctionExpression
     : CHAR '(' expression ')'
-    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
@@ -2073,7 +2089,7 @@ decimalType
     ;
 
 qualifiedName
-    : identifier ('.' identifier)*
+    : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
 identifier

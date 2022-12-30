@@ -20,7 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
     friend class ColumnFactory<Column, ArrayColumn>;
@@ -122,6 +122,7 @@ public:
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
+    void compare_column(const Column& rhs, std::vector<int8_t>* output) const;
 
     void crc32_hash_at(uint32_t* seed, int32_t idx) const override;
     void fnv_hash_at(uint32_t* seed, int32_t idx) const override;
@@ -192,4 +193,4 @@ private:
     UInt32Column::Ptr _offsets;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

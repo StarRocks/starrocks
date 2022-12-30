@@ -99,7 +99,11 @@ public class StatementPlanner {
 
         //1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan;
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+        }
 
         OptExpression optimizedPlan;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
@@ -120,7 +124,7 @@ public class StatementPlanner {
              * currently only used in Spark/Flink Connector
              * Because the connector sends only simple queries, it only needs to remove the output fragment
              */
-            return new PlanFragmentBuilder().createPhysicalPlan(
+            return PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                     resultSinkType,
                     !session.getSessionVariable().isSingleNodeExecPlan());

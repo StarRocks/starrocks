@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
         exit(-1);
     }
-    std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be.conf";
+    std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
     if (!starrocks::config::init(conffile.c_str(), false)) {
         fprintf(stderr, "error read config file. \n");
         return -1;
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
-    starrocks::vectorized::date::init_date_cache();
+    starrocks::date::init_date_cache();
     starrocks::TimezoneUtils::init_time_zones();
 
     std::vector<starrocks::StorePath> paths;
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     (void)butil::DeleteFile(storage_root, true);
-    starrocks::vectorized::TEST_clear_all_columns_this_thread();
+    starrocks::TEST_clear_all_columns_this_thread();
     // delete engine
     starrocks::StorageEngine::instance()->stop();
     // destroy exec env

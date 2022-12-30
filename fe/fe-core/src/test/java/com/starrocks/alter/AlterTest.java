@@ -59,6 +59,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -349,6 +350,56 @@ public class AlterTest {
         Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
                 "FROM `test`.`testTable1`", task.getDefinition());
         dropMaterializedView("drop materialized view test.mv2");
+    }
+
+    @Test
+    public void testCouldNotFindMaterializedView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.testTable1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.testTable2\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from test.testTable1;";
+        createMaterializedView(sql);
+        dropMaterializedView("drop materialized view test.mv1");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("testTable1");
+        // this for mock olapTable.getIndexNameById(mvIdx.getId()) == Null
+        table.deleteIndexInfo("testTable1");
+        try {
+            dropMaterializedView("drop materialized view test.mv1");
+            Assert.fail();
+        } catch (MetaNotFoundException ex) {
+            // pass
+        }
     }
 
     @Test
@@ -919,8 +970,9 @@ public class AlterTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
+                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
@@ -1002,9 +1054,9 @@ public class AlterTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
-
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
+                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L),
                         Lists.newArrayList(30007L, 30008L, 30009L),
@@ -1632,7 +1684,7 @@ public class AlterTest {
                 (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testAddMultiItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1679,7 +1731,7 @@ public class AlterTest {
 
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testAddSingleItemListPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1724,7 +1776,7 @@ public class AlterTest {
 
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testSingleItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1800,7 +1852,7 @@ public class AlterTest {
         file.delete();
     }
 
-    @Test
+    @Test(expected = AnalysisException.class)
     public void testMultiItemPartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition (\n" +
@@ -1905,9 +1957,9 @@ public class AlterTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
-
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
+                agent.createShards(anyInt, anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryBackendIdByShard(anyLong);
@@ -1988,7 +2040,7 @@ public class AlterTest {
         Config.use_staros = false;
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_1 (\n" +
@@ -2018,7 +2070,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_1", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
@@ -2052,7 +2104,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_2", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddSingleListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_3 (\n" +
@@ -2082,7 +2134,7 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_3", addPartitionClause);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testAddMultiItemListPartitionSamePartitionValueShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.test_partition_4 (\n" +

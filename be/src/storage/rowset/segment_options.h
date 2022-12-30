@@ -30,9 +30,12 @@ struct OlapReaderStatistics;
 class RuntimeProfile;
 class TabletSchema;
 class KVStore;
+namespace lake {
+class UpdateManager;
+} // namespace lake
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnPredicate;
 struct RowidRangeOption;
@@ -59,6 +62,10 @@ public:
     uint32_t rowset_id = 0;
     int64_t version = 0;
     KVStore* meta = nullptr;
+
+    // used for lake table
+    bool is_lake_table = false;
+    lake::UpdateManager* update_mgr = nullptr;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
@@ -89,4 +96,4 @@ public:
     std::string debug_string() const;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

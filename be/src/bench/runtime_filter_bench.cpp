@@ -20,12 +20,12 @@
 
 #include "bench.h"
 #include "column/column_helper.h"
-#include "exprs/vectorized/runtime_filter.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter.h"
+#include "exprs/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "util/time.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 //   --------------------------------------------------------------------------------------------------------
 //   Benchmark                                              Time             CPU   Iterations UserCounters...
@@ -164,6 +164,6 @@ static void Benchmark_RuntimeFilter_Eval(benchmark::State& state) {
 
 BENCHMARK(Benchmark_RuntimeFilter_Eval)->Apply(RuntimeFilterArg1);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 BENCHMARK_MAIN();

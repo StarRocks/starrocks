@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
@@ -21,7 +20,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -105,9 +103,8 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     private void commitEpoch(MVEpoch epoch) {
         long dbId = mvMaintenanceJob.getView().getDbId();
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Coordinator queryCoordinator = mvMaintenanceJob.getQueryCoordinator();
-        List<TabletCommitInfo> commitInfo = TabletCommitInfo.fromThrift(queryCoordinator.getCommitInfos());
-        List<TabletFailInfo> failedInfo = TabletFailInfo.fromThrift(queryCoordinator.getFailInfos());
+        List<TabletCommitInfo> commitInfo = null;
+        List<TabletFailInfo> failedInfo = null;
 
         try {
             epoch.onCommitting();
@@ -157,12 +154,14 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setQuery_id(mvMaintenanceJob.getQueryId());
             request.setTask_type(MVTaskType.START_EPOCH);
             request.setTask_id(taskId);
             request.setJob_id(mvMaintenanceJob.getJobId());
             request.setMv_name(mvMaintenanceJob.getView().getName());
             TMVStartEpochTask taskMsg = new TMVStartEpochTask();
             taskMsg.setEpoch(epoch.toThrift());
+            taskMsg.setPer_node_scan_ranges(task.getBinlogConsumeState());
             taskMsg.setMax_exec_millis(MAX_EXEC_MILLIS);
             taskMsg.setMax_scan_rows(MAX_SCAN_ROWS);
             // TODO(murphy) set binlog offset here

@@ -62,11 +62,12 @@ public class PruneProjectColumnsRule extends TransformationRule {
             }
         }));
 
-        if (newMap.isEmpty()) {
+        // Join Operator could not accept an output column, so try to choose a column for it
+        LogicalOperator inputOp = (LogicalOperator) input.inputAt(0).getOp();
+        if (newMap.isEmpty() && inputOp.getOpType().equals(OperatorType.LOGICAL_JOIN)) {
             ColumnRefSet candidates = new ColumnRefSet(projectOperator.getColumnRefMap().keySet());
             ColumnRefOperator smallestColumn =
-                    ((LogicalOperator) input.inputAt(0).getOp())
-                            .getSmallestColumn(candidates, context.getColumnRefFactory(), input.inputAt(0));
+                    inputOp.getSmallestColumn(candidates, context.getColumnRefFactory(), input.inputAt(0));
             if (smallestColumn != null) {
                 ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
                 newMap.put(smallestColumn, expr);

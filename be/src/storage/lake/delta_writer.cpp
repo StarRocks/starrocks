@@ -35,10 +35,10 @@
 
 namespace starrocks::lake {
 
-using Chunk = starrocks::vectorized::Chunk;
-using Column = starrocks::vectorized::Column;
-using MemTable = starrocks::vectorized::MemTable;
-using MemTableSink = starrocks::vectorized::MemTableSink;
+using Chunk = starrocks::Chunk;
+using Column = starrocks::Column;
+using MemTable = starrocks::MemTable;
+using MemTableSink = starrocks::MemTableSink;
 
 class TabletWriterSink : public MemTableSink {
 public:
@@ -53,9 +53,11 @@ public:
         return _writer->flush();
     }
 
-    Status flush_chunk_with_deletes(const Chunk& /*upserts*/, const Column& /*deletes*/,
-                                    starrocks::SegmentPB*) override {
-        return Status::NotSupported("TabletWriterSink::flush_chunk_with_deletes");
+    Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
+                                    starrocks::SegmentPB* segment = nullptr) override {
+        RETURN_IF_ERROR(_writer->flush_del_file(deletes));
+        RETURN_IF_ERROR(_writer->write(upserts));
+        return _writer->flush();
     }
 
 private:
@@ -110,6 +112,9 @@ public:
 
     [[nodiscard]] Status flush_async();
 
+    Status handle_partial_update();
+    Status build_schema_and_writer();
+
 private:
     Status reset_memtable();
 
@@ -129,15 +134,35 @@ private:
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
     std::shared_ptr<const TabletSchema> _tablet_schema;
-    vectorized::VectorizedSchema _vectorized_schema;
+    VectorizedSchema _vectorized_schema;
     bool _schema_initialized;
+
+    // for partial update
+    std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
+    std::vector<int32_t> _referenced_column_ids;
+    std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
 };
 
-inline Status DeltaWriterImpl::reset_memtable() {
+Status DeltaWriterImpl::build_schema_and_writer() {
     if (_tablet_schema == nullptr) {
+        DCHECK(_tablet_writer == nullptr);
         ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
+        RETURN_IF_ERROR(handle_partial_update());
+        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+            _rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
+            ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(_rowset_txn_meta.get(), _tablet_schema));
+        } else {
+            ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
+        }
+        RETURN_IF_ERROR(_tablet_writer->open());
+        _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
     }
+    return Status::OK();
+}
+
+inline Status DeltaWriterImpl::reset_memtable() {
+    RETURN_IF_ERROR(build_schema_and_writer());
     if (!_schema_initialized) {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
@@ -171,13 +196,6 @@ inline Status DeltaWriterImpl::flush() {
 // in a bthread.
 Status DeltaWriterImpl::open() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-
-    DCHECK(_tablet_writer == nullptr);
-    // TODO: remove the dependency |ExecEnv::GetInstance()|
-    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
-    RETURN_IF_ERROR(_tablet_writer->open());
-    _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
     _flush_token = StorageEngine::instance()->memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
@@ -205,11 +223,47 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     return st;
 }
 
+Status DeltaWriterImpl::handle_partial_update() {
+    if (_slots == nullptr) return Status::OK();
+    const std::size_t partial_cols_num = [this]() {
+        if (this->_slots->size() > 0 && this->_slots->back()->col_name() == "__op") {
+            return this->_slots->size() - 1;
+        } else {
+            return this->_slots->size();
+        }
+    }();
+    // maybe partial update, change to partial tablet schema
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < _tablet_schema->num_columns()) {
+        _referenced_column_ids.reserve(partial_cols_num);
+        for (auto i = 0; i < partial_cols_num; ++i) {
+            const auto& slot_col_name = (*_slots)[i]->col_name();
+            int32_t index = _tablet_schema->field_index(slot_col_name);
+            if (index < 0) {
+                return Status::InvalidArgument(strings::Substitute("Invalid column name: $0", slot_col_name));
+            }
+            _referenced_column_ids.push_back(index);
+        }
+        _partial_update_tablet_schema = TabletSchema::create(*_tablet_schema, _referenced_column_ids);
+        auto sort_key_idxes = _tablet_schema->sort_key_idxes();
+        std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
+        if (!std::includes(_referenced_column_ids.begin(), _referenced_column_ids.end(), sort_key_idxes.begin(),
+                           sort_key_idxes.end())) {
+            LOG(WARNING) << "table with sort key do not support partial update";
+            return Status::NotSupported("table with sort key do not support partial update");
+        }
+        LOG(INFO) << "handle_partial_update col num: " << partial_cols_num;
+        _tablet_schema = _partial_update_tablet_schema;
+    }
+    return Status::OK();
+}
+
 Status DeltaWriterImpl::finish() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(build_schema_and_writer());
 
     // TODO: move file type checking to a common place
     auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
+    auto is_del_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".del"); };
 
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
@@ -221,6 +275,8 @@ Status DeltaWriterImpl::finish() {
     for (auto& f : _tablet_writer->files()) {
         if (is_seg_file(f)) {
             op_write->mutable_rowset()->add_segments(std::move(f));
+        } else if (is_del_file(f)) {
+            op_write->add_dels(std::move(f));
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f));
         }
@@ -228,6 +284,15 @@ Status DeltaWriterImpl::finish() {
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    // handle partial update
+    if (_rowset_txn_meta != nullptr && _partial_update_tablet_schema != nullptr) {
+        op_write->mutable_txn_meta()->CopyFrom(*_rowset_txn_meta);
+        for (auto i = 0; i < _partial_update_tablet_schema->columns().size(); ++i) {
+            const auto& tablet_column = _partial_update_tablet_schema->column(i);
+            op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
+            op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+        }
+    }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
 }
@@ -248,6 +313,8 @@ void DeltaWriterImpl::close() {
     _mem_table_sink.reset();
     _flush_token.reset();
     _tablet_schema.reset();
+    _partial_update_tablet_schema.reset();
+    _rowset_txn_meta.reset();
 }
 
 //// DeltaWriter

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.privilege;
 
 import com.starrocks.analysis.UserIdentity;
@@ -98,7 +97,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException {
+    public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr)
+            throws PrivilegeException {
         PrivilegeType type = PrivilegeType.valueOf(typeStr);
         switch (type) {
             case TABLE:
@@ -113,11 +113,20 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case VIEW:
                 return ViewPEntryObject.generate(mgr, objectTokens);
 
+            case MATERIALIZED_VIEW:
+                return MaterializedViewPEntryObject.generate(mgr, objectTokens);
+
             case CATALOG:
                 return CatalogPEntryObject.generate(mgr, objectTokens);
 
+            case FUNCTION:
+                return FunctionPEntryObject.generate(mgr, objectTokens);
+
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(mgr, objectTokens);
+
+            case GLOBAL_FUNCTION:
+                return GlobalFunctionPEntryObject.generate(mgr, objectTokens);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
@@ -154,11 +163,20 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case VIEW:
                 return ViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
 
+            case MATERIALIZED_VIEW:
+                return MaterializedViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
+
             case CATALOG:
                 return CatalogPEntryObject.generate(allTypes, restrictType, restrictName);
 
+            case FUNCTION:
+                return FunctionPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
+
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(allTypes, restrictType, restrictName);
+
+            case GLOBAL_FUNCTION:
+                return GlobalFunctionPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
@@ -166,6 +184,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     private static final List<String> BAD_SYSTEM_ACTIONS = Arrays.asList("GRANT", "NODE");
+
     @Override
     public void validateGrant(String type, List<String> actions, List<PEntryObject> objects) throws PrivilegeException {
         if (type.equals("SYSTEM")) {
@@ -183,8 +202,15 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public boolean searchObject(short type, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.searchObject(type, object);
+    public boolean searchAnyActionOnObject(short type, PEntryObject object,
+                                           PrivilegeCollection currentPrivilegeCollection) {
+        return currentPrivilegeCollection.searchAnyActionOnObject(type, object);
+    }
+
+    @Override
+    public boolean searchActionOnObject(short type, PEntryObject object,
+                                        PrivilegeCollection currentPrivilegeCollection, Action want) {
+        return currentPrivilegeCollection.searchActionOnObject(type, object, want);
     }
 
     @Override

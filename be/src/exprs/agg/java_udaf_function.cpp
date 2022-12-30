@@ -23,7 +23,7 @@
 #include "jni.h"
 #include "runtime/user_function_cache.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const int DEFAULT_UDAF_BUFFER_SIZE = 1024;
 
@@ -94,4 +94,4 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

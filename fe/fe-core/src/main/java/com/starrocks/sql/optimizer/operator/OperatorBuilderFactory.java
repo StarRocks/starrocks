@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 
 public class OperatorBuilderFactory {
     public static Operator.Builder<?, ?> build(Operator operator) {
@@ -100,6 +101,8 @@ public class OperatorBuilderFactory {
             return new LogicalCTEAnchorOperator.Builder();
         } else if (operator instanceof LogicalProjectOperator) {
             return new LogicalProjectOperator.Builder();
+        } else if (operator instanceof LogicalBinlogScanOperator) {
+            return new LogicalBinlogScanOperator.Builder();
         } else {
             throw new StarRocksPlannerException("not implement builder: " + operator.getOpType(),
                     ErrorType.INTERNAL_ERROR);

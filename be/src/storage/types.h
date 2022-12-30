@@ -55,15 +55,10 @@ class TabletColumn;
 class TypeInfo;
 class ScalarTypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
-
-namespace vectorized {
 class Datum;
-}
 
 class TypeInfo {
 public:
-    using Datum = vectorized::Datum;
-
     virtual void shallow_copy(void* dest, const void* src) const = 0;
 
     virtual void deep_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
@@ -88,8 +83,8 @@ public:
 
     ////////// Datum-based methods
 
-    Status from_string(vectorized::Datum* buf, const std::string& scan_key) const = delete;
-    std::string to_string(const vectorized::Datum& datum) const = delete;
+    Status from_string(Datum* buf, const std::string& scan_key) const = delete;
+    std::string to_string(const Datum& datum) const = delete;
 
     int cmp(const Datum& left, const Datum& right) const;
 

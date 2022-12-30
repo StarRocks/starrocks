@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
@@ -76,7 +75,7 @@ public class Utils {
         return list;
     }
 
-    public static void extractConjunctsImpl(ScalarOperator root, List<ScalarOperator> result) {
+    private static void extractConjunctsImpl(ScalarOperator root, List<ScalarOperator> result) {
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
             result.add(root);
             return;
@@ -100,7 +99,7 @@ public class Utils {
         return list;
     }
 
-    public static void extractDisjunctiveImpl(ScalarOperator root, List<ScalarOperator> result) {
+    private static void extractDisjunctiveImpl(ScalarOperator root, List<ScalarOperator> result) {
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
             result.add(root);
             return;

@@ -13,16 +13,18 @@
 // limitations under the License.
 
 #pragma once
+#include <memory>
+#include <vector>
 
 namespace starrocks {
 class RowsetReadOptions;
 class Segment;
 class TabletSchema;
+class DelVector;
 
-namespace vectorized {
 class ChunkIterator;
 class VectorizedSchema;
-} // namespace vectorized
+class Column;
 
 namespace lake {
 
@@ -30,14 +32,19 @@ class Rowset;
 class Tablet;
 class CompactionTask;
 class LocationProvider;
+class RowsetMetadataPB;
 
-using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 using RowsetMetadata = RowsetMetadataPB;
 using RowsetMetadataPtr = std::shared_ptr<const starrocks::lake::RowsetMetadata>;
 using RowsetPtr = std::shared_ptr<starrocks::lake::Rowset>;
 using SegmentPtr = std::shared_ptr<starrocks::Segment>;
 using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
 using CompactionTaskPtr = std::shared_ptr<CompactionTask>;
+using ColumnUniquePtr = std::unique_ptr<Column>;
+using segment_rowid_t = uint32_t;
+using DeletesMap = std::unordered_map<uint32_t, std::vector<segment_rowid_t>>;
+using DelVectorPtr = std::shared_ptr<DelVector>;
 
 } // namespace lake
 

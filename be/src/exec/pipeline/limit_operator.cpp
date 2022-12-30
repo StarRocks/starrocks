@@ -19,11 +19,11 @@
 
 namespace starrocks::pipeline {
 
-StatusOr<vectorized::ChunkPtr> LimitOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> LimitOperator::pull_chunk(RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
-Status LimitOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status LimitOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _cur_chunk = chunk;
 
     int64_t old_limit;

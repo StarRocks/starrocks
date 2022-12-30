@@ -40,7 +40,11 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::vectorized::Chunk& data) override;
+    Status write(const starrocks::Chunk& data) override;
+
+    Status flush_del_file(const Column& deletes) {
+        return Status::NotSupported("GeneralTabletWriter flush_del_file not support");
+    }
 
     Status flush() override;
 

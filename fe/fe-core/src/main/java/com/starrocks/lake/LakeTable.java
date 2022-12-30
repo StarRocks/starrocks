@@ -77,7 +77,7 @@ public class LakeTable extends OlapTable {
         return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
-    public FilePathInfo getPartitionFilePathInfo(long partitionId) {
+    public FilePathInfo getPartitionFilePathInfo() {
         return getDefaultFilePathInfo();
     }
 
@@ -166,13 +166,15 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                          int replicationNum, long version, int schemaHash, long partitionId) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo(partitionId);
+                                          int replicationNum, long version, int schemaHash,
+                                          long partitionId, long shardGroupId) {
+        FilePathInfo fsInfo = getPartitionFilePathInfo();
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
 
         List<Long> shardIds = null;
         try {
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, partitionId);
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, replicationNum, fsInfo, cacheInfo,
+                    shardGroupId);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

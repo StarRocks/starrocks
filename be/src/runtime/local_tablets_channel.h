@@ -33,13 +33,6 @@ namespace starrocks {
 class MemTracker;
 
 class LocalTabletsChannel : public TabletsChannel {
-    using AsyncDeltaWriter = vectorized::AsyncDeltaWriter;
-    using AsyncDeltaWriterCallback = vectorized::AsyncDeltaWriterCallback;
-    using AsyncDeltaWriterRequest = vectorized::AsyncDeltaWriterRequest;
-    using AsyncDeltaWriterSegmentRequest = vectorized::AsyncDeltaWriterSegmentRequest;
-    using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
-    using FailedRowsetInfo = vectorized::FailedRowsetInfo;
-
 public:
     LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
     ~LocalTabletsChannel() override;
@@ -53,7 +46,7 @@ public:
 
     Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -61,7 +54,9 @@ public:
 
     void cancel() override;
 
-    void cancel(int64_t tablet_id);
+    void abort() override;
+
+    void abort(const std::vector<int64_t>& tablet_ids);
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -128,7 +123,7 @@ private:
         PTabletWriterAddBatchResult* _response;
         BThreadCountDownLatch* _latch{nullptr};
 
-        vectorized::Chunk _chunk;
+        Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
@@ -152,11 +147,14 @@ private:
 
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
-    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(vectorized::Chunk* chunk,
+    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
+
+    void _commit_tablets(const PTabletWriterAddChunkRequest& request,
+                         std::shared_ptr<LocalTabletsChannel::WriteContext> context);
 
     LoadChannel* _load_channel;
 
@@ -183,10 +181,12 @@ private:
     // tablet_id -> TabletChannel
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
 
-    vectorized::GlobalDictByNameMaps _global_dicts;
+    GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
 
     bool _is_replicated_storage = false;
+
+    std::unordered_map<int64_t, PNetworkAddress> _node_id_to_endpoint;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

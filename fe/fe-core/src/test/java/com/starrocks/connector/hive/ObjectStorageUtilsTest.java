@@ -28,10 +28,12 @@ public class ObjectStorageUtilsTest {
         String cosPath = "cos://xxx";
         String cosnPath = "cosn://xxx";
         String ks3Path = "ks3://xxx";
+        String ossPath = "oss://xxx";
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(s3Path));
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(s3nPath));
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(cosnPath));
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(cosPath));
         Assert.assertEquals(ks3Path, ObjectStorageUtils.formatObjectStoragePath(ks3Path));
+        Assert.assertEquals(ossPath, ObjectStorageUtils.formatObjectStoragePath(ossPath));
     }
 }

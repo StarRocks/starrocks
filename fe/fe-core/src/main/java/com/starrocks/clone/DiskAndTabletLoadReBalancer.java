@@ -316,7 +316,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (srcBePathSlot == null) {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "working slots not exist for src be");
         }
-        if (srcBePathSlot.takeBalanceSlot(pathHash) == -1) {
+        if (srcBePathSlot.takeSlot(pathHash) == -1) {
             throw new SchedException(SchedException.Status.SCHEDULE_FAILED, "path busy, wait for next round");
         }
     }
@@ -1525,8 +1525,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         long cost = (System.nanoTime() - start) / 1000000;
         lockTotalTime = lockTotalTime / 1000000;
-        LOG.info("finished to calculate partition stats. cost: {} ms, in lock time: {} ms",
-                cost, lockTotalTime);
+        if (lockTotalTime > Config.slow_lock_threshold_ms || cost > 30000) {
+            LOG.info("finished to calculate partition stats. cost: {} ms, in lock time: {} ms",
+                    cost, lockTotalTime);
+        }
 
         return partitionStats;
     }

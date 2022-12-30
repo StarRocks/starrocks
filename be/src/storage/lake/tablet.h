@@ -22,16 +22,18 @@
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/update_manager.h"
 
 namespace starrocks {
 class TabletSchema;
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class VectorizedSchema;
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -41,6 +43,7 @@ class TabletWriter;
 template <typename T>
 class MetadataIterator;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
+class UpdateManager;
 
 class Tablet {
 public:
@@ -86,16 +89,23 @@ public:
 
     StatusOr<std::unique_ptr<TabletWriter>> new_writer();
 
-    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, vectorized::VectorizedSchema schema);
+    StatusOr<std::unique_ptr<TabletWriter>> new_writer(RowsetTxnMetaPB* rowset_txn_meta,
+                                                       std::shared_ptr<const TabletSchema>& tschema);
+
+    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, VectorizedSchema schema);
 
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
+    StatusOr<std::vector<RowsetPtr>> get_rowsets(TabletMetadata* metadata);
+
     StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
                                       bool fill_cache);
 
     [[nodiscard]] std::string metadata_location(int64_t version) const;
+
+    [[nodiscard]] std::string metadata_root_location() const;
 
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
 
@@ -103,9 +113,13 @@ public:
 
     [[nodiscard]] std::string segment_location(std::string_view segment_name) const;
 
+    [[nodiscard]] std::string del_location(std::string_view del_name) const;
+
     Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
+
+    UpdateManager* update_mgr() { return _mgr->update_mgr(); }
 
 private:
     TabletManager* _mgr;

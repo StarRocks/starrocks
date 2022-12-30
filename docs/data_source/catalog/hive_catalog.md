@@ -7,7 +7,7 @@ A Hive catalog is an external catalog supported in StarRocks 2.3 and later versi
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks supports querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY, MAP, and STRUCT. The following data types are not supported: INTERVAL, BINARY, and UNION.
+- StarRocks does not support querying data of the following types from Hive: INTERVAL, BINARY, and UNION.
 
     > **Note**
     >
@@ -141,7 +141,7 @@ The properties of the Hive catalog. This parameter is required. You can configur
     | aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
     | aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
-### Properties for update policies for cached metadata
+#### Properties for update policies for cached metadata
 
 StarRocks supports two policies to update cached metadata: asynchronous update and automatic incremental update. For more information, see [Update policies for cached metadata](#update-policies-for-cached-metadata).
 
@@ -177,6 +177,8 @@ StarRocks supports two policies to update cached metadata: asynchronous update a
     | **Property**                       | **Required** | **Description**                                              |
     | ---------------------------------- | ------------ | ------------------------------------------------------------ |
     | enable_hms_events_incremental_sync | No           | Whether the automatic incremental update policy is enabled. Valid values:<ul><li>`TRUE`: means enabled.</li><li>`FALSE`: means disabled. The value of the parameter defaults to `FALSE`.</li></ul>To enable the automatic incremental update policy for the Hive catalog, set the value of this parameter to `TRUE`. |
+
+After the catalog is created, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## Update policies for cached metadata
 
@@ -267,10 +269,6 @@ You can also tune the following parameters in the **$FE_HOME/conf/fe.conf** file
 | hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
 | enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
 | hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |
-
-## What to do next
-
-After you complete all the preceding operations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

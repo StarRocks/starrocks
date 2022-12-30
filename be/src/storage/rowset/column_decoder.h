@@ -30,23 +30,23 @@ public:
 
     void set_iterator(ColumnIterator* iter) { _iter = iter; }
 
-    Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
+    Status decode_dict_codes(const Column& codes, Column* words) {
         DCHECK(_iter != nullptr);
         return _iter->decode_dict_codes(codes, words);
     }
 
-    Status decode_values_by_rowid(const vectorized::Column& rowids, vectorized::Column* values) {
+    Status decode_values_by_rowid(const Column& rowids, Column* values) {
         DCHECK(_iter != nullptr);
         return _iter->fetch_values_by_rowid(rowids, values);
     }
 
     void set_all_page_dict_encoded(bool all_page_dict_encoded) { _all_page_dict_encoded = all_page_dict_encoded; }
-    void set_global_dict(vectorized::GlobalDictMap* global_dict) { _global_dict = global_dict; }
+    void set_global_dict(GlobalDictMap* global_dict) { _global_dict = global_dict; }
     // check global dict is superset of local dict
     void check_global_dict();
 
     // encode string column to global dictionary id
-    Status encode_to_global_id(vectorized::Column* datas, vectorized::Column* codes);
+    Status encode_to_global_id(Column* datas, Column* codes);
 
     bool need_force_encode_to_global_id() const {
         return (!_all_page_dict_encoded && _global_dict) || (!_code_convert_map.has_value() && _global_dict);
@@ -57,7 +57,7 @@ public:
 private:
     std::optional<std::vector<int16_t>> _code_convert_map;
     ColumnIterator* _iter = nullptr;
-    vectorized::GlobalDictMap* _global_dict = nullptr;
+    GlobalDictMap* _global_dict = nullptr;
     bool _all_page_dict_encoded = false;
 };
 

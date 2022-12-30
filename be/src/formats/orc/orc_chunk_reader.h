@@ -21,7 +21,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
+#include "exprs/runtime_filter_bank.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
@@ -36,7 +36,7 @@ namespace starrocks {
 class RandomAccessFile;
 class RuntimeState;
 } // namespace starrocks
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
@@ -56,7 +56,7 @@ public:
     };
 
     // src slot descriptors should exactly matches columns in row readers.
-    explicit OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors);
+    explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -133,6 +133,7 @@ public:
     void lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
+    ColumnPtr get_row_delete_filter(const std::set<int64_t>& deleted_pos);
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
@@ -202,4 +203,4 @@ private:
     LazyLoadContext* _lazy_load_ctx;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

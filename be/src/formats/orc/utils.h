@@ -42,18 +42,12 @@ static inline size_t remove_trailing_spaces(const char* s, size_t size) {
 
 class OrcDateHelper {
 public:
-    static int64_t native_date_to_orc_date(const vectorized::DateValue& dv) {
-        return dv._julian - vectorized::date::UNIX_EPOCH_JULIAN;
-    }
+    static int64_t native_date_to_orc_date(const DateValue& dv) { return dv._julian - date::UNIX_EPOCH_JULIAN; }
 
     // orc date value is days since unix epoch time.
     // so conversion will be very simple.
-    static void orc_date_to_native_date(vectorized::DateValue* dv, int64_t value) {
-        dv->_julian = value + vectorized::date::UNIX_EPOCH_JULIAN;
-    }
-    static void orc_date_to_native_date(vectorized::JulianDate* jd, int64_t value) {
-        *jd = value + vectorized::date::UNIX_EPOCH_JULIAN;
-    }
+    static void orc_date_to_native_date(DateValue* dv, int64_t value) { dv->_julian = value + date::UNIX_EPOCH_JULIAN; }
+    static void orc_date_to_native_date(JulianDate* jd, int64_t value) { *jd = value + date::UNIX_EPOCH_JULIAN; }
 };
 
 // orc timestamp is millseconds since unix epoch time.
@@ -75,24 +69,23 @@ public:
     const static cctz::time_point<cctz::sys_seconds> CCTZ_UNIX_EPOCH;
 
     static void orc_ts_to_native_ts_after_unix_epoch(TTimestamp* ts, int64_t seconds, int64_t nanoseconds) {
-        int64_t days = seconds / vectorized::SECS_PER_DAY;
-        int64_t microseconds = (seconds % vectorized::SECS_PER_DAY) * 1000000L + nanoseconds / 1000;
-        vectorized::JulianDate jd;
+        int64_t days = seconds / SECS_PER_DAY;
+        int64_t microseconds = (seconds % SECS_PER_DAY) * 1000000L + nanoseconds / 1000;
+        JulianDate jd;
         OrcDateHelper::orc_date_to_native_date(&jd, days);
-        *ts = vectorized::timestamp::from_julian_and_time(jd, microseconds);
+        *ts = timestamp::from_julian_and_time(jd, microseconds);
     }
-    static void orc_ts_to_native_ts_after_unix_epoch(vectorized::TimestampValue* tv, int64_t seconds,
-                                                     int64_t nanoseconds) {
+    static void orc_ts_to_native_ts_after_unix_epoch(TimestampValue* tv, int64_t seconds, int64_t nanoseconds) {
         return orc_ts_to_native_ts_after_unix_epoch(&tv->_timestamp, seconds, nanoseconds);
     }
-    static void orc_ts_to_native_ts_before_unix_epoch(vectorized::TimestampValue* tv, const cctz::time_zone& tz,
-                                                      int64_t seconds, int64_t nanoseconds) {
+    static void orc_ts_to_native_ts_before_unix_epoch(TimestampValue* tv, const cctz::time_zone& tz, int64_t seconds,
+                                                      int64_t nanoseconds) {
         cctz::time_point<cctz::sys_seconds> t = CCTZ_UNIX_EPOCH + cctz::seconds(seconds);
         const auto tp = cctz::convert(t, tz);
         tv->from_timestamp(tp.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second(), 0);
     }
-    static void orc_ts_to_native_ts(vectorized::TimestampValue* tv, const cctz::time_zone& tz, int64_t tzoffset,
-                                    int64_t seconds, int64_t nanoseconds) {
+    static void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone& tz, int64_t tzoffset, int64_t seconds,
+                                    int64_t nanoseconds) {
         if (seconds >= 0) {
             orc_ts_to_native_ts_after_unix_epoch(tv, seconds + tzoffset, nanoseconds);
         } else {

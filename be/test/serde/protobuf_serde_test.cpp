@@ -32,33 +32,33 @@ std::string make_string(size_t i) {
     return std::string("c").append(std::to_string(static_cast<int32_t>(i)));
 }
 
-vectorized::VectorizedFieldPtr make_field(size_t i) {
-    return std::make_shared<vectorized::VectorizedField>(i, make_string(i), get_type_info(TYPE_INT), false);
+VectorizedFieldPtr make_field(size_t i) {
+    return std::make_shared<VectorizedField>(i, make_string(i), get_type_info(TYPE_INT), false);
 }
 
-vectorized::VectorizedFields make_fields(size_t size) {
-    vectorized::VectorizedFields fields;
+VectorizedFields make_fields(size_t size) {
+    VectorizedFields fields;
     for (size_t i = 0; i < size; i++) {
         fields.emplace_back(make_field(i));
     }
     return fields;
 }
 
-vectorized::VectorizedSchemaPtr make_schema(size_t i) {
-    vectorized::VectorizedFields fields = make_fields(i);
-    return std::make_shared<vectorized::VectorizedSchema>(fields);
+VectorizedSchemaPtr make_schema(size_t i) {
+    VectorizedFields fields = make_fields(i);
+    return std::make_shared<VectorizedSchema>(fields);
 }
 
-vectorized::ColumnPtr make_column(size_t start) {
-    auto column = vectorized::FixedLengthColumn<int32_t>::create();
+ColumnPtr make_column(size_t start) {
+    auto column = FixedLengthColumn<int32_t>::create();
     for (int i = 0; i < 100; i++) {
         column->append(start + i);
     }
     return column;
 }
 
-vectorized::Columns make_columns(size_t size) {
-    vectorized::Columns columns;
+Columns make_columns(size_t size) {
+    Columns columns;
     for (size_t i = 0; i < size; i++) {
         columns.emplace_back(make_column(i));
     }
@@ -68,7 +68,7 @@ vectorized::Columns make_columns(size_t size) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
-    auto chunk = std::make_unique<vectorized::Chunk>(make_columns(2), make_schema(2));
+    auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
     StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*chunk);
     ASSERT_TRUE(res.ok()) << res.status();
@@ -86,7 +86,7 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);
     ASSERT_TRUE(chunk_or.ok()) << chunk_or.status();
-    vectorized::Chunk& new_chunk = *chunk_or;
+    Chunk& new_chunk = *chunk_or;
     ASSERT_EQ(new_chunk.num_rows(), chunk->num_rows());
     for (size_t i = 0; i < chunk->columns().size(); ++i) {
         ASSERT_EQ(chunk->columns()[i]->size(), new_chunk.columns()[i]->size());
@@ -98,12 +98,11 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
-    auto chunk = std::make_unique<vectorized::Chunk>(make_columns(2), make_schema(2));
-    auto extra_data_meta = std::vector<vectorized::ChunkExtraColumnsMeta>{
-            vectorized::ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
-    auto extra_data_cols = std::vector<vectorized::ColumnPtr>{make_columns(2)};
-    auto extra_data =
-            std::make_shared<vectorized::ChunkExtraColumnsData>(std::move(extra_data_meta), std::move(extra_data_cols));
+    auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
+    auto extra_data_meta = std::vector<ChunkExtraColumnsMeta>{
+            ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
+    auto extra_data_cols = std::vector<ColumnPtr>{make_columns(2)};
+    auto extra_data = std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_meta), std::move(extra_data_cols));
     chunk->set_extra_data(extra_data);
 
     StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*chunk);
@@ -118,15 +117,15 @@ PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
     meta.types.resize(2);
     meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
     meta.types[1] = TypeDescriptor(LogicalType::TYPE_INT);
-    meta.extra_data_metas = std::vector<vectorized::ChunkExtraColumnsMeta>{
-            vectorized::ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
+    meta.extra_data_metas = std::vector<ChunkExtraColumnsMeta>{
+            ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
 
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);
     ASSERT_TRUE(chunk_or.ok()) << chunk_or.status();
 
     // check original chunk data
-    vectorized::Chunk& new_chunk = *chunk_or;
+    Chunk& new_chunk = *chunk_or;
     ASSERT_EQ(new_chunk.num_rows(), chunk->num_rows());
     for (size_t i = 0; i < chunk->columns().size(); ++i) {
         ASSERT_EQ(chunk->columns()[i]->size(), new_chunk.columns()[i]->size());
@@ -137,8 +136,8 @@ PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
 
     // check extra chunk data
     DCHECK(new_chunk.has_extra_data());
-    auto new_extra_data = dynamic_cast<vectorized::ChunkExtraColumnsData*>(new_chunk.get_extra_data().get());
-    auto old_extra_data = dynamic_cast<vectorized::ChunkExtraColumnsData*>(chunk->get_extra_data().get());
+    auto new_extra_data = dynamic_cast<ChunkExtraColumnsData*>(new_chunk.get_extra_data().get());
+    auto old_extra_data = dynamic_cast<ChunkExtraColumnsData*>(chunk->get_extra_data().get());
     for (size_t i = 0; i < new_extra_data->columns().size(); ++i) {
         ASSERT_EQ(old_extra_data->columns()[i]->size(), new_extra_data->columns()[i]->size());
         for (size_t j = 0; j < old_extra_data->columns()[i]->size(); ++j) {

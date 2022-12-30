@@ -35,7 +35,8 @@ import java.util.Map;
  * open();
  * do {
  *     int rows = getNext();
- *     if (rows < fetchSize) {
+ *     // do something...
+ *     if (rows == 0) {
  *         break;
  *     }
  * } while (true);

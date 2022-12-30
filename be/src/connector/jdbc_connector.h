@@ -16,19 +16,18 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
-#include "exec/vectorized/jdbc_scanner.h"
+#include "exec/jdbc_scanner.h"
 namespace starrocks {
 
-namespace vectorized {
 class JDBCScanner;
-}
+
 namespace connector {
 
 class JDBCConnector final : public Connector {
 public:
     ~JDBCConnector() override = default;
 
-    DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+    DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
     ConnectorType connector_type() const override { return ConnectorType::JDBC; }
@@ -41,14 +40,14 @@ class JDBCDataSourceProvider final : public DataSourceProvider {
 public:
     ~JDBCDataSourceProvider() override = default;
     friend class JDBCDataSource;
-    JDBCDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    JDBCDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     bool insert_local_exchange_operator() const override { return true; }
     bool accept_empty_scan_ranges() const override { return false; }
 
 protected:
-    vectorized::ConnectorScanNode* _scan_node;
+    ConnectorScanNode* _scan_node;
     const TJDBCScanNode _jdbc_scan_node;
 };
 
@@ -59,7 +58,7 @@ public:
     JDBCDataSource(const JDBCDataSourceProvider* provider, const TScanRange& scan_range);
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -74,7 +73,7 @@ private:
     ObjectPool _obj_pool;
     ObjectPool* _pool = &_obj_pool;
     RuntimeState* _runtime_state = nullptr;
-    vectorized::JDBCScanner* _scanner = nullptr;
+    JDBCScanner* _scanner = nullptr;
     int64_t _rows_read = 0;
     int64_t _bytes_read = 0;
 };

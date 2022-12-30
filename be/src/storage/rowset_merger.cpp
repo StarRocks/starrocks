@@ -29,7 +29,7 @@
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class RowsetMerger {
 public:
@@ -52,9 +52,9 @@ struct MergeEntry {
     ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
     // set |encode_schema| if require encode chunk pk columns
-    const vectorized::VectorizedSchema* encode_schema = nullptr;
+    const VectorizedSchema* encode_schema = nullptr;
     uint16_t order;
-    std::vector<vectorized::RowSourceMask>* source_masks = nullptr;
+    std::vector<RowSourceMask>* source_masks = nullptr;
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -103,7 +103,7 @@ struct MergeEntry {
             if (encode_schema != nullptr) {
                 // need to encode
                 chunk_pk_column->reset_column();
-                PrimaryKeyEncoder::encode(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
+                PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
             } else {
                 // just use chunk's first column
                 chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
@@ -267,7 +267,7 @@ private:
                                   size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
-        std::unique_ptr<vectorized::Column> sort_column;
+        std::unique_ptr<Column> sort_column;
         if (schema.sort_key_idxes().size() > 1) {
             if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
@@ -435,7 +435,7 @@ private:
 
             _entries.clear();
             _entries.reserve(rowsets.size());
-            vector<vectorized::ChunkIteratorPtr> iterators;
+            vector<ChunkIteratorPtr> iterators;
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
             VectorizedSchema schema =
@@ -451,7 +451,7 @@ private:
                 if (!res.ok()) {
                     return res.status();
                 }
-                vector<vectorized::ChunkIteratorPtr> segment_iters;
+                vector<ChunkIteratorPtr> segment_iters;
                 for (const auto& segment_iter : res.value()) {
                     if (segment_iter) {
                         segment_iters.emplace_back(segment_iter);
@@ -571,4 +571,4 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     return merger->do_merge(tablet, version, schema, rowsets, writer, cfg);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

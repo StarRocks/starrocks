@@ -90,6 +90,16 @@ public class ScalarOperatorFunctions {
 
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 
+    private static final int CONSTANT_128 = 128;
+    private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
+    private static final BigInteger[] INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
+
+    static {
+        for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
+            INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
+        }
+    }
+
     /**
      * date and time function
      */
@@ -333,7 +343,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
@@ -351,7 +361,8 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "utc_timestamp", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator utcTimestamp() {
-        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+        // for consistency with mysql, ignore milliseconds
+        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetime(utcStartTime);
     }
@@ -727,7 +738,8 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
     public static ConstantOperator bitShiftRightLogicalLargeInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createLargeInt(bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
+        return ConstantOperator.createLargeInt(
+                bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
     }
 
     @ConstantFunction(name = "concat", argTypes = {VARCHAR}, returnType = VARCHAR)
@@ -773,15 +785,6 @@ public class ScalarOperatorFunctions {
         }
 
         return ConstantOperator.createDecimal(result, type);
-    }
-
-    private static final int CONSTANT_128 = 128;
-    private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
-    private static final BigInteger []INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
-    static {
-        for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
-            INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
-        }
     }
 
     private static BigInteger bitShiftRightLogicalForInt128(BigInteger l, int shiftBy) {

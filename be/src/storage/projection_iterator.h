@@ -16,7 +16,7 @@
 
 #include "storage/chunk_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // A projection iterator will fetch chunk from its |child| iterator and choosing the columns
 // specified in |schema|.
@@ -26,4 +26,4 @@ namespace starrocks::vectorized {
 // columns in the order `c3`, `c1`.
 ChunkIteratorPtr new_projection_iterator(const VectorizedSchema& schema, const ChunkIteratorPtr& child);
 
-} //  namespace starrocks::vectorized
+} //  namespace starrocks

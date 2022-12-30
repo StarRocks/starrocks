@@ -19,6 +19,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -32,8 +33,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.PredicateUtils;
+import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -43,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -59,6 +63,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -70,6 +75,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class IcebergScanNode extends ScanNode {
@@ -90,10 +96,26 @@ public class IcebergScanNode extends ScanNode {
     private long totalBytes = 0;
 
     private boolean isFinalized = false;
+    private CloudConfiguration cloudConfiguration = null;
+
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         srIcebergTable = (IcebergTable) desc.getTable();
+        setupCloudCredential();
+    }
+
+    private void setupCloudCredential() {
+        String catalogName = srIcebergTable.getCatalog();
+        if (catalogName == null) {
+            return;
+        }
+        IcebergConnector connector = (IcebergConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+                getConnector(catalogName);
+        if (connector != null) {
+            cloudConfiguration = connector.getCloudConfiguration();
+        }
     }
 
     @Override
@@ -144,7 +166,7 @@ public class IcebergScanNode extends ScanNode {
                                       ExecPlan context) {
         Table referenceTable = node.getTable();
         Set<String> scanNodeColumns = node.getColRefToColumnMetaMap().values().stream()
-                .map(column -> column.getName()).collect(Collectors.toSet());
+                .map(Column::getName).collect(Collectors.toSet());
         Set<String> appendEqualityColumns = equalityDeleteColumns.stream()
                 .filter(name -> !scanNodeColumns.contains(name)).collect(Collectors.toSet());
         Map<String, Column> nameToColumns = referenceTable.getFullSchema().stream()
@@ -180,7 +202,7 @@ public class IcebergScanNode extends ScanNode {
 
         LOG.debug("IcebergScanNode finalize. Tuple: {}", desc);
         try {
-            getScanRangeLocations();
+            setupScanRangeLocations();
         } catch (AnalysisException e) {
             throw new UserException(e.getMessage());
         }
@@ -193,18 +215,24 @@ public class IcebergScanNode extends ScanNode {
         isFinalized = true;
     }
 
+    private long nextPartitionId() {
+        return partitionIdGen.getAndIncrement();
+    }
+
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return result;
     }
 
-    public void getScanRangeLocations() throws UserException {
+    public void setupScanRangeLocations() throws UserException {
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(
                 srIcebergTable.getIcebergTable());
         if (!snapshot.isPresent()) {
             LOG.info(String.format("Table %s has no snapshot!", srIcebergTable.getTable()));
             return;
         }
+        // partition -> partitionId
+        Map<StructLike, Long> partitionMap = Maps.newHashMap();
 
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
                 srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
@@ -213,6 +241,12 @@ public class IcebergScanNode extends ScanNode {
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
                 if (file.fileSizeInBytes() == 0) {
                     continue;
+                }
+
+                StructLike partition = task.file().partition();
+                if (!partitionMap.containsKey(partition)) {
+                    long partitionId = nextPartitionId();
+                    partitionMap.put(partition, partitionId);
                 }
 
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -252,6 +286,8 @@ public class IcebergScanNode extends ScanNode {
                 result.add(scanRangeLocations);
             }
         }
+
+        scanNodePredicates.setSelectedPartitionIds(partitionMap.values());
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -282,6 +318,16 @@ public class IcebergScanNode extends ScanNode {
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+        }
+
+        if (srIcebergTable.isCatalogTbl()) {
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    srIcebergTable.getCatalog(), srIcebergTable.getDb(), srIcebergTable.getTable());
+
+            output.append(prefix).append(
+                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
+            output.append("\n");
         }
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
@@ -339,6 +385,12 @@ public class IcebergScanNode extends ScanNode {
 
         if (srIcebergTable != null) {
             msg.hdfs_scan_node.setTable_name(srIcebergTable.getTable());
+        }
+
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
     }
 

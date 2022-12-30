@@ -26,17 +26,16 @@ namespace starrocks {
 class Status;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Chunk;
 
 class ChunkIterator {
 public:
     // |schema| is the output fields.
-    explicit ChunkIterator(vectorized::VectorizedSchema schema) : _schema(std::move(schema)) {}
+    explicit ChunkIterator(VectorizedSchema schema) : _schema(std::move(schema)) {}
 
-    ChunkIterator(vectorized::VectorizedSchema schema, int chunk_size)
-            : _schema(std::move(schema)), _chunk_size(chunk_size) {}
+    ChunkIterator(VectorizedSchema schema, int chunk_size) : _schema(std::move(schema)), _chunk_size(chunk_size) {}
 
     virtual ~ChunkIterator() = default;
 
@@ -135,9 +134,9 @@ protected:
         }
     }
 
-    vectorized::VectorizedSchema _schema;
-    vectorized::VectorizedSchema _encoded_schema;
-    vectorized::VectorizedSchema _output_schema;
+    VectorizedSchema _schema;
+    VectorizedSchema _encoded_schema;
+    VectorizedSchema _output_schema;
     bool _is_init_output_schema = false;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;
@@ -147,4 +146,4 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 ChunkIteratorPtr timed_chunk_iterator(const ChunkIteratorPtr& iter, RuntimeProfile::Counter* counter);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

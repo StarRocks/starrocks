@@ -328,7 +328,7 @@ void CompactionManager::update_tablet(TabletSharedPtr tablet) {
 }
 
 bool CompactionManager::register_task(CompactionTask* compaction_task) {
-    if (!compaction_task || check_if_exceed_max_task_num()) {
+    if (!compaction_task) {
         return false;
     }
     std::lock_guard lg(_tasks_mutex);
@@ -371,6 +371,14 @@ void CompactionManager::clear_tasks() {
     _running_tasks.clear();
     _data_dir_to_cumulative_task_num_map.clear();
     _data_dir_to_base_task_num_map.clear();
+}
+
+Status CompactionManager::update_max_threads(int max_threads) {
+    if (_compaction_pool != nullptr) {
+        return _compaction_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
 }
 
 } // namespace starrocks

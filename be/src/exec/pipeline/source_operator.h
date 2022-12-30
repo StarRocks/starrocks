@@ -39,11 +39,10 @@ public:
     // OlapScanOperator needs to do so.
     virtual bool with_morsels() const { return false; }
     // Set the DOP(degree of parallelism) of the SourceOperator, SourceOperator's DOP determine the Pipeline's DOP.
-    virtual void set_degree_of_parallelism(size_t degree_of_parallelism) {
-        this->_degree_of_parallelism = degree_of_parallelism;
-    }
+    void set_degree_of_parallelism(size_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
     virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
+    MorselQueueFactory* morsel_queue_factory() { return _morsel_queue_factory; }
     void set_morsel_queue_factory(MorselQueueFactory* morsel_queue_factory) {
         _morsel_queue_factory = morsel_queue_factory;
     }
@@ -55,13 +54,18 @@ public:
     // - The scan operator, which has been assigned tablets with the specific bucket sequences.
     // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
     virtual bool could_local_shuffle() const { return _could_local_shuffle; }
-    virtual void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; };
-    virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
+    void set_could_local_shuffle(bool could_local_shuffle) { _could_local_shuffle = could_local_shuffle; }
+    virtual TPartitionType::type partition_type() const { return _partition_type; }
+    void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; };
+    virtual const std::vector<ExprContext*>& partition_exprs() const { return _empty_partition_exprs; }
 
 protected:
     size_t _degree_of_parallelism = 1;
     bool _could_local_shuffle = true;
+    TPartitionType::type _partition_type = TPartitionType::type::HASH_PARTITIONED;
     MorselQueueFactory* _morsel_queue_factory = nullptr;
+    // Because partition_exprs() returns const reference, we need a non-temporal empty vector here.
+    const std::vector<ExprContext*> _empty_partition_exprs;
 };
 
 class SourceOperator : public Operator {
@@ -73,12 +77,11 @@ public:
 
     bool need_input() const override { return false; }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");
     }
 
     virtual void add_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; };
-
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
     size_t degree_of_parallelism() const { return _source_factory()->degree_of_parallelism(); }

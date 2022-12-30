@@ -21,17 +21,17 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
 public class StreamAggregateImplementationRule extends StreamImplementationRule {
 
-    private static final com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule INSTANCE =
-            new com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule(RuleType.IMP_STREAM_AGG);
+    private static final StreamAggregateImplementationRule INSTANCE =
+            new StreamAggregateImplementationRule(RuleType.IMP_STREAM_AGG);
 
-    public static com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule getInstance() {
+    public static StreamAggregateImplementationRule getInstance() {
         return INSTANCE;
     }
 

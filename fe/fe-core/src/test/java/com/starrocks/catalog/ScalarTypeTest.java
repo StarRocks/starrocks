@@ -15,11 +15,14 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.List;
 
 public class ScalarTypeTest {
 
@@ -154,5 +157,72 @@ public class ScalarTypeTest {
         jsonStr = "{\"clazz\":\"ScalarType\",\"type\":\"NOT_EXIST\",\"len\":65530,\"precision\":0,\"scale\":0}";
         type = GsonUtils.GSON.fromJson(jsonStr, ScalarType.class);
         Assert.assertEquals(PrimitiveType.INVALID_TYPE, type.getPrimitiveType());
+    }
+
+    @Test
+    public void testIsFullyCompatible() {
+        List<ScalarType> integerTypes = Lists.newArrayList(
+                ScalarType.TINYINT,
+                ScalarType.SMALLINT,
+                ScalarType.INT,
+                ScalarType.BIGINT,
+                ScalarType.LARGEINT
+        );
+        List<ScalarType> stringTypes = Lists.newArrayList(
+                ScalarType.createCharType(-1),
+                ScalarType.createVarcharType(-1)
+        );
+        List<ScalarType> decimalTypes = Lists.newArrayList(
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 6, 2),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 8),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 12),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 21, 14),
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 24, 16)
+        );
+
+        // integer to integer
+        for (int i = 0; i < integerTypes.size(); i++) {
+            for (int j = 0; j < integerTypes.size(); j++) {
+                Assert.assertEquals(
+                        ScalarType.isFullyCompatible(integerTypes.get(i), integerTypes.get(j)), i <= j);
+            }
+        }
+        // integer to string
+        for (int i = 0; i < integerTypes.size(); i++) {
+            for (int j = 0; j < stringTypes.size(); j++) {
+                Assert.assertTrue(ScalarType.isFullyCompatible(integerTypes.get(i), stringTypes.get(j)));
+            }
+        }
+        // decimal to decimal
+        for (int i = 0; i < decimalTypes.size(); i++) {
+            for (int j = 0; j < decimalTypes.size(); j++) {
+                Assert.assertEquals(
+                        ScalarType.isFullyCompatible(decimalTypes.get(i), decimalTypes.get(j)), i <= j);
+            }
+        }
+        // decimal to float
+        for (int i = 0; i < decimalTypes.size(); i++) {
+            Assert.assertTrue(ScalarType.isFullyCompatible(decimalTypes.get(i), ScalarType.FLOAT));
+            Assert.assertTrue(ScalarType.isFullyCompatible(decimalTypes.get(i), ScalarType.DOUBLE));
+        }
+        // decimal to string
+        for (int i = 0; i < decimalTypes.size(); i++) {
+            for (int j = 0; j < stringTypes.size(); j++) {
+                Assert.assertTrue(ScalarType.isFullyCompatible(decimalTypes.get(i), stringTypes.get(j)));
+            }
+        }
+        // string to string
+        for (int i = 0; i < stringTypes.size(); i++) {
+            for (int j = 0; j < stringTypes.size(); j++) {
+                Assert.assertTrue(ScalarType.isFullyCompatible(stringTypes.get(i), stringTypes.get(j)));
+            }
+        }
+
+        // complex types
+        Assert.assertFalse(ScalarType.isFullyCompatible(ScalarType.JSON, ScalarType.INT));
+        Assert.assertFalse(ScalarType.isFullyCompatible(ScalarType.JSON, ScalarType.VARCHAR));
     }
 }

@@ -24,8 +24,6 @@ class MysqlRowBuffer;
 class BufferControlBlock;
 class RuntimeProfile;
 
-namespace vectorized {
-
 class StatisticResultWriter final : public ResultWriter {
 public:
     StatisticResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
@@ -35,26 +33,26 @@ public:
 
     Status init(RuntimeState* state) override;
 
-    Status append_chunk(vectorized::Chunk* chunk) override;
+    Status append_chunk(Chunk* chunk) override;
 
     Status close() override;
 
-    StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk) override;
+    StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
 
     StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) override;
 
 private:
     void _init_profile();
 
-    StatusOr<TFetchDataResultPtr> _process_chunk(vectorized::Chunk* chunk);
+    StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
-    Status _fill_statistic_data_v1(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
-                                   TFetchDataResult* result);
-    Status _fill_dict_statistic_data(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
-                                     TFetchDataResult* result);
+    Status _fill_statistic_data_v1(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
+    Status _fill_dict_statistic_data(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
 
-    Status _fill_statistic_histogram(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
-                                     TFetchDataResult* result);
+    Status _fill_statistic_histogram(int version, const Columns& columns, const Chunk* chunk, TFetchDataResult* result);
+
+    Status _fill_table_statistic_data(int version, const Columns& columns, const Chunk* chunk,
+                                      TFetchDataResult* result);
 
 private:
     BufferControlBlock* _sinker;
@@ -70,5 +68,4 @@ private:
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 };
 
-} // namespace vectorized
 } // namespace starrocks

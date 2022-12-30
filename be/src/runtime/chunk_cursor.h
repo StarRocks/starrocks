@@ -24,8 +24,6 @@ namespace starrocks {
 
 class SortExecExprs;
 
-namespace vectorized {
-
 // A chunk supplier signal EOS by outputting a NULL Chunk.
 typedef std::function<Status(Chunk**)> ChunkSupplier;
 typedef std::vector<ChunkSupplier> ChunkSuppliers;
@@ -133,7 +131,5 @@ private:
     ChunkProvider _chunk_provider;
     const std::vector<ExprContext*>* _sort_exprs;
 };
-
-} // namespace vectorized
 
 } // namespace starrocks

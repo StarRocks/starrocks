@@ -145,7 +145,7 @@ public class InsertPlanner {
             //7. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || insertStmt.getTargetTable() instanceof MysqlTable);
-            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+            ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
 
@@ -302,8 +302,10 @@ public class InsertPlanner {
             if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
                     targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
-                Column originColumn = fullSchema.stream()
-                        .filter(c -> c.nameEquals(originName, false)).findFirst().get();
+                Optional<Column> optOriginColumn = fullSchema.stream()
+                        .filter(c -> c.nameEquals(originName, false)).findFirst();
+                Preconditions.checkState(optOriginColumn.isPresent());
+                Column originColumn = optOriginColumn.get();
                 ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
 
                 ColumnRefOperator columnRefOperator = columnRefFactory.create(
@@ -319,8 +321,10 @@ public class InsertPlanner {
             if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
                 String originName = targetColumn.getRefColumn().getColumnName();
-                Column originColumn = fullSchema.stream()
-                        .filter(c -> c.nameEquals(originName, false)).findFirst().get();
+                Optional<Column> optOriginColumn = fullSchema.stream()
+                        .filter(c -> c.nameEquals(originName, false)).findFirst();
+                Preconditions.checkState(optOriginColumn.isPresent());
+                Column originColumn = optOriginColumn.get();
                 ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
 
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),

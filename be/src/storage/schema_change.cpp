@@ -39,7 +39,7 @@
 #include <utility>
 #include <vector>
 
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -57,7 +57,7 @@
 #include "util/defer_op.h"
 #include "util/unaligned_access.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using ChunkRow = std::pair<size_t, Chunk*>;
 
@@ -1068,4 +1068,4 @@ Status SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_ta
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

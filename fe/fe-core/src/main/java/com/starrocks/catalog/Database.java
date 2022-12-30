@@ -815,6 +815,22 @@ public class Database extends MetaObject implements Writable {
         db.replayDropFunction(functionSearchDesc);
     }
 
+    public Function getFunction(FunctionSearchDesc function) {
+        String functionName = function.getName().getFunction();
+        List<Function> existFuncs = name2Function.get(functionName);
+        if (existFuncs == null) {
+            return null;
+        }
+        Function func = null;
+        for (Function existFunc : existFuncs) {
+            if (function.isIdentical(existFunc)) {
+                func = existFunc;
+                break;
+            }
+        }
+        return func;
+    }
+
     private void dropFunctionImpl(FunctionSearchDesc function) throws UserException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);

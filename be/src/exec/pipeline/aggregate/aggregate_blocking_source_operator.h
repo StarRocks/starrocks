@@ -16,8 +16,8 @@
 
 #include <utility>
 
+#include "exec/aggregator.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 class AggregateBlockingSourceOperator : public SourceOperator {
@@ -38,7 +38,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     // It is used to perform aggregation algorithms shared by

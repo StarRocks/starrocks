@@ -20,7 +20,7 @@
 #include "column/vectorized_schema.h"
 #include "storage/short_key_index.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // SeekTuple represent the values of key columns, including NULL.
 // The column id of columns specified in |_schema| must be continuously and started from zero.
@@ -81,4 +81,4 @@ inline std::string SeekTuple::short_key_encode(size_t num_short_keys, uint8_t pa
     return output;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -70,11 +70,9 @@ class CompactionContext;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
-namespace vectorized {
 class ChunkIterator;
-} // namespace vectorized
 
-using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
@@ -242,6 +240,8 @@ public:
     // if there is _compaction_task running
     // do not do compaction
     bool need_compaction();
+
+    bool force_base_compaction();
 
     double compaction_score();
     CompactionType compaction_type();

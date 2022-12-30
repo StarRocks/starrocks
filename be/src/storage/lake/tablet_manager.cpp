@@ -16,6 +16,8 @@
 
 #include <bthread/bthread.h>
 
+#include <atomic>
+#include <chrono>
 #include <variant>
 
 #include "agent/agent_server.h"
@@ -24,8 +26,6 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/AgentService_types.h"
-#include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
@@ -34,9 +34,11 @@
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/update_manager.h"
 #include "storage/metadata_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
@@ -47,33 +49,33 @@
 namespace starrocks::lake {
 
 static Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
-static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                int txns_size);
-static void* metadata_gc_trigger(void* arg);
-static void* segment_gc_trigger(void* arg);
+static void* gc_checker(void* arg);
+static Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata* metadata, MetaFileBuilder* builder,
+                               int64_t base_version);
+static StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version,
+                                int64_t new_version, const int64_t* txns, int txns_size);
 
-TabletManager::TabletManager(LocationProvider* location_provider, int64_t cache_capacity)
+TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
           _metacache(new_lru_cache(cache_capacity)),
-          _metadata_gc_tid(INVALID_BTHREAD),
-          _segment_gc_tid(INVALID_BTHREAD) {}
+          _update_mgr(update_mgr),
+          _gc_checker_tid(INVALID_BTHREAD) {}
 
 TabletManager::~TabletManager() {
-    if (_metadata_gc_tid != INVALID_BTHREAD) {
+    if (_gc_checker_tid != INVALID_BTHREAD) {
         [[maybe_unused]] void* ret = nullptr;
         // We don't care about the return value of bthread_stop or bthread_join.
-        (void)bthread_stop(_metadata_gc_tid);
-        (void)bthread_join(_metadata_gc_tid, &ret);
-    }
-    if (_segment_gc_tid != INVALID_BTHREAD) {
-        [[maybe_unused]] void* ret = nullptr;
-        (void)bthread_stop(_segment_gc_tid);
-        (void)bthread_join(_segment_gc_tid, &ret);
+        (void)bthread_stop(_gc_checker_tid);
+        (void)bthread_join(_gc_checker_tid, &ret);
     }
 }
 
 std::string TabletManager::tablet_root_location(int64_t tablet_id) const {
     return _location_provider->root_location(tablet_id);
+}
+
+std::string TabletManager::tablet_metadata_root_location(int64_t tablet_id) const {
+    return _location_provider->metadata_root_location(tablet_id);
 }
 
 std::string TabletManager::tablet_metadata_location(int64_t tablet_id, int64_t version) const {
@@ -90,6 +92,10 @@ std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version)
 
 std::string TabletManager::segment_location(int64_t tablet_id, std::string_view segment_name) const {
     return _location_provider->segment_location(tablet_id, segment_name);
+}
+
+std::string TabletManager::del_location(int64_t tablet_id, std::string_view del_name) const {
+    return _location_provider->del_location(tablet_id, del_name);
 }
 
 std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
@@ -170,6 +176,10 @@ void TabletManager::prune_metacache() {
     _metacache->prune();
 }
 
+UpdateManager* TabletManager::update_mgr() {
+    return _update_mgr;
+}
+
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     // generate tablet metadata pb
     auto tablet_metadata_pb = std::make_shared<TabletMetadataPB>();
@@ -177,6 +187,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_version(1);
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
+    LOG(INFO) << "lake create tablet " << fmt::format("tid:{}", req.tablet_id);
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
@@ -214,7 +225,13 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
                 req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-    return put_tablet_metadata(std::move(tablet_metadata_pb));
+    MetaFileBuilder builder(tablet_metadata_pb);
+    if (tablet_metadata_pb->schema().keys_type() == KeysType::PRIMARY_KEYS) {
+        RETURN_IF_ERROR(builder.finalize(_location_provider, _update_mgr));
+    } else {
+        RETURN_IF_ERROR(builder.finalize(_location_provider));
+    }
+    return Status::OK();
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
@@ -252,13 +269,12 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
 }
 
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
-    auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
-    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(options, metadata_location));
-    RETURN_IF_ERROR(wf->append(metadata->SerializeAsString()));
-    RETURN_IF_ERROR(wf->close());
+    // write to meta file
+    MetaFileBuilder builder(metadata);
+    RETURN_IF_ERROR(builder.finalize(_location_provider));
 
     // put into metacache
+    auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
     auto value_ptr = std::make_unique<CacheValue>(metadata);
     bool inserted = fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
     LOG_IF(WARNING, !inserted) << "Failed to put into meta cache " << metadata_location;
@@ -271,22 +287,9 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache) {
-    std::string read_buf;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, metadata_location));
-    ASSIGN_OR_RETURN(auto size, rf->get_size());
-    if (UNLIKELY(size > std::numeric_limits<int>::max())) {
-        return Status::Corruption("file size exceeded the int range");
-    }
-    raw::stl_string_resize_uninitialized(&read_buf, size);
-    RETURN_IF_ERROR(rf->read_at_fully(0, read_buf.data(), size));
-
-    std::shared_ptr<TabletMetadata> meta = std::make_shared<TabletMetadata>();
-    bool parsed = meta->ParseFromArray(read_buf.data(), static_cast<int>(size));
-    if (!parsed) {
-        return Status::Corruption(fmt::format("failed to parse tablet meta {}", metadata_location));
-    }
-    return std::move(meta);
+    MetaFileReader reader(metadata_location, fill_cache);
+    RETURN_IF_ERROR(reader.load());
+    return reader.get_meta();
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version) {
@@ -461,7 +464,11 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id) {
 StatusOr<double> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
                                                 const int64_t* txns, int txns_size) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    return publish(&tablet, base_version, new_version, txns, txns_size);
+    return publish(_location_provider, &tablet, base_version, new_version, txns, txns_size);
+}
+
+static bool is_primary_key(TabletMetadata* metadata) {
+    return metadata->schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
 static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata) {
@@ -475,6 +482,17 @@ static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* 
             // delete
             metadata->set_next_rowset_id(metadata->next_rowset_id() + 1);
         }
+    }
+    return Status::OK();
+}
+
+static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletMetadata* metadata,
+                                 MetaFileBuilder* builder, int64_t base_version) {
+    if (op_write.has_rowset() &&
+        (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate() || op_write.dels_size() > 0)) {
+        // handle primary key table publish
+        RETURN_IF_ERROR(
+                tablet->update_mgr()->publish_primary_key_tablet(op_write, metadata, tablet, builder, base_version));
     }
     return Status::OK();
 }
@@ -592,8 +610,16 @@ Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     return Status::OK();
 }
 
-StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
-                         int txns_size) {
+Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata* metadata, MetaFileBuilder* builder,
+                        int64_t base_version) {
+    if (log.has_op_write()) {
+        RETURN_IF_ERROR(apply_pk_write_log(log.op_write(), tablet, metadata, builder, base_version));
+    }
+    return Status::OK();
+}
+
+StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version, int64_t new_version,
+                         const int64_t* txns, int txns_size) {
     auto compaction_score = [](const TabletMetadata& metadata) {
         return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
     };
@@ -620,6 +646,9 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     auto new_metadata = std::make_shared<TabletMetadata>(*base_metadata);
     new_metadata->set_version(new_version);
 
+    // Meta file builder
+    std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata);
+
     // Apply txn logs
     int64_t alter_version = -1;
     for (int i = 0; i < txns_size; i++) {
@@ -645,7 +674,13 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
             alter_version = txn_log->op_schema_change().alter_version();
         }
 
-        auto st = apply_txn_log(*txn_log, new_metadata.get());
+        Status st = Status::OK();
+        if (is_primary_key(new_metadata.get())) {
+            st = apply_pk_txn_log(*txn_log, tablet, new_metadata.get(), builder.get(), base_version);
+        } else {
+            st = apply_txn_log(*txn_log, new_metadata.get());
+        }
+
         if (!st.ok()) {
             LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
             return st;
@@ -682,9 +717,10 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     }
 
     // Save new metadata
-    if (auto st = tablet->put_metadata(new_metadata); !st.ok()) {
-        LOG(WARNING) << "Fail to put " << tablet->metadata_location(new_version) << ": " << st;
-        return st;
+    if (is_primary_key(new_metadata.get())) {
+        RETURN_IF_ERROR(builder->finalize(location_provider, tablet->update_mgr()));
+    } else {
+        RETURN_IF_ERROR(builder->finalize(location_provider));
     }
 
     // Delete txn logs
@@ -786,76 +822,94 @@ std::set<int64_t> TabletManager::owned_tablets() {
 }
 
 void TabletManager::start_gc() {
-    int r = bthread_start_background(&_metadata_gc_tid, nullptr, metadata_gc_trigger, this);
-    PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
-
-    r = bthread_start_background(&_segment_gc_tid, nullptr, segment_gc_trigger, this);
+    int r = bthread_start_background(&_gc_checker_tid, nullptr, gc_checker, this);
     PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
 }
 
-void* metadata_gc_trigger(void* arg) {
-    auto tablet_mgr = static_cast<TabletManager*>(arg);
-    auto lp = tablet_mgr->location_provider();
-    // NOTE: Share the same thread pool with local tablet's clone task.
+static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
-    while (!bthread_stopped(bthread_self())) {
-        // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
-        // configured value, which is ok now.
-        if (bthread_usleep(config::lake_gc_metadata_check_interval * 1000 * 1000) != 0) {
-            continue;
-        }
-
-        std::set<std::string> roots;
-        auto st = lp->list_root_locations(&roots);
-
-        LOG_IF(ERROR, !st.ok()) << st;
-        auto master_info = get_master_info();
-
-        for (const auto& root : roots) {
-            // TODO: limit GC concurrency
-            st = thread_pool->submit_func([=]() {
-                auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_id);
-                LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
-            });
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-                break;
+    auto num_running = std::atomic<int>(roots.size());
+    for (const auto& root : roots) {
+        auto st = thread_pool->submit_func([&, root]() {
+            auto t1 = std::chrono::steady_clock::now();
+            auto r = metadata_gc(root, tablet_mgr, min_active_txn_id);
+            auto t2 = std::chrono::steady_clock::now();
+            auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+            if (r.ok()) {
+                LOG(INFO) << "Finished garbage collection of metadata for directory " << root << ". cost:" << cost
+                          << "ms";
+            } else {
+                LOG(WARNING) << "Fail to do garbage collection of metadata for directory " << root << ". cost:" << cost
+                             << "ms error:" << r;
             }
+            num_running.fetch_sub(1);
+        });
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+            num_running.fetch_sub(1);
         }
-        // TODO: wait until all tasks finished.
     }
-    return nullptr;
+    while (num_running.load() > 0) {
+        LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
+        bthread_usleep(/*100ms=*/100 * 1000);
+    }
 }
 
-void* segment_gc_trigger(void* arg) {
+static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
+    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    auto num_running = std::atomic<int>(roots.size());
+    for (const auto& root : roots) {
+        auto st = thread_pool->submit_func([&, root]() {
+            auto t1 = std::chrono::steady_clock::now();
+            auto r = datafile_gc(root, tablet_mgr);
+            auto t2 = std::chrono::steady_clock::now();
+            auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+            if (r.ok()) {
+                LOG(INFO) << "Finished garbage collection of data for directory " << root << ". cost:" << cost << "ms";
+            } else {
+                LOG(WARNING) << "Fail to do garbage collection of data for directory " << root << ". cost:" << cost
+                             << "ms error:" << r;
+            }
+            num_running.fetch_sub(1);
+        });
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+            num_running.fetch_sub(1);
+        }
+    }
+    while (num_running.load() > 0) {
+        LOG_EVERY_N(INFO, 10) << "Waiting for GC tasks to finish...";
+        bthread_usleep(/*100ms=*/100 * 1000);
+    }
+}
+
+void* gc_checker(void* arg) {
     auto tablet_mgr = static_cast<TabletManager*>(arg);
     auto lp = tablet_mgr->location_provider();
     // NOTE: Share the same thread pool with local tablet's clone task.
-    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    int64_t curr = butil::gettimeofday_s();
+    int64_t gc_time[2] = {curr + config::lake_gc_metadata_check_interval,
+                          curr + config::lake_gc_segment_check_interval};
     while (!bthread_stopped(bthread_self())) {
-        // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
-        // configured value, which is ok now.
-        if (bthread_usleep(config::lake_gc_segment_check_interval * 1000 * 1000) != 0) {
-            continue;
+        int64_t now = butil::gettimeofday_s();
+        int64_t min_gc_time = std::min(gc_time[0], gc_time[1]);
+        if (min_gc_time > now) {
+            // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
+            // configured value, which is ok now.
+            (void)bthread_usleep((min_gc_time - now) * 1000ULL * 1000ULL);
         }
 
         std::set<std::string> roots;
-        auto st = lp->list_root_locations(&roots);
+        (void)lp->list_root_locations(&roots);
 
-        LOG_IF(ERROR, !st.ok()) << st;
-
-        for (const auto& root : roots) {
-            // TODO: limit GC concurrency
-            st = thread_pool->submit_func([=]() {
-                auto r = segment_gc(root, tablet_mgr);
-                LOG_IF(WARNING, !r.ok()) << "Fail to do segment gc in " << root << ": " << r;
-            });
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
-                break;
-            }
+        if (min_gc_time == gc_time[0]) {
+            auto master_info = get_master_info();
+            metadata_gc(tablet_mgr, roots, master_info.min_active_txn_id);
+            gc_time[0] = butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
+        } else {
+            data_gc(tablet_mgr, roots);
+            gc_time[1] = butil::gettimeofday_s() + config::lake_gc_segment_check_interval;
         }
-        // TODO: wait until all tasks finished.
     }
     return nullptr;
 }

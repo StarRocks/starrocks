@@ -19,7 +19,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SeekTuple;
 class VectorizedSchema;
@@ -65,4 +65,4 @@ public:
     const ShortKeyOptionPtr upper;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

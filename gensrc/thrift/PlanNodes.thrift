@@ -41,6 +41,7 @@ include "Opcodes.thrift"
 include "Descriptors.thrift"
 include "Partitions.thrift"
 include "RuntimeFilter.thrift"
+include "CloudConfiguration.thrift"
 
 enum TPlanNodeType {
   OLAP_SCAN_NODE,
@@ -191,6 +192,7 @@ struct THdfsProperties {
   9: optional i32 max_connection
   10: optional string region
   11: optional string hdfs_username
+  12: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TBrokerScanRangeParams {
@@ -241,6 +243,14 @@ struct TBrokerScanRangeParams {
     21: optional string table_name
     22: optional string label
     23: optional i64 txn_id
+    // number of lines at the start of the file to skip
+    24: optional i64 skip_header
+    // specifies whether to remove white space from fields 
+    25: optional bool trim_space
+    // enclose character
+    26: optional i8 enclose
+    // escape character
+    27: optional i8 escape
 }
 
 // Broker scan range
@@ -309,6 +319,9 @@ struct THdfsScanRange {
     10: optional bool use_hudi_jni_reader;
 
     11: optional list<TIcebergDeleteFile> delete_files;
+
+    // number of lines at the start of the file to skip
+    12: optional i64 skip_header
 }
 
 struct TBinlogScanRange {
@@ -418,6 +431,8 @@ struct TOlapScanNode {
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
   25: optional bool sorted_by_keys_per_tablet = false
+
+  26: optional list<Exprs.TExpr> bucket_exprs
 }
 
 struct TJDBCScanNode {
@@ -919,6 +934,8 @@ struct THdfsScanNode {
 
     // Flag to indicate wheather the column names are case sensitive
     12: optional bool case_sensitive;
+
+    13: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 }
 
 struct TProjectNode {

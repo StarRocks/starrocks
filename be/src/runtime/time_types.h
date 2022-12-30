@@ -19,7 +19,7 @@
 
 #include "common/compiler_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Date: Julian Date -2000-01-01 ~ 9999-01-01
 // MAX USE 22 bits
@@ -34,16 +34,27 @@ static const uint8_t TIMESTAMP_BITS = 40;
 static const Timestamp TIMESTAMP_BITS_TIME{UINT64_MAX >> 24};
 
 // TimeUnit
-enum class TimeUnit {
-    MICROSECOND = 0,
-    SECOND = 1,
-    MINUTE = 2,
-    HOUR = 3,
-    DAY = 4,
-    WEEK = 5,
-    MONTH = 6,
-    QUARTER = 7,
-    YEAR = 8,
+enum TimeUnit {
+    MICROSECOND,
+    SECOND,
+    MINUTE,
+    HOUR,
+    DAY,
+    WEEK,
+    MONTH,
+    QUARTER,
+    YEAR,
+    SECOND_MICROSECOND,
+    MINUTE_MICROSECOND,
+    MINUTE_SECOND,
+    HOUR_MICROSECOND,
+    HOUR_SECOND,
+    HOUR_MINUTE,
+    DAY_MICROSECOND,
+    DAY_SECOND,
+    DAY_MINUTE,
+    DAY_HOUR,
+    YEAR_MONTH
 };
 
 // const value
@@ -429,4 +440,4 @@ inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, i
 
     return to_date(julian, year, month, day);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

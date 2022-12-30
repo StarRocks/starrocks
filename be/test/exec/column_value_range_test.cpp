@@ -17,7 +17,7 @@
 #include "gtest/gtest.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 TEST(NormalizeRangeTest, RangeTest) {
     const constexpr LogicalType Type = TYPE_INT;
     using CppType = RunTimeCppType<Type>;
@@ -172,4 +172,4 @@ TEST(NormalizeRangeTest, ExtendScanKeyTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

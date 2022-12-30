@@ -207,7 +207,7 @@ public class PrivilegeCollection {
         return false;
     }
 
-    public boolean searchObject(short type, PEntryObject object) {
+    private boolean searchObject(short type, PEntryObject object, Action want) {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         if (privilegeEntryList == null) {
             return false;
@@ -218,10 +218,20 @@ public class PrivilegeCollection {
             // 2. objectMatch(privilegeEntry.object, object):
             //    checking if any table in db1 exists for a user that's granted with `db1.table1` will return true
             if (objectMatch(object, privilegeEntry.object) || objectMatch(privilegeEntry.object, object)) {
-                return true;
+                if (want == null || privilegeEntry.actionSet.contains(want)) {
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    public boolean searchAnyActionOnObject(short type, PEntryObject object) {
+        return searchObject(type, object, null);
+    }
+
+    public boolean searchActionOnObject(short type, PEntryObject object, Action want) {
+        return searchObject(type, object, want);
     }
 
     public boolean allowGrant(short type, ActionSet wantSet, List<PEntryObject> objects) {
@@ -262,7 +272,7 @@ public class PrivilegeCollection {
                 PrivilegeEntry entry = entryIterator.next();
                 if (entry.object != null && !entry.object.isFuzzyMatching() && !entry.object.validate(globalStateMgr)) {
                     String entryStr = GsonUtils.GSON.toJson(entry);
-                    LOG.info("find invalidate object, will remove the entry now: {}", entryStr);
+                    LOG.info("find invalid object, will remove the entry now: {}", entryStr);
                     entryIterator.remove();
                 }
             }

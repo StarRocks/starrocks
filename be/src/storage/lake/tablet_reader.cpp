@@ -36,11 +36,11 @@
 
 namespace starrocks::lake {
 
-using ConjunctivePredicates = starrocks::vectorized::ConjunctivePredicates;
-using Datum = starrocks::vectorized::Datum;
-using VectorizedField = starrocks::vectorized::VectorizedField;
-using PredicateParser = starrocks::vectorized::PredicateParser;
-using ZonemapPredicatesRewriter = starrocks::vectorized::ZonemapPredicatesRewriter;
+using ConjunctivePredicates = starrocks::ConjunctivePredicates;
+using Datum = starrocks::Datum;
+using VectorizedField = starrocks::VectorizedField;
+using PredicateParser = starrocks::PredicateParser;
+using ZonemapPredicatesRewriter = starrocks::ZonemapPredicatesRewriter;
 
 TabletReader::TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema)
         : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {}
@@ -133,6 +133,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.tablet_schema = _tablet_schema.get();
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
+    if (keys_type == KeysType::PRIMARY_KEYS) {
+        rs_opts.is_primary_keys = true;
+        rs_opts.version = _version;
+    }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {

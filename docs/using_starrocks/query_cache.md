@@ -50,7 +50,7 @@ This section describes the parameters and session variables that are used to ena
 | enable_query_cache          | false             | Yes                               | Specifies whether to enable the query cache. Valid values: `true` and `false`. `true` specifies to enable this feature, and `false` specifies to disable this feature. When the query cache is enabled, it works only for queries that meet the conditions specified in the "[Application scenarios](../using_starrocks/query_cache.md#application-scenarios)" section of this topic. |
 | query_cache_force_populate  | false             | Yes                               | Specifies whether to ignore the computation results saved in the query cache. Valid values: `true` and `false`. `true` specifies to enable this feature, and `false` specifies to disable this feature. If this feature is enabled, StarRocks ignores the cached computation results when it performs computations required by queries. In this case, StarRocks once again reads data from the source, computes the data, and updates the computation results saved in the query cache.<br>In this sense, the `query_cache_force_populate=true` setting resembles cache misses. |
 | query_cache_entry_max_bytes | 4194304           | Yes                               | Specifies the threshold for triggering the Passthrough mode. Valid values: `0` to `9223372036854775807`. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by the `query_cache_entry_max_bytes` or  `query_cache_entry_max_rows` parameter, the query is switched to Passthrough mode.<br>If the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter is set to `0`, the Passthrough mode is used even when no computation results are generated from the involved tablets. |
-| query_cache_entry_max_rows  | 409600            | Yes                               |                                                              |
+| query_cache_entry_max_rows  | 409600            | Yes                               | Same as above.                                                |
 
 ### BE parameters
 
@@ -382,13 +382,12 @@ As data loads are made, new versions of tablets are generated. Consequently, the
 
 The support for multi-version caching varies depending on data models and query types, as described in the following table.
 
-| **Data type**                              | **Query** **type**                                           | **Support for multi-version caching**                        |
-| ------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Duplicate Key Model                        | Queries on base tables                                       | Supported in all situations except when incremental tablet versions contain data deletion records. |
-| Queries on single-table materialized views | Supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns. |                                                              |
-| Aggregate Key Model                        | Queries on base tables or queries on single-table materialized views | Supported in all situations except the following:<ul><li>The schemas of base tables contain the aggregate function `replace`.</li><li>The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li><li>Incremental tablet versions contain data deletion records.</li></ul> |
-| Unique Key Model                           | N/A                                                          | Not supported. However, the query cache is supported.        |
-| Primary Key Model                          | N/A                                                          | Not supported. However, the query cache is supported.        |
+| **Data type**       | **Query** **type**                                           | **Support for multi-version caching**                        |
+| ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Duplicate Key Model | <ul><li>Queries on base tables</li><li>Queries on single-table materialized views</li></ul> | <ul><li>Queries on base tables: supported in all situations except when incremental tablet versions contain data deletion records.</li><li>Queries on single-table materialized views: supported in all situations except when the GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.</li></ul> |
+| Aggregate Key Model | Queries on base tables or queries on single-table materialized views | Supported in all situations except the following:The schemas of base tables contain the aggregate function `replace`.The GROUP BY, HAVING, or WHERE clauses of queries reference aggregation columns.Incremental tablet versions contain data deletion records. |
+| Unique Key Model    | N/A                                                          | Not supported. However, the query cache is supported.        |
+| Primary Key Model   | N/A                                                          | Not supported. However, the query cache is supported.        |
 
 The impact of data update types on multi-version caching is as follows:
 

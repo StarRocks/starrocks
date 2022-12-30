@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "exec/aggregator.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 class SortedAggregateStreamingSourceOperator : public SourceOperator {
@@ -32,7 +32,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     mutable bool _is_finished = false;
