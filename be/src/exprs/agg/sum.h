@@ -62,6 +62,15 @@ public:
         this->data(state).sum += column.get_data()[row_num];
     }
 
+    AggStateTableKind agg_state_table_kind(bool is_append_only) const override { return AggStateTableKind::RESULT; }
+
+    void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        this->data(state).sum -= column.get_data()[row_num];
+    }
+
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);

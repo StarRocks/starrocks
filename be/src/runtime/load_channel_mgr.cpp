@@ -163,8 +163,16 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
-            channel->cancel();
-            channel->abort(request.index_id(), request.tablet_id());
+            channel->abort(request.index_id(), {request.tablet_id()});
+        }
+    } else if (request.tablet_ids_size() > 0) {
+        auto channel = _find_load_channel(load_id);
+        if (channel != nullptr) {
+            std::vector<int64_t> tablet_ids;
+            for (auto& tablet_id : request.tablet_ids()) {
+                tablet_ids.emplace_back(tablet_id);
+            }
+            channel->abort(request.index_id(), tablet_ids);
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {

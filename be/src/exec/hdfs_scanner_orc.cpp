@@ -17,11 +17,13 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "exec/iceberg/iceberg_delete_builder.h"
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_min_max_decoder.h"
 #include "gen_cpp/orc_proto.pb.h"
+#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
@@ -343,7 +345,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         src_slot_index++;
     }
 
-    _orc_reader = std::make_unique<OrcChunkReader>(runtime_state, _src_slot_descriptors);
+    _orc_reader = std::make_unique<OrcChunkReader>(runtime_state->chunk_size(), _src_slot_descriptors);
     _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_params, _scanner_ctx, _orc_reader.get());
     _orc_reader->disable_broker_load_mode();
     _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
@@ -386,15 +388,18 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         orc::RowReader::ReadPosition position;
         size_t read_num_values = 0;
         bool has_used_dict_filter = false;
+        ColumnPtr row_delete_filter = BooleanColumn::create();
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
+            row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
             RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
                                                                       &_dict_filter));
             if (_orc_reader->get_cvb_size() != read_num_values) {
                 has_used_dict_filter = true;
+                row_delete_filter->filter(_dict_filter);
             }
         }
 
@@ -438,6 +443,12 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                                                                                       ck.get(), &_chunk_filter));
                 }
             }
+
+            if (chunk_size != 0) {
+                ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
+                chunk_size = SIMD::count_nonzero(_chunk_filter);
+            }
+
             if (chunk_size != 0 && chunk_size != ck->num_rows()) {
                 ck->filter(_chunk_filter);
             }
@@ -478,6 +489,17 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     _should_skip_file = false;
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.
+    if (!scanner_params.deletes.empty()) {
+        SCOPED_RAW_TIMER(&_stats.delete_build_ns);
+        IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
+                                                    scanner_params.conjunct_ctxs, scanner_params.materialize_slots,
+                                                    &_need_skip_rowids);
+        for (const auto& tdelete_file : scanner_params.deletes) {
+            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
+        }
+        _stats.delete_file_per_scan += scanner_params.deletes.size();
+    }
+
     return Status::OK();
 }
 } // namespace starrocks

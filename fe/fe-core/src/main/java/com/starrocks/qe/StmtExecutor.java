@@ -909,7 +909,7 @@ public class StmtExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
         GlobalStateMgr.getCurrentAnalyzeMgr()
                 .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
-        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
     }
 
     private void handleDropHistogramStmt() {

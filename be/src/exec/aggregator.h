@@ -61,6 +61,7 @@ struct HashTableKeyAllocator {
     static auto constexpr alloc_batch_size = 1024;
     // memory aligned when allocate
     static size_t constexpr aligned = 16;
+
     int aggregate_key_size = 0;
     std::vector<std::pair<void*, int>> vecs;
     MemPool* pool = nullptr;
@@ -151,11 +152,37 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
 
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
-// Component used to process aggregation including bloking aggregate and streaming aggregate
+struct AggregatorParams {
+    bool needs_finalize;
+    bool has_outer_join_child;
+    int64_t limit;
+    TStreamingPreaggregationMode::type streaming_preaggregation_mode;
+    TupleId intermediate_tuple_id;
+    TupleId output_tuple_id;
+    std::string sql_grouping_keys;
+    std::string sql_aggregate_functions;
+    std::vector<TExpr> conjuncts;
+    std::vector<TExpr> grouping_exprs;
+    std::vector<TExpr> aggregate_functions;
+    std::vector<TExpr> intermediate_aggr_exprs;
+
+    // Incremental MV
+    // Whether it's testing, use MemStateTable in testing, instead use IMTStateTable.
+    bool is_testing;
+    // Whether input is only append-only or with retract messages.
+    bool is_append_only;
+    // Whether output is generated with retract or without retract messages.
+    bool is_generate_retract;
+    // The agg index of count agg function.
+    int32_t count_agg_idx;
+};
+using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
+AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
+
 // it contains common data struct and algorithm of aggregation
 class Aggregator : public pipeline::ContextWithDependency {
 public:
-    Aggregator(const TPlanNode& tnode);
+    Aggregator(AggregatorParamsPtr&& params);
 
     virtual ~Aggregator() noexcept override {
         if (_state != nullptr) {
@@ -166,7 +193,6 @@ public:
     Status open(RuntimeState* state);
     virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
                            MemTracker* mem_tracker);
-
     void close(RuntimeState* state) override;
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
@@ -259,11 +285,10 @@ public:
     HashTableKeyAllocator _state_allocator;
 
 protected:
+    AggregatorParamsPtr _params;
+
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
-
-    // TPlanNode is only valid in the PREPARE and INIT phase
-    const TPlanNode& _tnode;
 
     MemTracker* _mem_tracker = nullptr;
 
@@ -391,14 +416,15 @@ protected:
     Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
-    Columns _create_agg_result_columns(size_t num_rows);
+    Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
     Columns _create_group_by_columns(size_t num_rows);
 
     void _serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
     void _finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
     void _destroy_state(AggDataPtr __restrict state);
 
-    ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns);
+    ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
+                                 bool use_intermediate);
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }
     bool is_passthrough() const { return _is_passthrough; }
@@ -452,7 +478,7 @@ public:
         if (it != _aggregators.end()) {
             return it->second;
         }
-        auto aggregator = std::make_shared<T>(_tnode);
+        auto aggregator = std::make_shared<T>(convert_to_aggregator_params(_tnode));
         aggregator->set_aggr_mode(_aggr_mode);
         _aggregators[id] = aggregator;
         return aggregator;
