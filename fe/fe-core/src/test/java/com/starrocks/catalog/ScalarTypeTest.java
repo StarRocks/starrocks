@@ -203,6 +203,11 @@ public class ScalarTypeTest {
                         ScalarType.isFullyCompatible(decimalTypes.get(i), decimalTypes.get(j)), i <= j);
             }
         }
+        // decimal to float
+        for (int i = 0; i < decimalTypes.size(); i++) {
+            Assert.assertTrue(ScalarType.isFullyCompatible(decimalTypes.get(i), ScalarType.FLOAT));
+            Assert.assertTrue(ScalarType.isFullyCompatible(decimalTypes.get(i), ScalarType.DOUBLE));
+        }
         // decimal to string
         for (int i = 0; i < decimalTypes.size(); i++) {
             for (int j = 0; j < stringTypes.size(); j++) {

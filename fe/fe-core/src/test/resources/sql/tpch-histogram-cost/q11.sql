@@ -78,7 +78,7 @@ OutPut Exchange Id: 30
 |       cardinality: 1
 |
 10:AGGREGATE (update finalize)
-|  aggregate: sum[([20: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+|  aggregate: sum[([20: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [1: PS_PARTKEY, INT, false]
 |  cardinality: 3200000
 |  probe runtime filters:
@@ -165,7 +165,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 22
 
 21:AGGREGATE (update serialize)
-|  aggregate: sum[([41: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+|  aggregate: sum[([41: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[1.0, 9999000.0, 0.0, 8.0, 1.0] ESTIMATE

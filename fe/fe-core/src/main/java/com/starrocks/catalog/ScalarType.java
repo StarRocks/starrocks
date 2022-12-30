@@ -462,7 +462,9 @@ public class ScalarType extends Type implements Cloneable {
 
     /**
      * Returns true if t2 can be fully compatible with t1.
-     * fully compatible means that all possible values of t1 can be represented by t2 without lossing precision.
+     * fully compatible means that all possible values of t1 can be represented by t2,
+     * and no null values will be produced if we cast t1 as t2.
+     * This is closely related to the implementation by BE.
      * @TODO: the currently implementation is conservative, we can add more rules later.
      */
     public static boolean isFullyCompatible(Type t1, Type t2) {
@@ -496,7 +498,7 @@ public class ScalarType extends Type implements Cloneable {
             if (t2.isDecimalV3()) {
                 return t2.precision >= t1.precision && t2.scale >= t1.scale;
             }
-            if (t2.isStringType()) {
+            if (t2.isStringType() || t2.isFloatingPointType()) {
                 return true;
             }
             return false;
