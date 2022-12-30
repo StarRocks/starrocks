@@ -228,7 +228,7 @@ public class AggregationNode extends PlanNode {
         } else if (streamingPreaggregationMode.equalsIgnoreCase("auto_new")) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO_NEW);
         } else {
-            msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
+            msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO_NEW);
         }
 
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
