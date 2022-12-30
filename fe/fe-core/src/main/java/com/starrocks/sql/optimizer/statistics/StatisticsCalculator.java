@@ -794,7 +794,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         crossBuilder.addColumnStatistics(rightStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(1)));
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
-        double crossRowCount = leftRowCount * rightRowCount;
+        double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);
         crossBuilder.setOutputRowCount(crossRowCount);
 
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
