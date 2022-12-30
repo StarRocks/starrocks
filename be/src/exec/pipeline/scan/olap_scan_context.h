@@ -16,9 +16,9 @@
 
 #include <mutex>
 
+#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "exec/vectorized/olap_scan_prepare.h"
 #include "runtime/global_dict/parser.h"
 #include "util/phmap/phmap_fwd_decl.h"
 

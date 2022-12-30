@@ -196,21 +196,27 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
 }
 
 void LoadChannel::cancel() {
-    _span->AddEvent("cancel");
-    auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();
     }
 }
 
-void LoadChannel::cancel(int64_t index_id, int64_t tablet_id) {
+void LoadChannel::abort() {
+    _span->AddEvent("cancel");
+    auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
-    auto it = _tablets_channels.find(index_id);
-    if (it != _tablets_channels.end()) {
-        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(it->second.get());
+    for (auto& it : _tablets_channels) {
+        it.second->abort();
+    }
+}
+
+void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
+    auto channel = get_tablets_channel(index_id);
+    if (channel != nullptr) {
+        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(channel.get());
         if (local_tablets_channel != nullptr) {
-            local_tablets_channel->cancel(tablet_id);
+            local_tablets_channel->abort(tablet_ids);
         }
     }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
@@ -242,7 +241,8 @@ public class ExpressionTest extends PlanTestBase {
                 new ColumnRefOperator(100000, Type.INT, "x", true),
                 ConstantOperator.createInt(1));
         ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
-        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        LambdaFunctionOperator lambda =
+                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
         variableToSlotRef.clear();
         projectMap.clear();
         context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
@@ -676,7 +676,7 @@ public class ExpressionTest extends PlanTestBase {
                         "c5 IN ('292278994-08-17', '1970-02-01') AND " +
                         "c5 IN ('292278994-08-17', '1970-02-01')  " +
                         " FROM test_in_pred_norm",
-                "<slot 7> : ((5: c4 = 8: cast) OR (5: c4 = '1970-02-01')) AND ((6: c5 = 8: cast) OR (6: c5 = '1970-02-01'))");
+                "<slot 7> : ((5: c4 = '1970-02-01') OR (5: c4 = 8: cast)) AND ((6: c5 = '1970-02-01') OR (6: c5 = 8: cast))");
 
         String plan = getFragmentPlan("SELECT " +
                 "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
@@ -1275,19 +1275,19 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testAssertTrue() throws Exception {
         {
-            String sql = "select assert_true(null)";
+            String sql = "select assert_true(null, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(NULL)");
+            assertContains(plan, "<slot 2> : assert_true(NULL, 'a')");
         }
         {
-            String sql = "select assert_true(true)";
+            String sql = "select assert_true(true, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(TRUE)");
+            assertContains(plan, "<slot 2> : assert_true(TRUE, 'a')");
         }
         {
-            String sql = "select assert_true(false)";
+            String sql = "select assert_true(false, 'a')";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : assert_true(FALSE)");
+            assertContains(plan, "<slot 2> : assert_true(FALSE, 'a')");
         }
     }
 
@@ -1324,4 +1324,40 @@ public class ExpressionTest extends PlanTestBase {
             assertContains(plan, "<slot 2> : 8190");
         }
     }
+
+    @Test
+    public void testArithmeticExpressions() throws Exception {
+        String sql = "select multiply(400, 500);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 200000");
+
+        sql = "select subtract(-30000, 40000);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : -70000");
+
+        sql = "select int_divide(128, 100);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 1");
+
+        sql = "select multiply(200, 50);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 10000");
+
+        sql = "select multiply(429496, 429496);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 2> : 184466814016");
+    }
+
+    @Test
+    public void testInPredicate() throws Exception {
+        String sql = "select * from t0 where v1 in (v2, v3, 3, 4, 5) ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: ((1: v1 IN (3, 4, 5)) OR (1: v1 = 2: v2)) OR (1: v1 = 3: v3)");
+    }
+
 }

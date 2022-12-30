@@ -725,12 +725,12 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_UNUSED_SHARD: {
+            case OperationType.OP_ADD_UNUSED_SHARD: { // Deprecated
                 data = ShardInfo.read(in);
                 isRead = true;
                 break;
             }
-            case OperationType.OP_DELETE_UNUSED_SHARD: {
+            case OperationType.OP_DELETE_UNUSED_SHARD: { // Deprecated
                 data = ShardInfo.read(in);
                 isRead = true;
                 break;

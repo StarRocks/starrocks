@@ -24,9 +24,13 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -65,10 +69,12 @@ public class DeltaLakeScanNode extends ScanNode {
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private Optional<Expression> deltaLakePredicates = Optional.empty();
+    private CloudConfiguration cloudConfiguration = null;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         deltaLakeTable = (DeltaLakeTable) desc.getTable();
+        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -77,6 +83,18 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public DeltaLakeTable getDeltaLakeTable() {
         return deltaLakeTable;
+    }
+
+    private void setupCloudCredential() {
+        String catalog = deltaLakeTable.getCatalogName();
+        if (catalog == null) {
+            return;
+        }
+        DeltaLakeConnector connector = (DeltaLakeConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
+                getConnector(catalog);
+        if (connector != null) {
+            cloudConfiguration = connector.getCloudConfiguration();
+        }
     }
 
     @Override
@@ -133,9 +151,12 @@ public class DeltaLakeScanNode extends ScanNode {
 
             Metadata metadata = snapshot.getMetadata();
             PartitionKey partitionKey =
-                    PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns());
+                    PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
+                            deltaLakeTable.getType());
             addPartitionLocations(partitionKeys, partitionKey, descTbl, file, metadata);
         }
+
+        scanNodePredicates.setSelectedPartitionIds(partitionKeys.values());
     }
 
     private void addPartitionLocations(Map<PartitionKey, Long> partitionKeys, PartitionKey partitionKey,
@@ -209,9 +230,12 @@ public class DeltaLakeScanNode extends ScanNode {
                     getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
+        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                deltaLakeTable.getCatalogName(), deltaLakeTable.getDbName(), deltaLakeTable.getTableName());
+
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        scanNodePredicates.getIdToPartitionKey().size()));
+                        partitionNames.size() == 0 ? 1 : partitionNames.size()));
         output.append("\n");
 
         // TODO: support it in verbose
@@ -253,6 +277,12 @@ public class DeltaLakeScanNode extends ScanNode {
 
         if (deltaLakeTable != null) {
             msg.hdfs_scan_node.setTable_name(deltaLakeTable.getName());
+        }
+
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
     }
 

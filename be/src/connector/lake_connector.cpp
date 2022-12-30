@@ -15,8 +15,8 @@
 #include "connector/lake_connector.h"
 
 #include "common/constexpr.h"
-#include "exec/vectorized/connector_scan_node.h"
-#include "exec/vectorized/olap_scan_prepare.h"
+#include "exec/connector_scan_node.h"
+#include "exec/olap_scan_prepare.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"

@@ -28,6 +28,7 @@ import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.PlacementPolicy;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
@@ -44,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -261,6 +263,85 @@ public class StarOSAgent {
         }
     }
 
+    public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+        prepare();
+        List<ShardGroupInfo> shardGroupInfos = null;
+        try {
+            List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
+            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
+                    .setPolicy(PlacementPolicy.SPREAD)
+                    .putLabels("dbId", String.valueOf(dbId))
+                    .putLabels("tableId", String.valueOf(tableId))
+                    .putLabels("partitionId", String.valueOf(partitionId))
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build());
+            shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
+            LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
+            Preconditions.checkState(shardGroupInfos.size() == 1);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
+        }
+        return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList()).get(0);
+    }
+
+    public void deleteShardGroup(List<Long> groupIds) {
+        prepare();
+        try {
+            client.deleteShardGroup(serviceId, groupIds, true);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete shard group. error: {}", e.getMessage());
+        }
+    }
+
+    public List<ShardGroupInfo> listShardGroup() {
+        prepare();
+        try {
+            return client.listShardGroup(serviceId);
+        } catch (StarClientException e) {
+            LOG.info("list shard group failed. Error: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+        throws DdlException {
+        prepare();
+        List<ShardInfo> shardInfos = null;
+        try {
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(numShards);
+
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(replicaNum)
+                    .addGroupIds(groupId)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo);
+
+            for (int i = 0; i < numShards; ++i) {
+                builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
+                createShardInfoList.add(builder.build());
+            }
+            shardInfos = client.createShard(serviceId, createShardInfoList);
+            LOG.debug("Create shards success. shard infos: {}", shardInfos);
+        } catch (Exception e) {
+            throw new DdlException("Failed to create shards. error: " + e.getMessage());
+        }
+
+        Preconditions.checkState(shardInfos.size() == numShards);
+        return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
+    public List<Long> listShard(long groupId) throws DdlException {
+        prepare();
+
+        List<List<ShardInfo>> shardInfo;
+        try {
+            shardInfo = client.listShard(serviceId, Arrays.asList(groupId));
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to list shards. error: " + e.getMessage());
+        }
+        return shardInfo.get(0).stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
     public void deleteShards(Set<Long> shardIds) throws DdlException {
         prepare();
         try {
@@ -269,45 +350,6 @@ public class StarOSAgent {
             LOG.warn("Failed to delete shards. error: {}", e.getMessage());
             throw new DdlException("Failed to delete shards. error: " + e.getMessage());
         }
-    }
-
-    public void createShardGroup(long groupId) throws DdlException {
-        prepare();
-        List<ShardGroupInfo> shardGroupInfos = null;
-        try {
-            List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
-            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().setGroupId(groupId).build());
-            shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
-            LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
-            Preconditions.checkState(shardGroupInfos.size() == 1);
-        } catch (StarClientException e) {
-            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
-        }
-    }
-
-    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
-        throws DdlException {
-        prepare();
-        List<ShardInfo> shardInfos = null;
-        try {
-            List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
-            for (int i = 0; i < numShards; ++i) {
-                CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
-                builder.setReplicaCount(1);
-                builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
-                builder.setGroupId(groupId);
-                builder.setPathInfo(pathInfo);
-                builder.setCacheInfo(cacheInfo);
-                createShardInfos.add(builder.build());
-            }
-            shardInfos = client.createShard(serviceId, createShardInfos);
-            LOG.debug("Create shards success. shard infos: {}", shardInfos);
-        } catch (Exception e) {
-            throw new DdlException("Failed to create shards. error: " + e.getMessage());
-        }
-
-        Preconditions.checkState(shardInfos.size() == numShards);
-        return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }
 
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {

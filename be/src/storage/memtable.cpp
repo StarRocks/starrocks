@@ -18,7 +18,7 @@
 
 #include "column/json_column.h"
 #include "common/logging.h"
-#include "exec/vectorized/sorting/sorting.h"
+#include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -131,8 +131,12 @@ size_t MemTable::write_buffer_size() const {
     return _chunk_bytes_usage + _aggregator_bytes_usage;
 }
 
+size_t MemTable::write_buffer_rows() const {
+    return _total_rows - _merged_rows;
+}
+
 bool MemTable::is_full() const {
-    return write_buffer_size() >= _max_buffer_size;
+    return write_buffer_size() >= _max_buffer_size || write_buffer_rows() >= _max_buffer_row;
 }
 
 bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
@@ -162,6 +166,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
         _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
+        _total_rows += chunk.num_rows();
     }
 
     // if memtable is full, push it to the flush executor,
@@ -319,6 +324,7 @@ void MemTable::_aggregate(bool is_final) {
     // impossible finish
     DCHECK(!_aggregator->is_finish());
     DCHECK(_aggregator->source_exhausted());
+    _merged_rows = _aggregator->merged_rows();
 
     if (is_final) {
         _result_chunk.reset();

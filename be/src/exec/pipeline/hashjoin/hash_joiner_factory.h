@@ -17,7 +17,7 @@
 #include <memory>
 #include <vector>
 
-#include "exec/vectorized/hash_joiner.h"
+#include "exec/hash_joiner.h"
 
 namespace starrocks::pipeline {
 

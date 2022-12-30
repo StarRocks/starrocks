@@ -16,9 +16,9 @@
 
 #include "column/column_helper.h"
 #include "gtest/gtest.h"
+#include "storage/column_predicate.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/types.h"
-#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks {
 class DefaultValueColumnIteratorTest : public testing::Test {

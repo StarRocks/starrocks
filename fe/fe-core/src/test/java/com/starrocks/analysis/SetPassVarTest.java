@@ -34,19 +34,29 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class SetPassVarTest {
@@ -107,6 +117,57 @@ public class SetPassVarTest {
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBAHD913688E7278E2AD071FDB5E76D76D34B");
         stmt.analyze();
         Assert.fail("No exception throws.");
+    }
+
+    private static StarRocksAssert starRocksAssert;
+    private static UserIdentity testUser;
+    private static PrivilegeManager privilegeManager;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        starRocksAssert.getCtx().setRemoteIP("localhost");
+        privilegeManager.initBuiltinRolesAndUsers();
+        ctxToRoot();
+        createUsers();
+    }
+
+    private static void ctxToTestUser() {
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
+    }
+
+    private static void ctxToRoot() {
+        starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
+    }
+
+    private static void createUsers() throws Exception {
+        String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
+        AuthenticationManager authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        authenticationManager.createUser(createUserStmt);
+        testUser = createUserStmt.getUserIdent();
+    }
+    @Test
+    public void testSetPasswordInNewPrivilege() throws Exception {
+
+        ctxToRoot();
+        UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationManager().
+                getUserAuthenticationInfoByUserIdentity(testUser);
+        Assert.assertEquals(0, userAuthenticationInfo.getPassword().length);
+        String setSql = "SET PASSWORD FOR 'test'@'%' = PASSWORD('123456');";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(setSql, starRocksAssert.getCtx());
+        SetExecutor executor = new SetExecutor(starRocksAssert.getCtx(), (SetStmt) statementBase);
+        executor.execute();
+        userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationManager().
+                getUserAuthenticationInfoByUserIdentity(testUser);
+        Assert.assertTrue(userAuthenticationInfo.getPassword().length > 0);
+
     }
 
 }

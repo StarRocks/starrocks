@@ -24,6 +24,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -46,9 +47,7 @@ public class FileTable extends Table {
     private static final String JSON_KEY_FILE_PATH = "path";
     private static final String JSON_KEY_FORMAT = "format";
     private static final String JSON_KEY_FILE_PROPERTIES = "fileProperties";
-
     private Map<String, String> fileProperties = Maps.newHashMap();
-
     public FileTable() {
         super(TableType.FILE);
     }
@@ -63,25 +62,18 @@ public class FileTable extends Table {
         if (properties == null) {
             throw new DdlException("Please set properties of file table, " + "they are path and format");
         }
-        Map<String, String> copiedProps = Maps.newHashMap(properties);
 
-        String path = copiedProps.get(JSON_KEY_FILE_PATH);
+        String path = properties.get(JSON_KEY_FILE_PATH);
         if (Strings.isNullOrEmpty(path)) {
             throw new DdlException("path is null. Please add properties(path='xxx') when create table");
         }
-        copiedProps.remove(JSON_KEY_FILE_PATH);
 
-        String format = copiedProps.get(JSON_KEY_FORMAT);
+        String format = properties.get(JSON_KEY_FORMAT);
         if (Strings.isNullOrEmpty(format)) {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
         if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
-        }
-        copiedProps.remove(JSON_KEY_FORMAT);
-
-        if (!copiedProps.isEmpty()) {
-            throw new DdlException("Unknown table properties: " + copiedProps.toString());
         }
     }
 
@@ -104,7 +96,8 @@ public class FileTable extends Table {
     }
 
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
-        Configuration configuration = new Configuration();
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties, null);
+        Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), false, Optional.empty());
         try {

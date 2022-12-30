@@ -953,15 +953,15 @@ classifier
 // ------------------------------------------- Function ----------------------------------------------------
 
 showFunctionsStatement
-    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW FULL? (BUILTIN|GLOBAL)? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropFunctionStatement
-    : DROP FUNCTION qualifiedName '(' typeList ')'
+    : DROP GLOBAL? FUNCTION qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
-    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
     ;
 
 typeList
@@ -1714,7 +1714,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
-    | base = primaryExpression '.' fieldName = identifier                                 #dereference
+    | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1748,6 +1748,7 @@ functionCall
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
+    | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -1783,9 +1784,16 @@ informationFunctionExpression
     | name = CURRENT_USER ('(' ')')?
     ;
 
+specialDateTimeExpression
+    : name = CURRENT_DATE ('(' ')')?
+    | name = CURRENT_TIME ('(' ')')?
+    | name = CURRENT_TIMESTAMP ('(' ')')?
+    | name = LOCALTIME ('(' ')')?
+    | name = LOCALTIMESTAMP ('(' ')')?
+    ;
+
 specialFunctionExpression
     : CHAR '(' expression ')'
-    | CURRENT_TIMESTAMP '(' ')'
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
@@ -2079,7 +2087,7 @@ decimalType
     ;
 
 qualifiedName
-    : identifier ('.' identifier)*
+    : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
 identifier

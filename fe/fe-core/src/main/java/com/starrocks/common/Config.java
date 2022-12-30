@@ -681,7 +681,7 @@ public class Config extends ConfigBase {
     /**
      * The thrift server max worker threads
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
@@ -1762,9 +1762,28 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_endpoint = "";
     @ConfField
-    public static String starmgr_s3_ak = "";
+    public static String starmgr_aws_credential_type = "simple";
     @ConfField
-    public static String starmgr_s3_sk = "";
+    public static String starmgr_simple_credential_access_key_id = "";
+    @ConfField
+    public static String starmgr_simple_credential_access_key_secret = "";
+    @ConfField
+    public static String starmgr_assume_role_credential_arn = "";
+    @ConfField
+    public static String starmgr_assume_role_credential_external_id = "";
+    
+
+    /**
+     * empty shard group clean threshold (by create time).
+     */
+    @ConfField
+    public static long shard_group_clean_threshold_sec = 3600L;
+
+    /**
+     * ShardDeleter run interval in seconds
+     */
+    @ConfField
+    public static long shard_deleter_run_interval_sec = 600L;
 
     @ConfField
     public static String hdfs_url = "";
@@ -1774,6 +1793,12 @@ public class Config extends ConfigBase {
     public static String default_fs_type = "S3";
 
     /**
+     * starmgr disable auto shard balance or not
+     */
+    @ConfField
+    public static boolean starmgr_disable_shard_balance = false;
+
+    /**
      * default storage cache ttl of lake table
      */
     @ConfField(mutable = true)
@@ -1781,6 +1806,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
+
+    @ConfField(mutable = true)
+    public static boolean enable_expression_partition = false;
 
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
@@ -1933,6 +1961,18 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String ssl_key_password = "";
+
+    /**
+     * the truststore file path
+     */
+    @ConfField
+    public static String ssl_truststore_location = "";
+
+    /**
+     * the password of truststore file
+     */
+    @ConfField
+    public static String ssl_truststore_password = "";
 
     /**
      * ignore check db status when show proc '/catalog/catalog_name'

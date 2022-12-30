@@ -48,7 +48,6 @@
 #include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
-#include "exec/vectorized/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -267,6 +266,8 @@ public:
     Status init(const TDataSink& sink, RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+
+    void cancel() override;
 
     // sync open interface
     Status open(RuntimeState* state) override;

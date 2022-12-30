@@ -271,10 +271,12 @@ public class StmtExecutor {
         context.getPlannerProfile().build(plannerProfile);
 
         if (coord != null) {
-            coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-            coord.endProfile();
-            coord.mergeIsomorphicProfiles();
-            profile.addChild(coord.getQueryProfile());
+            if (coord.getQueryProfile() != null) {
+                coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                coord.endProfile();
+                coord.mergeIsomorphicProfiles();
+                profile.addChild(coord.getQueryProfile());
+            }
             coord = null;
         }
     }
@@ -907,7 +909,7 @@ public class StmtExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
         GlobalStateMgr.getCurrentAnalyzeMgr()
                 .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
-        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
     }
 
     private void handleDropHistogramStmt() {
@@ -1140,7 +1142,7 @@ public class StmtExecutor {
             }
             context.setState(e.getQueryState());
         } catch (Throwable e) {
-            // Maybe our bug or wrong input parematers
+            // Maybe our bug or wrong input parameters
             String sql = AstToStringBuilder.toString(parsedStmt);
             if (sql == null || sql.isEmpty()) {
                 sql = originStmt.originStmt;

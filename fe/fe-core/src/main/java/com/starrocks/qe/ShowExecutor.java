@@ -357,8 +357,8 @@ public class ShowExecutor {
                     AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                     mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
                         if (!PrivilegeManager.checkTableAction(ctx, db.getFullName(),
-                                                               baseTableInfo.getTableName(),
-                                                               PrivilegeType.TableAction.SELECT)) {
+                                baseTableInfo.getTableName(),
+                                PrivilegeType.TableAction.SELECT)) {
                             baseTableHasPrivilege.set(false);
                         }
                     });
@@ -366,7 +366,7 @@ public class ShowExecutor {
                         continue;
                     }
                     if (!PrivilegeManager.checkAnyActionOnMaterializedView(ctx, db.getFullName(),
-                                                                           mvTable.getName())) {
+                            mvTable.getName())) {
                         continue;
                     }
                 }
@@ -440,7 +440,10 @@ public class ShowExecutor {
         List<ConnectContext.ThreadInfo> threadInfos = ctx.getConnectScheduler().listConnection(ctx.getQualifiedUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
-            rowSet.add(info.toRow(nowMs, showStmt.showFull()));
+            List<String> row = info.toRow(nowMs, showStmt.showFull());
+            if (row != null) {
+                rowSet.add(row);
+            }
         }
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
@@ -486,10 +489,16 @@ public class ShowExecutor {
     // Handle show functions
     private void handleShowFunctions() throws AnalysisException {
         ShowFunctionsStmt showStmt = (ShowFunctionsStmt) stmt;
-        Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDbName());
-        MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
-        List<Function> functions = showStmt.getIsBuiltin() ? ctx.getGlobalStateMgr().getBuiltinFunctions() :
-                db.getFunctions();
+        List<Function> functions = null;
+        if (showStmt.getIsBuiltin()) {
+            functions = ctx.getGlobalStateMgr().getBuiltinFunctions();
+        } else if (showStmt.getIsGlobal()) {
+            functions = ctx.getGlobalStateMgr().getGlobalFunctionMgr().getFunctions();
+        } else {
+            Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDbName());
+            MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
+            functions = db.getFunctions();
+        }
 
         List<List<Comparable>> rowSet = Lists.newArrayList();
         for (Function function : functions) {
@@ -584,12 +593,15 @@ public class ShowExecutor {
     }
 
     // Show table statement.
-    private void handleShowTable() throws AnalysisException, DdlException {
+    private void handleShowTable() throws AnalysisException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        String catalog = ctx.getCurrentCatalog();
+        String catalogName = showTableStmt.getCatalogName();
+        if (catalogName == null) {
+            catalogName = ctx.getCurrentCatalog();
+        }
         String dbName = showTableStmt.getDb();
-        Database db = metadataMgr.getDb(catalog, dbName);
+        Database db = metadataMgr.getDb(catalogName, dbName);
 
         PatternMatcher matcher = null;
         if (showTableStmt.getPattern() != null) {
@@ -600,9 +612,9 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
-        db.readLock();
-        try {
-            if (CatalogMgr.isInternalCatalog(catalog)) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            db.readLock();
+            try {
                 for (Table tbl : db.getTables()) {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
@@ -613,22 +625,22 @@ public class ShowExecutor {
                             continue;
                         }
                     } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
+                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
                                 db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
                     }
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
-            } else {
-                List<String> tableNames = metadataMgr.listTableNames(catalog, dbName);
-                if (matcher != null) {
-                    tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
-                }
-                tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
+            } finally {
+                db.readUnlock();
             }
-        } finally {
-            db.readUnlock();
+        } else {
+            List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+            if (matcher != null) {
+                tableNames = tableNames.stream().filter(matcher::match).collect(Collectors.toList());
+            }
+            tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -1061,8 +1073,8 @@ public class ShowExecutor {
                 RoutineLoadJob routineLoadJob = iterator.next();
                 try {
                     if (!PrivilegeManager.checkAnyActionOnTable(ctx,
-                                                                routineLoadJob.getDbFullName(),
-                                                                routineLoadJob.getTableName())) {
+                            routineLoadJob.getDbFullName(),
+                            routineLoadJob.getTableName())) {
                         iterator.remove();
                     }
                 } catch (MetaNotFoundException e) {
@@ -1127,13 +1139,13 @@ public class ShowExecutor {
             }
         } else {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                                                         dbFullName,
-                                                                         tableName,
-                                                                         PrivPredicate.LOAD)) {
+                    dbFullName,
+                    tableName,
+                    PrivPredicate.LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                                                    ConnectContext.get().getQualifiedUser(),
-                                                    ConnectContext.get().getRemoteIP(),
-                                                    tableName);
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        tableName);
             }
         }
         // get routine load task info
@@ -1548,7 +1560,7 @@ public class ShowExecutor {
             tableRefs.forEach(tableRef -> {
                 TableName tableName = tableRef.getName();
                 if (!PrivilegeManager.checkTableAction(ctx, tableName.getDb(), tableName.getTbl(),
-                                                       PrivilegeType.TableAction.EXPORT)) {
+                        PrivilegeType.TableAction.EXPORT)) {
                     privilegeDeny.set(true);
                 }
             });
@@ -1669,11 +1681,18 @@ public class ShowExecutor {
                         dynamicPartitionScheduler.removeRuntimeInfo(olapTable.getName());
                         continue;
                     }
-                    // check tbl privs
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), olapTable.getName(),
-                            PrivPredicate.SHOW)) {
-                        continue;
+                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!PrivilegeManager.checkAnyActionOnTable(ConnectContext.get(),
+                                db.getFullName(), olapTable.getName())) {
+                            continue;
+                        }
+                    } else {
+                        // check tbl privs
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                                db.getFullName(), olapTable.getName(),
+                                PrivPredicate.SHOW)) {
+                            continue;
+                        }
                     }
                     DynamicPartitionProperty dynamicPartitionProperty =
                             olapTable.getTableProperty().getDynamicPartitionProperty();

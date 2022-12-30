@@ -15,8 +15,8 @@
 #pragma once
 
 #include "column/chunk.h"
-#include "exprs/vectorized/array_expr.h"
-#include "exprs/vectorized/mock_vectorized_expr.h"
+#include "exprs/array_expr.h"
+#include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"

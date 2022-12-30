@@ -177,6 +177,8 @@ public class LargeIntLiteral extends LiteralExpr {
             return Double.compare(value.doubleValue(), expr.getDoubleValue());
         } else if (expr.type.isDecimalV2()) {
             return new BigDecimal(value).compareTo(((DecimalLiteral) expr).getValue());
+        } else if (expr.type.isBoolean()) {
+            return value.compareTo(new BigInteger(String.valueOf(expr.getLongValue())));
         } else {
             BigInteger intValue = new BigInteger(expr.getStringValue());
             return value.compareTo(intValue);

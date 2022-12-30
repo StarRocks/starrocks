@@ -67,6 +67,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -102,6 +103,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -143,6 +145,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
@@ -448,6 +451,8 @@ public class GlobalStateMgr {
 
     private StarOSAgent starOSAgent;
 
+    private ShardDeleter shardDeleter;
+
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
@@ -456,7 +461,9 @@ public class GlobalStateMgr {
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
+    private GlobalFunctionMgr globalFunctionMgr;
 
+    @Deprecated
     private ShardManager shardManager;
 
     private StateChangeExecution execution;
@@ -465,6 +472,8 @@ public class GlobalStateMgr {
 
     // For LakeTable
     private CompactionManager compactionManager;
+
+    private ConfigRefreshDaemon configRefreshDaemon;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -528,6 +537,10 @@ public class GlobalStateMgr {
         return compactionManager;
     }
 
+    public ConfigRefreshDaemon getConfigRefreshDaemon() {
+        return configRefreshDaemon;
+    }
+
     private static class SingletonHolder {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
@@ -587,6 +600,7 @@ public class GlobalStateMgr {
 
         this.stat = new TabletSchedulerStat();
         this.nodeMgr = new NodeMgr(isCheckpointCatalog, this);
+        this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
@@ -631,6 +645,8 @@ public class GlobalStateMgr {
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
+        this.configRefreshDaemon = new ConfigRefreshDaemon();
+        this.shardDeleter = new ShardDeleter();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -682,6 +698,10 @@ public class GlobalStateMgr {
 
     public ResourceMgr getResourceMgr() {
         return resourceMgr;
+    }
+
+    public GlobalFunctionMgr getGlobalFunctionMgr() {
+        return globalFunctionMgr;
     }
 
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
@@ -811,10 +831,6 @@ public class GlobalStateMgr {
 
     public ConnectorMetadata getMetadata() {
         return localMetastore;
-    }
-
-    public ShardManager getShardManager() {
-        return shardManager;
     }
 
     @VisibleForTesting
@@ -1097,8 +1113,8 @@ public class GlobalStateMgr {
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
                 VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
-                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                        LiteralExpr.create("true", Type.BOOLEAN)),
+                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                                LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
         } catch (UserException e) {
@@ -1180,7 +1196,7 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (Config.use_staros) {
-            shardManager.getShardDeleter().start();
+            shardDeleter.start();
         }
     }
 
@@ -1203,6 +1219,7 @@ public class GlobalStateMgr {
         if (Config.use_staros) {
             compactionManager.start();
         }
+        configRefreshDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1307,14 +1324,17 @@ public class GlobalStateMgr {
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
             remoteChecksum = dis.readLong();
+            // ShardManager DEPRECATED, keep it for backward compatible
             checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
+
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadStreamLoadManager(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = MVManager.getInstance().reload(dis, checksum);
             remoteChecksum = dis.readLong();
+            globalFunctionMgr.loadGlobalFunctions(dis, checksum);
             // TODO put this at the end of the image before 3.0 release
             loadRBACPrivilege(dis);
         } catch (EOFException exception) {
@@ -1487,6 +1507,10 @@ public class GlobalStateMgr {
             resourceMgr = ResourceMgr.read(in);
         }
         LOG.info("finished replay resources from image");
+
+        LOG.info("start to replay resource mapping catalog");
+        catalogMgr.loadResourceMappingCatalog();
+        LOG.info("finished replaying resource mapping catalogs from resources");
         return checksum;
     }
 
@@ -1574,6 +1598,7 @@ public class GlobalStateMgr {
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
             dos.writeLong(checksum);
+            // ShardManager Deprecated, keep it for backward compatible
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
@@ -1582,8 +1607,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = MVManager.getInstance().store(dos, checksum);
             dos.writeLong(checksum);
+            globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
+
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -3437,8 +3464,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public Set<Long> onErasePartition(Partition partition) {
-        return localMetastore.onErasePartition(partition);
+    public void onErasePartition(Partition partition) {
+        localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {

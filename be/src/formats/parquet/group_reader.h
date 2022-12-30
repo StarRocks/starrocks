@@ -21,7 +21,7 @@
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/vectorized_column_predicate.h"
+#include "storage/column_predicate.h"
 #include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 namespace starrocks {
@@ -83,6 +83,38 @@ public:
     void set_end_offset(int64_t value) { _end_offset = value; }
 
 private:
+    struct DictFilterContext {
+    public:
+        void init(size_t column_number);
+        void use_as_dict_filter_column(int col_idx, SlotId slot_id, const std::vector<ExprContext*>& conjunct_ctxs);
+        Status rewrite_conjunct_ctxs_to_predicates(
+                const GroupReaderParam& param,
+                std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers, ObjectPool* obj_pool,
+                bool* is_group_filtered);
+
+        void init_chunk(const GroupReaderParam& param, ChunkPtr* chunk);
+        bool filter_chunk(ChunkPtr* chunk, Filter* filter);
+        Status decode_chunk(const GroupReaderParam& param,
+                            std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& column_readers,
+                            const ChunkPtr& read_chunk, ChunkPtr* chunk);
+        ColumnContentType column_content_type(int col_idx) {
+            if (_is_dict_filter_column[col_idx]) {
+                return ColumnContentType::DICT_CODE;
+            }
+            return ColumnContentType::VALUE;
+        }
+
+    private:
+        // if this column use as dict filter?
+        std::vector<bool> _is_dict_filter_column;
+        // columns(index) use as dict filter column
+        std::vector<int> _dict_column_indices;
+        // conjunct ctxs for each dict filter column
+        std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
+        // preds transformed from `_conjunct_ctxs_by_slot` for each dict filter column
+        std::unordered_map<SlotId, ColumnPredicate*> _predicates;
+    };
+
     using SlotIdExprContextsMap = std::unordered_map<int, std::vector<ExprContext*>>;
 
     Status _init_column_readers();
@@ -90,11 +122,10 @@ private:
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
-    bool _can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
-                                const tparquet::ColumnMetaData& column_metadata);
+    bool _can_use_as_dict_filter_column(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
+                                        const tparquet::ColumnMetaData& column_metadata);
     // Returns true if all of the data pages in the column chunk are dict encoded
-    bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
-    Status _rewrite_dict_column_predicates();
+    static bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
     void _init_read_chunk();
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
@@ -109,18 +140,10 @@ private:
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
-    // conjunct ctxs for each dict filter column
-    std::unordered_map<SlotId, std::vector<ExprContext*>> _dict_filter_conjunct_ctxs;
-    // preds transformed from conjunct ctxs for each dict filter column
-    std::unordered_map<SlotId, ColumnPredicate*> _dict_filter_preds;
+
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;
 
-    // dict filter column index
-    std::vector<int> _dict_filter_column_indices;
-    std::vector<bool> _use_as_dict_filter_column;
-    // direct read conlumn index
-    std::vector<int> _direct_read_column_indices;
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;
     // lazy conlumns that hold read_col index
@@ -139,6 +162,8 @@ private:
     ColumnReaderOptions _column_reader_opts;
 
     int64_t _end_offset = 0;
+
+    DictFilterContext _dict_filter_ctx;
 };
 
 } // namespace starrocks::parquet

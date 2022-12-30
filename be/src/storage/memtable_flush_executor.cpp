@@ -102,8 +102,16 @@ Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
     return _flush_token->submit(std::move(task));
 }
 
-void FlushToken::cancel() {
+void FlushToken::shutdown() {
     _flush_token->shutdown();
+}
+
+void FlushToken::cancel(const Status& st) {
+    if (st.ok()) return;
+    std::lock_guard l(_status_lock);
+    if (_status.ok()) {
+        _status = st;
+    }
 }
 
 Status FlushToken::wait() {
@@ -132,6 +140,14 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_flush_pool);
+}
+
+Status MemTableFlushExecutor::update_max_threads(int max_threads) {
+    if (_flush_pool != nullptr) {
+        return _flush_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
 }
 
 std::unique_ptr<FlushToken> MemTableFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {

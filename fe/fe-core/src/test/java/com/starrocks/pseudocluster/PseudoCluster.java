@@ -17,14 +17,16 @@ package com.starrocks.pseudocluster;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.ibm.icu.impl.Assert;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaRole;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.WorkerInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -60,6 +62,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -195,28 +198,44 @@ public class PseudoCluster {
         }
 
         @Override
-        public void createShardGroup(long groupId) throws DdlException {
+        public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+            return partitionId;
         }
 
         @Override
-        public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
-            throws DdlException {
+        public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                       long groupId)
+                throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
                 long id = nextId++;
                 shardIds.add(id);
+                List<ReplicaInfo> replicas = new ArrayList<>();
+                if (!workers.isEmpty()) {
+                    int availableReplicas = Math.min(workers.size(), replicaNum);
+                    int workerIndex = (int) (id % workers.size());
+                    for (int j = 0; j < availableReplicas; ++j) {
+                        replicas.add(ReplicaInfo.newBuilder()
+                                .setReplicaRole(ReplicaRole.PRIMARY)
+                                .setWorkerInfo(WorkerInfo.newBuilder()
+                                        .setWorkerId(workers.get(workerIndex).workerId)
+                                        .build())
+                                .build());
+                        workerIndex = (workerIndex + 1) % workers.size();
+                    }
+                }
                 ShardInfo shardInfo = ShardInfo.newBuilder().setFileCache(cacheInfo)
-                                               .setFilePath(pathInfo)
-                                               .setShardId(id)
-                                               .build();
+                        .addAllReplicaInfo(replicas)
+                        .setFilePath(pathInfo)
+                        .setShardId(id)
+                        .build();
                 shardInfos.add(shardInfo);
             }
             return shardIds;
         }
 
         @Override
-        public void deleteShards(Set<Long> shardIds) throws DdlException {
-            shardInfos.removeIf(s -> shardIds.contains(s.getShardId()));
+        public void deleteShardGroup(List<Long> groupIds) {
         }
 
         @Override
@@ -226,7 +245,13 @@ public class PseudoCluster {
 
         @Override
         public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
-            return Sets.newHashSet(getPrimaryBackendIdByShard(shardId));
+            Set<Long> results = new HashSet<>();
+            shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
+                for (ReplicaInfo info : y.getReplicaInfoList()) {
+                    results.add(info.getWorkerInfo().getWorkerId());
+                }
+            });
+            return results;
         }
     }
 

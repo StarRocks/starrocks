@@ -20,6 +20,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -39,6 +40,12 @@ import java.util.concurrent.TimeUnit;
 public class CachedStatisticStorage implements StatisticStorage {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
+    AsyncLoadingCache<TableStatsCacheKey, Optional<TableStatistic>> tableStatsCache = Caffeine.newBuilder()
+            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+            .maximumSize(Config.statistic_cache_columns)
+            .buildAsync(new TableStatsCacheLoader());
+
     AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> cachedStatistics = Caffeine.newBuilder()
             .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
             .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
@@ -50,6 +57,59 @@ public class CachedStatisticStorage implements StatisticStorage {
             .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
             .buildAsync(new ColumnHistogramStatsCacheLoader());
+
+    @Override
+    public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
+        try {
+            CompletableFuture<Optional<TableStatistic>> result =
+                    tableStatsCache.get(new TableStatsCacheKey(tableId, partitionId));
+            if (result.isDone()) {
+                Optional<TableStatistic> realResult;
+                realResult = result.get();
+                return realResult.orElseGet(TableStatistic::unknown);
+            } else {
+                return TableStatistic.unknown();
+            }
+        } catch (InterruptedException e) {
+            LOG.warn(e);
+            Thread.currentThread().interrupt();
+            return TableStatistic.unknown();
+        } catch (Exception e) {
+            LOG.warn(e);
+            return TableStatistic.unknown();
+        }
+    }
+
+    @Override
+    public void refreshTableStatistic(Table table) {
+        List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
+        for (Partition partition : table.getPartitions()) {
+            statsCacheKeyList.add(new TableStatsCacheKey(table.getId(), partition.getId()));
+        }
+
+        try {
+            CompletableFuture<Map<TableStatsCacheKey, Optional<TableStatistic>>> completableFuture
+                    = tableStatsCache.getAll(statsCacheKeyList);
+            if (completableFuture.isDone()) {
+                completableFuture.get();
+            }
+        } catch (InterruptedException e) {
+            LOG.warn(e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn(e);
+        }
+    }
+
+    @Override
+    public void refreshTableStatisticSync(Table table) {
+        List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
+        for (Partition partition : table.getPartitions()) {
+            statsCacheKeyList.add(new TableStatsCacheKey(table.getId(), partition.getId()));
+        }
+
+        tableStatsCache.synchronous().getAll(statsCacheKeyList);
+    }
 
     @Override
     public ColumnStatistic getColumnStatistic(Table table, String column) {
@@ -164,7 +224,13 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public void expireColumnStatistics(Table table, List<String> columns) {
+    public void expireTableAndColumnStatistics(Table table, List<String> columns) {
+        List<TableStatsCacheKey> tableStatsCacheKeys = Lists.newArrayList();
+        for (Partition partition : table.getPartitions()) {
+            tableStatsCacheKeys.add(new TableStatsCacheKey(table.getId(), partition.getId()));
+        }
+        tableStatsCache.synchronous().invalidateAll(tableStatsCacheKeys);
+
         if (columns == null) {
             return;
         }

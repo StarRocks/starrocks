@@ -129,8 +129,12 @@ public class StarMgrServer {
         com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
         com.staros.util.Config.S3_REGION = Config.starmgr_s3_region;
         com.staros.util.Config.S3_ENDPOINT = Config.starmgr_s3_endpoint;
-        com.staros.util.Config.S3_AK = Config.starmgr_s3_ak;
-        com.staros.util.Config.S3_SK = Config.starmgr_s3_sk;
+        com.staros.util.Config.AWS_CREDENTIAL_TYPE = Config.starmgr_aws_credential_type;
+        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.starmgr_simple_credential_access_key_id;
+        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.starmgr_simple_credential_access_key_secret;
+        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.starmgr_assume_role_credential_arn;
+        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.starmgr_assume_role_credential_external_id;
+        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.starmgr_disable_shard_balance;
 
         com.staros.util.Config.HDFS_URL = Config.hdfs_url;
 

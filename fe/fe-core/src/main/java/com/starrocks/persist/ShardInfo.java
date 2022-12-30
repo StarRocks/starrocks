@@ -26,6 +26,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Set;
 
+@Deprecated
 public class ShardInfo implements Writable {
 
     @SerializedName(value = "shardIds")
@@ -33,14 +34,6 @@ public class ShardInfo implements Writable {
 
     public ShardInfo() {
         this.shardIds = Sets.newHashSet();
-    }
-
-    public ShardInfo(Set<Long> ids) {
-        this.shardIds = ids;
-    }
-
-    public Set<Long> getShardIds() {
-        return this.shardIds;
     }
 
     @Override

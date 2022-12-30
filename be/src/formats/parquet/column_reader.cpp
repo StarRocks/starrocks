@@ -19,7 +19,7 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "util/runtime_profile.h"

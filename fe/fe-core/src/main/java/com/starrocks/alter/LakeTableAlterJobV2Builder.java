@@ -65,10 +65,14 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             // create SHADOW index for each partition
             for (Partition partition : table.getPartitions()) {
                 long partitionId = partition.getId();
+                long shardGroupId = partition.getShardGroupId();
+                short replicaNum = table.getPartitionInfo().getReplicationNum(partitionId);
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
+                // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
+                //  revise the code again.
                 List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
-                                     table.getPartitionFileCacheInfo(partitionId), partitionId);
+                        createShards(originTablets.size(), replicaNum, table.getPartitionFilePathInfo(),
+                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -92,9 +96,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @VisibleForTesting
-    public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+    public static List<Long> createShards(int shardCount, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                          long groupId)
         throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId);
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, replicaNum, pathInfo, cacheInfo, groupId);
     }
 
 }

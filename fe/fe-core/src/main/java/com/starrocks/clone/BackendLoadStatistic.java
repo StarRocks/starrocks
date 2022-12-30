@@ -314,7 +314,7 @@ public class BackendLoadStatistic {
             }
 
             if (Math.abs(pathStat.getUsedPercent() - avgUsedPercent)
-                    / avgUsedPercent > Config.tablet_sched_balance_load_score_threshold) {
+                    / (avgUsedPercent == 0.0 ? 1 : avgUsedPercent) > Config.tablet_sched_balance_load_score_threshold) {
                 if (pathStat.getUsedPercent() > avgUsedPercent) {
                     pathStat.setClazz(Classification.HIGH);
                     highCounter++;

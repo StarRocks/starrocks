@@ -17,8 +17,8 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
-#include "exprs/vectorized/arithmetic_operation.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 
@@ -117,6 +117,15 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         do_update<true>(ctx, columns, state, row_num);
+    }
+
+    AggStateTableKind agg_state_table_kind(bool is_append_only) const override {
+        return AggStateTableKind::INTERMEDIATE;
+    }
+
+    void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        do_update<false>(ctx, columns, state, row_num);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,

@@ -42,7 +42,7 @@ public:
     virtual Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
     virtual void finish(RuntimeState* state) {
-        if (decrement_sink_number() == 1) {
+        if (decr_sinker() == 1) {
             for (auto* source : _source->get_sources()) {
                 source->set_finishing(state);
             }
@@ -63,9 +63,8 @@ public:
 
     bool need_input() const;
 
-    void increment_sink_number() { _sink_number++; }
-
-    int32_t decrement_sink_number() { return _sink_number--; }
+    virtual void incr_sinker() { _sink_number++; }
+    int32_t decr_sinker() { return _sink_number--; }
 
     int32_t source_dop() const { return _source->get_sources().size(); }
 
@@ -104,7 +103,7 @@ class PartitionExchanger final : public LocalExchanger {
         LocalExchangeSourceOperatorFactory* _source;
         const TPartitionType::type _part_type;
         // Compute per-row partition values.
-        const std::vector<ExprContext*> _partition_expr_ctxs;
+        const std::vector<ExprContext*>& _partition_expr_ctxs;
 
         Columns _partitions_columns;
         std::vector<uint32_t> _hash_values;
@@ -120,18 +119,22 @@ class PartitionExchanger final : public LocalExchanger {
 public:
     PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                       const std::vector<ExprContext*>& _partition_expr_ctxs, size_t num_sinks);
+                       const std::vector<ExprContext*>& _partition_expr_ctxs);
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
+    void incr_sinker() override;
+
 private:
     // Used for local shuffle exchanger.
     // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner.
     // TODO(lzh): limit the size of _partitioners, because it will cost too much memory when dop is high.
+    TPartitionType::type _part_type;
     std::vector<ExprContext*> _partition_exprs;
+
     std::vector<Partitioner> _partitioners;
 };
 

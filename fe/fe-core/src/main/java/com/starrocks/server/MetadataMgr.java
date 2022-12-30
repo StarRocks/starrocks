@@ -65,7 +65,13 @@ public class MetadataMgr {
                 QueryMetadatas queryMetadatas = metadataByQueryId.computeIfAbsent(queryId, ignored -> new QueryMetadatas());
                 return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId));
             } else {
-                return Optional.of(connectorMgr.getConnector(catalogName).getMetadata());
+                Connector connector = connectorMgr.getConnector(catalogName);
+                if (connector == null) {
+                    LOG.error("Failed to get {} catalog", catalogName);
+                    return Optional.empty();
+                } else {
+                    return Optional.of(connector.getMetadata());
+                }
             }
         }
     }

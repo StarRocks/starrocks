@@ -47,6 +47,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -340,7 +341,8 @@ public class AggregationNode extends PlanNode {
         // greater than 24 bytes(it is equivalent to three bigint-typed group-by columns), then cache populating penalty
         // is unacceptable.
         List<ColumnStatistic> stringColumnStatistics = slotRefs.stream()
-                .map(slot -> columnStatistics.get(new ColumnRefOperator(slot.getSlotId().asInt(), null, null, false)))
+                .map(slot -> columnStatistics.get(new ColumnRefOperator(slot.getSlotId().asInt(),
+                        ScalarType.UNKNOWN_TYPE, "key", false)))
                 .filter(stat -> stat != null && !stat.isUnknown() &&
                         stat.getAverageRowSize() * stat.getDistinctValuesCount() > 24 * cardinalityLimit)
                 .collect(Collectors.toList());

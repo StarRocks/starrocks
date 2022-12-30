@@ -2,7 +2,7 @@
 
 ## Description
 
-Creates a repository in an remote storage system that is used to store data snapshots for [data backup and restoration](../../../administration/Backup_and_restore.md).
+Creates a repository in a remote storage system that is used to store data snapshots for [Backup and restore data](../../../administration/Backup_and_restore.md).
 
 > **CAUTION**
 >
@@ -23,10 +23,33 @@ PROPERTIES ("key"="value", ...)
 
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
-| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. |
+| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only warehouse for the new cluster and only grant it RESTORE permissions.|
 | repository_name     | Repository name.                                             |
 | repository_location | Location of the repository in the remote storage system.     |
 | PROPERTIES          | Username/password or access key/endpoint to the remote storage system. See [Examples](#examples) for more instructions. |
+
+**PROPERTIES**:
+
+StarRocks Supports creating repository in HDFS, S3, OSS, and COS.
+
+- HDFS：
+  - "username"：Username used to log in HDFS.
+  - "password"：Password used to log in HDFS.
+
+- S3：
+  - "fs.s3a.access.key"：Access Key used to log in S3.
+  - "fs.s3a.secret.key"：Secret Key used to log in S3.
+  - "fs.s3a.endpoint"：Endpoint of the S3 storage.
+
+- For OSS：
+  - "fs.oss.accessKeyId"：Access Key ID used to log in OSS.
+  - "fs.oss.accessKeySecret"：Access Key Secret used to log in OSS.
+  - "fs.oss.endpoint"：Endpoint of the OSS storage.
+
+- For COS：
+  - "fs.cosn.userinfo.secretId"：Secret ID used to log in COS.
+  - "fs.cosn.userinfo.secretKey"：Secret Key used to log in COS.
+  - "fs.cosn.bucket.endpoint_suffix"：COS endpoint suffix.
 
 ## Examples
 
