@@ -177,3 +177,11 @@ No.
 ## Can "2021-10" be used as a partition field?
 
 No, use functions to change "2021-10" to "2021-10-01" and then use "2021-10-01" as a partition field.
+
+## Where can I query the size of a StarRocks database or table?
+
+You can use the [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW%20DATA.md) command.
+
+`SHOW DATA;` displays the data size and replicas of all tables in the current database.
+
+`SHOW DATA FROM <db_name>.<table_name>;` displays the data size, number of replicas, and number of rows in a specified table of a specified database.
