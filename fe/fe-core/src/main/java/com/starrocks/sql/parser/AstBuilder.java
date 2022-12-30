@@ -93,6 +93,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -4114,6 +4115,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
     }
 
+    public String extendPrivilegeType(boolean isGlobal, String type) {
+        if (isGlobal) {
+            if (type.equals("FUNCTIONS") || type.equals("FUNCTION")) {
+                return "GLOBAL_" + type;
+            }
+        }
+        return type;
+    }
+
     @Override
     public ParseNode visitGrantOnAll(StarRocksParser.GrantOnAllContext context) {
         GrantRevokePrivilegeObjects objects =
@@ -4121,6 +4131,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String type = ((Identifier) visit(context.privilegeType(0))).getValue().toUpperCase();
         return newGrantRevokePrivilegeStmt(
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, true);
+    }
+
+    public ParseNode visitAllGlobalFunctions(StarRocksParser.GrantRevokeClauseContext grantRevokeClauseContext,
+                                             StarRocksParser.PrivilegeActionListContext privilegeActionListContext,
+                                             boolean isGrant) {
+        String type = PrivilegeType.GLOBAL_FUNCTION.getPlural();
+        List<String> allTypes = ImmutableList.of(type);
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setAll(allTypes, null, null);
+        return newGrantRevokePrivilegeStmt(
+                type, privilegeActionListContext, grantRevokeClauseContext, objects, isGrant);
+    }
+
+    @Override
+    public ParseNode visitGrantOnAllGlobalFunctions(StarRocksParser.GrantOnAllGlobalFunctionsContext context) {
+        return visitAllGlobalFunctions(context.grantRevokeClause(), context.privilegeActionList(), true);
+    }
+
+    @Override
+    public ParseNode visitRevokeOnAllGlobalFunctions(StarRocksParser.RevokeOnAllGlobalFunctionsContext context) {
+        return visitAllGlobalFunctions(context.grantRevokeClause(), context.privilegeActionList(), false);
     }
 
     @Override
@@ -4135,6 +4166,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
         String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        type = extendPrivilegeType(context.GLOBAL() != null, type);
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
         FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
@@ -4147,6 +4179,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
         String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        type = extendPrivilegeType(context.GLOBAL() != null, type);
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
         FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
