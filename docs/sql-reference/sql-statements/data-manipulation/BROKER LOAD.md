@@ -445,7 +445,7 @@ If you want to load all data from `example5.csv` into `table5` with Kerberos aut
 ```SQL
 LOAD LABEL test_db.label5
 (
-    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example5.csv)
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example5.csv")
     NEGATIVE
     INTO TABLE table5
     COLUMNS TERMINATED BY "\t"
@@ -471,7 +471,7 @@ If you want to revoke the data you have loaded, run the following command:
 ```SQL
 LOAD LABEL test_db.label6
 (
-    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example6.csv)
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example6.csv")
     NEGATIVE
     INTO TABLE table6
     COLUMNS TERMINATED BY "\t"
