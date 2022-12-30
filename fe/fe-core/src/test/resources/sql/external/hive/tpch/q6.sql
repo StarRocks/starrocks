@@ -21,6 +21,7 @@ RESULT SINK
 |  * sum-->[18.02, 4197.9800000000005, 0.0, 16.0, 1.0] ESTIMATE
 |
 3:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 1(F00)

@@ -33,6 +33,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 31:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 1600000
 column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
@@ -73,6 +74,7 @@ OutPut Exchange Id: 31
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
 |----27:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 11:AGGREGATE (update finalize)
@@ -84,6 +86,8 @@ OutPut Exchange Id: 31
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |
 10:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [1: ps_partkey, INT, true]
 cardinality: 3200000
 
 PLAN FRAGMENT 2(F11)
@@ -114,6 +118,7 @@ OutPut Exchange Id: 27
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
 23:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 3(F06)
@@ -150,6 +155,7 @@ OutPut Exchange Id: 23
 |  * expr-->[1.0, 9999000.0, 0.0, 16.0, 99864.0] ESTIMATE
 |
 |----19:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 40000
 |
 12:HdfsScanNode
@@ -192,6 +198,7 @@ OutPut Exchange Id: 19
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----16:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 13:HdfsScanNode
@@ -263,6 +270,7 @@ OutPut Exchange Id: 10
 |  * expr-->[1.0, 9999000.0, 0.0, 16.0, 99864.0] ESTIMATE
 |
 |----7:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 40000
 |
 0:HdfsScanNode
@@ -306,6 +314,7 @@ OutPut Exchange Id: 07
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----4:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 1:HdfsScanNode

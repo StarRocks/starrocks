@@ -49,6 +49,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 26:MERGING-EXCHANGE
+distribution type: GATHER
 limit: 100
 cardinality: 2
 column statistics:
@@ -164,6 +165,8 @@ OutPut Exchange Id: 26
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 20:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [1: p_partkey, INT, true]
 cardinality: 200000
 
 PLAN FRAGMENT 2(F10)
@@ -216,9 +219,13 @@ OutPut Exchange Id: 20
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 |----17:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [18: ps_suppkey, INT, true]
 |       cardinality: 400000
 |
 10:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [10: s_suppkey, INT, true]
 cardinality: 200000
 
 PLAN FRAGMENT 3(F06)
@@ -255,6 +262,7 @@ OutPut Exchange Id: 17
 |  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----14:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 100000
 |
 11:HdfsScanNode
@@ -344,6 +352,7 @@ OutPut Exchange Id: 10
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 |----7:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 5
 |
 0:HdfsScanNode
@@ -393,6 +402,7 @@ OutPut Exchange Id: 07
 |  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----4:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 1:HdfsScanNode
