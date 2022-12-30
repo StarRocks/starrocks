@@ -235,13 +235,12 @@ public class ScalarOperatorToIcebergExpr {
             return null;
         }
 
-        Object literalValue = operator.accept(new ExtractLiteralValue(), null);
-        return literalValue;
+        return operator.accept(new ExtractLiteralValue(), null);
     }
 
     private static Object convertBoolLiteralValue(Object literalValue, Type.TypeID type) {
         try {
-            if (type == Type.TypeID.BOOLEAN) {
+            if (literalValue != null && type == Type.TypeID.BOOLEAN) {
                 literalValue = new BoolLiteral(String.valueOf(literalValue)).getValue();
             }
         } catch (AnalysisException e) {
