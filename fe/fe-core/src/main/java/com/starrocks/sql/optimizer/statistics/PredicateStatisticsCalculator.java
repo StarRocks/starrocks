@@ -28,20 +28,21 @@ public class PredicateStatisticsCalculator {
         }
 
         // The time-complexity of PredicateStatisticsCalculatingVisitor OR row-count is O(2^n), n is OR number
-        if (countOrNode(predicate, 0) > StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT) {
+        if (countDisConsecutiveOr(predicate, 0, false) > StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT) {
             return predicate.accept(new LargeOrCalculatingVisitor(statistics), null);
         } else {
             return predicate.accept(new PredicateStatisticsCalculatingVisitor(statistics), null);
         }
     }
 
-    private static long countOrNode(ScalarOperator root, long count) {
-        if (OperatorType.COMPOUND.equals(root.getOpType()) && ((CompoundPredicateOperator) root).isOr()) {
+    private static long countDisConsecutiveOr(ScalarOperator root, long count, boolean isConsecutive) {
+        boolean isOr = OperatorType.COMPOUND.equals(root.getOpType()) && ((CompoundPredicateOperator) root).isOr();
+        if (isOr && !isConsecutive) {
             count = count + 1;
         }
 
         for (ScalarOperator child : root.getChildren()) {
-            count = countOrNode(child, count);
+            count = countDisConsecutiveOr(child, count, isOr);
         }
 
         return count;
@@ -276,7 +277,7 @@ public class PredicateStatisticsCalculator {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
 
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
-                Statistics cumulativeStatistics = predicate.getChild(0).accept(this, null);
+                Statistics cumulativeStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = cumulativeStatistics.getOutputRowCount();
 
                 for (int i = 1; i < disjunctive.size(); ++i) {
@@ -359,7 +360,7 @@ public class PredicateStatisticsCalculator {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
 
                 List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
-                Statistics baseStatistics = predicate.getChild(0).accept(this, null);
+                Statistics baseStatistics = disjunctive.get(0).accept(this, null);
                 double rowCount = baseStatistics.getOutputRowCount();
 
                 for (int i = 1; i < disjunctive.size(); ++i) {
