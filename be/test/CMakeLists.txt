@@ -42,6 +42,7 @@ set(EXEC_FILES
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/stream/mem_state_table_test.cpp
+        ./exec/stream/stream_aggregator_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/analytor_test.cpp
@@ -290,6 +291,7 @@ set(EXEC_FILES
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
         ./util/faststring_test.cpp
+        ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp

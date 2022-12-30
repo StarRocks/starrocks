@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -133,7 +132,7 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupByAsAnalyze() throws Exception {
         String sql = "select BITOR(825279661, 1960775729) as a from test_all_type group by a";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "group by: 11: bitor");
+        assertContains(plan, "group by: 11: expr");
     }
 
     @Test
@@ -1799,5 +1798,13 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testGroupByLiteral() throws Exception {
+        String sql = "select -9223372036854775808 group by TRUE;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 3> : -9223372036854775808");
     }
 }

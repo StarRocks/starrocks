@@ -79,7 +79,7 @@ public class PlanTestBase {
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
+
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
@@ -1076,6 +1076,8 @@ public class PlanTestBase {
                 ");");
 
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
+        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
     @AfterClass
@@ -1146,6 +1148,21 @@ public class PlanTestBase {
         int planCount = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.getPlanCount();
         connectContext.getSessionVariable().setUseNthExecPlan(0);
         return planCount;
+    }
+
+
+    public String getSQLFile(String filename) {
+        String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
+        File file = new File(path + "/" + filename + ".sql");
+
+        String sql;
+        try (BufferedReader re = new BufferedReader(new FileReader(file))) {
+            sql = re.lines().collect(Collectors.joining());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return sql;
     }
 
     public void runFileUnitTest(String filename, boolean debug) {

@@ -79,6 +79,7 @@ public:
         DCHECK_EQ(extra_column_data->columns().size(), 1);
         auto* op_col = ColumnHelper::as_raw_column<Int8Column>(extra_column_data->columns()[0]);
         DCHECK(op_col);
+        DCHECK_EQ(stream_chunk.num_rows(), op_col->size());
         return op_col;
     }
 

@@ -32,6 +32,13 @@ public:
     std::string external_id;
     std::string region;
     std::string endpoint;
+
+    bool operator==(const AWSCloudCredential& rhs) const {
+        return use_aws_sdk_default_behavior == rhs.use_aws_sdk_default_behavior &&
+               use_instance_profile == rhs.use_instance_profile && access_key == rhs.access_key &&
+               secret_key == rhs.secret_key && iam_role_arn == rhs.iam_role_arn && external_id == rhs.external_id &&
+               region == rhs.region && endpoint == rhs.endpoint;
+    }
 };
 
 class CloudConfiguration {
@@ -41,7 +48,11 @@ public:
 
 class AWSCloudConfiguration final : public CloudConfiguration {
 public:
-    std::shared_ptr<AWSCloudCredential> aws_cloud_credential;
+    bool operator==(const AWSCloudConfiguration& rhs) const {
+        return enable_path_style_access == rhs.enable_path_style_access && enable_ssl == rhs.enable_ssl &&
+               aws_cloud_credential == rhs.aws_cloud_credential;
+    }
+    AWSCloudCredential aws_cloud_credential;
     bool enable_path_style_access = false;
     bool enable_ssl = true;
 };

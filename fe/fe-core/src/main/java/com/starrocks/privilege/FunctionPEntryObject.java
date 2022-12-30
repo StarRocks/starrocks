@@ -98,7 +98,7 @@ public class FunctionPEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return false;
+        return databaseId == ALL_DATABASE_ID || functionSig.equals(ALL_FUNCTIONS_SIG);
     }
 
     @Override

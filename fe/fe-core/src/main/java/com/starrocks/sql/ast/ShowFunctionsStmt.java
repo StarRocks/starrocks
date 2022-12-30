@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
@@ -32,13 +31,16 @@ public class ShowFunctionsStmt extends ShowStmt {
 
     private String dbName;
     private final boolean isBuiltin;
+    private final boolean isGlobal;
     private final boolean isVerbose;
     private final String wild;
     private final Expr expr;
 
-    public ShowFunctionsStmt(String dbName, boolean isBuiltin, boolean isVerbose, String wild, Expr expr) {
+    public ShowFunctionsStmt(String dbName, boolean isBuiltin, boolean isGlobal, boolean isVerbose, String wild,
+                             Expr expr) {
         this.dbName = dbName;
         this.isBuiltin = isBuiltin;
+        this.isGlobal = isGlobal;
         this.isVerbose = isVerbose;
         this.wild = wild;
         this.expr = expr;
@@ -50,6 +52,10 @@ public class ShowFunctionsStmt extends ShowStmt {
 
     public boolean getIsBuiltin() {
         return isBuiltin;
+    }
+
+    public boolean getIsGlobal() {
+        return isGlobal;
     }
 
     public boolean getIsVerbose() {

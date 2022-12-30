@@ -470,8 +470,8 @@ public class EditLog {
                     if (version > FeConstants.meta_version) {
                         throw new JournalInconsistentException(
                                 "invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                + "please update FeConstants.meta_version bigger or equal to " + version +
-                                " and restart.");
+                                        + "please update FeConstants.meta_version bigger or equal to " + version +
+                                        " and restart.");
                     }
                     MetaContext.get().setMetaVersion(version);
                     break;
@@ -592,12 +592,20 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_FUNCTION: {
                     final Function function = (Function) journal.getData();
-                    Database.replayCreateFunctionLog(function);
+                    if (function.getFunctionName().isGlobalFunction()) {
+                        GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
+                    } else {
+                        Database.replayCreateFunctionLog(function);
+                    }
                     break;
                 }
                 case OperationType.OP_DROP_FUNCTION: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
-                    Database.replayDropFunctionLog(function);
+                    if (function.getName().isGlobalFunction()) {
+                        GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayDropFunction(function);
+                    } else {
+                        Database.replayDropFunctionLog(function);
+                    }
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
@@ -931,7 +939,8 @@ public class EditLog {
                 }
             }
         } catch (Exception e) {
-            JournalInconsistentException exception = new JournalInconsistentException("failed to load journal type " + opCode);
+            JournalInconsistentException exception =
+                    new JournalInconsistentException("failed to load journal type " + opCode);
             exception.initCause(e);
             throw exception;
         }
@@ -1123,7 +1132,6 @@ public class EditLog {
     public void logRecoverTable(RecoverInfo info) {
         logEdit(OperationType.OP_RECOVER_TABLE, info);
     }
-
 
     public void logDropRollup(DropInfo info) {
         logEdit(OperationType.OP_DROP_ROLLUP, info);

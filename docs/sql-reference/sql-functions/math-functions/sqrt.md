@@ -2,7 +2,7 @@
 
 ## Description
 
-Calculates the square root of a value, dsqrt is same as sqrt.
+Calculates the square root of a value. dsqrt is same as sqrt.
 
 ## Syntax
 
@@ -13,7 +13,7 @@ DOUBLE DSQRT(DOUBLE x);
 
 ## Parameters
 
-`x`: You can specify only a numeric value. This function converts the numeric value into a DOUBLE value before calculates.
+`x`: You can specify only a numeric value. This function converts the numeric value into a DOUBLE value before calculation.
 
 ## Return value
 
@@ -25,7 +25,7 @@ If you specify a non-numeric value, this function returns `NULL`.
 
 ## Examples
 
-```Plain Text
+```Plain
 mysql> select sqrt(3.14);
 +-------------------+
 | sqrt(3.14)        |

@@ -303,7 +303,7 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+    public List<Long> createShards(int numShards, int replicaNum, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {
         prepare();
         List<ShardInfo> shardInfos = null;
@@ -311,7 +311,7 @@ public class StarOSAgent {
             List<CreateShardInfo> createShardInfoList = new ArrayList<>(numShards);
 
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
-            builder.setReplicaCount(1)
+            builder.setReplicaCount(replicaNum)
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo);
