@@ -437,7 +437,7 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  8:Project\n" +
+                "  9:Project\n" +
                 "  |  <slot 10> : 0\n" +
                 "  |  \n");
     }
@@ -498,7 +498,7 @@ public class JoinTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  5:Project\n" +
-                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 12> : 1\n" +
                 "  |  \n" +
                 "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -927,7 +927,11 @@ public class JoinTest extends PlanTestBase {
         String sql = "select t0.v1 from t0, t1, t2, t3 where t0.v1 + t3.v10 = 2";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+<<<<<<< HEAD
         assertContains(plan, "3:NESTLOOP JOIN\n" +
+=======
+        assertContains(plan, "13:NESTLOOP JOIN\n" +
+>>>>>>> dc8d33c1c ([BugFix] use a tinyint col to fill empty project (#15662))
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 + 10: v10 = 2");
@@ -2034,6 +2038,7 @@ public class JoinTest extends PlanTestBase {
                 "          72\n" +
                 "      ) as subq_0 \n" +
                 "      right join t1 as ref_1 on (subq_0.v3 = ref_1.v5) \n" +
+<<<<<<< HEAD
                 "    where \n" +
                 "      subq_0.v2 <> subq_0.v3 \n" +
                 "    limit \n" +
@@ -2045,6 +2050,15 @@ public class JoinTest extends PlanTestBase {
                 "  155;";
         assertPlanContains(sql, "6:Project\n" +
                 "  |  <slot 1> : 1: v1");
+=======
+                "    where subq_0.v2 <> subq_0.v3 \n" +
+                "    limit 126 ) as subq_1 \n" +
+                "where 66 <= unix_timestamp() \n" +
+                "limit 155;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "7:Project\n" +
+                "  |  <slot 10> : 1");
+>>>>>>> dc8d33c1c ([BugFix] use a tinyint col to fill empty project (#15662))
     }
 
     @Test
@@ -2553,4 +2567,72 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "if(5: v5 = 0, '未知'");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testJoinKeyHasExpr() throws Exception {
+        String sql = "select subq_1.c0 from " +
+                "(select subq_0.c0 as c0, subq_0.c0 as c4, subq_0.c1 as c5, " +
+                "max(cast(subq_0.c0 as INT)) over (partition by ref_1.n_nationkey, subq_0.c0) as c8, ref_1.n_name as c13 " +
+                "from ( select ref_0.C_CUSTKEY as c0, ref_0.C_CUSTKEY as c1 from customer as ref_0 ) as subq_0 " +
+                "inner join nation as ref_1 on (subq_0.c0 = ref_1.n_name) ) as subq_1 where subq_1.c13 = subq_1.c5;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
+                "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
+    }
+
+    @Test
+    public void testComplexProjectionJoin() throws Exception {
+        connectContext.getSessionVariable().disableDPJoinReorder();
+        connectContext.getSessionVariable().disableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(3);
+
+        String sql = "select * from t4 join (   \n" +
+                "    select abs(xx1) as xxx1 from t3 join (       \n" +
+                "        select abs(x1) as xx1 from t2 join (          \n" +
+                "            select abs(t0.v1) as x1 from t0 join t1 \n" +
+                "            on v1 = t1.v4) y1        \n" +
+                "        on t2.v7 = x1) y2    \n" +
+                "    on t3.v10 = xx1) y3  \n" +
+                "on t4.v13 = xxx1";
+
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().enableDPJoinReorder();
+        connectContext.getSessionVariable().enableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+
+        assertContains(plan, "  13:Project\n" +
+                "  |  <slot 17> : abs(16: abs)\n" +
+                "  |  \n" +
+                "  12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)");
+    }
+
+    @Test
+    public void testSmallestColInJoin() throws Exception {
+        String sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2 where t.v1 = t1.v4 and t2.v7 = 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v4\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode");
+        sql = "select 1 from (select v1, v2, 3, 4, 'a' from t0) t, t1, t2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "|----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:Project\n" +
+                "  |  <slot 21> : 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+>>>>>>> dc8d33c1c ([BugFix] use a tinyint col to fill empty project (#15662))
 }
