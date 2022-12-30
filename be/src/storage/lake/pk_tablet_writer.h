@@ -28,13 +28,14 @@ class SegmentWriter;
 
 namespace starrocks::lake {
 
-class GeneralTabletWriter : public TabletWriter {
+class PkTabletWriter : public TabletWriter {
 public:
-    explicit GeneralTabletWriter(Tablet tablet);
+    explicit PkTabletWriter(Tablet tablet, RowsetTxnMetaPB* rowset_txn_meta,
+                            std::shared_ptr<const TabletSchema>& tschema);
 
-    ~GeneralTabletWriter() override;
+    ~PkTabletWriter() override;
 
-    DISALLOW_COPY(GeneralTabletWriter);
+    DISALLOW_COPY(PkTabletWriter);
 
     int64_t tablet_id() const override { return _tablet.id(); }
 
@@ -42,9 +43,7 @@ public:
 
     Status write(const starrocks::Chunk& data) override;
 
-    Status flush_del_file(const Column& deletes) {
-        return Status::NotSupported("GeneralTabletWriter flush_del_file not support");
-    }
+    Status flush_del_file(const Column& deletes) override;
 
     Status flush() override;
 
@@ -70,6 +69,7 @@ private:
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    RowsetTxnMetaPB* _rowset_txn_meta = nullptr;
 };
 
 } // namespace starrocks::lake

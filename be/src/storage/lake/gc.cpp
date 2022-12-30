@@ -30,6 +30,8 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/update_manager.h"
+#include "storage/olap_common.h"
 #include "util/raw_container.h"
 
 namespace starrocks::lake {
@@ -206,20 +208,20 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, in
     return ret;
 }
 
-static StatusOr<std::set<std::string>> find_orphan_segments(TabletManager* tablet_mgr, std::string_view root_location,
-                                                            const std::vector<std::string>& tablet_metadatas,
-                                                            const std::vector<std::string>& txn_logs) {
+static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tablet_mgr, std::string_view root_location,
+                                                             const std::vector<std::string>& tablet_metadatas,
+                                                             const std::vector<std::string>& txn_logs) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
     const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
 
-    std::set<std::string> segments;
+    std::set<std::string> datafiles;
 
     // List segment
     auto iter_st = fs->iterate_dir(segment_root_location, [&](std::string_view name) {
-        if (LIKELY(is_segment(name))) {
-            segments.emplace(name);
+        if (LIKELY(is_segment(name) || is_del(name) || is_delvec(name))) {
+            datafiles.emplace(name);
         }
         return true;
     });
@@ -227,13 +229,26 @@ static StatusOr<std::set<std::string>> find_orphan_segments(TabletManager* table
         return iter_st;
     }
 
-    if (segments.empty()) {
-        return segments;
+    if (datafiles.empty()) {
+        return datafiles;
     }
 
     auto check_rowset = [&](const RowsetMetadata& rowset) {
         for (const auto& seg : rowset.segments()) {
-            segments.erase(seg);
+            datafiles.erase(seg);
+        }
+    };
+
+    auto check_dels = [&](const TxnLogPB_OpWrite& opwrite) {
+        for (const auto& del : opwrite.dels()) {
+            datafiles.erase(del);
+        }
+    };
+
+    auto check_delvecs = [&](const TabletMetadataPtr metadata) {
+        for (const auto& delvec : metadata->delvec_meta().delvecs()) {
+            std::string delvec_name = tablet_delvec_filename(metadata->id(), delvec.page().version());
+            datafiles.erase(delvec_name);
         }
     };
 
@@ -250,6 +265,7 @@ static StatusOr<std::set<std::string>> find_orphan_segments(TabletManager* table
         for (const auto& rowset : metadata->rowsets()) {
             check_rowset(rowset);
         }
+        check_delvecs(metadata);
     }
 
     for (const auto& filename : txn_logs) {
@@ -264,6 +280,7 @@ static StatusOr<std::set<std::string>> find_orphan_segments(TabletManager* table
         auto txn_log = std::move(res).value();
         if (txn_log->has_op_write()) {
             check_rowset(txn_log->op_write().rowset());
+            check_dels(txn_log->op_write());
         }
         if (txn_log->has_op_compaction()) {
             // No need to check input rowsets
@@ -278,24 +295,24 @@ static StatusOr<std::set<std::string>> find_orphan_segments(TabletManager* table
 
     auto now = std::time(nullptr);
 
-    for (auto it = segments.begin(); it != segments.end(); /**/) {
+    for (auto it = datafiles.begin(); it != datafiles.end(); /**/) {
         auto location = join_path(segment_root_location, *it);
         auto res = fs->get_file_modified_time(location);
         if (!res.ok()) {
             LOG_IF(WARNING, !res.status().is_not_found())
                     << "Fail to get modified time of " << location << ": " << res.status();
-            it = segments.erase(it);
+            it = datafiles.erase(it);
         } else if (now < *res + config::lake_gc_segment_expire_seconds) {
-            it = segments.erase(it);
+            it = datafiles.erase(it);
         } else {
             ++it;
         }
     }
 
-    return segments;
+    return datafiles;
 }
 
-Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
+Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 
     const auto owned_tablets = tablet_mgr->owned_tablets();
@@ -340,19 +357,20 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
         return iter_st;
     }
 
-    // Find orphan segments
-    ASSIGN_OR_RETURN(auto orphan_segments, find_orphan_segments(tablet_mgr, root_location, tablet_metadatas, txn_logs));
+    // Find orphan data files, include segment, del, and delvec
+    ASSIGN_OR_RETURN(auto orphan_datafiles,
+                     find_orphan_datafiles(tablet_mgr, root_location, tablet_metadatas, txn_logs));
     // Write orphan segment list file
     WritableFileOptions opts{
             .sync_on_close = false, .skip_fill_local_cache = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto orphan_list_file, fs->new_writable_file(opts, join_path(root_location, kGCFileName)));
-    RETURN_IF_ERROR(write_orphan_list_file(orphan_segments, orphan_list_file.get()));
-    // Delete orphan segment files
-    for (auto& seg : orphan_segments) {
-        LOG(INFO) << "Deleting orphan segment " << seg;
-        auto location = join_path(segment_root_location, seg);
+    RETURN_IF_ERROR(write_orphan_list_file(orphan_datafiles, orphan_list_file.get()));
+    // Delete orphan segment files and del files
+    for (auto& file : orphan_datafiles) {
+        LOG(INFO) << "Deleting orphan data file: " << file;
+        auto location = join_path(segment_root_location, file);
         auto st = fs->delete_file(location);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << seg << ": " << st;
+        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << file << ": " << st;
     }
     return Status::OK();
 }

@@ -23,11 +23,8 @@
 namespace starrocks {
 class MemTracker;
 class SlotDescriptor;
-} // namespace starrocks
-
-namespace starrocks {
 class Chunk;
-}
+} // namespace starrocks
 
 namespace starrocks::lake {
 

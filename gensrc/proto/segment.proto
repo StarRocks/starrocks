@@ -33,17 +33,17 @@
 // under the License.
 // Define file format struct, like data header, index header.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
+option java_package = "com.starrocks.proto";
 
 import "olap_common.proto";
 import "types.proto";
 
-
 message MetadataPairPB {
-  optional string key = 1;
-  optional bytes value = 2;
+    optional string key = 1;
+    optional bytes value = 2;
 }
 
 enum EncodingTypePB {
@@ -96,16 +96,16 @@ message DataPageFooterPB {
 }
 
 message IndexPageFooterPB {
-  // required: number of index entries in this page
-  optional uint32 num_entries = 1;
+    // required: number of index entries in this page
+    optional uint32 num_entries = 1;
 
-  enum Type {
-    UNKNOWN_INDEX_PAGE_TYPE = 0;
-    LEAF = 1;
-    INTERNAL = 2;
-  };
-  // required: type of the index page
-  optional Type type = 2;
+    enum Type {
+        UNKNOWN_INDEX_PAGE_TYPE = 0;
+        LEAF = 1;
+        INTERNAL = 2;
+    };
+    // required: type of the index page
+    optional Type type = 2;
 }
 
 message DictPageFooterPB {
@@ -194,24 +194,24 @@ message ColumnMetaPB {
 
 message SegmentFooterPB {
     optional uint32 version = 1 [default = 1]; // file version
-    repeated ColumnMetaPB columns = 2; // tablet schema
-    optional uint32 num_rows = 3; // number of values
-    optional uint64 index_footprint = 4; // Deprecated
-    optional uint64 data_footprint = 5; // Deprecated
-    optional uint64 raw_data_footprint = 6; // Deprecated
+    repeated ColumnMetaPB columns = 2;         // tablet schema
+    optional uint32 num_rows = 3;              // number of values
+    optional uint64 index_footprint = 4;       // Deprecated
+    optional uint64 data_footprint = 5;        // Deprecated
+    optional uint64 raw_data_footprint = 6;    // Deprecated
 
     optional CompressionTypePB compress_type = 7 [default = LZ4_FRAME]; // Deprecated
-    repeated MetadataPairPB file_meta_datas = 8; // Deprecated
+    repeated MetadataPairPB file_meta_datas = 8;                        // Deprecated
 
     // Short key index's page
     optional PagePointerPB short_key_index_page = 9;
 }
 
 message BTreeMetaPB {
-  // required: pointer to either root index page or sole data page based on is_root_data_page
-  optional PagePointerPB root_page = 1;
-  // required: true if we only have one data page, in which case root points to that page directly
-  optional bool is_root_data_page = 2;
+    // required: pointer to either root index page or sole data page based on is_root_data_page
+    optional PagePointerPB root_page = 1;
+    // required: true if we only have one data page, in which case root points to that page directly
+    optional bool is_root_data_page = 2;
 }
 
 message IndexedColumnMetaPB {
@@ -226,7 +226,7 @@ message IndexedColumnMetaPB {
     // present iff this column contains sorted values and has value index
     optional BTreeMetaPB value_index_meta = 5;
     // compression type for data and index page
-    optional CompressionTypePB compression = 6 [default=NO_COMPRESSION];
+    optional CompressionTypePB compression = 6 [default = NO_COMPRESSION];
     // index size
     optional uint64 size = 7;
 }
@@ -269,7 +269,7 @@ message BitmapIndexPB {
         UNKNOWN_BITMAP_TYPE = 0;
         ROARING_BITMAP = 1;
     }
-    optional BitmapType bitmap_type = 1 [default=ROARING_BITMAP];
+    optional BitmapType bitmap_type = 1 [default = ROARING_BITMAP];
     // required: whether the index contains null key.
     // if true, the last bitmap (ordinal:dict_column.num_values) in bitmap_column is
     // the bitmap for null key. we don't store null key in dict_column.
