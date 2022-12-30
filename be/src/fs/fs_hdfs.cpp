@@ -305,9 +305,6 @@ Status HdfsFileSystem::path_exists(const std::string& path) {
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
-    if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
-    }
     return _path_exists(handle.hdfs_fs, path);
 }
 
@@ -316,9 +313,6 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
     RETURN_IF_ERROR(get_namenode_from_path(dir, &namenode));
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
-    if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path {}"_format(dir));
-    }
     Status status = _path_exists(handle.hdfs_fs, dir);
     if (!status.ok()) {
         return status;
@@ -364,10 +358,6 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
-    if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path, path="_format(path));
-    }
-
     int flags = O_WRONLY;
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(handle.hdfs_fs, path); st.ok()) {
@@ -414,9 +404,6 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
-    if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
-    }
     // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
     if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
@@ -439,9 +426,6 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
-    if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
-    }
     // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
     if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
@@ -463,9 +447,6 @@ Status HdfsFileSystem::rename_file(const std::string& src, const std::string& ta
     RETURN_IF_ERROR(get_namenode_from_path(src, &namenode));
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
-    if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path {}"_format(src));
-    }
     int ret = hdfsRename(handle.hdfs_fs, src.data(), target.data());
     if (ret != 0) {
         return Status::InvalidArgument("rename file from {} to {} error"_format(src, target));
