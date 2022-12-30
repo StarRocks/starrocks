@@ -88,6 +88,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
         ASSERT_EQ("cd" + std::to_string(k), v->get_data()[k].to_string());
     }
 
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     {
         // Trim utf-8 characters
         for (int i = 0; i < 10; i++) {
@@ -136,7 +137,6 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
         EXPECT_TRUE(st.is_invalid_argument());
         EXPECT_EQ("Invalid argument: The second parameter should not be null", st.to_string());
     }
-    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
