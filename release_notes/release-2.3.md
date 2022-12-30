@@ -1,5 +1,18 @@
 # StarRocks version 2.3
 
+## 2.3.7
+
+发布日期： 2022 年 12 月 30 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 当 StarRocks 表某些列支持为 NULL，但是当基于该表创建视图 时，视图中该列会被错误设置为 NOT NULL。 [#15749](https://github.com/StarRocks/starrocks/pull/15749)
+- 导入时生成了新的 Tablet 版本，但是 FE 可能尚未感知新的 tablet 版本，因此此时 FE 下发的查询执行计划中依然要求 BE 读取该 Tablet 的历史版本。如果此时垃圾回收机制回收了该历史版本，则该时间点发起的查询无法读取该历史版本，从而查询报错 “Not found: get_applied_rowsets(version xxxx) failed tablet:xxx #version:x [xxxxxx]”。 [#15726](https://github.com/StarRocks/starrocks/pull/15726)
+- 高频导入时 FE 占用较多内存。 [#15377](https://github.com/StarRocks/starrocks/pull/15377)
+- 对于聚合和多表 JOIN 的查询，统计信息收集不准确，出现 CROSS JOIN，导致查询耗时过长。 [#12067](https://github.com/StarRocks/starrocks/pull/12067) [#14780](https://github.com/StarRocks/starrocks/pull/14780)
+
 ## 2.3.6
 
 发布日期： 2022 年 12 月 22 日
@@ -13,7 +26,7 @@
 
 修复了如下问题：
 
-- 对于聚合和多表 JOIN 的查询，统计信息收集不准确，出现 CROSS JOIN ，导致查询耗时过长。[#15497](https://github.com/StarRocks/starrocks/pull/15497)
+- 修复开启资源隔离后，多个资源组同时执行查询，可能会导致 BE 挂死的问题。[#14905](https://github.com/StarRocks/starrocks/pull/14905)
 - 创建物化视图 `CREATE MATERIALIZED VIEW AS SELECT`，如果 `SELECT` 查询中未使用聚合函数，使用 GROUP BY，例如`CREATE MATERIALIZED VIEW test_view AS` `select a,b from test group by b,a order by a;`，则 BE 节点全部崩溃。[#13743](https://github.com/StarRocks/starrocks/pull/13743)
 - 执行 INSERT INTO 高频导入至主键模型的表，进行数据变更后，立即重启 BE，重启缓慢。[#15128](https://github.com/StarRocks/starrocks/pull/15128)
 - 如果环境中只安装 JRE 未安装 JDK，则重启 FE 后查询失败。修复后，在该环境无法成功重启 FE，会直接报错 `Error: JAVA_HOME can not be jre`，您需要在环境中安装 JDK。[#14332](https://github.com/StarRocks/starrocks/pull/14332)
@@ -41,7 +54,6 @@
 
 ### 问题修复
 
-- 修复开启资源隔离后，多个资源组同时执行查询，可能会导致 BE 挂死的问题。[#14905](https://github.com/StarRocks/starrocks/pull/14905)
 - 修复在 UNION ALL 之上建立的 view 中，当 UNION ALL 输入列有常量 NULL，则 view 的 schema 错误，正常情况下列的类型是 UNION ALL 所有输入列的类型，但实际上是 NULL_TYPE 的问题。[#13917](https://github.com/StarRocks/starrocks/pull/13917)
 - 修复 `SELECT * FROM ...` 和 `SELECT * FROM ... LIMIT ...` 查询结果不一致的问题。[#13585](https://github.com/StarRocks/starrocks/pull/13585)
 - 修复 FE 同步外表 tablet 元数据时可能会覆盖本地 tablet 元数据导致从 Flink 导入数据失败的问题。[#12579](https://github.com/StarRocks/starrocks/pull/12579)
