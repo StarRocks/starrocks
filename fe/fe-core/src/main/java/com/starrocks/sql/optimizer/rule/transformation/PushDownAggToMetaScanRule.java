@@ -30,17 +30,20 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 // For meta scan query: select max(a), min(a), dict_merge(a) from test_all_type [_META_]
-// we need to push max, min, dict_merge aggregate function infos to meta scan node
+// we need to push max, min, dict_merge aggregate function info to meta scan node
 // we will generate new columns: max_a, min_a, dict_merge_a, make meta scan known what meta info to collect
 public class PushDownAggToMetaScanRule extends TransformationRule {
     public PushDownAggToMetaScanRule() {
@@ -51,6 +54,26 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.inputAt(0).getOp();
+        if (CollectionUtils.isNotEmpty(agg.getGroupingKeys())) {
+            return false;
+        }
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
+            if (!entry.getKey().equals(entry.getValue())) {
+                return false;
+            }
+        }
+
+        for (CallOperator aggCall : agg.getAggregations().values()) {
+            String aggFuncName = aggCall.getFnName();
+            if (!aggFuncName.equalsIgnoreCase(FunctionSet.DICT_MERGE)
+                    || !aggFuncName.equalsIgnoreCase(FunctionSet.MAX)
+                    || !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)) {
+                return false;
+            }
+        }
+
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
         return metaScan.getAggColumnIdToNames().isEmpty();
     }
