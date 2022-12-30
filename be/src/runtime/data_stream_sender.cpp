@@ -283,8 +283,7 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     _chunk_closure->cntl.Reset();
     _chunk_closure->cntl.set_timeout_ms(_brpc_timeout_ms);
     _chunk_closure->cntl.request_attachment().append(attachment);
-    TRY_CATCH_BAD_ALLOC(
-            _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure));
+    _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure);
     _request_seq++;
     return Status::OK();
 }
