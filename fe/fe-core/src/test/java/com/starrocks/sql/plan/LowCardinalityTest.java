@@ -1385,18 +1385,17 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testMetaScan3() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a), t1b from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a), any_value(any_value_t1b)\n" +
+                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type\n" +
-                "     <id 16> : min_t1d\n" +
-                "     <id 17> : dict_merge_t1a\n" +
-                "     <id 18> : any_value_t1b\n" +
-                "     <id 15> : max_t1c");
+                "     <id 16> : dict_merge_t1a\n" +
+                "     <id 14> : max_t1c\n" +
+                "     <id 15> : min_t1d");
     }
 
     @Test
