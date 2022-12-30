@@ -15,10 +15,10 @@
 package com.starrocks.privilege;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Function;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -45,12 +45,12 @@ public class GlobalFunctionPEntryObject implements PEntryObject {
             GlobalStateMgr mgr, List<String> allTypes, String restrictType, String restrictName)
             throws PrivilegeException {
         if (allTypes.size() == 1) {
-            if (!StringUtils.isEmpty(restrictType)) {
-                throw new PrivilegeException("ALL GLOBAL FUNCTIONS must be restricted without any database");
-            }
+            Preconditions.checkState(allTypes.get(0).equals(PrivilegeType.GLOBAL_FUNCTION.getPlural()));
+            Preconditions.checkArgument(restrictType == null);
+            Preconditions.checkArgument(restrictName == null);
             return new GlobalFunctionPEntryObject(ALL_GLOBAL_FUNCTION_SIGS);
         } else {
-            throw new PrivilegeException("invalid ALL statement for functions!");
+            throw new PrivilegeException("Invalid ALL statement for global functions!");
         }
     }
 
