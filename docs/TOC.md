@@ -236,6 +236,7 @@
       + [max_by](./sql-reference/sql-functions/aggregate-functions/max_by.md)
       + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
       + [multi_distinct_sum](./sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
+      + [multi_distinct_count](./sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
       + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
