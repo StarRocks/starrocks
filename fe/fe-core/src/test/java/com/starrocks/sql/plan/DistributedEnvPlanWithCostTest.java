@@ -1394,7 +1394,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "join lineorder_new_l t31 join lineorder_new_l t32 join lineorder_new_l t33 join lineorder_new_l t34 " +
                 "join lineorder_new_l t35 join lineorder_new_l t36 join lineorder_new_l t37 join lineorder_new_l t38";
         String plan = getCostExplain(sql);
-        assertContains(plan, "148:Project\n" +
+        assertContains(plan, "185:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: LO_ORDERKEY, INT, false]\n" +
                 "  |  cardinality: 9223372036854775807");
