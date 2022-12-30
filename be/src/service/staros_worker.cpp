@@ -21,7 +21,9 @@
 #include "absl/strings/str_format.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "file_store.pb.h"
 #include "fmt/format.h"
+#include "util/debug_util.h"
 
 namespace starrocks {
 
@@ -66,6 +68,10 @@ absl::StatusOr<staros::starlet::WorkerInfo> StarOSWorker::worker_info() const {
     worker_info.worker_id = _worker_id;
     worker_info.service_id = _service_id;
     worker_info.properties["port"] = std::to_string(config::starlet_port);
+    worker_info.properties["be_port"] = std::to_string(config::be_port);
+    worker_info.properties["be_http_port"] = std::to_string(config::webserver_port);
+    worker_info.properties["be_brpc_port"] = std::to_string(config::brpc_port);
+    worker_info.properties["be_version"] = get_short_version();
     for (auto& iter : _shards) {
         worker_info.shards.insert(iter.first);
     }
@@ -128,11 +134,25 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
                 if (!s3_info.endpoint().empty()) {
                     localconf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
                 }
-                if (!s3_info.access_key().empty()) {
-                    localconf[fslib::kS3AccessKeyId] = s3_info.access_key();
-                }
-                if (!s3_info.access_key_secret().empty()) {
-                    localconf[fslib::kS3AccessKeySecret] = s3_info.access_key_secret();
+                if (s3_info.has_credential()) {
+                    auto credential = s3_info.credential();
+                    if (credential.has_default_credential()) {
+                        localconf[fslib::kS3CredentialType] = "default";
+                    } else if (credential.has_simple_credential()) {
+                        localconf[fslib::kS3CredentialType] = "simple";
+                        auto simple_credential = credential.simple_credential();
+                        localconf[fslib::kS3CredentialSimpleAccessKeyId] = simple_credential.access_key();
+                        localconf[fslib::kS3CredentialSimpleAccessKeySecret] = simple_credential.access_key_secret();
+                    } else if (credential.has_profile_credential()) {
+                        localconf[fslib::kS3CredentialType] = "instance_profile";
+                    } else if (credential.has_assume_role_credential()) {
+                        localconf[fslib::kS3CredentialType] = "assume_role";
+                        auto role_credential = credential.assume_role_credential();
+                        localconf[fslib::kS3CredentialAssumeRoleArn] = role_credential.iam_role_arn();
+                        localconf[fslib::kS3CredentialAssumeRoleExternalId] = role_credential.external_id();
+                    } else {
+                        localconf[fslib::kS3CredentialType] = "default";
+                    }
                 }
             }
             break;

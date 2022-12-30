@@ -67,6 +67,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -460,6 +461,7 @@ public class GlobalStateMgr {
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
+    private GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
     private ShardManager shardManager;
@@ -598,6 +600,7 @@ public class GlobalStateMgr {
 
         this.stat = new TabletSchedulerStat();
         this.nodeMgr = new NodeMgr(isCheckpointCatalog, this);
+        this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
@@ -695,6 +698,10 @@ public class GlobalStateMgr {
 
     public ResourceMgr getResourceMgr() {
         return resourceMgr;
+    }
+
+    public GlobalFunctionMgr getGlobalFunctionMgr() {
+        return globalFunctionMgr;
     }
 
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
@@ -1106,8 +1113,8 @@ public class GlobalStateMgr {
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
                 VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
-                        SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                        LiteralExpr.create("true", Type.BOOLEAN)),
+                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                                LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
         } catch (UserException e) {
@@ -1327,6 +1334,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = MVManager.getInstance().reload(dis, checksum);
             remoteChecksum = dis.readLong();
+            globalFunctionMgr.loadGlobalFunctions(dis, checksum);
             // TODO put this at the end of the image before 3.0 release
             loadRBACPrivilege(dis);
         } catch (EOFException exception) {
@@ -1499,6 +1507,10 @@ public class GlobalStateMgr {
             resourceMgr = ResourceMgr.read(in);
         }
         LOG.info("finished replay resources from image");
+
+        LOG.info("start to replay resource mapping catalog");
+        catalogMgr.loadResourceMappingCatalog();
+        LOG.info("finished replaying resource mapping catalogs from resources");
         return checksum;
     }
 
@@ -1595,8 +1607,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = MVManager.getInstance().store(dos, checksum);
             dos.writeLong(checksum);
+            globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             // TODO put this at the end of the image before 3.0 release
             saveRBACPrivilege(dos);
+
         }
 
         long saveImageEndTime = System.currentTimeMillis();

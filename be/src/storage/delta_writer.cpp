@@ -334,6 +334,8 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
                                                  segment_pb.segment_id(), _opt.tablet_id,
                                                  _replica_state_name(_replica_state)));
     }
+    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment id " << segment_pb.segment_id();
+
     return _rowset_writer->flush_segment(segment_pb, data);
 }
 
@@ -517,7 +519,9 @@ void DeltaWriter::abort(bool with_log) {
     if (_replicate_token != nullptr) {
         _replicate_token->cancel();
     }
-    VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id();
+
+    VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
+            << " load_id: " << print_id(_opt.load_id);
 }
 
 int64_t DeltaWriter::partition_id() const {

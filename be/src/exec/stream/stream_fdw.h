@@ -22,6 +22,9 @@
 
 namespace starrocks::stream {
 
+using Int8ColumnPtr = Int8Column::Ptr;
+using UInt8ColumnPtr = UInt8Column::Ptr;
+
 template <typename T>
 using Buffer = Buffer<T>;
 using Columns = Columns;
@@ -31,11 +34,13 @@ using DaumKey = DatumKey;
 using DatumRow = std::vector<Datum>;
 using DatumRowPtr = std::shared_ptr<DatumRow>;
 using DatumRowOpt = std::optional<DatumRow>;
+
 using Chunk = Chunk;
 using ChunkPtr = ChunkPtr;
 using StreamChunk = StreamChunk;
 using StreamChunkPtr = StreamChunkPtr;
 using StreamChunkConverter = StreamChunkConverter;
 using StreamRowOp = StreamRowOp;
+using ChunkExtraColumnsData = ChunkExtraColumnsData;
 
 } // namespace starrocks::stream

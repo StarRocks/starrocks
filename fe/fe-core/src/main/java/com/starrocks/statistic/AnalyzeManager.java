@@ -178,10 +178,12 @@ public class AnalyzeManager implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
         if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatistic(table);
             GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
         } else {
+            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatisticSync(table);
             GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsSync(table, columns);
         }
     }

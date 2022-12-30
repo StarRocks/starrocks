@@ -49,6 +49,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class IcebergTable extends Table {
@@ -145,7 +146,7 @@ public class IcebergTable extends Table {
     }
 
     public List<String> getPartitionColumnNames() {
-        return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
+        return getPartitionColumns().stream().filter(Objects::nonNull).map(Column::getName)
                 .collect(Collectors.toList());
     }
 

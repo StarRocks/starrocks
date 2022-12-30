@@ -76,17 +76,10 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::Rp
                                                             const PTabletWriterAddChunkRequest* request,
                                                             PTabletWriterAddBatchResult* response,
                                                             google::protobuf::Closure* done) {
-    auto task = [=]() {
-        ClosureGuard closure_guard(done);
-        VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-                 << ", sender_id=" << request->sender_id() << ", eos=" << request->eos();
-        PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(*request, response);
-    };
-    if (!PInternalServiceImplBase<T>::_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
-        ClosureGuard closure_guard(done);
-        Status::ServiceUnavailable("submit tablet_writer_add_chunk task failed")
-                .to_protobuf(response->mutable_status());
-    }
+    ClosureGuard closure_guard(done);
+    VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
+             << ", sender_id=" << request->sender_id() << ", eos=" << request->eos();
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(*request, response);
 }
 
 template <typename T>
@@ -94,15 +87,8 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunks(google::protobuf::R
                                                              const PTabletWriterAddChunksRequest* request,
                                                              PTabletWriterAddBatchResult* response,
                                                              google::protobuf::Closure* done) {
-    auto task = [=]() {
-        ClosureGuard closure_guard(done);
-        PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunks(*request, response);
-    };
-    if (!PInternalServiceImplBase<T>::_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
-        ClosureGuard closure_guard(done);
-        Status::ServiceUnavailable("submit tablet_writer_add_chunks task failed")
-                .to_protobuf(response->mutable_status());
-    }
+    ClosureGuard closure_guard(done);
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunks(*request, response);
 }
 
 template <typename T>
@@ -111,7 +97,7 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
                                                               PTabletWriterAddSegmentResult* response,
                                                               google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer add segment, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", eos=" << request->eos();
+             << ", tablet_id=" << request->tablet_id() << ", eos=" << request->eos();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_segment(static_cast<brpc::Controller*>(controller),
                                                                             request, response, done);
 }

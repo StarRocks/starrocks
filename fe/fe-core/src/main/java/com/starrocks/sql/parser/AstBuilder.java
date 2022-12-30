@@ -364,6 +364,7 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.parquet.Strings;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -3758,6 +3759,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowFunctionsStatement(StarRocksParser.ShowFunctionsStatementContext context) {
         boolean isBuiltIn = context.BUILTIN() != null;
+        boolean isGlobal = context.GLOBAL() != null;
         boolean isVerbose = context.FULL() != null;
 
         String dbName = null;
@@ -3775,20 +3777,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             where = (Expr) visit(context.expression());
         }
 
-        return new ShowFunctionsStmt(dbName, isBuiltIn, isVerbose, pattern, where);
+        return new ShowFunctionsStmt(dbName, isBuiltIn, isGlobal, isVerbose, pattern, where);
     }
 
     @Override
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        boolean isGlobal = context.GLOBAL() != null;
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (isGlobal) {
+            if (!Strings.isNullOrEmpty(fnName.getDb())) {
+                throw new IllegalArgumentException(
+                        "Global function name does not support qualified name: " + functionName);
+            }
+            fnName.setAsGlobalFunction();
+        }
 
-        return new DropFunctionStmt(FunctionName.createFnName(functionName),
-                getFunctionArgsDef(context.typeList()));
+        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()));
     }
 
     @Override
     public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
         String functionType = "SCALAR";
+        boolean isGlobal = context.GLOBAL() != null;
         if (context.functionType != null) {
             functionType = context.functionType.getText();
         }
@@ -3808,7 +3819,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateFunctionStmt(functionType, FunctionName.createFnName(functionName),
+
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (isGlobal) {
+            if (!Strings.isNullOrEmpty(fnName.getDb())) {
+                throw new IllegalArgumentException(
+                        "Global function name does not support qualified name: " + functionName);
+            }
+            fnName.setAsGlobalFunction();
+        }
+
+        return new CreateFunctionStmt(functionType, fnName,
                 getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
     }
 
@@ -4535,6 +4556,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
+        if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
+            if (context.expression().size() < 1) {
+                throw new ParsingException("Arithmetic expression least one parameter");
+            }
+            
+            Expr e1 = (Expr) visit(context.expression(0));
+            Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
+            return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2);
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
         if (context.over() != null) {
@@ -4936,7 +4967,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDereference(StarRocksParser.DereferenceContext ctx) {
         Expr base = (Expr) visit(ctx.base);
-        String fieldName = ((Identifier) visit(ctx.fieldName)).getValue();
+
+        String fieldName;
+        if (ctx.DOT_IDENTIFIER() != null) {
+            fieldName = ctx.DOT_IDENTIFIER().getText().substring(1);
+        } else {
+            fieldName = ((Identifier) visit(ctx.fieldName)).getValue();
+        }
 
         // Trick method
         // If left is SlotRef type, we merge fieldName to SlotRef
@@ -4950,10 +4987,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             // If left is not a SlotRef, we can left must be an StructType,
             // and fieldName must be StructType's subfield name.
-            return new SubfieldExpr(
-                    (Expr) visit(ctx.base),
-                    ((Identifier) visit(ctx.fieldName)).getValue()
-            );
+            return new SubfieldExpr(base, fieldName);
         }
     }
 
@@ -5357,9 +5391,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
-        List<String> parts = visit(context.identifier(), Identifier.class).stream()
-                .map(Identifier::getValue)
-                .collect(Collectors.toList());
+        List<String> parts = new ArrayList<>();
+        for (ParseTree c : context.children) {
+            if (c instanceof TerminalNode) {
+                TerminalNode t = (TerminalNode) c;
+                if (t.getSymbol().getType() == StarRocksParser.DOT_IDENTIFIER) {
+                    parts.add(t.getText().substring(1));
+                }
+            } else if (c instanceof StarRocksParser.IdentifierContext) {
+                StarRocksParser.IdentifierContext identifierContext = (StarRocksParser.IdentifierContext) c;
+                Identifier identifier = (Identifier) visit(identifierContext);
+                parts.add(identifier.getValue());
+            }
+        }
 
         return QualifiedName.of(parts);
     }

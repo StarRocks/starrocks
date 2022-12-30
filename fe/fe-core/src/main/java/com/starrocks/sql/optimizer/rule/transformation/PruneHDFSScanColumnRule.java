@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -65,6 +66,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                 scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                         .collect(Collectors.toSet());
         scanColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
+
+        checkPartitionColumnType(scanOperator, scanColumns, context);
 
         // make sure there is at least one materialized column in new output columns.
         // if not, we have to choose one materialized column from scan operator output columns
@@ -122,6 +125,24 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
             }
         }
+    }
+
+    private void checkPartitionColumnType(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumnRefOperators,
+                                          OptimizerContext context) {
+        Table table = scanOperator.getTable();
+        List<Column> partitionColumns = table.getPartitionColumnNames().stream().filter(Objects::nonNull)
+                .map(table::getColumn).collect(Collectors.toList());
+        List<Column> scanColumns = scanColumnRefOperators.stream().map(col -> context.getColumnRefFactory().getColumn(col)).
+                collect(Collectors.toList());
+        partitionColumns.retainAll(scanColumns);
+        if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
+            throw new StarRocksPlannerException("Table partition by float/timestamp/decimal datatype is not supported",
+                    ErrorType.UNSUPPORTED);
+        }
+    }
+
+    private boolean notSupportedPartitionColumnType(Type type) {
+        return type.isFloat() || type.isDecimalOfAnyVersion() || type.isDatetime();
     }
 
     private boolean containsMaterializedColumn(LogicalScanOperator scanOperator, Set<ColumnRefOperator> scanColumns) {
