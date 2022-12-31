@@ -94,12 +94,12 @@ public class StructTypeTest extends PlanTestBase {
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT))));
         Assert.assertFalse(root.matchesType(c));
 
-        // Different field name
+        // Types will match with different field names
         StructType diffName = new StructType(Lists.newArrayList(
                 new StructField("st", ScalarType.createType(PrimitiveType.INT)),
                 new StructField("cc", c1)
         ));
-        Assert.assertFalse(root.matchesType(diffName));
+        Assert.assertTrue(root.matchesType(diffName));
 
         // Different field type
         StructType diffType = new StructType(Lists.newArrayList(
@@ -119,7 +119,7 @@ public class StructTypeTest extends PlanTestBase {
         ));
         Assert.assertTrue(root.matchesType(matched));
 
-        // matched with different subfield order
+        // Won't match with different subfield order
         StructType mc2 = new StructType(Lists.newArrayList(
                 new StructField("cc1", ScalarType.createDefaultExternalTableString()),
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT))
@@ -128,6 +128,6 @@ public class StructTypeTest extends PlanTestBase {
                 new StructField("c1", mc2),
                 new StructField("struct_test", ScalarType.createType(PrimitiveType.INT))
         ));
-        Assert.assertTrue(root.matchesType(matchedDiffOrder));
+        Assert.assertFalse(root.matchesType(matchedDiffOrder));
     }
 }
