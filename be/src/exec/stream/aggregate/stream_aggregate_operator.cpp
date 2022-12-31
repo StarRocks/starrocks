@@ -17,8 +17,6 @@
 
 #include "exec/stream/aggregate/stream_aggregate_operator.h"
 
-#include <variant>
-
 #include "exec/exec_node.h"
 
 namespace starrocks::stream {
@@ -28,11 +26,11 @@ bool StreamAggregateOperator::has_output() const {
 }
 
 bool StreamAggregateOperator::is_finished() const {
-    return _is_finished || _aggregator->is_finished();
+    return _is_input_finished && !_has_output;
 }
 
 Status StreamAggregateOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+    _is_input_finished = true;
     _aggregator->sink_complete();
     return Status::OK();
 }

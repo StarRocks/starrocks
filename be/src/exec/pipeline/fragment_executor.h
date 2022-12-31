@@ -81,11 +81,7 @@ public:
     }
     const TDataSink& output_sink() const;
 
-    const PipelineKind pipeline_kind() const {
-        auto pipeline_kind = _common_request.pipeline_kind;
-        return pipeline_kind == TPipelineKind::STREAM_PIPELINE ? PipelineKind::STREAM_PIPELINE
-                                                               : PipelineKind::OLAP_PIPELINE;
-    }
+    const bool is_stream_pipeline() const { return _common_request.is_stream_pipeline; }
 
 private:
     static const std::vector<TScanRangeParams> _no_scan_ranges;

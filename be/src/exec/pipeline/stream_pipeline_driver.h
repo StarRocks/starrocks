@@ -27,7 +27,7 @@ namespace starrocks::pipeline {
  *      queue which will do nothing in the queue, and in the next epoch it will call `reset_epoch`
  *      to reset driver's and operators' state at first.
  */
-class StreamPipelineDriver : public PipelineDriver {
+class StreamPipelineDriver final : public PipelineDriver {
 public:
     StreamPipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                          Pipeline* pipeline, int32_t driver_id)
@@ -48,6 +48,7 @@ private:
     Status _mark_operator_epoch_finished(OperatorPtr& op, RuntimeState* state);
 
 private:
+    // index of the first epoch-unfisheded operator
     size_t _first_epoch_unfinished{0};
 };
 

@@ -297,10 +297,6 @@ enum InternalServiceVersion {
 }
 
 // ExecPlanFragment
-enum TPipelineKind {
-  OLAP_PIPELINE,
-  STREAM_PIPELINE
-}
 
 struct TExecPlanFragmentParams {
   1: required InternalServiceVersion protocol_version
@@ -355,7 +351,7 @@ struct TExecPlanFragmentParams {
   // Sharing data between drivers of same scan operator
   56: optional bool enable_shared_scan
 
-  57: optional TPipelineKind pipeline_kind
+  57: optional bool is_stream_pipeline
 }
 
 struct TExecPlanFragmentResult {

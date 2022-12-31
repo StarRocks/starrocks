@@ -49,24 +49,25 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     auto* query_ctx = state->query_ctx();
     auto* fragment_ctx = state->fragment_ctx();
     auto workgroup = fragment_ctx->workgroup();
-    auto pipeline_kind = fragment_ctx->pipeline_kind();
+    auto is_stream_pipeline = fragment_ctx->is_stream_pipeline();
 
     size_t dop = degree_of_parallelism();
 
-    VLOG_ROW << "Pipeline " << to_readable_string() << " parallel=" << dop << " pipeline_kind=" << (int)(pipeline_kind)
+    VLOG_ROW << "Pipeline " << to_readable_string() << " parallel=" << dop
+             << " is_stream_pipeline=" << is_stream_pipeline
              << " fragment_instance_id=" << print_id(fragment_ctx->fragment_instance_id());
 
     setup_pipeline_profile(state);
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
         DriverPtr driver = nullptr;
-        if (pipeline_kind == PipelineKind::OLAP_PIPELINE) {
-            driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
-                                                      fragment_ctx->next_driver_id());
-        } else {
-            DCHECK_EQ(pipeline_kind, PipelineKind::STREAM_PIPELINE);
+        if (is_stream_pipeline) {
             driver = std::make_shared<StreamPipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
                                                             fragment_ctx->next_driver_id());
+
+        } else {
+            driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
+                                                      fragment_ctx->next_driver_id());
         }
         setup_drivers_profile(driver);
         driver->set_workgroup(workgroup);

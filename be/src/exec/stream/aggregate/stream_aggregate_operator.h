@@ -60,7 +60,7 @@ private:
     StreamAggregatorPtr _aggregator = nullptr;
     ChunkPtr _epoch_chunk = nullptr;
     // Whether prev operator has no output
-    bool _is_finished = false;
+    bool _is_input_finished = false;
     // Mark whether aggregator is already epoch finished.
     bool _is_epoch_finished = false;
     // Mark whether aggregator has output or not.
@@ -80,7 +80,7 @@ public:
 
     ~StreamAggregateOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+    pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         if (_aggregator) {
             return std::make_shared<StreamAggregateOperator>(this, _id, _plan_node_id, driver_sequence, _aggregator);
         } else {

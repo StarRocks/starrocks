@@ -44,6 +44,7 @@ set(RUNTIME_FILES
     load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
+    mv_epoch_manager.cpp
     data_stream_recvr.cpp
     export_sink.cpp
     load_channel_mgr.cpp

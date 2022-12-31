@@ -33,6 +33,7 @@ struct GeneratorStreamSourceParam {
 };
 
 using SourceOperator = pipeline::SourceOperator;
+using Operator = pipeline::Operator;
 
 class GeneratorStreamSourceOperator final : public SourceOperator {
 public:

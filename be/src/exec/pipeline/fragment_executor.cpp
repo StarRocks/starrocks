@@ -143,18 +143,18 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
-    const auto& pipeline_kind = request.pipeline_kind();
+    const auto& is_stream_pipeline = request.is_stream_pipeline();
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
-    _fragment_ctx->set_pipeline_kind(pipeline_kind);
+    _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(fragment_instance_id) << " pipeline_kind=" << int(pipeline_kind)
-              << " backend_num=" << request.backend_num();
+              << " fragment_instance_id=" << print_id(fragment_instance_id)
+              << " is_stream_pipeline=" << is_stream_pipeline << " backend_num=" << request.backend_num();
 
     return Status::OK();
 }

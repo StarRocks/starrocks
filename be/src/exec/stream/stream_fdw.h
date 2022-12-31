@@ -16,35 +16,15 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/hash_set.h"
 #include "column/stream_chunk.h"
-#include "column/type_traits.h"
-#include "exec/pipeline/operator.h"
 
 namespace starrocks::stream {
 
 using Int8ColumnPtr = Int8Column::Ptr;
 using UInt8ColumnPtr = UInt8Column::Ptr;
 
-template <typename T>
-using Buffer = Buffer<T>;
-using Columns = Columns;
-
-using Datum = Datum;
-using DaumKey = DatumKey;
 using DatumRow = std::vector<Datum>;
 using DatumRowPtr = std::shared_ptr<DatumRow>;
 using DatumRowOpt = std::optional<DatumRow>;
-
-using Chunk = Chunk;
-using ChunkPtr = ChunkPtr;
-
-using StreamChunk = StreamChunk;
-using StreamChunkPtr = StreamChunkPtr;
-using StreamRowOp = StreamRowOp;
-using ChunkExtraColumnsData = ChunkExtraColumnsData;
-using StreamChunkConverter = StreamChunkConverter;
-using Operator = pipeline::Operator;
-using OperatorPtr = pipeline::OperatorPtr;
 
 } // namespace starrocks::stream

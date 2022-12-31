@@ -64,6 +64,14 @@ size_t FragmentContext::total_dop() const {
     return total;
 }
 
+size_t FragmentContext::num_drivers() const {
+    size_t total = 0;
+    for (const auto& pipeline : _pipelines) {
+        total += pipeline->drivers().size();
+    }
+    return total;
+}
+
 void FragmentContext::move_tplan(TPlan& tplan) {
     swap(_tplan, tplan);
 }

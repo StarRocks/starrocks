@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/stream/stream_pipeline.h"
+#include "exec/stream/stream_pipeline_test.h"
 
 #include <gtest/gtest.h>
 
@@ -30,7 +30,7 @@ namespace starrocks::stream {
 
 using DriverPtr = pipeline::DriverPtr;
 
-Status StreamPipelineTest::PreparePipeline() {
+Status StreamPipelineTest::prepare() {
     VLOG_ROW << "PreparePipeline";
     _exec_env = ExecEnv::GetInstance();
 
@@ -52,7 +52,7 @@ Status StreamPipelineTest::PreparePipeline() {
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
-    _fragment_ctx->set_pipeline_kind(pipeline::PipelineKind::STREAM_PIPELINE);
+    _fragment_ctx->set_is_stream_pipeline(true);
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
@@ -87,7 +87,7 @@ Status StreamPipelineTest::PreparePipeline() {
     return Status::OK();
 }
 
-Status StreamPipelineTest::ExecutePipeline() {
+Status StreamPipelineTest::execute() {
     VLOG_ROW << "ExecutePipeline";
     Status prepare_status = _fragment_ctx->iterate_drivers(
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
@@ -131,20 +131,31 @@ OpFactories StreamPipelineTest::maybe_interpolate_local_passthrough_exchange(OpF
     }
 }
 
-void StreamPipelineTest::StopMV() {
+Status StreamPipelineTest::start_mv(InitiliazeFunc&& init_func) {
+    RETURN_IF_ERROR(init_func());
+    RETURN_IF_ERROR(prepare());
+    RETURN_IF_ERROR(execute());
+    return Status::OK();
+}
+
+void StreamPipelineTest::stop_mv() {
     VLOG_ROW << "StopMV";
     _fragment_ctx->runtime_state()->epoch_manager()->set_is_finished(true);
-    _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
+    auto num_activated_drivers =
+            _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) {
+                return driver->query_ctx()->query_id() == _fragment_ctx->query_id();
+            });
+    DCHECK_EQ(num_activated_drivers, _fragment_ctx->num_drivers());
     ASSERT_EQ(std::future_status::ready, _fragment_future.wait_for(std::chrono::seconds(15)));
 }
 
 // TODO: Make it work!
-void StreamPipelineTest::CancelMV() {
+void StreamPipelineTest::cancel_mv() {
     VLOG_ROW << "CancelMV";
     _fragment_ctx->cancel(Status::OK());
 }
 
-Status StreamPipelineTest::StartEpoch(const std::vector<int64_t>& tablet_ids, const EpochInfo& epoch_info) {
+Status StreamPipelineTest::start_epoch(const std::vector<int64_t>& tablet_ids, const EpochInfo& epoch_info) {
     std::unordered_map<int64_t, BinlogOffset> binlog_offsets;
     for (auto tablet_id : tablet_ids) {
         binlog_offsets.insert({tablet_id, BinlogOffset{}});
@@ -160,11 +171,15 @@ Status StreamPipelineTest::StartEpoch(const std::vector<int64_t>& tablet_ids, co
     RETURN_IF_ERROR(_fragment_ctx->reset_epoch());
 
     // step3. active driver
-    _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) { return true; });
+    auto num_activated_drivers =
+            _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) {
+                return driver->query_ctx()->query_id() == _fragment_ctx->query_id();
+            });
+    DCHECK_EQ(num_activated_drivers, _fragment_ctx->num_drivers());
     return Status::OK();
 }
 
-Status StreamPipelineTest::WaitUntilEpochEnd(const EpochInfo& epoch_info) {
+Status StreamPipelineTest::wait_until_epoch_finished(const EpochInfo& epoch_info) {
     VLOG_ROW << "WaitUntilEpochEnd: " << epoch_info.debug_string();
 
     auto is_epoch_finished = [=]() {

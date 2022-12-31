@@ -20,12 +20,9 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/fragment_context.h"
-#include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
-#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks::stream {
 
@@ -33,22 +30,18 @@ using InitiliazeFunc = std::function<Status()>;
 
 class StreamPipelineTest {
 public:
-    Status StartMV(InitiliazeFunc&& init_func) {
-        RETURN_IF_ERROR(init_func());
-        RETURN_IF_ERROR(PreparePipeline());
-        RETURN_IF_ERROR(ExecutePipeline());
-        return Status::OK();
-    }
-    Status PreparePipeline();
-    Status ExecutePipeline();
-    void StopMV();
-    void CancelMV();
+    Status prepare();
+    Status execute();
 
-    Status StartEpoch(const std::vector<int64_t>& tablet_ids, const EpochInfo& epoch_info);
-    Status WaitUntilEpochEnd(const EpochInfo& epoch_info);
+    Status start_mv(InitiliazeFunc&& init_func);
+    void stop_mv();
+    void cancel_mv();
+
+    Status start_epoch(const std::vector<int64_t>& tablet_ids, const EpochInfo& epoch_info);
+    Status wait_until_epoch_finished(const EpochInfo& epoch_info);
 
     template <typename T>
-    std::vector<ChunkPtr> FetchResults(const EpochInfo& epoch_info);
+    std::vector<ChunkPtr> fetch_results(const EpochInfo& epoch_info);
 
     size_t next_operator_id() { return ++_next_operator_id; }
     size_t next_plan_node_id() { return ++_next_plan_node_id; }
@@ -74,7 +67,7 @@ protected:
 };
 
 template <typename T>
-std::vector<ChunkPtr> StreamPipelineTest::FetchResults(const EpochInfo& epoch_info) {
+std::vector<ChunkPtr> StreamPipelineTest::fetch_results(const EpochInfo& epoch_info) {
     VLOG_ROW << "FetchResults: " << epoch_info.debug_string();
     std::vector<ChunkPtr> result_chunks;
     const auto& pipelines = _fragment_ctx->pipelines();
