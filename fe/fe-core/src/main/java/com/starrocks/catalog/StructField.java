@@ -44,6 +44,11 @@ public class StructField {
         this(name, type, null);
     }
 
+    // Unnamed struct field
+    public StructField(Type type) {
+        this(null, type, null);
+    }
+
     public String getComment() {
         return comment;
     }
@@ -117,6 +122,7 @@ public class StructField {
             return false;
         }
         StructField otherStructField = (StructField) other;
+        // TODO(alvin): Consider unnamed struct fields
         return otherStructField.name.equals(name) && otherStructField.type.equals(type);
     }
 

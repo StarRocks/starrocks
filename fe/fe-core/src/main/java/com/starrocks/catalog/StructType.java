@@ -38,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
@@ -67,6 +68,16 @@ public class StructType extends Type {
         }
         selectedFields = new Boolean[fields.size()];
         Arrays.fill(selectedFields, false);
+    }
+
+    // Used to construct an unnamed struct type, for example, to create a struct type
+    // row(1, 'b') to create an unnamed struct type struct<int, string>
+    public StructType(List<Type> fieldTypes) {
+        ArrayList<StructField> newFields = new ArrayList<>();
+        for (Type fieldType : fieldTypes) {
+            newFields.add(new StructField(fieldType));
+        }
+        this.fields = newFields;
     }
 
     @Override
