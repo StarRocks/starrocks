@@ -17,8 +17,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -243,8 +242,8 @@ public class ScalarOperatorToIcebergExpr {
             if (literalValue != null && type == Type.TypeID.BOOLEAN) {
                 literalValue = new BoolLiteral(String.valueOf(literalValue)).getValue();
             }
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to convert %s to boolean type", literalValue);
         }
         return literalValue;
     }
