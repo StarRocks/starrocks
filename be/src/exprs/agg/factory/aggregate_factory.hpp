@@ -159,14 +159,22 @@ public:
 
     static AggregateFunctionPtr MakeNtileWindowFunction();
 
+<<<<<<< HEAD
     template <PrimitiveType PT>
+=======
+    template <LogicalType PT, bool ignoreNulls>
+>>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     static AggregateFunctionPtr MakeFirstValueWindowFunction() {
-        return std::make_shared<FirstValueWindowFunction<PT>>();
+        return std::make_shared<FirstValueWindowFunction<PT, ignoreNulls>>();
     }
 
+<<<<<<< HEAD
     template <PrimitiveType PT>
+=======
+    template <LogicalType PT, bool ignoreNulls>
+>>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     static AggregateFunctionPtr MakeLastValueWindowFunction() {
-        return std::make_shared<LastValueWindowFunction<PT>>();
+        return std::make_shared<LastValueWindowFunction<PT, ignoreNulls>>();
     }
 
     template <PrimitiveType PT>
