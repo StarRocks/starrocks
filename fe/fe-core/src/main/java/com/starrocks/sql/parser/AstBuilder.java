@@ -4470,8 +4470,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
         if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
-            return new FunctionCallExpr(context.name.getText().toLowerCase(),
+            FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
+            functionCallExpr.setIgnoreNulls(context.ignoreNulls() != null);
+            return functionCallExpr;
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
     }

@@ -330,6 +330,9 @@ struct TFunction {
   30: optional i64 fid
   31: optional TTableFunction table_fn
   32: optional bool could_apply_dict_optimize
+
+  // Ignore nulls
+  33: optional bool ignore_nulls
 }
 
 enum TLoadJobState {

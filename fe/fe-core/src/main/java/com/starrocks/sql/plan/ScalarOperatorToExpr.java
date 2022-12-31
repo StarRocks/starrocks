@@ -449,6 +449,7 @@ public class ScalarOperatorToExpr {
                     }
                     Preconditions.checkNotNull(call.getFunction());
                     callExpr.setFn(call.getFunction());
+                    callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
             }
             callExpr.setType(call.getType());

@@ -60,7 +60,17 @@ public:
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
 
+<<<<<<< HEAD
     template <PrimitiveType Type>
+=======
+    // Find the first non-null value
+    static size_t find_nonnull(const Column* col, size_t start, size_t end);
+
+    // Find the non-null value in reversed order
+    static size_t last_nonnull(const Column* col, size_t start, size_t end);
+
+    template <LogicalType Type>
+>>>>>>> 5c10d9831 ([Feature] support ignore nulls for first_value and last_value function (#15437))
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
         static_assert(!pt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
