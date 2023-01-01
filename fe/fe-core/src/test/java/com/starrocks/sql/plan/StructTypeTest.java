@@ -130,4 +130,10 @@ public class StructTypeTest extends PlanTestBase {
         ));
         Assert.assertFalse(root.matchesType(matchedDiffOrder));
     }
+
+    @Test
+    public void testUnnamedStruct() {
+        StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
+        Assert.assertEquals("STRUCT<int(11), datetime>", type.toSql());
+    }
 }
