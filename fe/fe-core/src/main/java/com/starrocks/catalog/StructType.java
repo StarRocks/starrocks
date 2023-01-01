@@ -78,6 +78,8 @@ public class StructType extends Type {
             newFields.add(new StructField(fieldType));
         }
         this.fields = newFields;
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
     }
 
     @Override

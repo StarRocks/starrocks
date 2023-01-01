@@ -71,10 +71,11 @@ public class StructField {
 
     public String toSql(int depth) {
         String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toSql(depth) : "...";
-        StringBuilder sb = new StringBuilder(name);
-        if (type != null) {
-            sb.append(":" + typeSql);
+        StringBuilder sb = new StringBuilder();
+        if (name != null) {
+            sb.append(name).append(':');
         }
+        sb.append(typeSql);
         if (comment != null) {
             sb.append(String.format(" COMMENT '%s'", comment));
         }
