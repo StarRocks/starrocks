@@ -68,6 +68,7 @@ set(EXPR_FILES
   locate.cpp
   map_element_expr.cpp
   map_functions.cpp
+  struct_functions.cpp
   math_functions.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp
