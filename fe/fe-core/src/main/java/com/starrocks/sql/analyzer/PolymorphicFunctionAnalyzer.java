@@ -18,12 +18,10 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.AnyMapType;
-import com.starrocks.catalog.AnyStructType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import org.apache.logging.log4j.LogManager;
@@ -58,28 +56,6 @@ public class PolymorphicFunctionAnalyzer {
             Type superKeyType = getSuperType(((MapType) t1).getKeyType(), ((MapType) t2).getKeyType());
             Type superValueType = getSuperType(((MapType) t1).getValueType(), ((MapType) t2).getValueType());
             return superKeyType != null && superValueType != null ? new MapType(superKeyType, superValueType) : null;
-        }
-        return null;
-    }
-
-    public static Function analyzeStructTypeFunction(Function fn, Type[] paramTypes) {
-        Type retType = null;
-        Type[] realTypes = Arrays.copyOf(paramTypes, paramTypes.length);
-        if (fn.getFunctionName().equals("row")) {
-            retType = new StructType(Arrays.asList(realTypes));
-        }
-
-        if (fn instanceof ScalarFunction) {
-            ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), Arrays.asList(realTypes), retType,
-                    fn.getLocation(), ((ScalarFunction) fn).getSymbolName(), ((ScalarFunction) fn).getPrepareFnSymbol(),
-                    ((ScalarFunction) fn).getCloseFnSymbol());
-            newFn.setFunctionId(fn.getFunctionId());
-            newFn.setChecksum(fn.getChecksum());
-            newFn.setBinaryType(fn.getBinaryType());
-            newFn.setHasVarArgs(fn.hasVarArgs());
-            newFn.setId(fn.getId());
-            newFn.setUserVisible(fn.isUserVisible());
-            return newFn;
         }
         return null;
     }
@@ -131,9 +107,6 @@ public class PolymorphicFunctionAnalyzer {
             return fn;
         }
         Type retType = fn.getReturnType();
-        if (retType instanceof AnyStructType) {
-            return analyzeStructTypeFunction(fn, paramTypes);
-        }
         Type[] declTypes = fn.getArgs();
         Type[] realTypes = Arrays.copyOf(declTypes, declTypes.length);
         ArrayType typeArray = null;
