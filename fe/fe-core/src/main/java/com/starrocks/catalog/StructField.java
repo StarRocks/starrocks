@@ -44,6 +44,11 @@ public class StructField {
         this(name, type, null);
     }
 
+    // Unnamed struct field
+    public StructField(Type type) {
+        this(null, type, null);
+    }
+
     public String getComment() {
         return comment;
     }
@@ -66,10 +71,11 @@ public class StructField {
 
     public String toSql(int depth) {
         String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toSql(depth) : "...";
-        StringBuilder sb = new StringBuilder(name);
-        if (type != null) {
-            sb.append(":" + typeSql);
+        StringBuilder sb = new StringBuilder();
+        if (name != null) {
+            sb.append(name).append(' ');
         }
+        sb.append(typeSql);
         if (comment != null) {
             sb.append(String.format(" COMMENT '%s'", comment));
         }
@@ -82,14 +88,17 @@ public class StructField {
      */
     public String prettyPrint(int lpad) {
         String leftPadding = Strings.repeat(" ", lpad);
-        StringBuilder sb = new StringBuilder(leftPadding + name);
-        if (type != null) {
-            // Pass in the padding to make sure nested fields are aligned properly,
-            // even if we then strip the top-level padding.
-            String typeStr = type.prettyPrint(lpad);
-            typeStr = typeStr.substring(lpad);
-            sb.append(":" + typeStr);
+        StringBuilder sb = new StringBuilder(leftPadding);
+        if (name != null) {
+            sb.append(name).append(' ');
         }
+
+        // Pass in the padding to make sure nested fields are aligned properly,
+        // even if we then strip the top-level padding.
+        String typeStr = type.prettyPrint(lpad);
+        typeStr = typeStr.substring(lpad);
+        sb.append(typeStr);
+
         if (comment != null) {
             sb.append(String.format(" COMMENT '%s'", comment));
         }
@@ -99,16 +108,18 @@ public class StructField {
     public void toThrift(TTypeDesc container, TTypeNode node) {
         TStructField field = new TStructField();
         field.setName(name);
-        if (comment != null) {
-            field.setComment(comment);
-        }
+        field.setComment(comment);
         node.struct_fields.add(field);
         type.toThrift(container);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(name, type);
+        if (name != null) {
+            return Objects.hashCode(name, type);
+        } else {
+            return Objects.hashCode(type);
+        }
     }
 
     @Override
@@ -117,6 +128,9 @@ public class StructField {
             return false;
         }
         StructField otherStructField = (StructField) other;
+        if (name == null) {
+            return otherStructField.name == null && otherStructField.type.equals(type);
+        }
         return otherStructField.name.equals(name) && otherStructField.type.equals(type);
     }
 
