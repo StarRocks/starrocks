@@ -208,7 +208,6 @@ public class StructType extends Type {
         container.types.add(node);
         Preconditions.checkNotNull(fields);
         Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
-        Preconditions.checkNotNull(!fields.isEmpty());
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
         Preconditions.checkArgument(selectedFields.length == fields.size());
