@@ -70,6 +70,7 @@ ${license}
 #include "exprs/array_functions.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/map_functions.h"
+#include "exprs/struct_functions.h"
 #include "exprs/math_functions.h"
 #include "exprs/bit_functions.h"
 #include "exprs/string_functions.h"
