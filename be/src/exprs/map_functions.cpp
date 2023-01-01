@@ -158,7 +158,9 @@ StatusOr<ColumnPtr> MapFunctions::map_keys(FunctionContext* context, const Colum
     auto map_keys_array = ArrayColumn::create(map_keys->clone_shared(), UInt32Column::create(col_map->offsets()));
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(map_keys_array), down_cast<NullableColumn*>(arg0)->null_column());
+        return NullableColumn::create(
+                std::move(map_keys_array),
+                std::static_pointer_cast<NullColumn>(down_cast<NullableColumn*>(arg0)->null_column()->clone_shared()));
     } else {
         return map_keys_array;
     }
@@ -175,7 +177,9 @@ StatusOr<ColumnPtr> MapFunctions::map_values(FunctionContext* context, const Col
     auto map_values_array = ArrayColumn::create(map_values->clone_shared(), UInt32Column::create(col_map->offsets()));
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(map_values_array), down_cast<NullableColumn*>(arg0)->null_column());
+        return NullableColumn::create(
+                std::move(map_values_array),
+                std::static_pointer_cast<NullColumn>(down_cast<NullableColumn*>(arg0)->null_column()->clone_shared()));
     } else {
         return map_values_array;
     }
