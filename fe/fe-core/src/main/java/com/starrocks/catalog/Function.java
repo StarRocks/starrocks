@@ -151,7 +151,7 @@ public class Function implements Writable {
             this.argTypes = argTypes;
         }
         this.retType = retType;
-        this.isPolymorphic = retType.isPseudoType() || Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
+        this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
     }
 
     public Function(long id, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs) {
@@ -164,7 +164,7 @@ public class Function implements Writable {
             this.argTypes = argTypes.toArray(new Type[argTypes.size()]);
         }
         this.retType = retType;
-        this.isPolymorphic = retType.isPseudoType() || Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
+        this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
     }
 
     public FunctionName getFunctionName() {
