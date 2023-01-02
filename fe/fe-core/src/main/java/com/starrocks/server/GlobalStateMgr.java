@@ -1116,6 +1116,11 @@ public class GlobalStateMgr {
                                 SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
+
+                VariableMgr.setVar(VariableMgr.getDefaultSessionVariable(), new SetVar(SetType.GLOBAL,
+                        SessionVariable.ENABLE_OUTER_JOIN_REORDER,
+                        LiteralExpr.create("true", Type.BOOLEAN)),
+                        false);
             }
         } catch (UserException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);

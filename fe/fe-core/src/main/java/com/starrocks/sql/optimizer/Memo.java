@@ -90,7 +90,6 @@ public class Memo {
     public GroupExpression init(OptExpression originExpression) {
         Preconditions.checkState(groups.size() == 0);
         Preconditions.checkState(groupExpressions.size() == 0);
-        originExpression.initRowInfo();
         GroupExpression rootGroupExpression = copyIn(null, originExpression).second;
         rootGroup = rootGroupExpression.getGroup();
         return rootGroupExpression;

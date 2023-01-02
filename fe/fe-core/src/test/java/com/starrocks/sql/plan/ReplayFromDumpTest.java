@@ -430,7 +430,7 @@ public class ReplayFromDumpTest {
             @Override
             public void addJoinTransformationRules() {
                 this.getTransformRules().clear();
-                this.getTransformRules().add(JoinAssociativityRule.getInstance());
+                this.getTransformRules().add(JoinAssociativityRule.INNER_JOIN_ASSOCIATIVITY_RULE);
             }
         };
 

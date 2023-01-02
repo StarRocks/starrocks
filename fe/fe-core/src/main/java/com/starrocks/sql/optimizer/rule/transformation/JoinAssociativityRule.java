@@ -59,18 +59,21 @@ import java.util.Map;
  */
 
 public class JoinAssociativityRule extends JoinAssociateBaseRule {
-    private JoinAssociativityRule() {
+
+    private final boolean isInnerMode;
+
+    public static final JoinAssociativityRule INNER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(true);
+
+    public static final JoinAssociativityRule OUTER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(false);
+
+
+    private JoinAssociativityRule(boolean isInnerMode) {
         super(RuleType.TF_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)), JoinAssociateBaseRule.ASSOCIATE_MODE);
-    }
-
-    private static final JoinAssociativityRule INSTANCE = new JoinAssociativityRule();
-
-    public static JoinAssociativityRule getInstance() {
-        return INSTANCE;
+        this.isInnerMode = isInnerMode;
     }
 
     @Override
@@ -88,7 +91,7 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
             return false;
         }
 
-        if (JoinReorderProperty.getAssociativityProperty(bottomJoin.getJoinType(), topJoin.getJoinType())
+        if (JoinReorderProperty.getAssociativityProperty(bottomJoin.getJoinType(), topJoin.getJoinType(), isInnerMode)
                 != JoinReorderProperty.SUPPORTED) {
             return false;
         }
@@ -167,10 +170,7 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
         @Override
         public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-            if (canDerivedFromNewBotJoinOutput(operator.getUsedColumns())) {
-                return addExprToColumnRefMap(operator);
-            }
-            return super.visitCaseWhenOperator(operator, context);
+            return operator;
         }
 
         @Override

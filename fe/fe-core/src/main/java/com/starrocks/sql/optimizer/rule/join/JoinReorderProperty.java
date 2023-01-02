@@ -25,7 +25,9 @@ public class JoinReorderProperty {
         //not called
     }
 
-    private static final int[][] ASSOCIATIVITY_PROPERTY = new int[10][10];
+    private static final int[][] INNER_ASSOCIATIVITY_PROPERTY = new int[10][10];
+
+    private static final int[][] OUTER_ASSOCIATIVITY_PROPERTY = new int[10][10];
 
     private static final int[][] LEFT_ASSCOM_PROPERTY = new int[10][10];
 
@@ -44,15 +46,26 @@ public class JoinReorderProperty {
          *  ▷* means null aware anti join
          *   op    ⨝    ⟕   ⋉    ▷    ⋊    ◁    ⟖   ⟗   ×    ▷*
          *  ----- ---- ---- ---- ---- ---- ---- ---- ---- ---- -----
-         *   ⋈     1    1    0    0    0    0    0    0    0    0
+         *   ⋈     1    0    0    0    0    0    0    0    0    0
+         *   ×      1    0    0    0    0    0    0    0    0    0
+         */
+        INNER_ASSOCIATIVITY_PROPERTY[JoinOperator.INNER_JOIN.ordinal()] = new int[] {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        INNER_ASSOCIATIVITY_PROPERTY[JoinOperator.CROSS_JOIN.ordinal()] = new int[] {1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+        /*
+         *  bottom join operator within the row and top join operator with in the column.
+         *  ▷* means null aware anti join
+         *   op    ⨝    ⟕   ⋉    ▷    ⋊    ◁    ⟖   ⟗   ×    ▷*
+         *  ----- ---- ---- ---- ---- ---- ---- ---- ---- ---- -----
+         *   ⋈     0    1    0    0    0    0    0    0    0    0
          *   ⟕     0    2    0    0    0    0    0    0    0    0
          *   ⟗     0    2    0    0    0    0    0    2    0    0
-         *   ×      1    1    0    0    0    0    0    0    0    0
+         *   ×      0    1    0    0    0    0    0    0    0    0
          */
-        ASSOCIATIVITY_PROPERTY[JoinOperator.INNER_JOIN.ordinal()] = new int[] {1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
-        ASSOCIATIVITY_PROPERTY[JoinOperator.LEFT_OUTER_JOIN.ordinal()] = new int[] {0, 2, 0, 0, 0, 0, 0, 0, 0, 0};
-        ASSOCIATIVITY_PROPERTY[JoinOperator.FULL_OUTER_JOIN.ordinal()] = new int[] {0, 2, 0, 0, 0, 0, 0, 2, 0, 0};
-        ASSOCIATIVITY_PROPERTY[JoinOperator.CROSS_JOIN.ordinal()] = new int[] {1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+        OUTER_ASSOCIATIVITY_PROPERTY[JoinOperator.INNER_JOIN.ordinal()] = new int[] {0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
+        OUTER_ASSOCIATIVITY_PROPERTY[JoinOperator.LEFT_OUTER_JOIN.ordinal()] = new int[] {0, 2, 0, 0, 0, 0, 0, 0, 0, 0};
+        OUTER_ASSOCIATIVITY_PROPERTY[JoinOperator.FULL_OUTER_JOIN.ordinal()] = new int[] {0, 2, 0, 0, 0, 0, 0, 2, 0, 0};
+        OUTER_ASSOCIATIVITY_PROPERTY[JoinOperator.CROSS_JOIN.ordinal()] = new int[] {0, 1, 0, 0, 0, 0, 0, 0, 0, 0};
 
 
         /*
@@ -71,8 +84,13 @@ public class JoinReorderProperty {
         LEFT_ASSCOM_PROPERTY[JoinOperator.FULL_OUTER_JOIN.ordinal()] = new int[] {1, 2, 0, 0, 0, 0, 0, 2, 0, 0};
     }
 
-    public static int getAssociativityProperty(JoinOperator bottomJoinType, JoinOperator topJoinType) {
-        return ASSOCIATIVITY_PROPERTY[bottomJoinType.ordinal()][topJoinType.ordinal()];
+    public static int getAssociativityProperty(JoinOperator bottomJoinType, JoinOperator topJoinType, boolean isInnerMode) {
+        if (isInnerMode) {
+            return INNER_ASSOCIATIVITY_PROPERTY[bottomJoinType.ordinal()][topJoinType.ordinal()];
+        } else {
+            return OUTER_ASSOCIATIVITY_PROPERTY[bottomJoinType.ordinal()][topJoinType.ordinal()];
+        }
+
     }
 
     public static int getLeftAsscomProperty(JoinOperator bottomJoinType, JoinOperator topJoinType) {

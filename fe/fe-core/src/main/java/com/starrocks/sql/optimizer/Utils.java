@@ -307,19 +307,6 @@ public class Utils {
 
     public static boolean capableSemiReorder(OptExpression root, boolean hasSemi, int joinNum, int maxJoin) {
         Operator operator = root.getOp();
-
-        if (operator instanceof LogicalJoinOperator) {
-            if (((LogicalJoinOperator) operator).getJoinType().isSemiAntiJoin()) {
-                hasSemi = true;
-            } else {
-                joinNum = joinNum + 1;
-            }
-
-            if (joinNum > maxJoin && hasSemi) {
-                return false;
-            }
-        }
-
         for (OptExpression child : root.getInputs()) {
             if (operator instanceof LogicalJoinOperator) {
                 if (!capableSemiReorder(child, hasSemi, joinNum, maxJoin)) {
@@ -333,6 +320,32 @@ public class Utils {
         }
 
         return true;
+    }
+
+    public static boolean capableOuterReorder(OptExpression root, int threshold) {
+        boolean[] hasOuter = {false};
+        int totalJoinNodes = countJoinNode(root, hasOuter);
+        return totalJoinNodes < threshold && hasOuter[0];
+    }
+
+    private static int countJoinNode(OptExpression root, boolean[] hasOuter) {
+        int count = 0;
+        Operator operator = root.getOp();
+        for (OptExpression child : root.getInputs()) {
+            if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+                count += countJoinNode(child, hasOuter);
+            } else {
+                count = Math.max(count, countJoinNode(child, hasOuter));
+            }
+        }
+
+        if (operator instanceof LogicalJoinOperator && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+            count += 1;
+            if (!hasOuter[0] && ((LogicalJoinOperator) operator).getJoinType().isOuterJoin()) {
+                hasOuter[0] = true;
+            }
+        }
+        return count;
     }
 
     public static boolean hasUnknownColumnsStats(OptExpression root) {

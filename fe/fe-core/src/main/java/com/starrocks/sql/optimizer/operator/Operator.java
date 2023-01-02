@@ -101,7 +101,7 @@ public abstract class Operator {
 
     public RowInfo getRowInfo(List<OptExpression> inputs) {
         if (rowInfo != null) {
-            return  rowInfo;
+            return rowInfo;
         }
 
         if (projection != null) {

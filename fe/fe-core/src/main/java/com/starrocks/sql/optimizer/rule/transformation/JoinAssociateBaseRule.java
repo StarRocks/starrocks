@@ -91,7 +91,8 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         ColumnRefSet newTopJoinChildOutCols = deriveTopJoinChildOutputCols(input);
 
         splitCondition(topJoin.getOnPredicate(), newTopJoinChildOutCols, top, bottom);
-        splitCondition(bottomJoin.getOnPredicate(), newTopJoinChildOutCols, top, bottom);
+        // bottom join on condition doesn't need to split, it can be pulled up to the top directly.
+        top.addAll(Utils.extractConjuncts(bottomJoin.getOnPredicate()));
 
         ScalarOperator newTopOnCondition = Utils.compoundAnd(top);
         ScalarOperator newBotOnCondition = Utils.compoundAnd(bottom);
@@ -105,7 +106,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         // split bottomJoin project
         ProjectionSplitter splitter = new ProjectionSplitter(input, newBotOnCondition);
 
-        newTopOnCondition = rewriteNewTopOnCondition(topJoin.getJoinType(), splitter, newTopOnCondition,
+        newTopOnCondition = rewriteNewTopOnCondition(newTopJoinType, splitter, newTopOnCondition,
                 newBotJoinColSet, context.getColumnRefFactory());
 
         newBotOnCondition = rewriteNewBotOnCondition(splitter, newBotOnCondition);
