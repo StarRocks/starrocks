@@ -662,39 +662,4 @@ public class ReplayFromDumpTest {
                 "  |      [2, DATE, false] | [7, BIGINT, true] | [8, DECIMAL128(27,19), true]\n" +
                 "  |      [9, DATE, false] | [14, BIGINT, true] | [15, DECIMAL128(27,19), true]"));
     }
-<<<<<<< HEAD
 }
-=======
-
-    @Test
-    public void testMultiSubqueries() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/subquery_statistics"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("96:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]\n" +
-                "  |  hasNullableGenerateChild: true\n" +
-                "  |  cardinality: 1\n" +
-                "  |  column statistics: \n" +
-                "  |  * count-->[0.0, 1.0420273298435367, 0.0, 8.0, 1.0] ESTIMATE\n" +
-                "  |  \n" +
-                "  95:Project\n" +
-                "  |  output columns:\n" +
-                "  |  548 <-> 1\n" +
-                "  |  hasNullableGenerateChild: true\n" +
-                "  |  cardinality: 1\n" +
-                "  |  column statistics: \n" +
-                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE"));
-    }
-
-
-    @Test
-    public void testCorrelatedPredicateRewrite() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("1110:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
-    }
-
-}
->>>>>>> dc8d33c1c ([BugFix] use a tinyint col to fill empty project (#15662))
