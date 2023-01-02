@@ -87,7 +87,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map) {
             input_values->append_datum(datum);
         }
     }
-    auto ret = MapFunctions::map(nullptr, {input_keys, input_values});
+    auto ret = MapFunctions::map_from_arrays(nullptr, {input_keys, input_values});
     EXPECT_TRUE(ret.ok());
     auto result = std::move(ret.value());
     EXPECT_EQ(6, result->size());
@@ -144,7 +144,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch1) {
             input_values->append_datum(datum);
         }
     }
-    auto ret = MapFunctions::map(nullptr, {input_keys, input_values});
+    auto ret = MapFunctions::map_from_arrays(nullptr, {input_keys, input_values});
     EXPECT_FALSE(ret.ok());
 }
 
@@ -175,7 +175,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch2) {
             input_values->append_datum(datum);
         }
     }
-    auto ret = MapFunctions::map(nullptr, {input_keys, input_values});
+    auto ret = MapFunctions::map_from_arrays(nullptr, {input_keys, input_values});
     EXPECT_FALSE(ret.ok());
 }
 
