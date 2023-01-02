@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstring>
 
+#if 0
 /*
  * These functions are used for validating utf8 string.
  * Details can be seen here: https://github.com/lemire/fastvalidate-utf-8
@@ -151,6 +152,7 @@ static struct processed_utf_bytes checkUTF8Bytes(__m128i current_bytes, struct p
     checkOverlong(current_bytes, off1_current_bytes, pb.high_nibbles, previous->high_nibbles, has_error);
     return pb;
 }
+
 
 static bool validate_utf8_fast(const char* src, size_t len) {
     size_t i = 0;
@@ -407,3 +409,5 @@ static struct avx_processed_utf_bytes avxcheckUTF8Bytes_asciipath(__m256i curren
 }
 
 #endif // __AVX2__
+
+#endif

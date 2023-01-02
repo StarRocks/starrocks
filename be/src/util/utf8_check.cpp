@@ -100,6 +100,7 @@ bool validate_utf8_naive(const char* data, size_t len) {
     return true;
 }
 
+#if 0
 #if defined(__x86_64__) && defined(__SSE4_2__)
 bool validate_utf8(const char* src, size_t len) {
     return validate_utf8_fast(src, len);
@@ -327,5 +328,6 @@ bool validate_utf8(const char* src, size_t len) {
 bool validate_utf8(const char* src, size_t len) {
     return validate_utf8_naive(src, len);
 }
+#endif
 #endif
 } // namespace starrocks

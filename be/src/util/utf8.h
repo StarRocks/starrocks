@@ -17,6 +17,7 @@
 #include <cstring>
 #include <vector>
 
+#include "simdutf.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -116,6 +117,7 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
 // is to say, counting bytes which do not match 10xx_xxxx pattern.
 // All 0xxx_xxxx, 110x_xxxx, 1110_xxxx and 1111_0xxx are greater than 1011_1111 when use int8_t arithmetic,
 // so just count bytes greater than 1011_1111 in a byte string as the result of utf8_length.
+#if 0
 static int utf8_len(const char* begin, const char* end) {
     int len = 0;
     const char* p = begin;
@@ -151,6 +153,11 @@ static int utf8_len(const char* begin, const char* end) {
         len += static_cast<int8_t>(*p) > static_cast<int8_t>(0xBF);
     }
     return len;
+}
+#endif
+
+static int utf8_len(const char* begin, const char* end) {
+    return simdutf::count_utf8(begin, end - begin);
 }
 
 // Check if the string contains a utf-8 character

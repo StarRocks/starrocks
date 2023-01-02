@@ -110,7 +110,7 @@ BUILD_SYSTEM=${BUILD_SYSTEM:-make}
 #check_prerequest "locate libiberty.a" "libiberty-dev"
 
 # sudo apt-get install bison
-# sudo yum install bison
+# sudo yum install bison 
 #check_prerequest "bison --version" "bison"
 
 #########################
@@ -988,6 +988,18 @@ build_streamvbyte() {
     make install
 }
 
+# simdutf
+build_simdutf() {
+    check_if_source_exist $SIMDUTF_SOURCE
+
+    cd $TP_SOURCE_DIR/$SIMDUTF_SOURCE/
+    mkdir -p $BUILD_DIR
+    
+    $CMAKE_CMD -B $BUILD_DIR -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
+    $CMAKE_CMD --build $BUILD_DIR -j $PARALLEL
+    cd $BUILD_DIR && ${BUILD_SYSTEM} install
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
 export CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -1038,6 +1050,7 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
+build_simdutf
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
