@@ -14,14 +14,18 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.AnyMapType;
+import com.starrocks.catalog.AnyStructType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import org.apache.logging.log4j.LogManager;
@@ -56,6 +60,108 @@ public class PolymorphicFunctionAnalyzer {
             Type superKeyType = getSuperType(((MapType) t1).getKeyType(), ((MapType) t2).getKeyType());
             Type superValueType = getSuperType(((MapType) t1).getValueType(), ((MapType) t2).getValueType());
             return superKeyType != null && superValueType != null ? new MapType(superKeyType, superValueType) : null;
+        }
+        return null;
+    }
+
+    private static Function newScalarFunction(ScalarFunction fn, List<Type> newArgTypes, Type newRetType) {
+        ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), newArgTypes, newRetType,
+                fn.getLocation(), fn.getSymbolName(), fn.getPrepareFnSymbol(),
+                fn.getCloseFnSymbol());
+        newFn.setFunctionId(fn.getFunctionId());
+        newFn.setChecksum(fn.getChecksum());
+        newFn.setBinaryType(fn.getBinaryType());
+        newFn.setHasVarArgs(fn.hasVarArgs());
+        newFn.setId(fn.getId());
+        newFn.setUserVisible(fn.isUserVisible());
+        return newFn;
+    }
+
+    private static Function newAggregateFunction(AggregateFunction fn, List<Type> newArgTypes, Type newRetType) {
+        AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), newArgTypes, newRetType,
+                fn.getIntermediateType(), fn.hasVarArgs());
+        newFn.setFunctionId(fn.getFunctionId());
+        newFn.setChecksum(fn.getChecksum());
+        newFn.setBinaryType(fn.getBinaryType());
+        newFn.setHasVarArgs(fn.hasVarArgs());
+        newFn.setId(fn.getId());
+        newFn.setUserVisible(fn.isUserVisible());
+        return newFn;
+    }
+
+    private static Type[] resolveArgTypes(Type[] declTypes, Type[] inputArgTypes) {
+        // Use inputArgTypes length, because function may be a variable arguments
+        Type[] resolvedTypes = Arrays.copyOf(inputArgTypes, inputArgTypes.length);
+
+        for (int i = 0; i < declTypes.length; ++i) {
+            Type declType = declTypes[i];
+            Type inputType = inputArgTypes[i];
+
+            // If declaration type is not a pseudo type, use it.
+            if (!declType.isPseudoType()) {
+                resolvedTypes[i] = declType;
+                continue;
+            }
+
+            // Need to make input be a valid complex type if the input is Type NULL
+            if (declType instanceof AnyArrayType) {
+                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.NULL) : inputType;
+            } else if (declType instanceof AnyMapType) {
+                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.NULL, Type.NULL) : inputType;
+            } else if (declType instanceof AnyStructType) {
+                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.NULL)) : inputType;
+            } else {
+                resolvedTypes[i] = inputType;
+            }
+        }
+        return resolvedTypes;
+    }
+
+    private static Function resolveByReplacingInputs(Function fn, Type[] inputArgTypes) {
+        Type[] resolvedArgTypes = resolveArgTypes(fn.getArgs(), inputArgTypes);
+        if (fn instanceof ScalarFunction) {
+            return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), fn.getReturnType());
+        }
+        if (fn instanceof AggregateFunction) {
+            return newAggregateFunction((AggregateFunction) fn, Arrays.asList(resolvedArgTypes), fn.getReturnType());
+        }
+        return null;
+    }
+
+    private static class MapKeysDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            return new ArrayType(mapType.getKeyType());
+        }
+    }
+
+    private static class MapValuesDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            return new ArrayType(mapType.getValueType());
+        }
+    }
+
+    private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
+            = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
+            .put("map_keys", new MapKeysDeduce())
+            .put("map_values", new MapValuesDeduce())
+            .build();
+
+    private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
+        java.util.function.Function<Type[], Type> deduce = DEDUCE_RETURN_TYPE_FUNCTIONS.get(fn.functionName());
+        if (deduce == null) {
+            return null;
+        }
+        Type[] resolvedArgTypes = resolveArgTypes(fn.getArgs(), inputArgTypes);
+        Type newRetType = deduce.apply(resolvedArgTypes);
+        if (fn instanceof ScalarFunction) {
+            return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
+        }
+        if (fn instanceof AggregateFunction) {
+            return newAggregateFunction((AggregateFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
         }
         return null;
     }
@@ -108,10 +214,22 @@ public class PolymorphicFunctionAnalyzer {
         }
         Type retType = fn.getReturnType();
         Type[] declTypes = fn.getArgs();
+        Function resolvedFunction;
+        long numPseudoArgs = Arrays.stream(declTypes).filter(Type::isPseudoType).count();
+        if (!retType.isPseudoType() && numPseudoArgs == 1) {
+            resolvedFunction = resolveByReplacingInputs(fn, paramTypes);
+            if (resolvedFunction != null) {
+                return resolvedFunction;
+            }
+        }
+        resolvedFunction = resolveByDeducingReturnType(fn, paramTypes);
+        if (resolvedFunction != null) {
+            return resolvedFunction;
+        }
+
         Type[] realTypes = Arrays.copyOf(declTypes, declTypes.length);
         ArrayType typeArray = null;
         Type typeElement = null;
-        MapType typeMap = null;
         for (int i = 0; i < declTypes.length; i++) {
             Type declType = declTypes[i];
             Type realType = paramTypes[i];
@@ -123,16 +241,6 @@ public class PolymorphicFunctionAnalyzer {
                     typeArray = (ArrayType) realType;
                 } else if ((typeArray = (ArrayType) getSuperType(typeArray, realType)) == null) {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
-                    return null;
-                }
-            } else if (declType instanceof AnyMapType) {
-                if (realType.isNull()) {
-                    continue;
-                }
-                if (typeMap == null) {
-                    typeMap = (MapType) realType;
-                } else {
-                    LOGGER.warn("could not determine polymorphic type because input has two map types");
                     return null;
                 }
             } else if (declType instanceof AnyElementType) {
@@ -174,32 +282,17 @@ public class PolymorphicFunctionAnalyzer {
             return null;
         }
 
-        if (typeMap != null) {
-            if (retType instanceof AnyArrayType) {
-                if (fn.functionName().equals("map_keys")) {
-                    retType = new ArrayType(typeMap.getKeyType());
-                } else if (fn.functionName().equals("map_values")) {
-                    retType = new ArrayType(typeMap.getValueType());
-                } else {
-                    LOGGER.warn("not supported map function");
-                    return null;
-                }
-            }
-        } else {
-            if (retType instanceof AnyArrayType) {
-                retType = typeArray;
-            } else if (retType instanceof AnyElementType) {
-                retType = typeElement;
-            } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
-                assert !retType.isPseudoType();
-            }
+        if (retType instanceof AnyArrayType) {
+            retType = typeArray;
+        } else if (retType instanceof AnyElementType) {
+            retType = typeElement;
+        } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
+            assert !retType.isPseudoType();
         }
 
         for (int i = 0; i < declTypes.length; i++) {
             if (declTypes[i] instanceof AnyArrayType) {
                 realTypes[i] = typeArray;
-            } else if (declTypes[i] instanceof AnyMapType) {
-                realTypes[i] = typeMap;
             } else if (declTypes[i] instanceof AnyElementType) {
                 realTypes[i] = typeElement;
             } else {
@@ -208,27 +301,10 @@ public class PolymorphicFunctionAnalyzer {
         }
 
         if (fn instanceof ScalarFunction) {
-            ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), Arrays.asList(realTypes), retType,
-                    fn.getLocation(), ((ScalarFunction) fn).getSymbolName(), ((ScalarFunction) fn).getPrepareFnSymbol(),
-                    ((ScalarFunction) fn).getCloseFnSymbol());
-            newFn.setFunctionId(fn.getFunctionId());
-            newFn.setChecksum(fn.getChecksum());
-            newFn.setBinaryType(fn.getBinaryType());
-            newFn.setHasVarArgs(fn.hasVarArgs());
-            newFn.setId(fn.getId());
-            newFn.setUserVisible(fn.isUserVisible());
-            return newFn;
+            return newScalarFunction((ScalarFunction) fn, Arrays.asList(realTypes), retType);
         }
         if (fn instanceof AggregateFunction) {
-            AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(realTypes), retType,
-                    ((AggregateFunction) fn).getIntermediateType(), fn.hasVarArgs());
-            newFn.setFunctionId(fn.getFunctionId());
-            newFn.setChecksum(fn.getChecksum());
-            newFn.setBinaryType(fn.getBinaryType());
-            newFn.setHasVarArgs(fn.hasVarArgs());
-            newFn.setId(fn.getId());
-            newFn.setUserVisible(fn.isUserVisible());
-            return newFn;
+            return newAggregateFunction((AggregateFunction) fn, Arrays.asList(realTypes), retType);
         }
         if (fn instanceof TableFunction) {
             // Because unnest is a variadic function, and the types of multiple parameters may be inconsistent,
