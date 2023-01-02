@@ -346,12 +346,12 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
         System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("3:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [258: ss_sold_date_sk, INT, true] = [299: d_date_sk, INT, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (299: d_date_sk), remote = false\n" +
-                "  |  output columns: 256, 257, 260, 266, 267, 269, 305\n" +
-                "  |  cardinality: 54516964"));
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
+                "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
+                "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
+                "  |  output columns: 256, 258, 260, 266, 267, 269\n" +
+                "  |  cardinality: 37372757"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +

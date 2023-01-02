@@ -53,6 +53,7 @@ public class JoinCommutativityWithoutInnerRule extends TransformationRule {
         return INSTANCE;
     }
 
+    @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         return ((LogicalJoinOperator) input.getOp()).getJoinHint().isEmpty();
     }

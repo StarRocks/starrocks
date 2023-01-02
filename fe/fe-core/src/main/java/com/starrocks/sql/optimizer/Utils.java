@@ -307,6 +307,19 @@ public class Utils {
 
     public static boolean capableSemiReorder(OptExpression root, boolean hasSemi, int joinNum, int maxJoin) {
         Operator operator = root.getOp();
+
+        if (operator instanceof LogicalJoinOperator) {
+            if (((LogicalJoinOperator) operator).getJoinType().isSemiAntiJoin()) {
+                hasSemi = true;
+            } else {
+                joinNum = joinNum + 1;
+            }
+
+            if (joinNum > maxJoin && hasSemi) {
+                return false;
+            }
+        }
+
         for (OptExpression child : root.getInputs()) {
             if (operator instanceof LogicalJoinOperator) {
                 if (!capableSemiReorder(child, hasSemi, joinNum, maxJoin)) {
