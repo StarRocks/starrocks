@@ -828,4 +828,6 @@ vectorized_functions = [
     [170000, 'map_size', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
     [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
     [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
+
+    [170501, 'named_struct', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
 ]

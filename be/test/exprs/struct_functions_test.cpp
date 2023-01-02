@@ -57,4 +57,43 @@ PARALLEL_TEST(StructFunctionsTest, test_struct_ctor) {
     ASSERT_STREQ("{5,4,3,2,1}", struct_col->debug_item(2).c_str());
 }
 
+PARALLEL_TEST(StructFunctionsTest, test_named_struct) {
+    Columns input_columns;
+    for (int i = 0; i < 5; ++i) {
+        TypeDescriptor type;
+        type.type = LogicalType::TYPE_BINARY;
+        input_columns.emplace_back(ColumnHelper::create_column(type, true));
+        type.type = LogicalType::TYPE_INT;
+        input_columns.emplace_back(ColumnHelper::create_column(type, true));
+    }
+
+    // append 0,1,2,3,4
+    for (int i = 0; i < 9; i += 2) {
+        input_columns[i]->append_datum({std::to_string(i)});
+        input_columns[i + 1]->append_datum({i});
+    }
+    // append NULL,1,NULL,3,NULL
+    for (int i = 0; i < 5; ++i) {
+        if ((i % 2) == 0) {
+            input_columns[i + 1]->append_nulls(1);
+        } else {
+            input_columns[i + 1]->append_datum({i});
+        }
+    }
+    // append 5,4,3,2,1
+    for (int i = 0; i < 5; ++i) {
+        input_columns[i + 1]->append_datum({5 - i});
+    }
+
+    auto ret = StructFunctions::named_struct(nullptr, input_columns);
+    ASSERT_TRUE(ret.ok());
+    auto struct_col = std::move(ret).value();
+    ASSERT_EQ(3, struct_col->size());
+
+    ASSERT_STREQ("{\"0\":0,\"1\":1,\"2\":2,\"3\":3,\"4\":4}", struct_col->debug_item(0).c_str());
+    ASSERT_STREQ("{\"0\":NULL,\"1\":1,\"2\":NULL,\"3\":3,\"4\":NULL}", struct_col->debug_item(1).c_str());
+    ASSERT_STREQ("{\"0\":5,\"1\":4,\"2\":3,\"3\":2,\"4\":1}", struct_col->debug_item(2).c_str());
+}
+
+
 } // namespace starrocks
