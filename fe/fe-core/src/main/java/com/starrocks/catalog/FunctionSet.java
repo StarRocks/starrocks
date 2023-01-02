@@ -398,6 +398,9 @@ public class FunctionSet {
     public static final String ARRAY_MAP = "array_map";
     public static final String TRANSFORM = "transform";
 
+    // Struct functions:
+    public static final String ROW = "row";
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
@@ -461,7 +464,7 @@ public class FunctionSet {
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
-                    HLL_HASH, JSON_ARRAY, JSON_OBJECT);
+                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW);
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.

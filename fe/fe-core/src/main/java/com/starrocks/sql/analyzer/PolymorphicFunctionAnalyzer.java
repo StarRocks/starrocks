@@ -144,10 +144,28 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class MapFromArraysDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            ArrayType keyArrayType = (ArrayType) types[0];
+            ArrayType valueArrayType = (ArrayType) types[1];
+            return new MapType(keyArrayType.getItemType(), valueArrayType.getItemType());
+        }
+    }
+
+    private static class RowDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return new StructType(Arrays.asList(types));
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put("map_keys", new MapKeysDeduce())
             .put("map_values", new MapValuesDeduce())
+            .put("map_from_arrays", new MapFromArraysDeduce())
+            .put("row", new RowDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {

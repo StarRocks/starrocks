@@ -22,7 +22,7 @@
 
 namespace starrocks {
 
-PARALLEL_TEST(StructFunctionsTest, test_struct_ctor) {
+PARALLEL_TEST(StructFunctionsTest, test_row) {
     Columns input_columns;
     for (int i = 0; i < 5; ++i) {
         TypeDescriptor type;
@@ -47,7 +47,7 @@ PARALLEL_TEST(StructFunctionsTest, test_struct_ctor) {
         input_columns[i]->append_datum({5 - i});
     }
 
-    auto ret = StructFunctions::struct_ctor(nullptr, input_columns);
+    auto ret = StructFunctions::row(nullptr, input_columns);
     ASSERT_TRUE(ret.ok());
     auto struct_col = std::move(ret).value();
     ASSERT_EQ(3, struct_col->size());

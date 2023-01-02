@@ -454,6 +454,7 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
       + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
@@ -551,6 +552,8 @@
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
+    + Struct Functions
+      + [row](/sql-reference/sql-functions/struct-functions/row.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
