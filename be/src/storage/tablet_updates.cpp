@@ -2932,16 +2932,24 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     return Status::OK();
 }
 
-void TabletUpdates::_remove_unused_rowsets() {
+void TabletUpdates::_remove_unused_rowsets(bool drop_tablet) {
     size_t removed = 0;
     std::vector<RowsetSharedPtr> skipped_rowsets;
     RowsetSharedPtr rowset;
     while (_unused_rowsets.try_get(&rowset) == 1) {
         if (rowset.use_count() > 1) {
-            LOG(WARNING) << "rowset " << rowset->rowset_id() << " still been referenced"
-                         << " tablet:" << _tablet.tablet_id() << " rowset_id:" << rowset->rowset_id().id()
-                         << " use_count: " << rowset.use_count() << " refs_by_reader:" << rowset->refs_by_reader()
-                         << " version:" << rowset->version();
+            if (drop_tablet) {
+                LOG(WARNING) << "rowset " << rowset->rowset_id() << " still been referenced"
+                             << " tablet:" << _tablet.tablet_id() << " rowset_id:" << rowset->rowset_id().id()
+                             << " use_count: " << rowset.use_count() << " refs_by_reader:" << rowset->refs_by_reader()
+                             << " version:" << rowset->version();
+            } else {
+                VLOG(1) << "rowset " << rowset->rowset_id() << " still been referenced"
+                        << " tablet:" << _tablet.tablet_id() << " rowset_id:" << rowset->rowset_id().id()
+                        << " use_count: " << rowset.use_count() << " refs_by_reader:" << rowset->refs_by_reader()
+                        << " version:" << rowset->version();
+            }
+
             skipped_rowsets.emplace_back(std::move(rowset));
             continue;
         }
@@ -2971,6 +2979,18 @@ void TabletUpdates::_remove_unused_rowsets() {
     if (removed > 0) {
         LOG(INFO) << "_remove_unused_rowsets remove " << removed << " rowsets, tablet:" << _tablet.tablet_id();
     }
+}
+
+Status TabletUpdates::check_and_remove_rowset() {
+    std::lock_guard l1(_lock);
+    _remove_unused_rowsets(true);
+    if (!_unused_rowsets.empty()) {
+        std::string msg =
+                strings::Substitute("some rowsets of tablet: $0 are still been referenced", _tablet.tablet_id());
+        LOG(WARNING) << "msg";
+        return Status::InternalError(msg);
+    }
+    return Status::OK();
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
