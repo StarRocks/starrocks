@@ -104,4 +104,18 @@ public class MaterializedViewPlanTest extends PlanTestBase {
 
         );
     }
+
+    @Test
+    public void testTableSink() throws Exception {
+        String sql = "create materialized view rtmv \n" +
+                "distributed by hash(v1) " +
+                "refresh incremental as " +
+                "select v1, count(*) as cnt from t0 join t1 on t0.v1 = t1.v4 group by v1";
+        Pair<CreateMaterializedViewStatement, ExecPlan> pair = UtFrameUtils.planMVMaintenance(connectContext, sql);
+        String verbosePlan = pair.second.getExplainString(StatementBase.ExplainLevel.VERBOSE);
+        assertContains(verbosePlan, "  OLAP TABLE SINK\n" +
+                "    TABLE: rtmv\n" +
+                "    TUPLE ID: 4\n" +
+                "    RANDOM");
+    }
 }
