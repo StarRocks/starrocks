@@ -135,8 +135,6 @@ Right anti join reverses this comparison, returning only rows from the right tab
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 ```
 
-<<<<<<< HEAD
-=======
 #### Equi-join and Non-equi-join
 
 The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
@@ -165,7 +163,6 @@ The various joins supported by StarRocks can be classified as equi-joins and non
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
->>>>>>> cba93dbd2 (add functions and other updates (#16055))
 ### ORDER BY
 
 The ORDER BY clause of a SELECT statement sorts the result set by comparing the values from one or more columns.
