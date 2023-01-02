@@ -245,7 +245,6 @@ public class SelectAnalyzer {
                     name = item.getAlias() == null ? AstToStringBuilder.toString(item.getExpr()) : item.getAlias();
                 }
 
-
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
 
