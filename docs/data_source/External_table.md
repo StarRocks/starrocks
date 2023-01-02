@@ -537,23 +537,12 @@ Description:
     |  DOUBLE | DOUBLE |
     | FLOATE | FLOAT|
 
-<<<<<<< HEAD
-Note:
-
-* Hive table schema changes **will not be automatically synchronized to the external table**. You must create another Hive external table in StarRocks.
-* Currently, the supported Hive storage formats are Parquet, ORC, and CSV.
-
- > If the storage format is CSV, quotation marks cannot be used as escape characters.
-
-* The SNAPPY and LZ4 compression formats are supported.
-=======
 > Note:
 >
 > * Currently, the supported Hive storage formats are Parquet, ORC, and CSV.
 If the storage format is CSV, quotation marks cannot be used as escape characters.
 > * The SNAPPY and LZ4 compression formats are supported.
 > * The maximum length of a Hive string column that can be queried is 1 MB. If a string column exceeds 1 MB, it will be processed as a null column.
->>>>>>> cba93dbd2 (add functions and other updates (#16055))
 
 ### Use a Hive external table
 
