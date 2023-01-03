@@ -99,6 +99,9 @@ public class JsonTypeTest extends PlanTestBase {
 
     @Test
     public void testPredicateImplicitCast() throws Exception {
+        assertPlanContains("select parse_json('1') between 0.5 and 0.9",
+                "CAST(3: parse_json AS DOUBLE)");
+
         List<String> operators = Arrays.asList("<", "<=", "=", ">=", "!=");
         for (String operator : operators) {
             assertPlanContains(String.format("select parse_json('1') %s 1", operator),
