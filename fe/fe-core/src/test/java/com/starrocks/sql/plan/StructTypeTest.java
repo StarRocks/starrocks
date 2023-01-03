@@ -41,8 +41,8 @@ public class StructTypeTest extends PlanTestBase {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("create table test(c0 INT, " +
-                "c1 struct<a:array<struct<b:int>>>," +
-                "c2 struct<a:int,b:double>) " +
+                "c1 struct<a array<struct<b int>>>," +
+                "c2 struct<a int,b double>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         FeConstants.runningUnitTest = false;
@@ -135,5 +135,38 @@ public class StructTypeTest extends PlanTestBase {
     public void testUnnamedStruct() {
         StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
         Assert.assertEquals("STRUCT<int(11), datetime>", type.toSql());
+    }
+
+    @Test
+    public void testStructEquals() {
+        // test equals() for unnamed struct
+        StructType originType = new StructType(Lists.newArrayList(Type.INT, Type.VARCHAR));
+        StructType comparedType = new StructType(Lists.newArrayList(Type.INT, Type.VARCHAR));
+        Assert.assertEquals(originType, comparedType);
+        Assert.assertEquals(comparedType, originType);
+
+        comparedType = new StructType(Lists.newArrayList(Type.VARCHAR, Type.INT));
+        Assert.assertNotEquals(originType, comparedType);
+        Assert.assertNotEquals(comparedType, originType);
+
+        // test equals() for unnamed struct & named struct
+        StructField tmpField1 = new StructField("hello", Type.INT);
+        StructField tmpField2 = new StructField("world", Type.VARCHAR);
+        comparedType = new StructType(Lists.newArrayList(tmpField1, tmpField2));
+        Assert.assertNotEquals(originType, comparedType);
+        Assert.assertNotEquals(comparedType, originType);
+
+        // test equals() for named struct & named struct
+        StructField tmpField3 = new StructField("hello", Type.INT);
+        StructField tmpField4 = new StructField("world", Type.VARCHAR);
+        originType = new StructType(Lists.newArrayList(tmpField1, tmpField2));
+        comparedType = new StructType(Lists.newArrayList(tmpField3, tmpField4));
+        Assert.assertEquals(originType, comparedType);
+        Assert.assertEquals(comparedType, originType);
+
+        tmpField3 = new StructField("hello123", Type.INT);
+        comparedType = new StructType(Lists.newArrayList(tmpField3, tmpField4));
+        Assert.assertNotEquals(originType, comparedType);
+        Assert.assertNotEquals(comparedType, originType);
     }
 }
