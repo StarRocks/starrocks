@@ -2982,7 +2982,6 @@ void TabletUpdates::_remove_unused_rowsets(bool drop_tablet) {
 }
 
 Status TabletUpdates::check_and_remove_rowset() {
-    std::lock_guard l1(_lock);
     _remove_unused_rowsets(true);
     if (!_unused_rowsets.empty()) {
         std::string msg =
