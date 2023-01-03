@@ -173,6 +173,7 @@ public class MVMaintenanceJob implements Writable {
      * Trigger the incremental maintenance by transaction publish
      */
     public void onTransactionPublish() {
+        LOG.info("onTransactionPublish: {}", this);
         if (this.state.get().equals(JobState.RUN_EPOCH)) {
             this.epoch.onReady();
         } else {
@@ -252,7 +253,7 @@ public class MVMaintenanceJob implements Writable {
             CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
             List<TExecPlanFragmentParams> tParams =
                     execParams.toThrift(instanceIds, descTable, dbIds, enablePipeline, tabletSinkDop, tabletSinkDop);
-
+            Preconditions.checkState(tParams.size() == execParams.instanceExecParams.size());
             for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
                 long beId = execParams.instanceExecParams.get(i).getBackendNum();
                 TNetworkAddress beHost = execParams.instanceExecParams.get(i).getHost();
@@ -272,12 +273,9 @@ public class MVMaintenanceJob implements Writable {
     private void deployTasks() throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
-            long beId = task.getBeId();
+            LOG.info("deployTasks: {}", task);
             long taskId = task.getTaskId();
-            Backend backend =
-                    Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId),
-                            "backend not found:" + beId);
-            TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+            TNetworkAddress address = queryCoordinator.toBrpcHost(task.getBeHost());
             // Request information
             String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
 
@@ -324,6 +322,7 @@ public class MVMaintenanceJob implements Writable {
     private void stopTasks() throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
+            LOG.info("stopTasks: {}", task);
             long beId = task.getBeId();
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
             request.setQuery_id(connectContext.getExecutionId());
