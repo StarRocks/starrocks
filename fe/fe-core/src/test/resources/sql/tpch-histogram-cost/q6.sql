@@ -21,6 +21,7 @@ RESULT SINK
 |  * sum-->[NaN, NaN, 0.0, 8.0, 1.0] ESTIMATE
 |
 3:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 1(F00)

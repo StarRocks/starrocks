@@ -43,6 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 38:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 2
 column statistics:
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
@@ -86,6 +87,8 @@ OutPut Exchange Id: 38
 |  * expr-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
 |
 34:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [69: year, SMALLINT, false]
 cardinality: 2
 
 PLAN FRAGMENT 2(F16)
@@ -137,6 +140,7 @@ OutPut Exchange Id: 34
 |  * case-->[-Infinity, Infinity, 0.0, 8.0, 932378.0] ESTIMATE
 |
 |----30:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 25
 |
 28:Project
@@ -168,11 +172,15 @@ OutPut Exchange Id: 34
 |  * O_ORDERDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2406.0] ESTIMATE
 |
 |----26:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [11: S_SUPPKEY, INT, false]
 |       cardinality: 1000000
 |       probe runtime filters:
 |       - filter_id = 6, probe_expr = (14: S_NATIONKEY)
 |
 24:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [21: L_SUPPKEY, INT, false]
 cardinality: 3000000
 
 PLAN FRAGMENT 3(F17)
@@ -244,9 +252,13 @@ OutPut Exchange Id: 24
 |  * C_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 3000000.0] ESTIMATE
 |
 |----21:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [46: C_CUSTKEY, INT, false]
 |       cardinality: 3000000
 |
 10:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [37: O_CUSTKEY, INT, false]
 cardinality: 6425045
 
 PLAN FRAGMENT 6(F06)
@@ -275,6 +287,7 @@ OutPut Exchange Id: 21
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |
 |----18:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 5
 |
 11:OlapScanNode
@@ -315,6 +328,7 @@ OutPut Exchange Id: 18
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----15:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 12:OlapScanNode
@@ -391,6 +405,8 @@ OutPut Exchange Id: 10
 |  * O_ORDERDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2406.0] ESTIMATE
 |
 |----7:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [19: L_ORDERKEY, INT, false]
 |       cardinality: 6425045
 |
 0:OlapScanNode
@@ -443,6 +459,7 @@ OutPut Exchange Id: 07
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 |----4:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 214168
 |
 1:OlapScanNode

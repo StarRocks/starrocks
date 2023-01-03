@@ -34,6 +34,7 @@ RESULT SINK
 |  * expr-->[-Infinity, Infinity, 0.0, 8.0, 1.0] ESTIMATE
 |
 7:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 1(F00)
@@ -78,6 +79,8 @@ OutPut Exchange Id: 07
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |
 |----3:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [2: L_PARTKEY, INT, false]
 |       cardinality: 7013947
 |
 0:OlapScanNode

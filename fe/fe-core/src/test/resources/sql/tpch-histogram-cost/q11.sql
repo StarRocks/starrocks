@@ -33,6 +33,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 30:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 1600000
 column statistics:
 * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
@@ -75,6 +76,7 @@ OutPut Exchange Id: 30
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 8.0, 1.0] ESTIMATE
 |
 |----26:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 10:AGGREGATE (update finalize)
@@ -112,6 +114,7 @@ OutPut Exchange Id: 30
 |  * expr-->[1.0, 9999000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----7:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 40000
 |
 0:OlapScanNode
@@ -156,6 +159,7 @@ OutPut Exchange Id: 26
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 8.0, 1.0] ESTIMATE
 |
 22:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 3(F05)
@@ -192,6 +196,7 @@ OutPut Exchange Id: 22
 |  * expr-->[1.0, 9999000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 |----18:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 40000
 |
 11:OlapScanNode
@@ -233,6 +238,7 @@ OutPut Exchange Id: 18
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----15:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 12:OlapScanNode
@@ -297,6 +303,7 @@ OutPut Exchange Id: 07
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----4:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 1:OlapScanNode
