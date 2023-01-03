@@ -92,7 +92,7 @@ StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked(ExprContext* context, Chunk*
     auto* array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(orig_column.get()));
 
     ColumnPtr casted_element_column;
-    // cast key column
+    // cast element column
     if (_element_cast != nullptr) {
         Chunk field_chunk;
         field_chunk.append_column(array_column->elements_column(), 0);
