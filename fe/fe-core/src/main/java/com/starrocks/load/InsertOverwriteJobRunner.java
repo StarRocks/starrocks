@@ -18,10 +18,13 @@ package com.starrocks.load;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
@@ -240,12 +243,18 @@ public class InsertOverwriteJobRunner {
             }
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable targetTable = (OlapTable) table;
+            List<Long> sourceTabletIds = Lists.newArrayList();
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
                     LOG.info("drop temp partition:{}", pid);
 
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
+                        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            for (Tablet tablet : index.getTablets()) {
+                                sourceTabletIds.add(tablet.getId());
+                            }
+                        }
                         targetTable.dropTempPartition(partition.getName(), true);
                     } else {
                         LOG.warn("partition {} is null", pid);
@@ -253,6 +262,13 @@ public class InsertOverwriteJobRunner {
                 }
             }
             if (!isReplay) {
+                // mark all source tablet ids force delete to drop it directly on BE,
+                // not to move it to trash
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                for (long tabletId : sourceTabletIds) {
+                    invertedIndex.markTabletForceDelete(tabletId);
+                }
+
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
@@ -274,12 +290,29 @@ public class InsertOverwriteJobRunner {
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
+            List<Long> sourceTabletIds = Lists.newArrayList();
+            sourcePartitionNames.forEach(name -> {
+                Partition partition = targetTable.getPartition(name);
+                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        sourceTabletIds.add(tablet.getId());
+                    }
+                }
+            });
+
             if (targetTable.getPartitionInfo().getType() == PartitionType.RANGE) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
             } else {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             }
             if (!isReplay) {
+                // mark all source tablet ids force delete to drop it directly on BE,
+                // not to move it to trash
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                for (long tabletId : sourceTabletIds) {
+                    invertedIndex.markTabletForceDelete(tabletId);
+                }
+
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
