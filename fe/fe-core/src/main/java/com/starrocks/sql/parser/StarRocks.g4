@@ -2050,16 +2050,16 @@ mapType
     : MAP '<' type ',' type '>'
     ;
 
-columnNameType
+subfieldDesc
     : identifier type
     ;
 
-columnNameTypeList
-    : columnNameType (',' columnNameType)*
+subfieldDescs
+    : subfieldDesc (',' subfieldDesc)*
     ;
 
 structType
-    : STRUCT '<' columnNameTypeList '>'
+    : STRUCT '<' subfieldDescs '>'
     ;
 
 typeParameter

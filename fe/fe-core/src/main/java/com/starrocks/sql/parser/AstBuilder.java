@@ -5576,9 +5576,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public StructType getStructType(StarRocksParser.StructTypeContext context) {
         ArrayList<StructField> fields = new ArrayList<>();
-        List<StarRocksParser.ColumnNameTypeContext> typeLists =
-                context.columnNameTypeList().columnNameType();
-        for (StarRocksParser.ColumnNameTypeContext type : typeLists) {
+        List<StarRocksParser.SubfieldDescContext> subfields =
+                context.subfieldDescs().subfieldDesc();
+        for (StarRocksParser.SubfieldDescContext type : subfields) {
             fields.add(new StructField(type.identifier().getText(), getType(type.type()), null));
         }
 
