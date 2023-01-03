@@ -437,7 +437,7 @@ public class FileSystemManager {
                 } else {
                     dfsFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 }
-                fileSystem.setFileSystem(dfsFileSystem);
+                fileSystem.setFileSystem(dfsFileSystem, authentication.equals(AUTHENTICATION_KERBEROS));
             }
             return fileSystem;
         } catch (Exception e) {
@@ -994,7 +994,7 @@ public class FileSystemManager {
         public void run() {
             try {
                 for (BrokerFileSystem fileSystem : cachedFileSystem.values()) {
-                    if (fileSystem.isExpired(BrokerConfig.client_expire_seconds)) {
+                    if (fileSystem.isExpired()) {
                         logger.info("file system " + fileSystem + " is expired, close and remove it");
                         fileSystem.getLock().lock();
                         try {

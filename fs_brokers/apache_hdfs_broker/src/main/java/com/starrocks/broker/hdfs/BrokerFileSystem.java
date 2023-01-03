@@ -31,20 +31,27 @@ public class BrokerFileSystem {
     private ReentrantLock lock;
     private FileSystemIdentity identity;
     private FileSystem dfsFileSystem;
-    private long lastAccessTimestamp;
+    private long lastAccessTimestamp = -1L;
+    private long createTimestamp = -1L;
     private UUID fileSystemId;
-    
+    private boolean isKerberosAuth = false;
+
     public BrokerFileSystem(FileSystemIdentity identity) {
         this.identity = identity;
         this.lock = new ReentrantLock();
         this.dfsFileSystem = null;
-        this.lastAccessTimestamp = System.currentTimeMillis();
         this.fileSystemId = UUID.randomUUID();
     }
     
-    public synchronized void setFileSystem(FileSystem fileSystem) {
+    public synchronized void setFileSystem(FileSystem fileSystem, boolean isKerberosAuth) {
         this.dfsFileSystem = fileSystem;
         this.lastAccessTimestamp = System.currentTimeMillis();
+        this.createTimestamp = System.currentTimeMillis();
+        this.isKerberosAuth = isKerberosAuth;
+    }
+
+    public synchronized void setFileSystem(FileSystem fileSystem) {
+        this.setFileSystem(fileSystem, false);
     }
     
     public void closeFileSystem() {
@@ -81,8 +88,14 @@ public class BrokerFileSystem {
         return lock;
     }
     
-    public boolean isExpired(long expirationIntervalSecs) {
-        if (System.currentTimeMillis() - lastAccessTimestamp > expirationIntervalSecs * 1000) {
+    public boolean isExpired() {
+        if (lastAccessTimestamp > 0
+                && System.currentTimeMillis() - lastAccessTimestamp > BrokerConfig.client_expire_seconds * 1000) {
+            return true;
+        }
+        if (createTimestamp > 0
+                && isKerberosAuth
+                && System.currentTimeMillis() - createTimestamp > BrokerConfig.kerberos_token_expire_seconds * 1000) {
             return true;
         }
         return false;
