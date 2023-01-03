@@ -45,13 +45,13 @@ public:
 
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
-    Status _push_chunk_by_force_streaming();
+    Status _push_chunk_by_force_streaming(ChunkPtr chunk);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
-    Status _push_chunk_by_force_preaggregation(const size_t chunk_size);
+    Status _push_chunk_by_force_preaggregation(ChunkPtr chunk, const size_t chunk_size);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
-    Status _push_chunk_by_auto(const size_t chunk_size);
+    Status _push_chunk_by_auto(ChunkPtr chunk, const size_t chunk_size);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is

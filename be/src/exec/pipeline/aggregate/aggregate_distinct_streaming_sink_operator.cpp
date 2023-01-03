@@ -52,22 +52,22 @@ Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, c
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
-        return _push_chunk_by_force_streaming();
+        return _push_chunk_by_force_streaming(chunk);
     } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
         return _push_chunk_by_force_preaggregation(chunk->num_rows());
     } else {
-        return _push_chunk_by_auto(chunk->num_rows());
+        return _push_chunk_by_auto(chunk, chunk->num_rows());
     }
 }
 
-Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_streaming() {
+Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_streaming(const ChunkPtr& chunk) {
     SCOPED_TIMER(_aggregator->streaming_timer());
-    ChunkPtr chunk = std::make_shared<Chunk>();
-    _aggregator->output_chunk_by_streaming(&chunk);
-    _aggregator->offer_chunk_to_buffer(chunk);
+    ChunkPtr res = std::make_shared<Chunk>();
+    RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+    _aggregator->offer_chunk_to_buffer(res);
     return Status::OK();
 }
 
@@ -84,7 +84,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregati
     return Status::OK();
 }
 
-Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_size) {
+Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size) {
     // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
     size_t real_capacity = _aggregator->hash_set_variant().capacity() - _aggregator->hash_set_variant().capacity() / 8;
     size_t remain_size = real_capacity - _aggregator->hash_set_variant().size();
@@ -110,13 +110,13 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
             SCOPED_TIMER(_aggregator->streaming_timer());
             size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
             if (zero_count == 0) {
-                ChunkPtr chunk = std::make_shared<Chunk>();
-                _aggregator->output_chunk_by_streaming(&chunk);
-                _aggregator->offer_chunk_to_buffer(chunk);
+                ChunkPtr res = std::make_shared<Chunk>();
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+                _aggregator->offer_chunk_to_buffer(res);
             } else if (zero_count != _aggregator->streaming_selection().size()) {
-                ChunkPtr chunk = std::make_shared<Chunk>();
-                _aggregator->output_chunk_by_streaming_with_selection(&chunk);
-                _aggregator->offer_chunk_to_buffer(chunk);
+                ChunkPtr res = std::make_shared<Chunk>();
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
+                _aggregator->offer_chunk_to_buffer(res);
             }
         }
 

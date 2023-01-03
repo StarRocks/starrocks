@@ -47,7 +47,7 @@ AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(28: expr)}] group by [[]] having [nu
 [plan-2]
 AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(29: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(28: expr)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(multiply(6: L_EXTENDEDPRICE, subtract(1.0, 7: L_DISCOUNT)))}] group by [[]] having [null]
             INNER JOIN (join-predicate [2: L_PARTKEY = 18: P_PARTKEY AND 21: P_BRAND = Brand#45 AND 24: P_CONTAINER IN (SM CASE, SM BOX, SM PACK, SM PKG) AND 5: L_QUANTITY >= 5.0 AND 5: L_QUANTITY <= 15.0 AND 23: P_SIZE <= 5 OR 21: P_BRAND = Brand#11 AND 24: P_CONTAINER IN (MED BAG, MED BOX, MED PKG, MED PACK) AND 5: L_QUANTITY >= 15.0 AND 5: L_QUANTITY <= 25.0 AND 23: P_SIZE <= 10 OR 21: P_BRAND = Brand#21 AND 24: P_CONTAINER IN (LG CASE, LG BOX, LG PACK, LG PKG) AND 5: L_QUANTITY >= 25.0 AND 5: L_QUANTITY <= 35.0 AND 23: P_SIZE <= 15] post-join-predicate [null])
                 EXCHANGE SHUFFLE[2]
                     SCAN (columns[2: L_PARTKEY, 5: L_QUANTITY, 6: L_EXTENDEDPRICE, 7: L_DISCOUNT, 14: L_SHIPINSTRUCT, 15: L_SHIPMODE] predicate[5: L_QUANTITY >= 5.0 AND 5: L_QUANTITY <= 35.0 AND 15: L_SHIPMODE IN (AIR, AIR REG) AND 14: L_SHIPINSTRUCT = DELIVER IN PERSON])

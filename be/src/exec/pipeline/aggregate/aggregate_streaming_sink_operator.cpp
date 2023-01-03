@@ -16,6 +16,7 @@
 
 #include <variant>
 
+#include "column/vectorized_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 namespace starrocks::pipeline {
@@ -51,34 +52,34 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const Chu
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
-        RETURN_IF_ERROR(_push_chunk_by_force_streaming());
+        RETURN_IF_ERROR(_push_chunk_by_force_streaming(chunk));
     } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
-        RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk->num_rows()));
+        RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk->num_rows()));
     } else {
-        RETURN_IF_ERROR(_push_chunk_by_auto(chunk->num_rows()));
+        RETURN_IF_ERROR(_push_chunk_by_auto(chunk, chunk->num_rows()));
     }
     RETURN_IF_ERROR(_aggregator->check_has_error());
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming() {
+Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming(ChunkPtr chunk) {
     SCOPED_TIMER(_aggregator->streaming_timer());
-    ChunkPtr chunk = std::make_shared<Chunk>();
-    _aggregator->output_chunk_by_streaming(&chunk);
-    _aggregator->offer_chunk_to_buffer(chunk);
+    ChunkPtr res = std::make_shared<Chunk>();
+    RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+    _aggregator->offer_chunk_to_buffer(std::move(res));
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const size_t chunk_size) {
+Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(ChunkPtr chunk, const size_t chunk_size) {
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->compute_single_agg_state(chunk_size);
+        RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
     } else {
-        _aggregator->compute_batch_agg_states(chunk_size);
+        RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
     }
 
     _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -88,7 +89,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_size) {
+Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const size_t chunk_size) {
     // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
     size_t real_capacity = _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
     size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
@@ -101,9 +102,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
         if (_aggregator->is_none_group_by_exprs()) {
-            _aggregator->compute_single_agg_state(chunk_size);
+            RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk.get(), chunk_size));
         } else {
-            _aggregator->compute_batch_agg_states(chunk_size);
+            RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
         }
 
         _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -120,25 +121,25 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
         // very poor aggregation
         if (zero_count == 0) {
             SCOPED_TIMER(_aggregator->streaming_timer());
-            ChunkPtr chunk = std::make_shared<Chunk>();
-            _aggregator->output_chunk_by_streaming(&chunk);
-            _aggregator->offer_chunk_to_buffer(chunk);
+            ChunkPtr res = std::make_shared<Chunk>();
+            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
+            _aggregator->offer_chunk_to_buffer(res);
         }
         // very high aggregation
         else if (zero_count == _aggregator->streaming_selection().size()) {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            _aggregator->compute_batch_agg_states(chunk_size);
+            RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
         } else {
             // middle cases, first aggregate locally and output by stream
             {
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
-                _aggregator->compute_batch_agg_states_with_selection(chunk_size);
+                RETURN_IF_ERROR(_aggregator->compute_batch_agg_states_with_selection(chunk.get(), chunk_size));
             }
             {
                 SCOPED_TIMER(_aggregator->streaming_timer());
-                ChunkPtr chunk = std::make_shared<Chunk>();
-                _aggregator->output_chunk_by_streaming_with_selection(&chunk);
-                _aggregator->offer_chunk_to_buffer(chunk);
+                ChunkPtr res = std::make_shared<Chunk>();
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(chunk.get(), &res));
+                _aggregator->offer_chunk_to_buffer(res);
             }
         }
 

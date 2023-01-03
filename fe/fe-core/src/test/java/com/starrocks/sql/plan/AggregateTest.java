@@ -1063,11 +1063,12 @@ public class AggregateTest extends PlanTestBase {
         System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(8: case)\n" +
+                "  |  output: sum(if(1: v4 = 4: v1, 1: v4, NULL))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  6:Project\n" +
-                "  |  <slot 8> : if(1: v4 = 4: v1, 1: v4, NULL)\n" +
+                "  |  <slot 1> : 1: v4\n" +
+                "  |  <slot 4> : 4: v1\n" +
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -1075,8 +1076,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: t1"));
+                "  0:OlapScanNode"));
 
         Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 04\n" +
@@ -1640,12 +1640,12 @@ public class AggregateTest extends PlanTestBase {
                 "sum(arrays_overlap(v3, [1])) as q1, " +
                 "sum(arrays_overlap(v3, [1])) as q2, " +
                 "sum(arrays_overlap(v3, [1])) as q3 FROM tarray;");
-        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(4: arrays_overlap)\n" +
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>)))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 4> : arrays_overlap(3: v3, CAST(ARRAY<tinyint(4)>[1] AS ARRAY<BIGINT>))\n" +
+                "  |  <slot 3> : 3: v3\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
@@ -1728,6 +1728,81 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testExtractProject() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select sum(t1c + 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(CAST(3: t1c AS BIGINT) + 1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select sum(t1c), sum(t1c + 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: t1c), sum(CAST(3: t1c AS BIGINT) + 1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c");
+
+        sql = "select sum(t1c + 1), sum(t1c + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(15: cast + 1), sum(15: cast + 2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 15> : 15: cast\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 15> : CAST(3: t1c AS BIGINT)");
+
+        sql = "select sum(t1c), sum(t1c + 1), sum(t1c + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: t1c), sum(16: cast + 1), sum(16: cast + 2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 16> : 16: cast\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 16> : CAST(3: t1c AS BIGINT)");
+
+        sql = "select sum(t1c + 1), sum(t1c + 1 + 2), sum(t1d + 1 + 3) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(11: expr), sum(18: add + 2), sum(4: t1d + 1 + 3)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: t1d\n" +
+                "  |  <slot 11> : 18: add\n" +
+                "  |  <slot 18> : 18: add\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
+                "  |  <slot 18> : 17: cast + 1");
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select count(distinct t1c, upper(id_datetime)) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  5:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(3: t1c IS NULL, NULL, 11: upper))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 3: t1c, 11: upper");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+    }
+
+    @Test
     public void testSimpleMinMaxAggRewrite() throws Exception {
         // normal case
         String sql = "select min(t1b),max(t1b),min(id_datetime) from test_all_type_not_null";
@@ -1756,12 +1831,11 @@ public class AggregateTest extends PlanTestBase {
         sql = "select min(t1b+1),max(t1b) from test_all_type_not_null";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: min(11: expr), max(2: t1b)\n" +
+                "  |  output: min(CAST(2: t1b AS INT) + 1), max(2: t1b)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 2> : 2: t1b\n" +
-                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
         // with unsupported type in agg function

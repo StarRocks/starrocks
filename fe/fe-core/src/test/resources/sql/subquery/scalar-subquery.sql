@@ -538,7 +538,7 @@ INNER JOIN (join-predicate [10: cast = 8: avg] post-join-predicate [null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{8: avg=avg(8: avg)}] group by [[]] having [8: avg IS NOT NULL]
             EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{8: avg=avg(7: expr)}] group by [[]] having [null]
+                AGGREGATE ([LOCAL] aggregate [{8: avg=avg(add(5: v5, 1))}] group by [[]] having [null]
                     SCAN (columns[5: v5] predicate[null])
 [end]
 

@@ -112,11 +112,12 @@ EXCHANGE ID: 22
 UNPARTITIONED
 
 21:AGGREGATE (update serialize)
-|  output: sum(41: expr)
+|  output: sum(25: PS_SUPPLYCOST * CAST(24: PS_AVAILQTY AS DOUBLE))
 |  group by:
 |
 20:Project
-|  <slot 41> : 25: PS_SUPPLYCOST * CAST(24: PS_AVAILQTY AS DOUBLE)
+|  <slot 24> : 24: PS_AVAILQTY
+|  <slot 25> : 25: PS_SUPPLYCOST
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)

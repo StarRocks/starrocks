@@ -31,17 +31,19 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 03
 
 2:AGGREGATE (update serialize)
-|  aggregate: sum[([18: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+|  aggregate: sum[([6: L_EXTENDEDPRICE, DOUBLE, false] * [7: L_DISCOUNT, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[NaN, NaN, 0.0, 8.0, 1.0] ESTIMATE
 |
 1:Project
 |  output columns:
-|  18 <-> [6: L_EXTENDEDPRICE, DOUBLE, false] * [7: L_DISCOUNT, DOUBLE, false]
+|  6 <-> [6: L_EXTENDEDPRICE, DOUBLE, false]
+|  7 <-> [7: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 11504008
 |  column statistics:
-|  * expr-->[NaN, NaN, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
+|  * L_DISCOUNT-->[NaN, NaN, 0.0, 8.0, 11.0] ESTIMATE
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem

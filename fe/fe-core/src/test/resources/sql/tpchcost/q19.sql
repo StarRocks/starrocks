@@ -56,11 +56,12 @@ EXCHANGE ID: 08
 UNPARTITIONED
 
 7:AGGREGATE (update serialize)
-|  output: sum(28: expr)
+|  output: sum(6: L_EXTENDEDPRICE * 1.0 - 7: L_DISCOUNT)
 |  group by:
 |
 6:Project
-|  <slot 28> : 6: L_EXTENDEDPRICE * 1.0 - 7: L_DISCOUNT
+|  <slot 6> : 6: L_EXTENDEDPRICE
+|  <slot 7> : 7: L_DISCOUNT
 |
 5:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -87,7 +88,6 @@ PREDICATES: 21: P_BRAND IN ('Brand#45', 'Brand#11', 'Brand#21'), 23: P_SIZE <= 1
 partitions=1/1
 rollup: part
 tabletRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=5714286
 avgRowSize=32.0
 numNodes=0
@@ -113,7 +113,6 @@ PREDICATES: 5: L_QUANTITY >= 5.0, 5: L_QUANTITY <= 35.0, 15: L_SHIPMODE IN ('AIR
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=26239067
 avgRowSize=67.0
 numNodes=0

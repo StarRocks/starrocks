@@ -488,10 +488,40 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size
     return current_reduction > min_reduction;
 }
 
-void Aggregator::compute_single_agg_state(size_t chunk_size) {
+Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i) {
+    {
+        SCOPED_TIMER(_agg_stat->expr_release_timer);
+        for (size_t j = 0; j < agg_expr_ctxs.size(); j++) {
+            _agg_input_columns[i][j] = nullptr;
+        }
+    }
+
+    SCOPED_TIMER(_agg_stat->expr_compute_timer);
+    for (size_t j = 0; j < agg_expr_ctxs.size(); j++) {
+        // For simplicity and don't change the overall processing flow,
+        // We handle const column as normal data column
+        // TODO(kks): improve const column aggregate later
+        if (j == 0) {
+            ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[j]->evaluate(chunk));
+            _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
+        } else {
+            ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[j]->evaluate(chunk));
+            _agg_input_columns[i][j] = std::move(col);
+        }
+        _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
+    }
+    return Status::OK();
+}
+
+Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
+    auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        // evaluate arguments at i-th agg function
+        RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+        // batch call update or merge for singe stage
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
                                                          _single_agg_state + _agg_states_offsets[i]);
@@ -501,12 +531,18 @@ void Aggregator::compute_single_agg_state(size_t chunk_size) {
                                                         _agg_input_columns[i][0].get(), 0, chunk_size);
         }
     }
+    return Status::OK();
 }
 
-void Aggregator::compute_batch_agg_states(size_t chunk_size) {
+Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
+    auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        // evaluate arguments at i-th agg function
+        RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+        // batch call update or merge
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                             _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
@@ -516,12 +552,17 @@ void Aggregator::compute_batch_agg_states(size_t chunk_size) {
                                            _agg_input_columns[i][0].get(), _tmp_agg_states.data());
         }
     }
+    return Status::OK();
 }
 
-void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
+Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
+    auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+
         if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                         _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
@@ -533,6 +574,7 @@ void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
                                                        _tmp_agg_states.data(), _streaming_selection);
         }
     }
+    return Status::OK();
 }
 
 Status Aggregator::_evaluate_const_columns(int i) {
@@ -593,13 +635,13 @@ void Aggregator::process_limit(ChunkPtr* chunk) {
     }
 }
 
-Status Aggregator::evaluate_exprs(Chunk* chunk) {
+Status Aggregator::evaluate_groupby_exprs(Chunk* chunk) {
     _set_passthrough(chunk->owner_info().is_passthrough());
-    _reset_exprs();
-    return _evaluate_exprs(chunk);
+    _reset_groupby_exprs();
+    return _evaluate_group_by_exprs(chunk);
 }
 
-void Aggregator::output_chunk_by_streaming(ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
@@ -614,11 +656,15 @@ void Aggregator::output_chunk_by_streaming(ChunkPtr* chunk) {
 
     if (!_agg_fn_ctxs.empty()) {
         DCHECK(!_group_by_columns.empty());
+
+        RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
+
         const auto num_rows = _group_by_columns[0]->size();
         Columns agg_result_column = _create_agg_result_columns(num_rows, use_intermediate_as_output);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
+            // TODO: evaluate agg input columns
             if (use_intermediate_as_input) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
@@ -635,9 +681,10 @@ void Aggregator::output_chunk_by_streaming(ChunkPtr* chunk) {
     _num_rows_processed += result_chunk->num_rows();
     *chunk = std::move(result_chunk);
     COUNTER_SET(_agg_stat->pass_through_row_count, _num_pass_through_rows);
+    return Status::OK();
 }
 
-void Aggregator::output_chunk_by_streaming_with_selection(ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk) {
     // Streaming aggregate at least has one group by column
     size_t chunk_size = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -666,7 +713,9 @@ void Aggregator::output_chunk_by_streaming_with_selection(ChunkPtr* chunk) {
             }
         }
     }
-    output_chunk_by_streaming(chunk);
+
+    RETURN_IF_ERROR(output_chunk_by_streaming(input_chunk, chunk));
+    return Status::OK();
 }
 
 void Aggregator::try_convert_to_two_level_map() {
@@ -767,22 +816,14 @@ ChunkPtr Aggregator::_build_output_chunk(const Columns& group_by_columns, const 
     return result_chunk;
 }
 
-void Aggregator::_reset_exprs() {
+void Aggregator::_reset_groupby_exprs() {
     SCOPED_TIMER(_agg_stat->expr_release_timer);
     for (auto& _group_by_column : _group_by_columns) {
         _group_by_column = nullptr;
     }
-
-    DCHECK(_agg_input_columns.size() == _agg_fn_ctxs.size());
-    for (size_t i = 0; i < _agg_input_columns.size(); i++) {
-        for (size_t j = 0; j < _agg_input_columns[i].size(); j++) {
-            _agg_input_columns[i][j] = nullptr;
-            _agg_input_raw_columns[i][j] = nullptr;
-        }
-    }
 }
 
-Status Aggregator::_evaluate_exprs(Chunk* chunk) {
+Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
     SCOPED_TIMER(_agg_stat->expr_compute_timer);
     // Compute group by columns
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
@@ -809,27 +850,15 @@ Status Aggregator::_evaluate_exprs(Chunk* chunk) {
         }
     }
 
-    // Compute agg function columns
-    auto use_intermediate = _use_intermediate_as_input();
-    auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
-    DCHECK(agg_expr_ctxs.size() == _agg_input_columns.size());
-    DCHECK(agg_expr_ctxs.size() == _agg_fn_ctxs.size());
-    for (size_t i = 0; i < agg_expr_ctxs.size(); i++) {
-        for (size_t j = 0; j < agg_expr_ctxs[i].size(); j++) {
-            // For simplicity and don't change the overall processing flow,
-            // We handle const column as normal data column
-            // TODO(kks): improve const column aggregate later
-            if (j == 0) {
-                ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[i][j]->evaluate(chunk));
-                _agg_input_columns[i][j] = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
-            } else {
-                ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[i][j]->evaluate(chunk));
-                _agg_input_columns[i][j] = std::move(col);
-            }
-            _agg_input_raw_columns[i][j] = _agg_input_columns[i][j].get();
-        }
-    }
+    return Status::OK();
+}
 
+Status Aggregator::evaluate_agg_fn_exprs(Chunk* chunk) {
+    bool use_intermediate = _use_intermediate_as_input();
+    auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+    for (size_t i = 0; i < agg_expr_ctxs.size(); i++) {
+        RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
+    }
     return Status::OK();
 }
 

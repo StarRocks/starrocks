@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -1426,18 +1425,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type");
-
-        sql = "select sum(t1a+t1b) from test_all_type [_META_]";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(11: expr)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 11> : CAST(t1a AS DOUBLE) + CAST(t1b AS DOUBLE)\n" +
-                "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: test_all_type");
     }
 
     @Test
@@ -1460,6 +1447,23 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testExtractProject() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select max(upper(S_ADDRESS)), min(upper(S_ADDRESS)), max(S_ADDRESS), sum(S_SUPPKEY + 1) from supplier";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: max(16: upper), min(16: upper), max(15: S_ADDRESS), sum(CAST(1: S_SUPPKEY AS BIGINT) + 1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: S_SUPPKEY\n" +
+                "  |  <slot 15> : 15: S_ADDRESS\n" +
+                "  |  <slot 16> : DictExpr(15: S_ADDRESS,[upper(<place-holder>)])");
+    }
+
+    @Test
     public void testCompoundPredicate() throws Exception {
         String sql = "select count(*) from supplier group by S_ADDRESS having " +
                 "if(S_ADDRESS > 'a' and S_ADDRESS < 'b', true, false)";
@@ -1471,7 +1475,6 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(*) from supplier group by S_ADDRESS having " +
                 "if(not S_ADDRESS like '%a%' and S_ADDRESS < 'b', true, false)";
         plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertContains(plan,
                 "DictExpr(10: S_ADDRESS,[if((NOT (<place-holder> LIKE '%a%')) " +
                         "AND (<place-holder> < 'b'), TRUE, FALSE)])");

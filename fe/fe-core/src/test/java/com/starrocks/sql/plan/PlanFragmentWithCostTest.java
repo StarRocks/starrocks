@@ -1159,9 +1159,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql =
                 "select count(t.a) from (select datediff(\"1981-09-06t03:40:33\", L_SHIPDATE) as a from lineitem) as t;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 1:Project\n" +
-                "  |  <slot 18> : datediff(CAST('1981-09-06t03:40:33' AS DATETIME), CAST(11: L_SHIPDATE AS DATETIME))\n" +
-                "  |  ");
+        assertContains(plan,
+                "output: count(datediff(CAST('1981-09-06t03:40:33' AS DATETIME), CAST(11: L_SHIPDATE AS DATETIME)))");
     }
 
     @Test

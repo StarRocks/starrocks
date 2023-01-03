@@ -237,26 +237,28 @@ public:
                                           int64_t ht_rows) const;
 
     // For aggregate without group by
-    void compute_single_agg_state(size_t chunk_size);
+    [[nodiscard]] Status compute_single_agg_state(Chunk* chunk, size_t chunk_size);
     // For aggregate with group by
-    void compute_batch_agg_states(size_t chunk_size);
-    void compute_batch_agg_states_with_selection(size_t chunk_size);
+    [[nodiscard]] Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
+    [[nodiscard]] Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
 
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
 
     void process_limit(ChunkPtr* chunk);
 
-    Status evaluate_exprs(Chunk* chunk);
+    Status evaluate_groupby_exprs(Chunk* chunk);
+    Status evaluate_agg_fn_exprs(Chunk* chunk);
+    Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
-    void output_chunk_by_streaming(ChunkPtr* chunk);
+    [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    void output_chunk_by_streaming_with_selection(ChunkPtr* chunk);
+    [[nodiscard]] Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -433,8 +435,8 @@ protected:
     void end_pending_reset_state() { _is_pending_reset_state = false; }
     bool is_pending_reset_state() { return _is_pending_reset_state; }
 
-    void _reset_exprs();
-    Status _evaluate_exprs(Chunk* chunk);
+    void _reset_groupby_exprs();
+    Status _evaluate_group_by_exprs(Chunk* chunk);
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>

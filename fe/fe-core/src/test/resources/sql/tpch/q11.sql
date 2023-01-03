@@ -43,7 +43,7 @@ TOP-N (order by [[21: sum DESC NULLS LAST]])
                 ASSERT LE 1
                     AGGREGATE ([GLOBAL] aggregate [{42: sum=sum(42: sum)}] group by [[]] having [null]
                         EXCHANGE GATHER
-                            AGGREGATE ([LOCAL] aggregate [{42: sum=sum(41: expr)}] group by [[]] having [null]
+                            AGGREGATE ([LOCAL] aggregate [{42: sum=sum(multiply(25: PS_SUPPLYCOST, cast(24: PS_AVAILQTY as double)))}] group by [[]] having [null]
                                 INNER JOIN (join-predicate [23: PS_SUPPKEY = 28: S_SUPPKEY] post-join-predicate [null])
                                     SCAN (columns[23: PS_SUPPKEY, 24: PS_AVAILQTY, 25: PS_SUPPLYCOST] predicate[null])
                                     EXCHANGE BROADCAST
