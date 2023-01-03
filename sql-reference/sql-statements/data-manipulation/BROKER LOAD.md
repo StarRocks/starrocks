@@ -646,9 +646,9 @@ WITH BROKER
 >
 > - 使用 `hll_hash` 函数把 `example10.csv` 中的 `temp1`、`temp2` 列转换成 HLL 类型的数据，并分别落入 `table10`中的 `col1`、`col2` 列。
 >
-> - 使用 `empty_hll` 函数给导入的数据行在 `table10` 中的第四列补充默认值。
+> - 使用 `hll_empty` 函数给导入的数据行在 `table10` 中的第四列补充默认值。
 
-有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](/sql-reference/sql-statements/data-definition/HLL.md)。
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md)和[hll_empty](../../sql-functions/aggregate-functions/hll_empty.md)。
 
 #### 提取文件路径中的分区字段
 
