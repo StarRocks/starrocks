@@ -221,6 +221,7 @@ public class ReplayFromDumpTest {
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----24:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 65744\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
@@ -241,8 +242,9 @@ public class ReplayFromDumpTest {
                 "  |  38 <-> [38: c_city, VARCHAR, false]\n" +
                 "  |  46 <-> [46: s_city, VARCHAR, false]\n" +
                 "  |  cardinality: 28532"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----7:EXCHANGE\n"
-                + "  |       cardinality: 30"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----7:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
+                "  |       cardinality: 30"));
     }
 
     @Test
@@ -259,6 +261,7 @@ public class ReplayFromDumpTest {
                 "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----48:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  41:Project\n" +
@@ -280,11 +283,14 @@ public class ReplayFromDumpTest {
                 "  |  * expr-->[1.0, 2401.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----39:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  32:OlapScanNode\n" +
-                "     table: date_dim, rollup: date_dim"));
+                "     table: date_dim, rollup: date_dim\n"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----18:EXCHANGE\n" +
+                "  |       distribution type: SHUFFLE\n" +
+                "  |       partition exprs: [796: cs_bill_customer_sk, INT, true]\n" +
                 "  |       cardinality: 6304\n" +
                 "  |    \n" +
                 "  2:OlapScanNode\n" +
@@ -397,6 +403,7 @@ public class ReplayFromDumpTest {
                 "  |  * d_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 335"));
     }
 

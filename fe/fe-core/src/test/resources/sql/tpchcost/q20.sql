@@ -43,6 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 25:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 40000
 column statistics:
 * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -89,9 +90,13 @@ OutPut Exchange Id: 25
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |
 |----21:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [1: S_SUPPKEY, INT, false]
 |       cardinality: 40000
 |
 14:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [15: PS_SUPPKEY, INT, false]
 cardinality: 39029703
 
 PLAN FRAGMENT 2(F07)
@@ -126,6 +131,7 @@ OutPut Exchange Id: 21
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----18:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 15:OlapScanNode
@@ -198,6 +204,8 @@ OutPut Exchange Id: 14
 |  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----11:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [14: PS_PARTKEY, INT, false]
 |       cardinality: 20000000
 |
 4:AGGREGATE (merge finalize)
@@ -210,6 +218,8 @@ OutPut Exchange Id: 14
 |  * sum-->[1.0, 1.504511322419371E14, 0.0, 8.0, 50.0] ESTIMATE
 |
 3:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [32: L_PARTKEY, INT, false]
 cardinality: 86732673
 probe runtime filters:
 - filter_id = 1, probe_expr = (32: L_PARTKEY)
@@ -246,6 +256,8 @@ OutPut Exchange Id: 11
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |
 |----8:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [20: P_PARTKEY, INT, false]
 |       cardinality: 5000000
 |
 5:OlapScanNode

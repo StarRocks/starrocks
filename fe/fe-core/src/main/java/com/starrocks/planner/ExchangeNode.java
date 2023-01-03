@@ -202,11 +202,31 @@ public class ExchangeNode extends PlanNode {
 
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
-        if (offset != 0) {
-            return detailPrefix + "offset: " + offset + "\n";
-        } else {
-            return "";
+        StringBuilder output = new StringBuilder();
+        List<Expr> partitionExprs = dataPartition.getPartitionExprs();
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            if (distributionType != null) {
+                output.append(detailPrefix).append("distribution type: ")
+                        .append(distributionType).append('\n');
+            }
+            if (partitionType != null) {
+                output.append(detailPrefix).append("partition type: ")
+                        .append(partitionType).append('\n');
+            }
+            if (CollectionUtils.isNotEmpty(partitionExprs)) {
+                output.append(detailPrefix)
+                        .append("partition exprs: ")
+                        .append(getVerboseExplain(partitionExprs, detailLevel))
+                        .append('\n');
+            }
         }
+        if (offset != 0) {
+            output.append(detailPrefix)
+                    .append("offset: ")
+                    .append(offset)
+                    .append('\n');
+        }
+        return output.toString();
     }
 
     @Override
@@ -220,7 +240,8 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -250,7 +271,8 @@ public class ExchangeNode extends PlanNode {
         return accept;
     }
 
-    private boolean pushCrossExchange(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    private boolean pushCrossExchange(RuntimeFilterDescription description, Expr probeExpr,
+                                      List<Expr> partitionByExprs) {
         if (!description.canPushAcrossExchangeNode()) {
             return false;
         }
