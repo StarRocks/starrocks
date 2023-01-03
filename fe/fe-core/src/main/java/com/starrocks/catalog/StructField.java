@@ -139,11 +139,11 @@ public class StructField {
             return otherStructField.name == null && type.equals(otherStructField.type);
         }
 
-        // Both are named struct field
         if (otherStructField.name == null) {
             // If other struct field is not named struct field, return false directly.
             return false;
         }
+        // Both are named struct field
         return otherStructField.name.equals(name) && otherStructField.type.equals(type);
     }
 
