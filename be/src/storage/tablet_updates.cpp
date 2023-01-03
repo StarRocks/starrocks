@@ -1593,32 +1593,6 @@ void TabletUpdates::to_updates_pb(TabletUpdatesPB* updates_pb) const {
     _to_updates_pb_unlocked(updates_pb);
 }
 
-void TabletUpdates::_erase_expired_versions(int64_t expire_time,
-                                            std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
-                                            int64_t* min_readable_version) {
-    DCHECK(expire_list->empty());
-    std::lock_guard l(_lock);
-    if (_edit_version_infos.empty()) {
-        LOG(WARNING) << "tablet deleted when erase_expired_versions tablet:" << _tablet.tablet_id();
-        return;
-    }
-    // only keep at most one version which is before expire_time
-    int keep_index_min = _apply_version_idx;
-    while (keep_index_min > 0) {
-        if (_edit_version_infos[keep_index_min]->creation_time <= expire_time) {
-            break;
-        }
-        keep_index_min--;
-    }
-    for (int i = 0; i < keep_index_min; i++) {
-        expire_list->emplace_back(std::move(_edit_version_infos[i]));
-    }
-    auto n = expire_list->size();
-    _edit_version_infos.erase(_edit_version_infos.begin(), _edit_version_infos.begin() + n);
-    _apply_version_idx -= n;
-    *min_readable_version = _edit_version_infos[0]->version.major();
-}
-
 bool TabletUpdates::check_rowset_id(const RowsetId& rowset_id) const {
     // TODO(cbl): optimization: check multiple rowset_ids at once
     {
@@ -1640,15 +1614,6 @@ bool TabletUpdates::check_rowset_id(const RowsetId& rowset_id) const {
     return false;
 }
 
-std::set<uint32_t> TabletUpdates::_active_rowsets() {
-    std::set<uint32_t> ret;
-    std::lock_guard rl(_lock);
-    for (const auto& edit_version_info : _edit_version_infos) {
-        ret.insert(edit_version_info->rowsets.begin(), edit_version_info->rowsets.end());
-    }
-    return ret;
-}
-
 void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     if (_error) {
         LOG(WARNING) << strings::Substitute(
@@ -1656,41 +1621,61 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
                 _error_msg);
         return;
     }
-    /// Remove expired versions from memory.
-    std::vector<std::unique_ptr<EditVersionInfo>> expired_edit_version_infos;
-    int64_t min_readable_version = 0;
-    _erase_expired_versions(expire_time, &expired_edit_version_infos, &min_readable_version);
 
-    if (!expired_edit_version_infos.empty()) {
-        int64_t tablet_id = 0;
+    size_t num_version_removed = 0;
+    size_t num_rowset_removed = 0;
+    uint64_t min_readable_version = 0;
+    // GC works that require locking
+    {
+        std::lock_guard l(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet deleted when erase_expired_versions tablet:" << _tablet.tablet_id();
+            return;
+        }
+
+        // only keep at most one version which is before expire_time
+        // also to prevent excessive memory usage of editversion array, limit edit version count to be less than
+        // config::tablet_max_versions
+        size_t keep_index_min = _apply_version_idx;
+        while (keep_index_min > 0) {
+            if (_edit_version_infos[keep_index_min]->creation_time <= expire_time ||
+                keep_index_min + config::tablet_max_versions < _edit_version_infos.size()) {
+                break;
+            }
+            keep_index_min--;
+        }
+        num_version_removed = keep_index_min;
+        if (num_version_removed > 0) {
+            _edit_version_infos.erase(_edit_version_infos.begin(), _edit_version_infos.begin() + num_version_removed);
+            _apply_version_idx -= num_version_removed;
+            // remove non-referenced rowsets
+            std::set<uint32_t> active_rowsets;
+            for (const auto& edit_version_info : _edit_version_infos) {
+                active_rowsets.insert(edit_version_info->rowsets.begin(), edit_version_info->rowsets.end());
+            }
+            std::lock_guard rl(_rowsets_lock);
+            std::lock_guard rsl(_rowset_stats_lock);
+            for (auto it = _rowsets.begin(); it != _rowsets.end();) {
+                if (active_rowsets.find(it->first) == active_rowsets.end()) {
+                    num_rowset_removed++;
+                    _rowset_stats.erase(it->first);
+                    (void)_unused_rowsets.blocking_put(std::move(it->second));
+                    it = _rowsets.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            min_readable_version = _edit_version_infos[0]->version.major();
+        }
+    }
+
+    // GC works that can be done outside of lock
+    if (num_version_removed > 0) {
         {
             std::unique_lock wrlock(_tablet.get_header_lock());
             _tablet.save_meta();
-            tablet_id = _tablet.tablet_id();
         }
-        std::set<uint32_t> unused_rid;
-        std::set<uint32_t> active_rid = _active_rowsets();
-        for (const auto& expired_edit_version_info : expired_edit_version_infos) {
-            VLOG(1) << "Removing expired version " << expired_edit_version_info->version.to_string() << " of tablet "
-                    << _tablet.tablet_id();
-            for (uint32_t expired_rid : expired_edit_version_info->rowsets) {
-                if (active_rid.count(expired_rid) == 0) {
-                    unused_rid.insert(expired_rid);
-                }
-            }
-        }
-        for (uint32_t id : unused_rid) {
-            std::lock_guard l(_rowsets_lock);
-            auto iter = _rowsets.find(id);
-            DCHECK(iter != _rowsets.end());
-            (void)_unused_rowsets.blocking_put(std::move(iter->second));
-            _rowsets.erase(iter);
-        }
-        for (uint32_t id : unused_rid) {
-            std::lock_guard l(_rowset_stats_lock);
-            _rowset_stats.erase(id);
-        }
-
+        auto tablet_id = _tablet.tablet_id();
         // Remove useless delete vectors.
         auto meta_store = _tablet.data_dir()->get_meta();
         auto res = TabletMetaManager::delete_del_vector_before_version(meta_store, tablet_id, min_readable_version);
@@ -1704,8 +1689,8 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         LOG(INFO) << strings::Substitute(
                 "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
                 "#delvec:$5",
-                _debug_version_info(true), expire_time, min_readable_version, expired_edit_version_infos.size(),
-                unused_rid.size(), delvec_deleted);
+                _debug_version_info(true), expire_time, min_readable_version, num_version_removed, num_rowset_removed,
+                delvec_deleted);
     }
     _remove_unused_rowsets();
 }
@@ -3454,6 +3439,18 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.empty()) {
             string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
                                              _debug_version_info(false), missing_version_ranges.back());
+            LOG(INFO) << msg;
+            return Status::NotFound(msg);
+        }
+        size_t num_rowset_full_clone = _edit_version_infos.back()->rowsets.size();
+        // TODO: make better estimates about incremental / full clone costs
+        // currently only consider number of rowsets, should also consider number of actual files and data size to
+        // reflect the actual cost
+        if (versions.size() >= config::tablet_max_versions || versions.size() >= num_rowset_full_clone * 20) {
+            string msg = strings::Substitute(
+                    "get_rowsets_for_snapshot: too many rowsets for incremental clone "
+                    "#rowset:$0 #rowset_for_full_clone:$1 $2",
+                    versions.size(), num_rowset_full_clone, _debug_version_info(false));
             LOG(INFO) << msg;
             return Status::NotFound(msg);
         }
