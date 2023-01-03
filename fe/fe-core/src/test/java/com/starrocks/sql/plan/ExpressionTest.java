@@ -582,7 +582,7 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan, plan.contains("6:Project\n" +
                 "  |  output columns:\n" +
-                "  |  25 <-> 1\n" +
+                "  |  22 <-> 1\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
                 "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE\n" +
@@ -591,6 +591,7 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  join op: CROSS JOIN\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE\n" +
                 "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE\n" +
                 "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE"));
     }

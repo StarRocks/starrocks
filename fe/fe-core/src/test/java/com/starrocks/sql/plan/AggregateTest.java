@@ -694,7 +694,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 5> : 1\n" +
+                "  |  <slot 4> : 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -1361,7 +1361,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  15:Project\n" +
-                "  |  <slot 19> : 15: auto_fill_col");
+                "  |  <slot 18> : 14: auto_fill_col");
 
         sql =
                 "select avg(distinct 1), count(distinct null), count(distinct 1), count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
