@@ -25,7 +25,10 @@ import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,6 +44,7 @@ import java.util.Optional;
  * 2. The execution of task is coordinated by EpochCoordinator on FE
  */
 public class MVMaintenanceTask {
+    private static final Logger LOG = LogManager.getLogger(MVMaintenanceTask.class);
 
     // Job information of the job
     private MVMaintenanceJob job;
@@ -122,11 +126,31 @@ public class MVMaintenanceTask {
         return fragmentInstances;
     }
 
+    public TNetworkAddress getBeHost() {
+        return beHost;
+    }
+
     public void setFragmentInstances(List<TExecPlanFragmentParams> fragmentInstances) {
         this.fragmentInstances = fragmentInstances;
     }
 
     public synchronized Map<TUniqueId, Map<Integer, List<TScanRange>>> getBinlogConsumeState() {
+        // TODO(lism): how to initialize binlog consume state at first?
+        if (binlogConsumeState.isEmpty()) {
+            for (TExecPlanFragmentParams params : fragmentInstances) {
+                Map<Integer, List<TScanRange>> nodeScanRangesMapping = new HashMap<>();
+                for (Map.Entry<Integer, List<TScanRangeParams>> entry : params.params.getPer_node_scan_ranges().entrySet()) {
+                    List<TScanRange> scanRanges = new ArrayList<>();
+                    for (TScanRangeParams scanRangeParams : entry.getValue()) {
+                        if (scanRangeParams.scan_range.isSetBinlog_scan_range()) {
+                            scanRanges.add(scanRangeParams.scan_range);
+                        }
+                    }
+                    nodeScanRangesMapping.putIfAbsent(entry.getKey(), scanRanges);
+                }
+                binlogConsumeState.put(params.params.getFragment_instance_id(), nodeScanRangesMapping);
+            }
+        }
         return binlogConsumeState;
     }
 

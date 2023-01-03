@@ -58,6 +58,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
@@ -1119,7 +1120,7 @@ public class CoordinatorPreprocessor {
                         if (driverSeq != null) {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
                             dest.server = toRpcHost(instanceExecParams.host);
-                            dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
+                            dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
                             if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                 dest.setPipeline_driver_sequence(driverSeq);
                             }
@@ -1136,7 +1137,7 @@ public class CoordinatorPreprocessor {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
                     dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
                     dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                    dest.setBrpc_server(toBrpcHost(destParams.instanceExecParams.get(j).host));
+                    dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
                     params.destinations.add(dest);
                 }
             }
@@ -1192,7 +1193,7 @@ public class CoordinatorPreprocessor {
                             if (driverSeq != null) {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
                                 dest.server = toRpcHost(instanceExecParams.host);
-                                dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
+                                dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
                                 if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                     dest.setPipeline_driver_sequence(driverSeq);
                                 }
@@ -1209,7 +1210,7 @@ public class CoordinatorPreprocessor {
                         TPlanFragmentDestination dest = new TPlanFragmentDestination();
                         dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
                         dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                        dest.setBrpc_server(toBrpcHost(destParams.instanceExecParams.get(j).host));
+                        dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
                         multiSink.getDestinations().get(i).add(dest);
                     }
                 }
@@ -1256,22 +1257,6 @@ public class CoordinatorPreprocessor {
             }
         }
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBeRpcPort());
-    }
-
-    public TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
-        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
-                host.getHostname(), host.getPort());
-        if (computeNode == null) {
-            computeNode =
-                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
-            if (computeNode == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
-            }
-        }
-        if (computeNode.getBrpcPort() < 0) {
-            return null;
-        }
-        return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
     }
 
     private String backendInfosString(boolean chooseComputeNode) {

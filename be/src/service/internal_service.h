@@ -158,6 +158,8 @@ private:
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
+    Status _submit_mv_maintenance_task(brpc::Controller* cntl);
+
 protected:
     ExecEnv* _exec_env;
 

@@ -90,6 +90,17 @@ public class MVManager {
         return checksum;
     }
 
+    public void replay(MVMaintenanceJob job) throws IOException {
+        Preconditions.checkState(jobMap.isEmpty());
+
+        try {
+            jobMap.put(job.getView().getMvId(), job);
+            LOG.info("replay MV maintenance jobs: {}", job);
+        } catch (Exception ignored) {
+            LOG.warn("Replay MV maintenannce job failed: {}", job);
+        }
+    }
+
     /**
      * Store jobs in meta store
      */
@@ -179,6 +190,7 @@ public class MVManager {
      * Refresh the MV
      */
     public void onTxnPublish(MaterializedView view) {
+        LOG.info("onTxnPublish: {}", view);
         MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
         job.onTransactionPublish();
     }

@@ -1013,8 +1013,9 @@ struct TStreamAggregationNode {
   2: optional list<Exprs.TExpr> aggregate_functions
 
   // IMT info
-  // 10: optional Descriptors.TIMTDescriptor detail_imt
-  // 11: optional Descriptors.TIMTDescriptor agg_result_imt
+  10: optional Descriptors.TIMTDescriptor agg_result_imt
+  11: optional Descriptors.TIMTDescriptor agg_intermediate_imt
+  12: optional Descriptors.TIMTDescriptor agg_detail_imt
   
   // For profile attributes' printing: `Grouping Keys` `Aggregate Functions`
   22: optional string sql_grouping_keys

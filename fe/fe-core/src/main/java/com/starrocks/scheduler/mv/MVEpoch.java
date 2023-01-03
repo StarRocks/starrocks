@@ -90,7 +90,7 @@ public class MVEpoch implements Writable {
     }
 
     public void reset() {
-        Preconditions.checkState(state.equals(EpochState.COMMITTED));
+        Preconditions.checkState(state.equals(EpochState.COMMITTED) || state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
     }
 

@@ -58,6 +58,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
@@ -70,6 +71,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -485,6 +487,22 @@ public class SystemInfoService {
             }
         }
         return -1L;
+    }
+
+    public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
+        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+                host.getHostname(), host.getPort());
+        if (computeNode == null) {
+            computeNode =
+                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            if (computeNode == null) {
+                throw new UserException("Backend not found. Check if any backend is down or not");
+            }
+        }
+        if (computeNode.getBrpcPort() < 0) {
+            return null;
+        }
+        return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
