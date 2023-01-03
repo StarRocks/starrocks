@@ -606,9 +606,9 @@ LOAD LABEL test_db.label10
 >
 > - The `hll_hash` function is used to convert the values in `temp1` and `temp2` of `example10.csv` into HLL-type data and map `temp1` and `temp2` of `example10.csv` onto `col1` and `col2` of `table10`.
 >
-> - The `empty_hll` function is used to fill the specified default value into `col3` of `table10`.
+> - The `hll_empty` function is used to fill the specified default value into `col3` of `table10`.
 
-For usage of the functions `hll_hash` and `hll_empty`, see [HLL](../../../sql-reference/sql-statements/data-definition/HLL.md).
+For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) and [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md).
 
 #### Extract partition field values from file path
 

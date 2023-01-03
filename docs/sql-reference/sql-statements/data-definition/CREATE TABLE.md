@@ -54,7 +54,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 - DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
 - CHAR[(length)]: Fixed length string. Range：1 ~ 255. Default value: 1.
 - VARCHAR[(length)]: A variable-length string. The default value is 1. Unit: bytes. In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533. [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
-- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value.The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by hll_union_agg、Hll_cardinality、hll_hash.
+- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
 **agg_type**：aggregation type. If not specified, this column is key column.
@@ -521,7 +521,7 @@ PROPERTIES
 )
 ```
 
-- Create a table that contain HLL columns.
+- Create a table that contains HLL columns.
 
 ```SQL
 CREATE TABLE example_db.example_table
