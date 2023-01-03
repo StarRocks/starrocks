@@ -5,7 +5,6 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -100,9 +99,17 @@ public class RefreshMaterializedViewStatementTest {
         Assert.assertNotNull(refreshScheme);
         Assert.assertTrue(refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().containsKey(t1.getId()));
         Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap =
+<<<<<<< HEAD
                 refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(t1.getId());
         Assert.assertTrue(partitionInfoMap.containsKey("t1"));
         MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("t1");
         Assert.assertEquals(t1.getPartition("t1").getVisibleVersion(), partitionInfo.getVersion());
+=======
+                refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(table.getId());
+        if (partitionInfoMap.containsKey("table_name_tmp_1")) {
+            MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
+            Assert.assertEquals(table.getPartition("table_name_tmp_1").getVisibleVersion(), partitionInfo.getVersion());
+        }
+>>>>>>> 6b3db26f0 ([Enhancement] fix disk space occupation problems after insert overwrite (#16133))
     }
 }
