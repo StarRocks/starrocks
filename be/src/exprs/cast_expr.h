@@ -86,10 +86,9 @@ private:
     TypeDescriptor _cast_to_type_desc;
 };
 
-// cast one MAP to another M.
+// cast one ARRAY to another ARRAY.
 // For example.
-//   cast MAP<tinyint, tinyint> to MAP<int, int> is OK
-// TODO(alvin): function is enough, but i
+//   cast ARRAY<tinyint> to ARRAY<int>
 class CastArrayExpr final : public Expr {
 public:
     CastArrayExpr(const TExprNode& node, std::unique_ptr<Expr> element_cast)
@@ -107,10 +106,11 @@ private:
     std::unique_ptr<Expr> _element_cast;
 };
 
-// cast one MAP to another M.
+// cast one MAP to another MAP.
 // For example.
-//   cast MAP<tinyint, tinyint> to MAP<int, int> is OK
-// TODO(alvin): function is enough, but i
+//   cast MAP<tinyint, tinyint> to MAP<int, int>
+// TODO(alvin): function is enough, but now all cast operations are implemented in Expr.
+//  Need to refactor these Expressions as Functions
 class CastMapExpr final : public Expr {
 public:
     CastMapExpr(const TExprNode& node, std::unique_ptr<Expr> key_cast, std::unique_ptr<Expr> value_cast)
@@ -129,10 +129,9 @@ private:
     std::unique_ptr<Expr> _value_cast;
 };
 
-// cast one MAP to another M.
+// cast one STRUCT to another STRUCT.
 // For example.
-//   cast MAP<tinyint, tinyint> to MAP<int, int> is OK
-// TODO(alvin): function is enough, but i
+//   cast STRUCT<tinyint, tinyint> to STRUCT<int, int>
 class CastStructExpr final : public Expr {
 public:
     CastStructExpr(const TExprNode& node, std::vector<std::unique_ptr<Expr>> field_casts)

@@ -18,7 +18,6 @@
 
 #include <utility>
 
-#include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
