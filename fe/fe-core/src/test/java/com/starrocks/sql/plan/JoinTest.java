@@ -437,7 +437,7 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  8:Project\n" +
+                "  9:Project\n" +
                 "  |  <slot 10> : 0\n" +
                 "  |  \n");
     }
@@ -498,7 +498,7 @@ public class JoinTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  5:Project\n" +
-                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 11> : 1\n" +
                 "  |  \n" +
                 "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -2043,8 +2043,8 @@ public class JoinTest extends PlanTestBase {
                 "  66 <= unix_timestamp() \n" +
                 "limit \n" +
                 "  155;";
-        assertPlanContains(sql, "6:Project\n" +
-                "  |  <slot 1> : 1: v1");
+        assertPlanContains(sql, "7:Project\n" +
+                "  |  <slot 9> : 1");
     }
 
     @Test

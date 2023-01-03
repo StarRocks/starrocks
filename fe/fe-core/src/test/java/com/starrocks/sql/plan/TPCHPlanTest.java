@@ -41,7 +41,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testExists() {
-        runFileUnitTest("subquery/exists-subquery");
+        runFileUnitTest("subquery/exists-subquery", true);
     }
 
     @Test
