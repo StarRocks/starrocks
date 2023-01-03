@@ -65,7 +65,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <SizeBasedTriggeringPolicy size=\"${sys_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
             "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
-            "        <Delete basePath=\"${sys_log_dir}/\" maxDepth=\"1\">\n" +
+            "        <Delete basePath=\"${sys_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.log.*\" />\n" +
             "          <IfLastModified age=\"${sys_log_delete_age}\" />\n" +
             "        </Delete>\n" +
@@ -80,7 +80,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <SizeBasedTriggeringPolicy size=\"${sys_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
             "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
-            "        <Delete basePath=\"${sys_log_dir}/\" maxDepth=\"1\">\n" +
+            "        <Delete basePath=\"${sys_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.warn.log.*\" />\n" +
             "          <IfLastModified age=\"${sys_log_delete_age}\" />\n" +
             "        </Delete>\n" +
@@ -95,7 +95,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <SizeBasedTriggeringPolicy size=\"${audit_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
             "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
-            "        <Delete basePath=\"${audit_log_dir}/\" maxDepth=\"1\">\n" +
+            "        <Delete basePath=\"${audit_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.audit.log.*\" />\n" +
             "          <IfLastModified age=\"${audit_log_delete_age}\" />\n" +
             "        </Delete>\n" +
@@ -110,7 +110,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <SizeBasedTriggeringPolicy size=\"${dump_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
             "      <DefaultRolloverStrategy max=\"${dump_roll_num}\" fileIndex=\"min\">\n" +
-            "        <Delete basePath=\"${dump_log_dir}/\" maxDepth=\"1\">\n" +
+            "        <Delete basePath=\"${dump_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.dump.log.*\" />\n" +
             "          <IfLastModified age=\"${dump_log_delete_age}\" />\n" +
             "        </Delete>\n" +
@@ -125,7 +125,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        <SizeBasedTriggeringPolicy size=\"${big_query_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
             "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
-            "        <Delete basePath=\"${big_query_log_dir}/\" maxDepth=\"1\">\n" +
+            "        <Delete basePath=\"${big_query_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.big_query.log.*\" />\n" +
             "          <IfLastModified age=\"${big_query_log_delete_age}\" />\n" +
             "        </Delete>\n" +
