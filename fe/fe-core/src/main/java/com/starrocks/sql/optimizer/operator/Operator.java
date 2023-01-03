@@ -17,8 +17,7 @@ package com.starrocks.sql.optimizer.operator;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowInfo;
-import com.starrocks.sql.optimizer.RowInfoImpl;
+import com.starrocks.sql.optimizer.RowDescriptor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
@@ -39,7 +38,7 @@ public abstract class Operator {
      */
     protected Projection projection;
 
-    protected RowInfo rowInfo;
+    protected RowDescriptor rowDescriptor;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -99,29 +98,29 @@ public abstract class Operator {
         this.projection = projection;
     }
 
-    public RowInfo getRowInfo(List<OptExpression> inputs) {
-        if (rowInfo != null) {
-            return rowInfo;
+    public RowDescriptor getRowDescriptor(List<OptExpression> inputs) {
+        if (rowDescriptor != null) {
+            return rowDescriptor;
         }
 
         if (projection != null) {
-            rowInfo = new RowInfoImpl(projection.getColumnRefMap());
+            rowDescriptor = new RowDescriptor(projection.getColumnRefMap());
         } else {
-            rowInfo = deriveRowInfo(inputs);
+            rowDescriptor = deriveRowDescriptor(inputs);
         }
-        return rowInfo;
+        return rowDescriptor;
     }
 
-    protected RowInfo deriveRowInfo(List<OptExpression> inputs) {
+    protected RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
         throw new UnsupportedOperationException();
     }
 
-    protected RowInfo projectInputRowInfo(RowInfo inputRow) {
+    protected RowDescriptor projectInputRowDescriptor(RowDescriptor inputRow) {
         List<ColumnEntry> entryList = Lists.newArrayList();
         for (ColumnEntry columnEntry : inputRow.getColumnEntries()) {
-            entryList.add(new ColumnEntryImpl(columnEntry.getColumnRef(), columnEntry.getColumnRef()));
+            entryList.add(new ColumnEntry(columnEntry.getColumnRef(), columnEntry.getColumnRef()));
         }
-        return new RowInfoImpl(entryList);
+        return new RowDescriptor(entryList);
     }
 
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {

@@ -24,7 +24,6 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnEntry;
-import com.starrocks.sql.optimizer.operator.ColumnEntryImpl;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -141,7 +140,7 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
         public List<ColumnEntry> getColumnEntries() {
             List<ColumnEntry> entryList = Lists.newArrayList();
-            exprToColumnRefMap.entrySet().stream().forEach(e -> entryList.add(new ColumnEntryImpl(e.getValue(), e.getKey())));
+            exprToColumnRefMap.entrySet().stream().forEach(e -> entryList.add(new ColumnEntry(e.getValue(), e.getKey())));
             return entryList;
         }
 

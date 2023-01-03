@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnEntry;
-import com.starrocks.sql.optimizer.operator.ColumnEntryImpl;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -30,19 +29,26 @@ import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
-public class RowInfoImpl implements RowInfo {
+/**
+ * RowDescriptor is used to describe the output row info returned by an operator.
+ * Because of the Projection field in Operator, an operator with a not null projection may take
+ * an input row and yield a different output row.
+ * To unify the input/output info of an operator, we use the RowDescriptor to describe the input/output
+ * row info received/returned by an operator.
+ */
+public class RowDescriptor {
 
     private final Map<Integer, ColumnEntry> columnEntryMap;
 
-    public static RowInfo createEmptyRowInfo() {
-        return new RowInfoImpl();
+    public static RowDescriptor createEmptyDescriptor() {
+        return new RowDescriptor();
     }
 
-    private RowInfoImpl() {
+    private RowDescriptor() {
         this.columnEntryMap = Maps.newHashMap();
     }
 
-    public RowInfoImpl(Collection<ColumnEntry> columnEntries) {
+    public RowDescriptor(Collection<ColumnEntry> columnEntries) {
         Map<Integer, ColumnEntry> map = Maps.newHashMap();
         for (ColumnEntry columnEntry : columnEntries) {
             map.put(columnEntry.getColId(), columnEntry);
@@ -50,26 +56,23 @@ public class RowInfoImpl implements RowInfo {
         this.columnEntryMap = map;
     }
 
-    public RowInfoImpl(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+    public RowDescriptor(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         Map<Integer, ColumnEntry> map = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
-            map.put(entry.getKey().getId(), new ColumnEntryImpl(entry));
+            map.put(entry.getKey().getId(), new ColumnEntry(entry));
         }
         this.columnEntryMap = map;
     }
 
-    @Override
     public List<ColumnEntry> getColumnEntries() {
         return Lists.newArrayList(columnEntryMap.values());
     }
 
-    @Override
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         return columnEntryMap.values().stream()
                 .collect(Collectors.toMap(ColumnEntry::getColumnRef, ColumnEntry::getScalarOp));
     }
 
-    @Override
     public ColumnRefSet getOutputColumnRefSet() {
         ColumnRefSet columnRefSet = new ColumnRefSet();
         for (Integer colId : columnEntryMap.keySet()) {
@@ -79,7 +82,6 @@ public class RowInfoImpl implements RowInfo {
         return columnRefSet;
     }
 
-    @Override
     public ColumnRefSet getUsedColumnRefSet() {
         ColumnRefSet columnRefSet = new ColumnRefSet();
         for (ColumnEntry entry : getColumnEntries()) {
@@ -88,26 +90,16 @@ public class RowInfoImpl implements RowInfo {
         return columnRefSet;
     }
 
-    @Override
     public int getColumnCount() {
         return columnEntryMap.size();
     }
 
-    @Override
     public ColumnEntry rewriteColWithRowInfo(ColumnEntry columnEntry) {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(getColumnRefMap());
-        return new ColumnEntryImpl(columnEntry.getColumnRef(), rewriter.rewrite(columnEntry.getScalarOp()));
+        return new ColumnEntry(columnEntry.getColumnRef(), rewriter.rewrite(columnEntry.getScalarOp()));
     }
 
-    @Override
-    public RowInfo mergeRowInfo(RowInfo rowInfo) {
-        List<ColumnEntry> entryList = Lists.newArrayList(getColumnEntries());
-        entryList.addAll(rowInfo.getColumnEntries());
-        return new RowInfoImpl(entryList);
-    }
-
-    @Override
-    public RowInfo addColsToRow(List<ColumnEntry> entryList, boolean existProjection) {
+    public RowDescriptor addColsToRow(List<ColumnEntry> entryList, boolean existProjection) {
         List<ColumnEntry> newCols = Lists.newArrayList();
         if (existProjection) {
             newCols.addAll(getColumnEntries());
@@ -117,16 +109,11 @@ public class RowInfoImpl implements RowInfo {
             }
         } else {
             for (ColumnEntry entry : getColumnEntries()) {
-                newCols.add(new ColumnEntryImpl(entry.getColumnRef(), entry.getColumnRef()));
+                newCols.add(new ColumnEntry(entry.getColumnRef(), entry.getColumnRef()));
             }
             newCols.addAll(entryList);
         }
-        return new RowInfoImpl(newCols);
-    }
-
-    @Override
-    public ColumnEntry getColumnEntry(ColumnRefOperator columnRefOperator) {
-        return columnEntryMap.get(columnRefOperator.getId());
+        return new RowDescriptor(newCols);
     }
 
     @Override
@@ -139,11 +126,11 @@ public class RowInfoImpl implements RowInfo {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof RowInfoImpl)) {
+        if (!(obj instanceof RowDescriptor)) {
             return false;
         }
 
-        RowInfoImpl that = (RowInfoImpl) obj;
+        RowDescriptor that = (RowDescriptor) obj;
 
         return Objects.equals(getOutputColumnRefSet(), that.getOutputColumnRefSet());
     }

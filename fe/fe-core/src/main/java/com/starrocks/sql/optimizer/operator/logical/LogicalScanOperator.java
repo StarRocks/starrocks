@@ -23,8 +23,7 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowInfo;
-import com.starrocks.sql.optimizer.RowInfoImpl;
+import com.starrocks.sql.optimizer.RowDescriptor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -87,8 +86,8 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     }
 
     @Override
-    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
-        return new RowInfoImpl(colRefToColumnMetaMap.keySet().stream()
+    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
+        return new RowDescriptor(colRefToColumnMetaMap.keySet().stream()
                 .collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 

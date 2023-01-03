@@ -356,8 +356,9 @@ public class Utils {
             count += 1;
             if (!hasOuterOrSemi[0]) {
                 LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-                if (joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isSemiAntiJoin())
-                hasOuterOrSemi[0] = true;
+                if (joinOperator.getJoinType().isOuterJoin() || joinOperator.getJoinType().isSemiAntiJoin()) {
+                    hasOuterOrSemi[0] = true;
+                }
             }
         }
         return count;

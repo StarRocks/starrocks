@@ -18,8 +18,7 @@ import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowInfo;
-import com.starrocks.sql.optimizer.RowInfoImpl;
+import com.starrocks.sql.optimizer.RowDescriptor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -65,8 +64,8 @@ public class LogicalValuesOperator extends LogicalOperator {
     }
 
     @Override
-    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
-        return new RowInfoImpl(columnRefSet.stream().collect(Collectors.toMap(Function.identity(), Function.identity())));
+    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
+        return new RowDescriptor(columnRefSet.stream().collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
     @Override

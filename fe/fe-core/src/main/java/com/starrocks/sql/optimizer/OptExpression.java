@@ -126,15 +126,15 @@ public class OptExpression {
         return property.getOutputColumns();
     }
 
-    public RowInfo getRowInfo() {
-        return op.getRowInfo(inputs);
+    public RowDescriptor getRowDescriptor() {
+        return op.getRowDescriptor(inputs);
     }
 
     public void initRowInfo() {
         for (OptExpression optExpression : inputs) {
             optExpression.initRowInfo();
         }
-        getRowInfo();
+        getRowDescriptor();
     }
 
     public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {

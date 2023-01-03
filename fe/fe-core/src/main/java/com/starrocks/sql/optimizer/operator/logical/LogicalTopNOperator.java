@@ -18,12 +18,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowInfo;
-import com.starrocks.sql.optimizer.RowInfoImpl;
+import com.starrocks.sql.optimizer.RowDescriptor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnEntry;
-import com.starrocks.sql.optimizer.operator.ColumnEntryImpl;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -135,15 +133,15 @@ public class LogicalTopNOperator extends LogicalOperator {
     }
 
     @Override
-    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
         List<ColumnEntry> entryList = Lists.newArrayList();
-        for (ColumnEntry entry : inputs.get(0).getRowInfo().getColumnEntries()) {
-            entryList.add(new ColumnEntryImpl(entry.getColumnRef(), entry.getScalarOp()));
+        for (ColumnEntry entry : inputs.get(0).getRowDescriptor().getColumnEntries()) {
+            entryList.add(new ColumnEntry(entry.getColumnRef(), entry.getScalarOp()));
         }
         for (Ordering ordering : orderByElements) {
-            entryList.add(new ColumnEntryImpl(ordering.getColumnRef(), ordering.getColumnRef()));
+            entryList.add(new ColumnEntry(ordering.getColumnRef(), ordering.getColumnRef()));
         }
-        return new RowInfoImpl(entryList);
+        return new RowDescriptor(entryList);
     }
 
     @Override

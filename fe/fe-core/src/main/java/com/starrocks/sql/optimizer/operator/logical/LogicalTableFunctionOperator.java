@@ -19,8 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowInfo;
-import com.starrocks.sql.optimizer.RowInfoImpl;
+import com.starrocks.sql.optimizer.RowDescriptor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -95,8 +94,8 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
     }
 
     @Override
-    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
-        return RowInfoImpl.createEmptyRowInfo();
+    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
+        return RowDescriptor.createEmptyDescriptor();
     }
 
     @Override

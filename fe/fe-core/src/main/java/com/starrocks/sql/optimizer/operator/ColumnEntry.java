@@ -20,13 +20,68 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
-public interface ColumnEntry extends Map.Entry<ColumnRefOperator, ScalarOperator> {
+/**
+ * ColumnEntry is used to describe an output column info in the RowDescriptor.
+ * It's a wrapper of Map.Entry<ColumnRefOperator, ScalarOperator> and provide some handy methods.
+ */
+public class ColumnEntry {
 
-    ColumnRefOperator getColumnRef();
+    private final ColumnRefOperator columnRefOperator;
 
-    int getColId();
+    private final ScalarOperator scalarOperator;
 
-    ScalarOperator getScalarOp();
+    private final int colId;
 
-    ColumnRefSet getUsedColumns();
+    public ColumnEntry(ColumnRefOperator columnRefOperator, ScalarOperator scalarOperator) {
+        this.columnRefOperator = columnRefOperator;
+        this.colId = columnRefOperator.getId();
+        this.scalarOperator = scalarOperator;
+    }
+
+    public ColumnEntry(Map.Entry<ColumnRefOperator, ScalarOperator> entry) {
+        this.columnRefOperator = entry.getKey();
+        this.colId = entry.getKey().getId();
+        this.scalarOperator = entry.getValue();
+    }
+
+    public ColumnRefOperator getColumnRef() {
+        return columnRefOperator;
+    }
+
+    public int getColId() {
+        return colId;
+    }
+
+    public ScalarOperator getScalarOp() {
+        return scalarOperator;
+    }
+
+    public ColumnRefSet getUsedColumns() {
+        return scalarOperator.getUsedColumns();
+    }
+
+
+    @Override
+    public int hashCode() {
+        return colId;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof ColumnEntry)) {
+            return false;
+        }
+
+        ColumnEntry that = (ColumnEntry) obj;
+
+        return colId == that.colId;
+    }
+
+    @Override
+    public String toString() {
+        return columnRefOperator + " <- " + scalarOperator;
+    }
 }
