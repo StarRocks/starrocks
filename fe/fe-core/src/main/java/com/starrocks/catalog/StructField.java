@@ -32,10 +32,13 @@ import com.starrocks.thrift.TTypeNode;
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
 public class StructField {
+    // If name is null, that means this StructFiled is unnamed.
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "type")
     private final Type type;
+
+    // comment is not used now, it's always null.
     @SerializedName(value = "comment")
     private final String comment;
     private int position;  // in struct
@@ -113,11 +116,39 @@ public class StructField {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public int hashCode() {
+        if (name != null) {
+            return Objects.hashCode(name, type);
+        } else {
+            return Objects.hashCode(type);
+        }
+    }
+
+    // [Named vs Named] struct<a: INT, b: STRING> is equal to struct<a: INT, b: STRING>
+    // [Unnamed vs Unnamed] struct<INT, STRING> is equal to struct<INT, STRING>
+    // [Named vs Unnamed][Always false] struct<a: INT, b: STRING> is not equal to struct<INT, STRING>
+    @Override
+>>>>>>> 8e51005c6 ([Enhancement] Remove struct subfield colon separator and change struct subfield equals() behavior (#16132))
     public boolean equals(Object other) {
         if (!(other instanceof StructField)) {
             return false;
         }
         StructField otherStructField = (StructField) other;
+<<<<<<< HEAD
+=======
+        if (name == null) {
+            // If this() is unnamed struct field, other struct field must also be an unnamed struct field.
+            return otherStructField.name == null && type.equals(otherStructField.type);
+        }
+
+        if (otherStructField.name == null) {
+            // If other struct field is not named struct field, return false directly.
+            return false;
+        }
+        // Both are named struct field
+>>>>>>> 8e51005c6 ([Enhancement] Remove struct subfield colon separator and change struct subfield equals() behavior (#16132))
         return otherStructField.name.equals(name) && otherStructField.type.equals(type);
     }
 
