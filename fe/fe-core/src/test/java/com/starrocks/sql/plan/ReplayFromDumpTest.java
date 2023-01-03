@@ -542,7 +542,7 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
                         TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  85:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  95:HASH JOIN\n" +
                 "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 186: S_SUPPKEY = 202: cast\n"));
@@ -553,7 +553,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains(" 38:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 40:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
 
