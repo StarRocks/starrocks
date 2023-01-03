@@ -347,9 +347,9 @@ curl --location-trusted -u root: \
 >
 > - The `hll_hash` function is used to convert the values in `temp1` of `example7.csv` into HLL-type data and map `temp1` of `example7.csv` onto `col1` of `table7`.
 >
-> - The `empty_hll` function is used to fill the specified default value into `col2` of `table7`.
+> - The `hll_empty` function is used to fill the specified default value into `col2` of `table7`.
 
-For usage of the functions `hll_hash` and `hll_empty`, see [HLL](../../../sql-reference/sql-statements/data-definition/HLL.md).
+For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) and [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md).
 
 #### Load data into tables containing BITMAP-type columns
 

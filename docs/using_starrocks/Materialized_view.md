@@ -373,7 +373,7 @@ After the materialized view is created, the sub-query `count(distinct user_id)` 
 
 #### Approximate count distinct
 
-Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a materialized view based on this table and use the hll_union function to pre-aggregate the data.
+Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a materialized view based on this table and use the [hll_union()](../sql-reference/sql-functions/aggregate-functions/hll_union.md) function to pre-aggregate the data.
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv2 AS
