@@ -165,8 +165,6 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     }
 
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
-
-    _mv_epoch_manager = std::make_shared<MVEpochManager>();
 }
 
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {

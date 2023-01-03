@@ -27,6 +27,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_epoch_manager.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
 #include "util/time.h"
@@ -152,6 +153,9 @@ public:
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
+    // STREAM MV
+    StreamEpochManager* stream_epoch_manager() const { return _stream_epoch_manager.get(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -190,6 +194,9 @@ private:
 
     int64_t _scan_limit = 0;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
+
+    // STREAM MV
+    std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 };
 
 class QueryContextManager {

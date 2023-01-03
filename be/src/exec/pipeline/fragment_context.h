@@ -127,7 +127,6 @@ public:
     bool enable_resource_group() const { return _workgroup != nullptr; }
 
     // STREAM MV
-    MVEpochManager* epoch_manager() const { return _runtime_state->epoch_manager(); }
     Status reset_epoch();
     void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
     bool is_stream_pipeline() const { return _is_stream_pipeline; }

@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/stream/stream_fdw.h"
+#include "runtime/stream_epoch_manager.h"
 
 namespace starrocks::stream {
 
@@ -48,8 +50,8 @@ public:
     // Use mv epoch manager to interact with FE
     Status prepare(RuntimeState* state) override {
         SourceOperator::prepare(state);
-        _mv_epoch_manager = state->epoch_manager();
-        DCHECK(_mv_epoch_manager);
+        _stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
+        DCHECK(_stream_epoch_manager);
         return Status::OK();
     }
 
@@ -57,17 +59,17 @@ public:
     bool is_trigger_finished(const EpochInfo& epoch_info);
 
     // never finished until mv epoch manager set it finished
-    bool is_finished() const override { return _mv_epoch_manager && _mv_epoch_manager->is_finished(); }
+    bool is_finished() const override { return _stream_epoch_manager && _stream_epoch_manager->is_finished(); }
     bool has_output() const override { return !_is_epoch_finished; }
 
     bool is_epoch_finished() const override { return _is_epoch_finished; }
     Status set_epoch_finishing(RuntimeState* state) override { return Status::OK(); }
 
     Status reset_epoch(RuntimeState* state) override {
-        _current_epoch_info = state->epoch_manager()->epoch_info();
-        VLOG_ROW << "reset_epoch:" << _current_epoch_info.debug_string();
+        _current_epoch_info = _stream_epoch_manager->epoch_info();
         _processed_chunks = 1;
         _is_epoch_finished = false;
+        VLOG_ROW << "reset_epoch:" << _current_epoch_info.debug_string();
         return Status::OK();
     }
 
@@ -77,7 +79,7 @@ private:
     GeneratorStreamSourceParam _param;
     int64_t _tablet_id;
     starrocks::EpochInfo _current_epoch_info;
-    MVEpochManager* _mv_epoch_manager;
+    StreamEpochManager* _stream_epoch_manager;
     bool _is_epoch_finished{true};
     int64_t _processed_chunks{1};
 };
@@ -106,8 +108,6 @@ public:
     // Use mv epoch manager to interact with FE
     Status prepare(RuntimeState* state) override {
         Operator::prepare(state);
-        _mv_epoch_manager = state->epoch_manager();
-        DCHECK(_mv_epoch_manager);
         return Status::OK();
     }
 
@@ -140,7 +140,6 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    MVEpochManager* _mv_epoch_manager;
     bool _is_finished = false;
     bool _is_epoch_finished = false;
     std::vector<ChunkPtr> _output_chunks;

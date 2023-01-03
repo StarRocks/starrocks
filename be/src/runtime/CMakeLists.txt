@@ -44,7 +44,6 @@ set(RUNTIME_FILES
     load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
-    mv_epoch_manager.cpp
     data_stream_recvr.cpp
     export_sink.cpp
     load_channel_mgr.cpp
@@ -53,6 +52,7 @@ set(RUNTIME_FILES
     snapshot_loader.cpp
     query_statistics.cpp 
     message_body_sink.cpp
+    stream_epoch_manager.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp

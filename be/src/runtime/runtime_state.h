@@ -53,7 +53,6 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/mv_epoch_manager.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
 
@@ -335,8 +334,6 @@ public:
     std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
-    MVEpochManager* epoch_manager() const { return _mv_epoch_manager.get(); }
-
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -454,9 +451,6 @@ private:
     pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
-
-    // MV epoch State
-    std::shared_ptr<MVEpochManager> _mv_epoch_manager;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

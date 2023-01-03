@@ -28,8 +28,6 @@ class RuntimeState;
 
 namespace pipeline {
 
-enum PipelineKind { OLAP_PIPELINE = 0, STREAM_PIPELINE = 1 };
-
 class Pipeline {
 public:
     Pipeline() = delete;

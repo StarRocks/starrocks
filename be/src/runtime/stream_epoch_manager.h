@@ -19,24 +19,29 @@
 namespace starrocks {
 
 /**
- * `MVEpochManager` is used to manage the binlog source operators' start or final epoch, and
+ * `StreamEpochManager` is used to manage the binlog source operators' start or final epoch, and
  *  can be used to interact with RuntimeState which can be controlled by FE.
+ * 
+ * `StreamEpochManager` manages all fragment instances in one BE, operators in all fragment
+ * instances may interact with it, so methods should be thread-safe in MVEpochMangaer.
  */
 using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
-
-class MVEpochManager {
+using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
+class StreamEpochManager {
 public:
-    MVEpochManager() = default;
-    ~MVEpochManager() = default;
+    StreamEpochManager() = default;
+    ~StreamEpochManager() = default;
 
     // Start the new epoch from input epoch info
-    Status update_epoch(const TUniqueId& fragment_instance_id, const EpochInfo& epoch_info,
-                        const std::unordered_map<int64_t, TabletId2BinlogOffset>& input_epoch_infos);
-    Status update_binlog_offset(int64_t scan_node_id, int64_t tablet_id, BinlogOffset binlog_offset);
-    const BinlogOffset* get_binlog_offset(int64_t scan_node_id, int64_t tablet_id) const;
-    const TUniqueId& fragment_instance_id() const;
+    Status update_epoch(const EpochInfo& epoch_info,
+                        std::unordered_map<TUniqueId, NodeId2ScanRanges>& fragment_id_to_node_id_scan_ranges);
+    Status update_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id, int64_t tablet_id,
+                                BinlogOffset binlog_offset);
+
+    const BinlogOffset* get_binlog_offset(const TUniqueId& fragment_instance_id, int64_t scan_node_id,
+                                          int64_t tablet_id) const;
     const EpochInfo& epoch_info() const;
-    const std::unordered_map<int64_t, TabletId2BinlogOffset>& node_id_to_scan_ranges() const;
+    const std::unordered_map<TUniqueId, NodeId2ScanRanges>& fragment_id_to_node_id_scan_ranges() const;
 
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire); }
     void set_is_finished(bool v) { _is_finished.store(v, std::memory_order_release); }
@@ -48,9 +53,8 @@ private:
 private:
     mutable std::shared_mutex _epoch_lock;
     std::atomic_bool _is_finished{false};
-    TUniqueId _fragment_instance_id;
     EpochInfo _epoch_info;
-    std::unordered_map<int64_t, TabletId2BinlogOffset> _node_id_to_scan_ranges;
+    std::unordered_map<TUniqueId, NodeId2ScanRanges> _fragment_id_to_node_id_scan_ranges;
 };
 
 } // namespace starrocks

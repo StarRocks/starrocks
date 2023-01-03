@@ -140,7 +140,7 @@ Status StreamPipelineTest::start_mv(InitiliazeFunc&& init_func) {
 
 void StreamPipelineTest::stop_mv() {
     VLOG_ROW << "StopMV";
-    _fragment_ctx->runtime_state()->epoch_manager()->set_is_finished(true);
+    _query_ctx->stream_epoch_manager()->set_is_finished(true);
     auto num_activated_drivers =
             _exec_env->driver_executor()->activate_parked_driver([=](const pipeline::PipelineDriver* driver) {
                 return driver->query_ctx()->query_id() == _fragment_ctx->query_id();
@@ -161,11 +161,13 @@ Status StreamPipelineTest::start_epoch(const std::vector<int64_t>& tablet_ids, c
         binlog_offsets.insert({tablet_id, BinlogOffset{}});
     }
     std::unordered_map<int64_t, std::unordered_map<int64_t, BinlogOffset>> node_id_binlog_offsets;
-    node_id_binlog_offsets[0] = binlog_offsets;
+    // TODO: WE assume scan node id is zero.
+    node_id_binlog_offsets.emplace(0, binlog_offsets);
 
     // step1. update epoch info
-    RETURN_IF_ERROR(_fragment_ctx->epoch_manager()->update_epoch(_fragment_ctx->fragment_instance_id(), epoch_info,
-                                                                 node_id_binlog_offsets));
+    std::unordered_map<TUniqueId, NodeId2ScanRanges> fragment_id_to_node_id_scan_ranges;
+    fragment_id_to_node_id_scan_ranges.emplace(_fragment_ctx->fragment_instance_id(), node_id_binlog_offsets);
+    RETURN_IF_ERROR(_query_ctx->stream_epoch_manager()->update_epoch(epoch_info, fragment_id_to_node_id_scan_ranges));
 
     // step2. reset state
     RETURN_IF_ERROR(_fragment_ctx->reset_epoch());

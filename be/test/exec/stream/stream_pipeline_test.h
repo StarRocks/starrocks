@@ -23,6 +23,7 @@
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_epoch_manager.h"
 
 namespace starrocks::stream {
 
