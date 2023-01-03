@@ -57,6 +57,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
 import com.starrocks.analysis.OrderByElement;
@@ -3744,6 +3745,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitTupleInSubquery(StarRocksParser.TupleInSubqueryContext context) {
+        boolean isNotIn = context.NOT() != null;
+        QueryRelation query = (QueryRelation) visit(context.queryRelation());
+        List<Expr> tupleExpressions = visit(context.expression(), Expr.class);
+
+        return new MultiInPredicate(tupleExpressions, new Subquery(new QueryStatement(query)), isNotIn);
+    }
+
+    @Override
     public ParseNode visitExists(StarRocksParser.ExistsContext context) {
         QueryRelation query = (QueryRelation) visit(context.queryRelation());
         return new ExistsPredicate(new Subquery(new QueryStatement(query)), false);
@@ -4315,6 +4325,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitPredicate(StarRocksParser.PredicateContext context) {
         if (context.predicateOperations() != null) {
             return visit(context.predicateOperations());
+        } else if (context.tupleInSubquery() != null) {
+            return visit(context.tupleInSubquery());
         } else {
             return visit(context.valueExpression());
         }

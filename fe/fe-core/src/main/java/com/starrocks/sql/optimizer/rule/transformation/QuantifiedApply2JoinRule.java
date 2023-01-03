@@ -29,8 +29,9 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -54,24 +55,39 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
+        boolean isNotIn = false;
+        ScalarOperator simplifiedPredicate = null;
+        if (apply.getSubqueryOperator() instanceof MultiInPredicateOperator) {
+            MultiInPredicateOperator multiIn = (MultiInPredicateOperator) apply.getSubqueryOperator();
+            isNotIn = multiIn.isNotIn();
+            List<ScalarOperator> conjuncts = Lists.newArrayList();
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            for (int i = 0; i < multiIn.getTupleSize(); ++i) {
+                ScalarOperator left = multiIn.getChild(i);
+                ScalarOperator right = multiIn.getChild(multiIn.getTupleSize() + i);
+                ScalarOperator normalizedConjunct =
+                        rewriter.rewrite(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                left, right), ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+                conjuncts.add(normalizedConjunct);
+            }
+            simplifiedPredicate = Utils.compoundAnd(conjuncts);
+        } else {
+            // IN/NOT IN
+            InPredicateOperator ipo = (InPredicateOperator) apply.getSubqueryOperator();
+            BinaryPredicateOperator bpo =
+                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ipo.getChildren());
+            isNotIn = ipo.isNotIn();
 
-        // IN/NOT IN
-        InPredicateOperator ipo = (InPredicateOperator) apply.getSubqueryOperator();
-        BinaryPredicateOperator bpo =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ipo.getChildren());
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            simplifiedPredicate =
+                    rewriter.rewrite(bpo, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
-        ScalarOperator simplifiedPredicate = bpo;
-        if (bpo.getUsedColumns().isEmpty()) {
-            simplifiedPredicate = new FoldConstantsRule().visitBinaryPredicate(bpo, null);
-        } else if (bpo.getChild(0).getUsedColumns().isEmpty()) {
-            // normalize binaryPredicateOperator, e.g. 1 = tbl.v1 to tbl.v1 = 1
-            bpo.swap();
         }
 
         // IN to SEMI-JOIN
         // NOT IN to ANTI-JOIN or NULL_AWARE_LEFT_ANTI_JOIN
         OptExpression joinExpression;
-        if (ipo.isNotIn()) {
+        if (isNotIn) {
             //@TODO: if will can filter null, use left-anti-join
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN,
                     Utils.compoundAnd(simplifiedPredicate,
