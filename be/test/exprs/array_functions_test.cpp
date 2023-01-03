@@ -4682,7 +4682,7 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     src_column_nullable->append_datum(Datum());
     dest_column = filter.process(nullptr, {src_column_nullable, src_column2});
     auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data().data();
-    ASSERT_TRUE(null_data->null_column_data().size() == 2);
+    ASSERT_TRUE(null_data->size() == 2);
     ASSERT_TRUE(!null_data[0]);
     ASSERT_TRUE(null_data[1]);
 }
