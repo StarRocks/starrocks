@@ -377,7 +377,8 @@ public class Optimizer {
             }
         }
 
-        if (Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
+        if (sessionVariable.isEnableOuterJoinReorder() &&
+                Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
             context.getRuleSet().addOuterJoinTransformationRules();
         }
 
