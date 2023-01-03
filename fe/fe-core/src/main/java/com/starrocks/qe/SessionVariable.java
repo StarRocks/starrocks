@@ -821,7 +821,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String sqlDialect = "StarRocks";
 
     @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
-    private boolean enableOuterJoinReorder = false;
+    private boolean enableOuterJoinReorder = true;
 
     // This value is different from cboMaxReorderNodeUseExhaustive which only counts innerOrCross join node, while it
     // counts all types of join node including outer/semi/anti join.
