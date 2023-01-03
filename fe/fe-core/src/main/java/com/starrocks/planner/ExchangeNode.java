@@ -213,7 +213,7 @@ public class ExchangeNode extends PlanNode {
                 output.append(detailPrefix).append("partition type: ")
                         .append(partitionType).append('\n');
             }
-            if (partitionExprs != null && !partitionExprs.isEmpty()) {
+            if (CollectionUtils.isNotEmpty(partitionExprs)) {
                 output.append(detailPrefix)
                         .append("partition exprs: ")
                         .append(getVerboseExplain(partitionExprs, detailLevel))
