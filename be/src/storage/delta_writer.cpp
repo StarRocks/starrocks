@@ -61,7 +61,7 @@ DeltaWriter::~DeltaWriter() {
         _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
-        _replicate_token->cancel();
+        _replicate_token->shutdown();
     }
     switch (get_state()) {
     case kUninitialized:
@@ -506,6 +506,9 @@ void DeltaWriter::cancel(const Status& st) {
     if (_flush_token != nullptr) {
         _flush_token->cancel(st);
     }
+    if (_replicate_token != nullptr) {
+        _replicate_token->cancel(st);
+    }
 }
 
 void DeltaWriter::abort(bool with_log) {
@@ -517,7 +520,7 @@ void DeltaWriter::abort(bool with_log) {
         _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
-        _replicate_token->cancel();
+        _replicate_token->shutdown();
     }
 
     VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
