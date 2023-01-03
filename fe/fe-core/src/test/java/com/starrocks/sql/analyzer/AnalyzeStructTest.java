@@ -15,9 +15,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -98,5 +104,19 @@ public class AnalyzeStructTest {
     public void testDeeperTable() {
         analyzeFail("SELECT b.b.c.d.f FROM deeper_table");
         analyzeSuccess("SELECT b.b.c.d.e FROM deeper_table");
+    }
+
+    @Test
+    public void testShowCreateTable() throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
+
+        ShowCreateTableStmt stmt = (ShowCreateTableStmt) analyzeSuccess("SHOW CREATE TABLE deeper_table");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        String res = resultSet.getResultRows().get(0).get(1);
+        Assert.assertTrue(res.contains("`b` STRUCT<b STRUCT<c STRUCT<d STRUCT<e int(11)>>>> NULL COMMENT \"\""));
+        Assert.assertTrue(
+                res.contains("`struct_a` STRUCT<struct_a STRUCT<struct_a int(11)>, other int(11)> NULL COMMENT \"\""));
     }
 }
