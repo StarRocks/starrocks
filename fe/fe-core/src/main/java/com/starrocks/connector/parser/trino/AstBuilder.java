@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -85,6 +87,7 @@ import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
 import io.trino.sql.tree.Expression;
 import io.trino.sql.tree.Extract;
+import io.trino.sql.tree.FrameBound;
 import io.trino.sql.tree.FunctionCall;
 import io.trino.sql.tree.GenericDataType;
 import io.trino.sql.tree.GenericLiteral;
@@ -120,6 +123,9 @@ import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.WhenClause;
+import io.trino.sql.tree.Window;
+import io.trino.sql.tree.WindowFrame;
+import io.trino.sql.tree.WindowSpecification;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -129,6 +135,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.AnalyticWindow.BoundaryType.CURRENT_ROW;
+import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
+import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
+import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
+import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private final long sqlMode;
@@ -413,16 +424,85 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitFunctionCall(FunctionCall node, ParseTreeContext context) {
-        List<Expr> children = visit(node.getChildren(), context, Expr.class);
+        List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
-        Expr convertedFunctionCall = Trino2SRFunctionCallTransformer.convert(node.getName().toString(), children);
+        FunctionCallExpr callExpr;
+        Expr convertedFunctionCall = Trino2SRFunctionCallTransformer.convert(node.getName().toString(), arguments);
         if (convertedFunctionCall != null) {
-            return convertedFunctionCall;
+            callExpr = (FunctionCallExpr) convertedFunctionCall;
         } else if (DISTINCT_FUNCTION.contains(node.getName().toString())) {
-            return visitDistinctFunctionCall(node, context);
+            callExpr = visitDistinctFunctionCall(node, context);
         }  else {
-            return new FunctionCallExpr(node.getName().toString(), children);
+            callExpr = new FunctionCallExpr(node.getName().toString(), arguments);
         }
+        if (node.getWindow().isPresent()) {
+            return visitWindow(callExpr, node.getWindow().get(), context);
+        }
+        return callExpr;
+
+    }
+
+    private static AnalyticWindow.Type getFrameType(WindowFrame.Type type) {
+        switch (type) {
+            case RANGE:
+                return AnalyticWindow.Type.RANGE;
+            case ROWS:
+                return AnalyticWindow.Type.ROWS;
+        }
+
+        throw new IllegalArgumentException("Unsupported frame type: " + type);
+    }
+
+    @Override
+    protected ParseNode visitFrameBound(FrameBound node, ParseTreeContext context) {
+        switch (node.getType()) {
+            case UNBOUNDED_PRECEDING:
+                return new AnalyticWindow.Boundary(UNBOUNDED_PRECEDING, null);
+            case UNBOUNDED_FOLLOWING:
+                return new AnalyticWindow.Boundary(UNBOUNDED_FOLLOWING, null);
+            case CURRENT_ROW:
+                return new AnalyticWindow.Boundary(CURRENT_ROW, null);
+            case PRECEDING:
+                return new AnalyticWindow.Boundary(PRECEDING, (Expr) visit(node.getValue().get(), context));
+            case FOLLOWING:
+                return new AnalyticWindow.Boundary(FOLLOWING, (Expr) visit(node.getValue().get(), context));
+        }
+
+        throw new IllegalArgumentException("Unsupported frame bound type: " + node.getType());
+    }
+
+    @Override
+    protected ParseNode visitWindowFrame(WindowFrame node, ParseTreeContext context) {
+        if (node.getEnd().isPresent()) {
+            return new AnalyticWindow(
+                    getFrameType(node.getType()),
+                    (AnalyticWindow.Boundary) visit(node.getStart(), context),
+                    (AnalyticWindow.Boundary) visit(node.getEnd().get(), context));
+        } else {
+            return new AnalyticWindow(
+                    getFrameType(node.getType()),
+                    (AnalyticWindow.Boundary) visit(node.getStart(), context));
+        }
+    }
+
+    protected AnalyticExpr visitWindowSpecification(FunctionCallExpr functionCallExpr, WindowSpecification node,
+                                                 ParseTreeContext context) {
+        functionCallExpr.setIsAnalyticFnCall(true);
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (node.getOrderBy().isPresent()) {
+            orderByElements = visit(node.getOrderBy().get(), context, OrderByElement.class);
+        }
+        List<Expr> partitionExprs = visit(node.getPartitionBy(), context, Expr.class);
+
+        return new AnalyticExpr(functionCallExpr, partitionExprs, orderByElements,
+                (AnalyticWindow) processOptional(node.getFrame(), context));
+    }
+
+    private ParseNode visitWindow(FunctionCallExpr functionCallExpr, Window windowSpec, ParseTreeContext context) {
+        if (windowSpec instanceof WindowSpecification) {
+            return visitWindowSpecification(functionCallExpr, (WindowSpecification) windowSpec, context);
+        }
+        return null;
     }
 
     private FunctionCallExpr visitDistinctFunctionCall(FunctionCall node, ParseTreeContext context) {
