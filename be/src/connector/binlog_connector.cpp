@@ -46,8 +46,8 @@ Status BinlogDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
     ASSIGN_OR_RETURN(_tablet, _get_tablet())
     ASSIGN_OR_RETURN(_binlog_read_schema, _build_binlog_schema())
-    LOG(INFO) << "Tablet id " << _tablet->tablet_uid() << ", version " << _scan_range.offset.version << ", seq_id "
-              << _scan_range.offset.lsn << ", binlog read schema " << _binlog_read_schema;
+    VLOG(2) << "Tablet id " << _tablet->tablet_uid() << ", version " << _scan_range.offset.version << ", seq_id "
+            << _scan_range.offset.lsn << ", binlog read schema " << _binlog_read_schema;
     return Status::OK();
 }
 
@@ -111,10 +111,9 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
             meta_column_slot_index.push_back(slot_index);
             meta_fields.emplace_back(binlog_meta_map[BINLOG_TIMESTAMP]);
         } else {
-            std::stringstream ss;
-            ss << "invalid field name: " << slot->col_name();
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
+            std::string msg = fmt::format("invalid field name: {}", slot->col_name());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
         }
     }
 

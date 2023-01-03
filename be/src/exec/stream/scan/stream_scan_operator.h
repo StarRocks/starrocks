@@ -23,11 +23,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-
-class ScanNode;
-
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class StreamScanOperatorFactory final : public ConnectorScanOperatorFactory {
 public:
@@ -53,5 +49,4 @@ public:
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline
