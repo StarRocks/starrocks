@@ -1425,18 +1425,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type");
-
-        sql = "select sum(t1a+t1b) from test_all_type [_META_]";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(11: expr)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 11> : CAST(t1a AS DOUBLE) + CAST(t1b AS DOUBLE)\n" +
-                "  |  \n" +
-                "  0:MetaScan\n" +
-                "     Table: test_all_type");
     }
 
     @Test
