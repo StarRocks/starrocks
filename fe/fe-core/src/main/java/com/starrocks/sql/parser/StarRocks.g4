@@ -2050,16 +2050,16 @@ mapType
     : MAP '<' type ',' type '>'
     ;
 
-columnNameColonType
-    : identifier ':' type comment?
+columnNameType
+    : identifier type
     ;
 
-columnNameColonTypeList
-    : columnNameColonType (',' columnNameColonType)*
+columnNameTypeList
+    : columnNameType (',' columnNameType)*
     ;
 
 structType
-    : STRUCT '<' columnNameColonTypeList '>'
+    : STRUCT '<' columnNameTypeList '>'
     ;
 
 typeParameter
