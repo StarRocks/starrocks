@@ -368,6 +368,7 @@ public class ScalarType extends Type implements Cloneable {
             case DATE:
             case DATETIME:
             case TIME:
+            case JSON:
                 return DOUBLE;
             default:
                 return INVALID;
