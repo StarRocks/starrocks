@@ -61,7 +61,7 @@ ReplicateChannel::~ReplicateChannel() {
 }
 
 std::string ReplicateChannel::debug_string() {
-    return fmt::format("SyncChannnel [host={}, port={}, load_id={}, tablet_id={}, txn_id={}]", _host, _port,
+    return fmt::format("SyncChannnel [host: {}, port: {}, load_id: {}, tablet_id: {}, txn_id: {}]", _host, _port,
                        print_id(_opt->load_id), _opt->tablet_id, _opt->txn_id);
 }
 

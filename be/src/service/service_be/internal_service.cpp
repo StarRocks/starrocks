@@ -77,8 +77,9 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::Rp
                                                             PTabletWriterAddBatchResult* response,
                                                             google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", sender_id=" << request->sender_id() << ", eos=" << request->eos();
+    VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", txn_id: " << request->txn_id()
+             << ", index_id=" << request->index_id() << ", sender_id=" << request->sender_id()
+             << ", eos=" << request->eos();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(*request, response);
 }
 
@@ -96,8 +97,9 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
                                                               const PTabletWriterAddSegmentRequest* request,
                                                               PTabletWriterAddSegmentResult* response,
                                                               google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer add segment, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", tablet_id=" << request->tablet_id() << ", eos=" << request->eos();
+    VLOG_RPC << "tablet writer add segment, id=" << print_id(request->id()) << ", txn_id: " << request->txn_id()
+             << ", index_id=" << request->index_id() << ", tablet_id=" << request->tablet_id()
+             << ", eos=" << request->eos();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_segment(static_cast<brpc::Controller*>(controller),
                                                                             request, response, done);
 }
@@ -107,8 +109,9 @@ void BackendInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcCo
                                                          const PTabletWriterCancelRequest* request,
                                                          PTabletWriterCancelResult* response,
                                                          google::protobuf::Closure* done) {
-    VLOG_RPC << "tablet writer cancel, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-             << ", sender_id=" << request->sender_id() << ", tablet_id=" << request->tablet_id();
+    VLOG_RPC << "tablet writer cancel, id=" << print_id(request->id()) << ", txn_id: " << request->txn_id()
+             << ", index_id=" << request->index_id() << ", sender_id=" << request->sender_id()
+             << ", tablet_id=" << request->tablet_id();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->cancel(static_cast<brpc::Controller*>(cntl_base),
                                                                        *request, response, done);
 }
