@@ -262,8 +262,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE not in ('1998-04-10', '1994-04-11', '1994-04-12');";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "3:AGGREGATE (merge finalize)");
-        assertContains(plan, "1:AGGREGATE (update serialize)");
+        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "2:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -274,8 +274,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' " +
                         "and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "3:AGGREGATE (merge finalize)");
-        assertContains(plan, "1:AGGREGATE (update serialize)");
+        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "2:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -489,7 +489,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  5:Project\n" +
-                "  |  <slot 1> : 1: C_CUSTKEY");
+                "  |  <slot 22> : 1");
         checkTwoPhaseAgg(plan);
     }
 
@@ -676,8 +676,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "      ) t1\n" +
                 "  ) t2;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 11:AGGREGATE (update finalize)");
-        assertContains(plan, "10:Project");
+        assertContains(plan, "12:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(11: count)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  11:Project\n" +
+                "  |  <slot 11> : 11: count");
     }
 
     @Test

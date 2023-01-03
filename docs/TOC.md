@@ -351,13 +351,13 @@
     + Cryptographic Functions
       + [aes_encrypt](./sql-reference/sql-functions/crytographic-functions/aes_encrypt.md)
       + [aes_decrypt](./sql-reference/sql-functions/crytographic-functions/aes_decrypt.md)
+      + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [md5sum](./sql-reference/sql-functions/crytographic-functions/md5sum.md)
       + [md5sum_numeric](./sql-reference/sql-functions/crytographic-functions/md5sum_numeric.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
       + [sm3](./sql-reference/sql-functions/crytographic-functions/sm3.md)
       + [to_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
-      + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
     + Date Functions
       + [add_months](./sql-reference/sql-functions/date-time-functions/add_months.md)
       + [adddate](./sql-reference/sql-functions/date-time-functions/adddate.md)
@@ -377,6 +377,7 @@
       + [dayofmonth](./sql-reference/sql-functions/date-time-functions/dayofmonth.md)
       + [dayofweek](./sql-reference/sql-functions/date-time-functions/dayofweek.md)
       + [dayofyear](./sql-reference/sql-functions/date-time-functions/dayofyear.md)
+      + [days_add](./sql-reference/sql-functions/date-time-functions/adddate.md)
       + [days_diff](./sql-reference/sql-functions/date-time-functions/days_diff.md)
       + [days_sub](./sql-reference/sql-functions/date-time-functions/days_sub.md)
       + [from_days](./sql-reference/sql-functions/date-time-functions/from_days.md)
@@ -450,6 +451,7 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
       + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
@@ -465,8 +467,6 @@
       + [conv](/sql-reference/sql-functions/math-functions/conv.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
-<<<<<<< HEAD
-=======
       + [cot](/sql-reference/sql-functions/math-functions/cot.md)
       + [degrees](/sql-reference/sql-functions/math-functions/degrees.md)
       + [divide](./sql-reference/sql-functions/math-functions/divide.md)
@@ -474,7 +474,6 @@
       + [exp](/sql-reference/sql-functions/math-functions/exp.md)
       + [floor](/sql-reference/sql-functions/math-functions/floor.md)
       + [fmod](/sql-reference/sql-functions/math-functions/fmod.md)
->>>>>>> 0498ffcf0 ([Doc] add math functions (#15908))
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
       + [least](./sql-reference/sql-functions/math-functions/least.md)
       + [ln](./sql-reference/sql-functions/math-functions/ln.md)
@@ -485,9 +484,9 @@
       + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
       + [negative](./sql-reference/sql-functions/math-functions/negative.md)
       + [pi](./sql-reference/sql-functions/math-functions/pi.md)
+      + [pmod](./sql-reference/sql-functions/math-functions/pmod.md)
       + [positive](./sql-reference/sql-functions/math-functions/positive.md)
       + [pow](./sql-reference/sql-functions/math-functions/pow.md)
-      + [pmod](./sql-reference/sql-functions/math-functions/pmod.md)
       + [radians](./sql-reference/sql-functions/math-functions/radians.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [round](./sql-reference/sql-functions/math-functions/round.md)
@@ -544,7 +543,10 @@
       + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
       + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
     + Percentile Functions
+      + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](./sql-reference/sql-functions/percentile-functions/percentile_empty.md)
+      + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
+      + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Utility Functions
