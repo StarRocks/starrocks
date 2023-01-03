@@ -436,14 +436,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.simpleDefineSql = simple;
     }
 
-    public Set<Long> getBaseTableIds() {
-        return baseTableIds;
-    }
-
-    public void setBaseTableIds(Set<Long> baseTableIds) {
-        this.baseTableIds = baseTableIds;
-    }
-
     public List<BaseTableInfo> getBaseTableInfos() {
         return baseTableInfos;
     }
@@ -627,6 +619,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
      * @return
      */
     public boolean isLoadTriggeredRefresh() {
+        if (this.refreshScheme.getType() == MaterializedView.RefreshType.INCREMENTAL) {
+            return true;
+        }
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
