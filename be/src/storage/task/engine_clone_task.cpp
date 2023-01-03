@@ -877,9 +877,8 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta));
-    if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_FULL) {
-        tablet->updates()->remove_expired_versions(time(nullptr));
-    }
+    int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
+    tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << clone_dir;
     auto st = fs::remove_all(clone_dir);
     LOG_IF(WARNING, !st.ok()) << "Fail to remove clone directory " << clone_dir << ": " << st;
