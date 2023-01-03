@@ -349,9 +349,9 @@ curl --location-trusted -u root: \
 >
 > - 使用 `hll_hash` 函数把 `example7.csv` 中的 `temp1` 列转换成 HLL 类型的数据并映射到 `table7`中的 `col1` 列。
 >
-> - 使用 `empty_hll` 函数给导入的数据行在 `table7` 中的第二列补充默认值。
+> - 使用 `hll_empty` 函数给导入的数据行在 `table7` 中的第二列补充默认值。
 
-有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](../data-definition/HLL.md)。
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) 和 [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md)。
 
 #### **导入数据到含有 BITMAP 类型列的表**
 
