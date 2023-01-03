@@ -33,6 +33,15 @@ public class BrokerConfig extends ConfigBase {
     
     @ConfField
     public static int broker_ipc_port = 8000;
+
+    /**
+     * If the kerberos HDFS client is alive beyond this time,
+     * client checker will destroy it to avoid kerberos token expire.
+     * Set this value a little smaller than the actual token expire seconds,
+     * to make sure the client is destroyed before the timeout reaches.
+     */
+    @ConfField
+    public static int kerberos_token_expire_seconds = 86000;
     
     @ConfField
     public static String sys_log_dir = System.getenv("BROKER_HOME") + "/log";
