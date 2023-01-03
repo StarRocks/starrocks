@@ -44,7 +44,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 08
 
 7:AGGREGATE (update serialize)
-|  aggregate: sum[([26: case, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([27: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[(if[(21: p_type LIKE 'PROMO%', [37: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([27: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[-Infinity, Infinity, 0.0, 16.0, 1.0] ESTIMATE
@@ -52,8 +52,9 @@ OutPut Exchange Id: 08
 |
 6:Project
 |  output columns:
-|  26 <-> if[(21: p_type LIKE 'PROMO%', [37: multiply, DECIMAL128(33,4), true], 0); args: BOOLEAN,DECIMAL128,DECIMAL128; result: DECIMAL128(33,4); args nullable: true; result nullable: true]
+|  21 <-> [21: p_type, VARCHAR, true]
 |  27 <-> [37: multiply, DECIMAL128(33,4), true]
+|  37 <-> [37: multiply, DECIMAL128(33,4), true]
 |  common expressions:
 |  33 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  34 <-> [7: l_discount, DECIMAL64(15,2), true]
@@ -62,7 +63,7 @@ OutPut Exchange Id: 08
 |  37 <-> [33: cast, DECIMAL128(15,2), true] * [36: cast, DECIMAL128(18,2), true]
 |  cardinality: 6653886
 |  column statistics:
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 3736521.0] ESTIMATE
+|  * p_type-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 5:HASH JOIN

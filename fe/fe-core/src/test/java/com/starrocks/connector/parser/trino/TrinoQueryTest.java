@@ -285,10 +285,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "output: sum(2: v2)");
 
         sql = "select sum(case v1 when false then v2 when v2 then 1 else NULL end) from t0";
-        assertPlanContains(sql, "<slot 4> : CASE 1: v1 WHEN 0 THEN 2: v2 WHEN 2: v2 THEN 1 ELSE NULL END");
+        assertPlanContains(sql, "output: sum(CASE 1: v1 WHEN 0 THEN 2: v2 WHEN 2: v2 THEN 1 ELSE NULL END)");
 
         sql = "select count(case when v1 then 1 end) from t0";
-        assertPlanContains(sql, "<slot 4> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)", "output: count(4: case)");
+        assertPlanContains(sql, "<slot 1> : 1: v1", "output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
     }
 
 

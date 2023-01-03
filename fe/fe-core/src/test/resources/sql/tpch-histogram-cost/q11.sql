@@ -1,32 +1,3 @@
-[sql]
-select
-    ps_partkey,
-    sum(ps_supplycost * ps_availqty) as value
-from
-    partsupp,
-    supplier,
-    nation
-where
-    ps_suppkey = s_suppkey
-  and s_nationkey = n_nationkey
-  and n_name = 'PERU'
-group by
-    ps_partkey having
-    sum(ps_supplycost * ps_availqty) > (
-    select
-    sum(ps_supplycost * ps_availqty) * 0.0001000000
-    from
-    partsupp,
-    supplier,
-    nation
-    where
-    ps_suppkey = s_suppkey
-                  and s_nationkey = n_nationkey
-                  and n_name = 'PERU'
-    )
-order by
-    value desc ;
-[fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:1: PS_PARTKEY | 21: sum
 Input Partition: UNPARTITIONED
@@ -169,17 +140,19 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 22
 
 21:AGGREGATE (update serialize)
-|  aggregate: sum[([41: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([25: PS_SUPPLYCOST, DOUBLE, false] * cast([24: PS_AVAILQTY, INT, false] as DOUBLE)); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[1.0, 9999000.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 20:Project
 |  output columns:
-|  41 <-> [25: PS_SUPPLYCOST, DOUBLE, false] * cast([24: PS_AVAILQTY, INT, false] as DOUBLE)
+|  24 <-> [24: PS_AVAILQTY, INT, false]
+|  25 <-> [25: PS_SUPPLYCOST, DOUBLE, false]
 |  cardinality: 3200000
 |  column statistics:
-|  * expr-->[1.0, 9999000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -341,5 +314,3 @@ cardinality: 1
 column statistics:
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
-[end]
-
