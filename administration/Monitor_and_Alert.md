@@ -151,7 +151,7 @@ wget https://dl.grafana.com/oss/release/grafana-8.0.6.linux-amd64.tar.gz
 tar -zxf grafana-8.0.6.linux-amd64.tar.gz
 ```
 
-#### 配置 Prometheus
+#### 配置 Grafana
 
 在 **./conf/defaults.ini** 中添加相关的配置。
 
