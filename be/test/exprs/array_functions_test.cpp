@@ -4681,10 +4681,10 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     src_column_nullable->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column_nullable->append_datum(Datum());
     dest_column = filter.process(nullptr, {src_column_nullable, src_column2});
-    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data().data();
-    ASSERT_TRUE(null_data->size() == 2);
-    ASSERT_TRUE(!null_data[0]);
-    ASSERT_TRUE(null_data[1]);
+    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data();
+    ASSERT_TRUE(null_data.size() == 2);
+    ASSERT_TRUE(!null_data.data()[0]);
+    ASSERT_TRUE(null_data.data()[1]);
 }
 
 TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
