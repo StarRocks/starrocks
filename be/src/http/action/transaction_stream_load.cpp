@@ -441,6 +441,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
             master_addr.hostname, master_addr.port,
             [&request, ctx](FrontendServiceConnection& client) { client->streamLoadPut(ctx->put_result, request); }));
     ctx->stream_load_put_cost_nanos = MonotonicNanos() - stream_load_put_start_time;
+    ctx->timeout_second = ctx->put_result.params.query_options.query_timeout;
 #else
     ctx->put_result = k_stream_load_put_result;
 #endif
