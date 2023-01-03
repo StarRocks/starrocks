@@ -34,6 +34,7 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -275,7 +276,7 @@ public class MVMaintenanceJob implements Writable {
         for (MVMaintenanceTask task : taskMap.values()) {
             LOG.info("deployTasks: {}", task);
             long taskId = task.getTaskId();
-            TNetworkAddress address = queryCoordinator.toBrpcHost(task.getBeHost());
+            TNetworkAddress address = SystemInfoService.toBrpcHost(task.getBeHost());
             // Request information
             String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
 

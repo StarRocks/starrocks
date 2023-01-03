@@ -21,7 +21,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
@@ -149,29 +149,13 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         }
     }
 
-    public TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
-        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
-                host.getHostname(), host.getPort());
-        if (computeNode == null) {
-            computeNode =
-                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
-            if (computeNode == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
-            }
-        }
-        if (computeNode.getBrpcPort() < 0) {
-            return null;
-        }
-        return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
-    }
-
     // TODO(murphy) notify all executors, and wait for finishing
     private void execute(MVEpoch epoch) throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
 
         for (MVMaintenanceTask task : mvMaintenanceJob.getTasks().values()) {
             long taskId = task.getTaskId();
-            TNetworkAddress address = toBrpcHost(task.getBeHost());
+            TNetworkAddress address = SystemInfoService.toBrpcHost(task.getBeHost());
 
             // Request information
             MaterializedView view = mvMaintenanceJob.getView();
