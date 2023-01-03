@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstring>
 #include <vector>
 
 #include "util/slice.h"
@@ -150,6 +151,29 @@ static int utf8_len(const char* begin, const char* end) {
         len += static_cast<int8_t>(*p) > static_cast<int8_t>(0xBF);
     }
     return len;
+}
+
+// Check if the string contains a utf-8 character
+static inline bool utf8_contains(const std::string& str, const std::vector<size_t>& utf8_index, Slice utf8_char) {
+    for (int i = 0; i < utf8_index.size(); i++) {
+        size_t char_idx = utf8_index[i];
+        // TODO: optimize the utf8-index, add a length guard at the tail
+        size_t char_len = i < utf8_index.size() - 1 ? utf8_index[i + 1] - char_idx : str.length() - char_idx;
+        if (memcmp(str.data() + char_idx, utf8_char.data, char_len) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Find the start of utf8 character
+// NOTE: it must be a valid utf-8 string
+static inline Slice utf8_char_start(const char* end) {
+    const char* p = end;
+    size_t count = 1;
+    for (; (*p & 0xC0) == 0x80; p--, count++) {
+    }
+    return {p, count};
 }
 
 } // namespace starrocks
