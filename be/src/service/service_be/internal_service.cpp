@@ -84,12 +84,8 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::
                                                               const PTabletWriterAddSegmentRequest* request,
                                                               PTabletWriterAddSegmentResult* response,
                                                               google::protobuf::Closure* done) {
-<<<<<<< HEAD
-    VLOG_RPC << "tablet writer add segment, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
-=======
     VLOG_RPC << "tablet writer add segment, id=" << print_id(request->id()) << ", txn_id: " << request->txn_id()
              << ", index_id=" << request->index_id() << ", tablet_id=" << request->tablet_id()
->>>>>>> 6fb2241a5 ([BugFix] Fix replicated storage write hang when async writer fail (#16049))
              << ", eos=" << request->eos();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_segment(static_cast<brpc::Controller*>(controller),
                                                                             request, response, done);
