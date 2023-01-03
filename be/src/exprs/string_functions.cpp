@@ -33,6 +33,7 @@
 #include "exprs/math_functions.h"
 #include "exprs/unary_function.h"
 #include "gutil/strings/fastmem.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/large_int_value.h"
@@ -1728,15 +1729,16 @@ StatusOr<ColumnPtr> StringFunctions::reverse(FunctionContext* context, const Col
 
 // strings with little spaces can not benefit from simd optimization,
 // simd_optimization = false, turn off SIMD optimization
-template <bool simd_optimization>
-static inline const char* skip_leading_spaces(const char* begin, const char* end) {
+template <bool simd_optimization, bool trim_single, bool trim_utf8>
+static inline const char* skip_leading_spaces(const char* begin, const char* end, const std::string& remove,
+                                              const std::vector<size_t>& utf8_index) {
     auto p = begin;
 #if defined(__SSE2__)
-    if constexpr (simd_optimization) {
+    if constexpr (simd_optimization && trim_single) {
         const auto size = end - begin;
         const auto SSE2_BYTES = sizeof(__m128i);
         const auto sse2_end = begin + (size & ~(SSE2_BYTES - 1));
-        const auto spaces = _mm_set1_epi8(' ');
+        const auto spaces = _mm_set1_epi8(remove[0]);
         for (; p < sse2_end; p += SSE2_BYTES) {
             uint32_t masks = _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_loadu_si128((__m128i*)p), spaces));
             int pos = __builtin_ctz((1u << SSE2_BYTES) | ~masks);
@@ -1746,25 +1748,42 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
         }
     }
 #endif
-    for (; p < end && *p == ' '; ++p) {
+    if constexpr (trim_single) {
+        if (remove[0] == ' ') {
+            for (; p < end && *p == ' '; ++p) {
+            }
+        } else {
+            for (; p < end && *p == remove[0]; ++p) {
+            }
+        }
+    } else if constexpr (!trim_utf8) {
+        for (; p < end && remove.find(*p) != remove.npos; ++p) {
+        }
+    } else {
+        size_t char_size = UTF8_BYTE_LENGTH_TABLE[(uint8_t)*p];
+        while (p < end && utf8_contains(remove, utf8_index, {p, char_size})) {
+            char_size = UTF8_BYTE_LENGTH_TABLE[(uint8_t)*p];
+            p += char_size;
+        }
     }
     return p;
 }
 
 // strings with little spaces can not benefit from simd optimization,
 // simd_optimization = false, turn off SIMD optimization
-template <bool simd_optimization>
-static const char* skip_trailing_spaces(const char* begin, const char* end) {
+template <bool simd_optimization, bool trim_single, bool trim_utf8>
+static const char* skip_trailing_spaces(const char* begin, const char* end, const std::string& remove,
+                                        const std::vector<size_t>& utf8_index) {
     if (UNLIKELY(begin == nullptr)) {
         return begin;
     }
     auto p = end;
 #if defined(__SSE2__)
-    if constexpr (simd_optimization) {
+    if constexpr (simd_optimization && trim_single && !trim_utf8) {
         const auto size = end - begin;
         const auto SSE2_BYTES = sizeof(__m128i);
         const auto sse2_begin = end - (size & ~(SSE2_BYTES - 1));
-        const auto spaces = _mm_set1_epi8(' ');
+        const auto spaces = _mm_set1_epi8(remove[0]);
         for (p = end - SSE2_BYTES; p >= sse2_begin; p -= SSE2_BYTES) {
             uint32_t masks = _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_loadu_si128((__m128i*)p), spaces));
             int pos = __builtin_clz(~(masks << SSE2_BYTES));
@@ -1775,7 +1794,30 @@ static const char* skip_trailing_spaces(const char* begin, const char* end) {
         p += SSE2_BYTES;
     }
 #endif
-    for (--p; p >= begin && *p == ' '; --p) {
+    if constexpr (trim_single) {
+        if (remove[0] == ' ') {
+            for (--p; p >= begin && *p == ' '; --p) {
+            }
+        } else {
+            for (--p; p >= begin && *p == remove[0]; --p) {
+            }
+        }
+    } else if constexpr (!trim_utf8) {
+        for (--p; p >= begin && remove.find(*p) != remove.npos; --p) {
+        }
+    } else {
+        p--;
+        while (true) {
+            // TODO: Maybe we could also match the charcters in reverse order instead of find the start of utf-8 char
+            Slice utf8_char = utf8_char_start(p);
+            if (!utf8_contains(remove, utf8_index, utf8_char)) {
+                break;
+            }
+            p = utf8_char.data - 1;
+            if (p < begin) {
+                break;
+            }
+        }
     }
     return p + 1;
 }
@@ -1783,8 +1825,10 @@ static const char* skip_trailing_spaces(const char* begin, const char* end) {
 enum TrimType { TRIM_LEFT, TRIM_RIGHT, TRIM_BOTH };
 enum TrimSimdOptimization { TRIM_SIMD_NONE, TRIM_SIMD_LEFT, TRIM_SIMD_RIGHT, TRIM_SIMD_BOTH };
 
-template <TrimType trim_type, TrimSimdOptimization trim_simd_optimization, bool compute_spaces_num>
+template <TrimType trim_type, TrimSimdOptimization trim_simd_optimization, bool compute_spaces_num, bool trim_single,
+          bool trim_utf8>
 static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes* bytes, Offsets* offsets,
+                                  const std::string& remove, const std::vector<size_t>& utf8_index,
                                   [[maybe_unused]] size_t* leading_spaces_num,
                                   [[maybe_unused]] size_t* trailing_spaces_num) {
     auto s = src->get_slice(i);
@@ -1800,7 +1844,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     if constexpr (trim_type == TRIM_LEFT || trim_type == TRIM_BOTH) {
         constexpr auto simd_enable =
                 trim_simd_optimization == TRIM_SIMD_LEFT || trim_simd_optimization == TRIM_SIMD_BOTH;
-        from_ptr = skip_leading_spaces<simd_enable>(from_ptr, end);
+        from_ptr = skip_leading_spaces<simd_enable, trim_single, trim_utf8>(from_ptr, end, remove, utf8_index);
         if constexpr (compute_spaces_num) {
             *leading_spaces_num += from_ptr - begin;
         }
@@ -1810,7 +1854,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     if constexpr (trim_type == TRIM_RIGHT || trim_type == TRIM_BOTH) {
         constexpr auto simd_enable =
                 trim_simd_optimization == TRIM_SIMD_RIGHT || trim_simd_optimization == TRIM_SIMD_BOTH;
-        to_ptr = skip_trailing_spaces<simd_enable>(from_ptr, to_ptr);
+        to_ptr = skip_trailing_spaces<simd_enable, trim_single, trim_utf8>(from_ptr, to_ptr, remove, utf8_index);
         if constexpr (compute_spaces_num) {
             *trailing_spaces_num += end - to_ptr;
         }
@@ -1820,84 +1864,10 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     (*offsets)[i + 1] = bytes->size();
 }
 
-template <size_t simd_threshold>
-struct AdaptiveLTrimFunction {
-    template <LogicalType Type, LogicalType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        auto* src = down_cast<BinaryColumn*>(column.get());
-
-        auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
-        auto& dst_offsets = dst->get_offset();
-        auto& dst_bytes = dst->get_bytes();
-
-        const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
-        dst_bytes.reserve(dst_bytes.size());
-
-        size_t i = 0;
-        const auto sample_num = std::min(num_rows, 100ul);
-        size_t spaces_num = 0;
-
-        for (; i < sample_num; ++i) {
-            trim_per_slice<TRIM_LEFT, TRIM_SIMD_NONE, true>(src, i, &dst_bytes, &dst_offsets, &spaces_num, nullptr);
-        }
-        // when the average number of leading spaces in the sample is greater than simd_threshold,
-        // SIMD optimization is enabled.
-        if (spaces_num < simd_threshold * spaces_num) {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_LEFT, TRIM_SIMD_NONE, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        } else {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_LEFT, TRIM_SIMD_LEFT, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        }
-        return dst;
-    }
-};
-
-template <size_t simd_threshold>
-struct AdaptiveRTrimFunction {
-    template <LogicalType Type, LogicalType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        auto* src = down_cast<BinaryColumn*>(column.get());
-
-        auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
-        auto& dst_offsets = dst->get_offset();
-        auto& dst_bytes = dst->get_bytes();
-
-        const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
-        dst_bytes.reserve(dst_bytes.size());
-
-        size_t i = 0;
-        const auto sample_num = std::min(num_rows, 100ul);
-        size_t spaces_num = 0;
-
-        for (; i < sample_num; ++i) {
-            trim_per_slice<TRIM_RIGHT, TRIM_SIMD_NONE, true>(src, i, &dst_bytes, &dst_offsets, nullptr, &spaces_num);
-        }
-        // when the average number of trailing spaces in the sample is greater than simd_threshold,
-        // SIMD optimization is enabled.
-        if (spaces_num < simd_threshold * sample_num) {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_RIGHT, TRIM_SIMD_NONE, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        } else {
-            for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_RIGHT, TRIM_SIMD_RIGHT, false>(src, i, &dst_bytes, &dst_offsets, nullptr, nullptr);
-            }
-        }
-        return dst;
-    }
-};
-
-template <size_t simd_threshold>
+template <TrimType trim_type, size_t simd_threshold, bool trim_single, bool trim_utf8>
 struct AdaptiveTrimFunction {
-    template <LogicalType Type, LogicalType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& column) {
+    template <LogicalType Type, LogicalType ResultType, class RemoveArg, class Utf8Index>
+    static ColumnPtr evaluate(const ColumnPtr& column, RemoveArg&& remove, Utf8Index&& utf8_index) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
@@ -1915,8 +1885,8 @@ struct AdaptiveTrimFunction {
         size_t trailing_spaces_num = 0;
 
         for (; i < sample_num; ++i) {
-            trim_per_slice<TRIM_BOTH, TRIM_SIMD_NONE, true>(src, i, &dst_bytes, &dst_offsets, &leading_spaces_num,
-                                                            &trailing_spaces_num);
+            trim_per_slice<trim_type, TRIM_SIMD_NONE, true, trim_single, trim_utf8>(
+                    src, i, &dst_bytes, &dst_offsets, remove, utf8_index, &leading_spaces_num, &trailing_spaces_num);
         }
         // when the average number of leading/trailing spaces in the sample is greater than
         // simd_threshold, SIMD optimization is enabled.
@@ -1924,75 +1894,110 @@ struct AdaptiveTrimFunction {
         bool trailing_simd = trailing_spaces_num > simd_threshold * sample_num;
         if (leading_simd && trailing_simd) {
             for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_BOTH, TRIM_SIMD_BOTH, false>(src, i, &dst_bytes, &dst_offsets, &leading_spaces_num,
-                                                                 &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_BOTH, false, trim_single, trim_utf8>(
+                        src, i, &dst_bytes, &dst_offsets, remove, utf8_index, &leading_spaces_num,
+                        &trailing_spaces_num);
             }
         } else if (leading_simd) {
             for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_BOTH, TRIM_SIMD_LEFT, false>(src, i, &dst_bytes, &dst_offsets, &leading_spaces_num,
-                                                                 &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_LEFT, false, trim_single, trim_utf8>(
+                        src, i, &dst_bytes, &dst_offsets, remove, utf8_index, &leading_spaces_num,
+                        &trailing_spaces_num);
             }
         } else if (trailing_simd) {
             for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_BOTH, TRIM_SIMD_RIGHT, false>(src, i, &dst_bytes, &dst_offsets, &leading_spaces_num,
-                                                                  &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_RIGHT, false, trim_single, trim_utf8>(
+                        src, i, &dst_bytes, &dst_offsets, remove, utf8_index, &leading_spaces_num,
+                        &trailing_spaces_num);
             }
         } else {
             for (; i < num_rows; ++i) {
-                trim_per_slice<TRIM_BOTH, TRIM_SIMD_NONE, false>(src, i, &dst_bytes, &dst_offsets, &leading_spaces_num,
-                                                                 &trailing_spaces_num);
+                trim_per_slice<trim_type, TRIM_SIMD_NONE, false, trim_single, trim_utf8>(
+                        src, i, &dst_bytes, &dst_offsets, remove, utf8_index, &leading_spaces_num,
+                        &trailing_spaces_num);
             }
         }
         return dst;
     }
 };
 
-// trim
-DEFINE_STRING_UNARY_FN_WITH_IMPL(trimImpl, str) {
-    int begin = 0;
-    int end = str.size - 1;
-    while (begin < str.size && str.data[begin] == ' ') {
-        ++begin;
+struct TrimState {
+    std::string remove_chars;
+    bool is_utf8;
+    std::vector<size_t> utf8_index;
+};
+
+template <TrimType trim_type>
+static StatusOr<ColumnPtr> trim_impl(FunctionContext* context, const starrocks::Columns& columns) {
+    auto* state = reinterpret_cast<TrimState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    DCHECK(!!state);
+    auto& remove_chars = state->remove_chars;
+    DCHECK(remove_chars.size() > 0);
+    if (!state->is_utf8) {
+        if (remove_chars.size() == 1) {
+            return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, true, false>>::template evaluate<
+                    TYPE_VARCHAR, const std::string&>(columns[0], remove_chars, state->utf8_index);
+        } else {
+            return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, false, false>>::template evaluate<
+                    TYPE_VARCHAR, const std::string&>(columns[0], remove_chars, state->utf8_index);
+        }
+    } else {
+        return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, false, true>>::template evaluate<
+                TYPE_VARCHAR, const std::string&>(columns[0], remove_chars, state->utf8_index);
+    }
+}
+
+Status StringFunctions::trim_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    if (context->get_num_constant_columns() == 1) {
+        auto* state = new TrimState();
+        context->set_function_state(scope, state);
+        state->remove_chars = " ";
+        return Status::OK();
+    }
+    if (!context->is_constant_column(1)) {
+        return Status::InvalidArgument("The second parameter of trim only accept literal value");
+    }
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::InvalidArgument("The second parameter should not be null");
+    }
+    auto remove_col = context->get_constant_column(1);
+    const Slice chars = ColumnHelper::get_const_value<TYPE_VARCHAR>(remove_col);
+    std::string remove(chars.get_data(), chars.get_size());
+    if (remove.empty()) {
+        return Status::InvalidArgument("The second parameter should not be empty string");
     }
 
-    while (end > begin && str.data[end] == ' ') {
-        --end;
+    auto* state = new TrimState();
+    context->set_function_state(scope, state);
+    state->remove_chars = std::move(remove);
+    size_t utf8_len = get_utf8_index(state->remove_chars, &state->utf8_index);
+    state->is_utf8 = state->remove_chars.length() > utf8_len;
+
+    return Status::OK();
+}
+
+Status StringFunctions::trim_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<TrimState*>(context->get_function_state(scope));
+        delete state;
     }
-    return std::string(str.data + begin, end - begin + 1);
+
+    return Status::OK();
 }
 
 StatusOr<ColumnPtr> StringFunctions::trim(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedUnaryFunction<AdaptiveTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
-}
-
-// ltrim
-DEFINE_STRING_UNARY_FN_WITH_IMPL(ltrimImpl, str) {
-    int begin = 0;
-    while (begin < str.size && str.data[begin] == ' ') {
-        ++begin;
-    }
-    return std::string(str.data + begin, str.size - begin);
+    return trim_impl<TRIM_BOTH>(context, columns);
 }
 
 StatusOr<ColumnPtr> StringFunctions::ltrim(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedUnaryFunction<AdaptiveLTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
-}
-
-// rtrim
-DEFINE_STRING_UNARY_FN_WITH_IMPL(rtrimImpl, str) {
-    if (str.size == 0) {
-        return std::string("");
-    }
-
-    int end = str.size - 1;
-    while (end > 0 && str.data[end] == ' ') {
-        --end;
-    }
-    return std::string(str.data, (str.data[end] == ' ') ? end : end + 1);
+    return trim_impl<TRIM_LEFT>(context, columns);
 }
 
 StatusOr<ColumnPtr> StringFunctions::rtrim(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedUnaryFunction<AdaptiveRTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
+    return trim_impl<TRIM_RIGHT>(context, columns);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_intImpl, v) {
