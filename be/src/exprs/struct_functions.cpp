@@ -19,7 +19,7 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> StructFunctions::struct_ctor(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StructFunctions::row(FunctionContext* context, const Columns& columns) {
     Columns field_columns;
     for (auto& column : columns) {
         field_columns.emplace_back(column->clone());

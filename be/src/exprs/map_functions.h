@@ -28,7 +28,7 @@ namespace starrocks {
 
 class MapFunctions {
 public:
-    DEFINE_VECTORIZED_FN(map);
+    DEFINE_VECTORIZED_FN(map_from_arrays);
 
     DEFINE_VECTORIZED_FN(map_size);
 

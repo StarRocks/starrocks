@@ -24,7 +24,7 @@ namespace starrocks {
 // format of Array type.
 // For example,
 //  map([1, 2], [3, 4]) will generate a map which value is {1=3,2=4}
-StatusOr<ColumnPtr> MapFunctions::map(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(2, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
