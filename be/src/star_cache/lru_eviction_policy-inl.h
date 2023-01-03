@@ -36,15 +36,14 @@ bool LruEvictionPolicy<T>::add(const T& id) {
 }
 
 template <typename T>
-bool LruEvictionPolicy<T>::touch(const T& id) {
+typename EvictionPolicy<T>::HandlePtr LruEvictionPolicy<T>::touch(const T& id) {
     char* key = makeup_key(id);
     Cache::Handle* h = _lru_cache->lookup(CacheKey(key, sizeof(T)));
     free_key(key);
     if (h) {
-        _lru_cache->release(h);
-        return true;
+        return std::make_shared<typename EvictionPolicy<T>::Handle>(this, h);
     }
-    return false;
+    return nullptr;
 }
 
 template <typename T>
@@ -70,6 +69,12 @@ void LruEvictionPolicy<T>::evict_for(const T& id, size_t count, std::vector<T>* 
         lru_h->free();
     }
     free_key(key);
+}
+
+template <typename T>
+void LruEvictionPolicy<T>::release(void* hdl) {
+    auto h = reinterpret_cast<Cache::Handle*>(hdl);
+    _lru_cache->release(h);
 }
 
 template <typename T>

@@ -4,7 +4,7 @@
 
 #include <atomic>
 #include "common/status.h"
-#include "star_cache/block_item.h"
+#include "star_cache/cache_item.h"
 #include "star_cache/eviction_policy.h"
 
 namespace starrocks::starcache {
@@ -30,22 +30,26 @@ public:
 
 	Status init(const MemCacheOptions& options);
 
-    Status write_block(const BlockKey& key, MemBlockItem* block,
-                       const std::vector<BlockSegment*>& segments) const;
-    Status read_block(const BlockKey& key, MemBlockItem* block, off_t offset, size_t size,
+    // Return old segments instead of freeing them directly because they can be freed without locks
+    Status write_block(const BlockKey& key, MemBlockPtr block,
+                       const std::vector<BlockSegment*>& segments, std::vector<BlockSegment*>* old_segments) const;
+    Status read_block(const BlockKey& key, MemBlockPtr block, off_t offset, size_t size,
                       std::vector<BlockSegment>* segments) const;
 
-    MemBlockItem* new_block_item(const BlockKey& key, BlockState state) const;
-    void free_block_item(MemBlockItem* block) const;
-
+    CacheItemPtr new_cache_item(const std::string& cache_key, uint32_t block_count, size_t size,
+                                uint64_t expire_time);
+    MemBlockPtr new_block_item(const BlockKey& key, BlockState state) const;
     BlockSegment* new_block_segment(off_t offset, const IOBuf& buf) const;
-    void set_block_segment(MemBlockItem* block, int start_slice_index, int end_slice_index,
+    void set_block_segment(MemBlockPtr block, int start_slice_index, int end_slice_index,
                            BlockSegment* segment) const;
     void free_block_segment(BlockSegment* segment) const;
+    void free_block_segments(const std::vector<BlockSegment*> segments) const;
 
     void evict_track(const BlockKey& key) const;
     void evict_untrack(const BlockKey& key) const;
+    EvictionPolicy<BlockKey>::HandlePtr evict_touch(const BlockKey& key) const;
     void evict_for(const BlockKey& key, size_t count, std::vector<BlockKey>* evicted) const;
+    void evict(size_t count, std::vector<BlockKey>* evicted) const;
 
 private:
     MemSpaceManager* _space_manager = nullptr;

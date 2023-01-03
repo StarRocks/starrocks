@@ -23,21 +23,11 @@
 
 namespace starrocks {
 
-/*
-std::once_flag config_init_flag;
-static void init_config() {
-    std::call_once(config_init_flag, []() {
-        std::string conffile = "/home/gavin/work/code/SR/dev/starrocks/conf/be.conf";
-        if (!starrocks::config::init(conffile.c_str(), false)) {
-            fprintf(stderr, "error read config file. \n");
-        }
-    });
-}
-*/
-
 const size_t KB = 1024;
 const size_t MB = KB * 1024;
 const size_t GB = MB * 1024;
+
+const std::string DISK_CACHE_PATH = "./ut_dir/block_disk_cache";
 
 void delete_dir_content(const std::string& dir_path)
 {
@@ -131,7 +121,7 @@ public:
     }
 
     static void Teardown(const benchmark::State& state) {
-        //delete_dir_content("./ut_dir/block_disk_cache");
+        delete_dir_content(DISK_CACHE_PATH);
     }
 
     static char index2ch(size_t index) {
@@ -199,13 +189,17 @@ public:
                                        << ", index: " << index << ", key: " << _ctx->obj_keys[index];
                 }
             } else if (res.status().is_not_found()) {
-                std::string value = gen_obj_value(index, _params->obj_value_size, _ctx);
+                std::string v = gen_obj_value(index, _params->obj_value_size, _ctx);
                 start_us = MonotonicMicros();
-                Status st = _cache->write_cache(_ctx->obj_keys[index], value.data(), _params->obj_value_size, 0);
+                Status st = _cache->write_cache(_ctx->obj_keys[index], v.data(), _params->obj_value_size, 0);
                 ASSERT_TRUE(st.ok()) << "write cache failed: " << st.get_error_msg();
                 *(_ctx->write_latency) <<  MonotonicMicros() - start_us;
-                *(_ctx->write_bytes) << value.size();
+                *(_ctx->write_bytes) << v.size();
                 *(_ctx->write_op_count) << 1;
+
+                char* read_value = new char[_params->obj_value_size];
+                auto res = _cache->read_cache(_ctx->obj_keys[index], read_value, 0, _params->read_size);
+                delete[] read_value;
             } else {
                 ASSERT_TRUE(false) << "read cache failed: " << res.status().get_error_msg();
             }
@@ -213,24 +207,26 @@ public:
         }
     }
 
-    void do_populate() {
+    void do_prepare(bool pre_populate) {
         _ctx->obj_keys.reserve(_params->obj_count);
         for (size_t i = 0; i < _params->obj_count; ++i) {
             std::string key = gen_obj_key(i, _params->obj_key_size, _ctx);
-            std::string value = gen_obj_value(i, _params->obj_value_size, _ctx);
+            if  (pre_populate) {
+                std::string value = gen_obj_value(i, _params->obj_value_size, _ctx);
 
-            int64_t start_us = MonotonicMicros();
-            Status st = _cache->write_cache(key, value.data(), _params->obj_value_size, 0);
-            ASSERT_OK(st);
+                int64_t start_us = MonotonicMicros();
+                Status st = _cache->write_cache(key, value.data(), _params->obj_value_size, 0);
+                ASSERT_OK(st);
 
-            char *read_value = new char[_params->obj_value_size];
-            std::string read_key = i == 0 ? key : _ctx->obj_keys[0];
-            auto res = _cache->read_cache(read_key, read_value, 0, _params->read_size);
-            delete[] read_value;
+                char *read_value = new char[_params->obj_value_size];
+                std::string read_key = i == 0 ? key : _ctx->obj_keys[0];
+                auto res = _cache->read_cache(read_key, read_value, 0, _params->read_size);
+                delete[] read_value;
 
-            *(_ctx->write_latency) <<  MonotonicMicros() - start_us;
-            *(_ctx->write_bytes) << value.size();
-            *(_ctx->write_op_count) << 1;
+                *(_ctx->write_latency) <<  MonotonicMicros() - start_us;
+                *(_ctx->write_bytes) << value.size();
+                *(_ctx->write_op_count) << 1;
+            }
             _ctx->obj_keys.push_back(key);
         }
     }
@@ -255,9 +251,7 @@ static void do_bench_cache(benchmark::State& state, const CacheOptions& options,
     if (state.thread_index == 0) {
         suite = std::make_shared<BlockCacheBenchSuite>(options, params);
         suite->Setup(state);
-        if (suite->params()->pre_populate) {
-            suite->do_populate();
-        }
+        suite->do_prepare(suite->params()->pre_populate);
     }
 
     for(auto _ : state) {
@@ -287,22 +281,20 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     do_bench_cache(state, std::get<0>(args_tuple).first, std::get<0>(args_tuple).second);
 }
 
-[[maybe_unused]] static std::pair<CacheOptions,BlockCacheBenchSuite::BenchParams> read_mem_suite(
-        CacheEngine cache_engine) {
+[[maybe_unused]] static std::pair<CacheOptions,BlockCacheBenchSuite::BenchParams> read_mem_suite() {
     CacheOptions options;
     options.mem_space_size = 5 * GB;
-    options.meta_path = "./ut_dir/block_disk_cache";
-    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = 1 * GB });
+    options.meta_path = DISK_CACHE_PATH;
+    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 1 * GB });
     options.block_size = 4 * MB;
 
     BlockCacheBenchSuite::BenchParams params;
-    params.cache_engine = cache_engine;
     params.obj_count = 1000;
     params.obj_key_size = 20;
     params.obj_value_size = 1 * MB;
     params.read_size = 1 * MB;
     params.total_op_count = 300000;
-    params.check_value = false;
+    params.check_value = true;
 
     return std::make_pair(options, params);
 }
@@ -310,8 +302,8 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
 [[maybe_unused]] static std::pair<CacheOptions,BlockCacheBenchSuite::BenchParams> read_disk_suite() {
     CacheOptions options;
     options.mem_space_size = 300 * MB;
-    options.meta_path = "./ut_dir/block_disk_cache";
-    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = 10 * GB });
+    options.meta_path = DISK_CACHE_PATH;
+    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB });
     options.block_size = 4 * MB;
 
     BlockCacheBenchSuite::BenchParams params;
@@ -319,32 +311,80 @@ static void BM_bench_starcache(benchmark::State& state, Args&&... args) {
     params.obj_key_size = 20;
     params.obj_value_size = 1 * MB;
     params.read_size = 1 * MB;
-    params.total_op_count = 10000;
+    params.total_op_count = 1000;
+    params.check_value = true;
+
+    return std::make_pair(options, params);
+}
+
+[[maybe_unused]] static std::pair<CacheOptions,BlockCacheBenchSuite::BenchParams> read_write_remove_disk_suite() {
+    CacheOptions options;
+    options.mem_space_size = 300 * MB;
+    options.meta_path = DISK_CACHE_PATH;
+    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB });
+    options.block_size = 4 * MB;
+
+    BlockCacheBenchSuite::BenchParams params;
+    params.obj_count = 1000;
+    params.obj_key_size = 20;
+    params.obj_value_size = 1 * MB;
+    params.read_size = 1 * MB;
+    params.total_op_count = 2000;
+    params.check_value = false;
+    params.pre_populate = false;
+    params.remove_op_ratio = 30;
+
+    return std::make_pair(options, params);
+}
+
+[[maybe_unused]] static std::pair<CacheOptions,BlockCacheBenchSuite::BenchParams> random_offset_read_suite() {
+    CacheOptions options;
+    options.mem_space_size = 300 * MB;
+    options.meta_path = DISK_CACHE_PATH;
+    options.disk_spaces.push_back({.path = DISK_CACHE_PATH, .size = 10 * GB });
+    options.block_size = 4 * MB;
+
+    BlockCacheBenchSuite::BenchParams params;
+    params.obj_count = 1000;
+    params.obj_key_size = 20;
+    params.obj_value_size = 1 * MB;
+    params.read_size = 256 * KB;
+    params.random_read_offset = true;
+    params.total_op_count = 1000;
     params.check_value = false;
 
     return std::make_pair(options, params);
 }
 
 // Read Mem 
-//BENCHMARK_CAPTURE(BM_bench_cache, bench_read_mem, read_mem_suite(CacheEngine::CACHELIB))->Threads(8)->Threads(16)->Threads(32);
-//BENCHMARK_CAPTURE(BM_bench_cache, bench_read_mem, read_mem_suite(CacheEngine::STARCACHE))->Threads(8)->Threads(16)->Threads(32);
+BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_disk, read_mem_suite())->Threads(32);
+BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_disk, read_mem_suite())->Threads(32);
 
 // Read Disk
-BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_mem, read_disk_suite())->Threads(16);
-BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_mem, read_disk_suite())->Threads(16);
+BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_disk, read_disk_suite())->Threads(16);
+BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_disk, read_disk_suite())->Threads(16);
+
+// Read+Write+Remove Disk
+BENCHMARK_CAPTURE(BM_bench_cachelib, bench_read_write_remove_disk, read_write_remove_disk_suite())->Threads(16);
+BENCHMARK_CAPTURE(BM_bench_starcache, bench_read_write_remove_disk, read_write_remove_disk_suite())->Threads(16);
+
+// Random offset for Read+Write+Remove Disk
+BENCHMARK_CAPTURE(BM_bench_cachelib, bench_random_offset_read_suite, random_offset_read_suite())->Threads(16);
+BENCHMARK_CAPTURE(BM_bench_starcache, bench_random_offset_read_suite, random_offset_read_suite())->Threads(16);
 
 } // namespace starrocks
 
 //BENCHMARK_MAIN();
 int main(int argc, char** argv) {
     starrocks::init_glog("be_bench", true);
-    std::filesystem::create_directories("./ut_dir/block_disk_cache");
+    std::filesystem::create_directories(starrocks::DISK_CACHE_PATH);
+    starrocks::delete_dir_content(starrocks::DISK_CACHE_PATH);
 
     ::benchmark::Initialize(&argc, argv);
     if (::benchmark::ReportUnrecognizedArguments(argc, argv)) return 1;
     ::benchmark::RunSpecifiedBenchmarks();
     ::benchmark::Shutdown();
 
-    //std::filesystem::remove_all("./ut_dir");
+    std::filesystem::remove_all("./ut_dir");
     return 0;
 }

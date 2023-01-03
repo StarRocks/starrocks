@@ -3,7 +3,9 @@
 #pragma once
 
 #include <atomic>
+#include <shared_mutex>
 #include <butil/iobuf.h>
+#include "star_cache/macros.h"
 #include "star_cache/util.h"
 
 namespace starrocks::starcache {
@@ -36,19 +38,15 @@ struct MemBlockItem {
         memset(slices, 0, sizeof(BlockSegment*) * slice_count);
     }
     ~MemBlockItem() {
-        BlockSegment* cur_segment = nullptr;
-        for (size_t i = 0; i < block_slice_count(); ++i) {
-           if (slices[i] != cur_segment) {
-                delete cur_segment;
-                cur_segment = slices[i];
-            }
-        }
-        delete cur_segment;
         delete[] slices;
     }
 
     void list_segments(std::vector<BlockSegment*> *segments) {
-        for (size_t i = 0; i < block_slice_count(); ++i) {
+        list_segments(0, block_slice_count() - 1, segments);
+    }
+
+    void list_segments(size_t start_slice, size_t end_slice, std::vector<BlockSegment*> *segments) {
+        for (size_t i = start_slice; i < end_slice; ++i) {
             if (slices[i] && (segments->empty() || slices[i] != segments->back())) {
                 segments->push_back(slices[i]);
             }
@@ -71,14 +69,39 @@ struct DiskBlockItem {
     }
 };
 
-struct BlockItem {
-    MemBlockItem* mem_block_item = nullptr;
-    DiskBlockItem* disk_block_item = nullptr;
+using MemBlockPtr = std::shared_ptr<MemBlockItem>;
+using DiskBlockPtr = std::shared_ptr<DiskBlockItem>;
 
-    ~BlockItem() {
-        delete mem_block_item;
-        delete disk_block_item;
+struct BlockItem {
+    MemBlockPtr mem_block_item = nullptr;
+    DiskBlockPtr disk_block_item = nullptr;
+
+    void set_mem_block(MemBlockPtr mem_block, std::unique_lock<std::shared_mutex>* lck=nullptr) {
+        LOCK_IF(lck, lck != nullptr);
+        mem_block_item = mem_block;
+        UNLOCK_IF(lck, lck != nullptr);
     }
+
+    void set_disk_block(DiskBlockPtr disk_block, std::unique_lock<std::shared_mutex>* lck=nullptr) {
+        LOCK_IF(lck, lck != nullptr);
+        disk_block_item = disk_block;
+        UNLOCK_IF(lck, lck != nullptr);
+    }
+
+    MemBlockPtr mem_block(std::shared_lock<std::shared_mutex>* lck=nullptr) {
+        LOCK_IF(lck, lck != nullptr);
+        auto mem_block = mem_block_item;
+        UNLOCK_IF(lck, lck != nullptr);
+        return mem_block;
+    }
+
+    DiskBlockPtr disk_block(std::shared_lock<std::shared_mutex>* lck=nullptr) {
+        LOCK_IF(lck, lck != nullptr);
+        auto disk_block = disk_block_item;
+        UNLOCK_IF(lck, lck != nullptr);
+        return disk_block;
+    }
+
 };
 
 } // namespace starrocks::starcache

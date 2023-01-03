@@ -19,7 +19,7 @@ DEFINE_uint32(mem_evict_batch, 50,
 DEFINE_uint32(disk_evict_batch, 50,
               "The count of elements that need to be evicted in a disk eviction");
 
-DEFINE_uint32(max_retry_when_allocate, 5,
+DEFINE_uint32(max_retry_when_allocate, 10,
               "The maximum retry count when allocate segment or block failed");
 
 DEFINE_uint32(admission_max_check_size, 65536,
@@ -35,5 +35,8 @@ DEFINE_double(promotion_mem_threshold, 0.8,
 DEFINE_bool(enable_os_page_cache, false,
               "Whether to enable os page cache, if not, the disk data will be processed in direct io mode");
 DEFINE_uint32(io_align_unit_size, 4096, "The unit size for direct io alignment"); // 4KB
+
+DEFINE_uint32(access_index_shard_bits, 5, "The shard bits of access index hashmap"); // 32 shards
+DEFINE_uint32(sharded_lock_shard_bits, 12, "The shard bits of sharded lock manager"); // 4096 shards
 
 } // namespace starrocks::starcache

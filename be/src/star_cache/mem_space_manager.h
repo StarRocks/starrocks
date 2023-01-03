@@ -18,13 +18,12 @@ public:
 
     void add_cache_zone(void* base_addr, size_t size);
 
-    BlockSegment* alloc_segment(size_t size);
-    void free_segment(BlockSegment* segment);
+    bool inc_mem(size_t size);
+    void dec_mem(size_t size);
 
     size_t quota_bytes() const {
         return _quota_bytes;
     }
-
     size_t used_bytes() const {
         return _used_bytes;
     }

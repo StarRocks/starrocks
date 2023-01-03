@@ -59,22 +59,23 @@ private:
     Status _read_cache_item(const CacheId& cache_id, CacheItemPtr cache_item, off_t offset, size_t size, IOBuf* buf);
     void _remove_cache_item(const CacheId& cache_id, CacheItemPtr cache_item);
 
-    BlockItem* _get_block(const BlockKey& block_key);
     Status _write_block(CacheItemPtr cache_item, const BlockKey& block_key, const IOBuf& buf);
     Status _read_block(CacheItemPtr cache_item, const BlockKey& block_key, off_t offset, size_t size,
                        IOBuf* buf);
 
-    Status _flush_block(const BlockKey& block_key, BlockItem* block);
-    void _promote_block_segments(const BlockKey& block_key, BlockItem* block,
+    Status _flush_block(CacheItemPtr cache_item, const BlockKey& block_key);
+    void _promote_block_segments(CacheItemPtr cache_item, const BlockKey& block_key,
                                  const std::vector<BlockSegment>& segments);
 
+    void _evict_mem_block();
     void _evict_for_mem_block(const BlockKey& block_key);
+    void _process_evicted_mem_blocks(const std::vector<BlockKey>& evicted);
     void _evict_for_disk_block(const CacheId& cache_id);
 
+    CacheItemPtr _alloc_cache_item(const std::string& cache_key, uint32_t block_count, size_t size,
+                                   uint64_t expire_time);
     BlockSegment* _alloc_block_segment(const BlockKey& block_key, off_t offset, const IOBuf& buf);
-    DiskBlockItem* _alloc_disk_block(const BlockKey& block_key);
-    bool _set_mem_block(CacheItemPtr cache_item, uint32_t block_index, MemBlockItem* mem_block);
-    bool _set_disk_block(CacheItemPtr cache_item, uint32_t block_index, DiskBlockItem* disk_block);
+    DiskBlockPtr _alloc_disk_block(const BlockKey& block_key);
 
     std::unique_ptr<MemCache> _mem_cache = nullptr;
     std::unique_ptr<DiskCache> _disk_cache = nullptr;

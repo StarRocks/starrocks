@@ -5,7 +5,7 @@
 #include <shared_mutex>
 #include <atomic>
 #include "common/status.h"
-#include "star_cache/common/thread_safe_hash_map.h"
+#include "star_cache/common/parallel_hash_map.h"
 #include "star_cache/access_index.h"
 
 namespace starrocks::starcache {
@@ -17,7 +17,7 @@ public:
     bool remove(const CacheId& id) override;
 
 private:
-    ThreadSafeHashMap<CacheId, CacheItemPtr> _cache_items;
+    ParallelHashMap<CacheId, CacheItemPtr> _cache_items;
 };
 
 } // namespace starrocks::starcache

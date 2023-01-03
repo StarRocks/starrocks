@@ -7,6 +7,7 @@
 #include "star_cache/hashtable_access_index.h"
 #include "star_cache/size_based_admission_policy.h"
 #include "star_cache/capacity_based_promotion_policy.h"
+#include "star_cache/sharded_lock_manager.h"
 
 #include "star_cache/mem_space_manager.h"
 
@@ -62,7 +63,7 @@ Status StarCache::set(const std::string& cache_key, const IOBuf& buf, uint64_t t
     size_t block_size = config::FLAGS_block_size;
     size_t block_count = (buf.size()  - 1) / block_size + 1;
     uint64_t expire_time = MonotonicSeconds() + ttl_seconds;
-    cache_item = std::make_shared<CacheItem>(cache_key, block_count, buf.size(), expire_time);
+    cache_item = _alloc_cache_item(cache_key, block_count, buf.size(), expire_time);
 
     uint32_t start_block_index = 0;
     uint32_t end_block_index = (buf.size() - 1) / block_size;
@@ -84,6 +85,7 @@ Status StarCache::set(const std::string& cache_key, const IOBuf& buf, uint64_t t
 
 Status StarCache::_write_block(CacheItemPtr cache_item, const BlockKey& block_key, const IOBuf& buf) {
     BlockItem& block = cache_item->blocks[block_key.block_index];
+    auto wlck = block_unique_lock(block_key);
     auto location = _promotion_policy->check_write(cache_item, block_key);
 
     if (location == BlockLocation::MEM) {
@@ -104,34 +106,23 @@ Status StarCache::_write_block(CacheItemPtr cache_item, const BlockKey& block_ke
             return Status::InternalError("allocate segment failed");
         }
         auto mem_block = _mem_cache->new_block_item(block_key, BlockState::DIRTY);
-        Status st = _mem_cache->write_block(block_key, mem_block, { segment });
-        if(!st.ok() || !_set_mem_block(cache_item, block_key.block_index, mem_block)) {
+        Status st = _mem_cache->write_block(block_key, mem_block, { segment }, nullptr);
+        if (!st.ok()) {
             _mem_cache->free_block_segment(segment);
-            delete mem_block;
-            return Status::InternalError("the block is released");
+            return st;
         }
+        block.set_mem_block(mem_block, &wlck);
         _mem_cache->evict_track(block_key);
-
     } else if (location == BlockLocation::DISK) {
-        auto disk_block = block.disk_block_item;
-        if (disk_block) {
-            return _disk_cache->write_block(block_key.cache_id, disk_block, 0, buf);
-        }
         // allocate block and evict
-        disk_block = _alloc_disk_block(block_key);
+        auto disk_block = _alloc_disk_block(block_key);
         if (!disk_block) {
             return Status::InternalError("allocate disk block failed");
         }
-
         Status st = _disk_cache->write_block(block_key.cache_id, disk_block, 0, buf);
-        if (!st.ok()) {
-            _disk_cache->free_block_item(disk_block);
-            return st;
-        }
-         if (!_set_disk_block(cache_item, block_key.block_index, disk_block)) {
-            _disk_cache->free_block_item(disk_block);
-            return Status::InternalError("the object is released");
-        }
+        RETURN_IF_ERROR(st);
+
+        block.set_disk_block(disk_block, &wlck);
         // If the cache has been added to eviction component before, the `add` operation will do nothing.
         _disk_cache->evict_track(block_key.cache_id);
 
@@ -202,14 +193,20 @@ Status StarCache::_read_cache_item(const CacheId& cache_id, CacheItemPtr cache_i
 Status StarCache::_read_block(CacheItemPtr cache_item, const BlockKey& block_key, off_t offset, size_t size,
                               IOBuf* buf) {
     BlockItem& block = cache_item->blocks[block_key.block_index];
+    auto wlck = block_unique_lock(block_key);
+    auto rlck = block_shared_lock(block_key);
+    auto mem_block = block.mem_block(&rlck);
+    auto disk_block = block.disk_block(&rlck);
     std::vector<BlockSegment> segments;
-    _mem_cache->read_block(block_key, block.mem_block_item, offset, size, &segments);
+    _mem_cache->read_block(block_key, mem_block, offset, size, &segments);
     std::vector<BlockSegment> disk_segments;
     off_t cursor = offset;
+
+    wlck.lock();
     for (auto& seg : segments) {
         if (seg.offset > cursor) {
             IOBuf block_buf;
-            RETURN_IF_ERROR(_disk_cache->read_block(block_key.cache_id, block.disk_block_item, cursor,
+            RETURN_IF_ERROR(_disk_cache->read_block(block_key.cache_id, disk_block, cursor,
                                                     seg.offset - cursor, &block_buf));
             buf->append(block_buf);
             disk_segments.emplace_back(cursor, block_buf);
@@ -219,15 +216,16 @@ Status StarCache::_read_block(CacheItemPtr cache_item, const BlockKey& block_key
     }
     if (buf->size() < size) {
         IOBuf block_buf;
-        RETURN_IF_ERROR(_disk_cache->read_block(block_key.cache_id, block.disk_block_item, cursor,
+        RETURN_IF_ERROR(_disk_cache->read_block(block_key.cache_id, disk_block, cursor,
                                                 size - buf->size(), &block_buf));
         buf->append(block_buf);
         disk_segments.emplace_back(cursor, block_buf);
     }
+    wlck.unlock();
 
     // TODO: The follow procedure can be done asynchronously
     if (!disk_segments.empty() && _promotion_policy->check_promote(cache_item, block_key)) {
-        _promote_block_segments(block_key, &block, disk_segments);
+        _promote_block_segments(cache_item, block_key, disk_segments);
     }
     return Status::OK();
 }
@@ -247,60 +245,76 @@ Status StarCache::remove(const std::string& cache_key) {
 }
 
 void StarCache::_remove_cache_item(const CacheId& cache_id, CacheItemPtr cache_item) {
-    for (size_t i = 0; i < cache_item->block_count; ++i) {
-        _set_disk_block(cache_item, i, nullptr);
-        _set_mem_block(cache_item, i, nullptr);
+    for (uint32_t i = 0; i < cache_item->block_count; ++i) {
+        auto& block = cache_item->blocks[i];
+        auto wlck = block_unique_lock({ cache_id, i });
+        block.set_disk_block(nullptr, &wlck);
+        block.set_mem_block(nullptr, &wlck);
     }
     _access_index->remove(cache_id);
 }
 
-Status StarCache::_flush_block(const BlockKey& block_key, BlockItem* block) {
-    CacheItemPtr cache_item = _access_index->find(block_key.cache_id);
-    DCHECK(cache_item);
+Status StarCache::_flush_block(CacheItemPtr cache_item, const BlockKey& block_key) {
+    if (cache_item->is_released()) {
+        LOG(INFO) << "The block to flush is released, key: " << block_key;
+        return Status::OK();
+    }
+
+    auto& block = cache_item->blocks[block_key.block_index];
     auto admission = _admission_policy->check_admission(cache_item, block_key);
     if (admission == BlockAdmission::SKIP) {
         _mem_cache->evict_track(block_key);
         return Status::OK();
     } else if (admission == BlockAdmission::DELETE) {
-        _set_mem_block(cache_item, block_key.block_index, nullptr);
+        auto wlck = block_unique_lock(block_key);
+        block.set_mem_block(nullptr, &wlck);
         return Status::OK();
     }
 
-    LOG(INFO) << "[Gavin] flush block: " << block_key;
     // admission == AdmissionPolicy::FLUSH
+    auto rlck = block_shared_lock(block_key);
+    auto wlck = block_unique_lock(block_key);
+    auto mem_block = block.mem_block(&rlck);
     Status st;
+
+    bool new_block = false;
     do {
-        auto disk_block = block->disk_block_item;
+        auto disk_block = block.disk_block(&rlck);
         if (!disk_block) {
             disk_block = _alloc_disk_block(block_key);
             if (!disk_block) {
                 st = Status::InternalError("allocate disk block failed");
                 break;
             }
+            new_block = true;
         }
 
         std::vector<BlockSegment*> segments;
-        block->mem_block_item->list_segments(&segments);
+        mem_block->list_segments(&segments);
+        // For new disk block instance, we have no need to write block under lock
+        // because the new disk block is invisible for other threads before `set_disk_block`.
+        LOCK_IF(&wlck, !new_block);
         for (auto seg : segments) {
             st = _disk_cache->write_block(block_key.cache_id, disk_block, seg->offset, seg->buf);
             if (!st.ok()) {
-                _disk_cache->free_block_item(disk_block);
                 LOG(WARNING) << "flush block failed: " << st.message();
                 break;
             }
         }
         if (!st.ok()) {
+            UNLOCK_IF(&wlck, !new_block);
             break;
         }
 
-        if (!block->disk_block_item && !_set_disk_block(cache_item, block_key.block_index, disk_block)) {
-            _disk_cache->free_block_item(disk_block);
-            st = Status::InternalError("the block is released");
+        if (new_block) {
+            block.set_disk_block(disk_block, &wlck); 
+        } else {
+            block.set_disk_block(disk_block);
+            wlck.unlock();
         }
-        
     } while (0);
 
-    _set_mem_block(cache_item, block_key.block_index, nullptr);
+    block.set_mem_block(nullptr, &wlck);
     if (st.ok()) {
         // If the cache has been added to eviction component before, the `add` operation will do nothing.
         _disk_cache->evict_track(block_key.cache_id);
@@ -308,8 +322,10 @@ Status StarCache::_flush_block(const BlockKey& block_key, BlockItem* block) {
     return st;
 }
 
-void StarCache::_promote_block_segments(const BlockKey& block_key, BlockItem* block,
+void StarCache::_promote_block_segments(CacheItemPtr cache_item, const BlockKey& block_key,
                                         const std::vector<BlockSegment>& segments) {
+    auto handle = _mem_cache->evict_touch(block_key);
+    auto& block = cache_item->blocks[block_key.block_index];
     std::vector<BlockSegment*> mem_segments;
     for (auto& seg : segments) {
         BlockSegment* segment = _alloc_block_segment(block_key, seg.offset, seg.buf);
@@ -322,13 +338,47 @@ void StarCache::_promote_block_segments(const BlockKey& block_key, BlockItem* bl
         return;
     }
 
-    auto& mem_block = block->mem_block_item;
+    auto wlck = block_unique_lock(block_key);
+    wlck.lock();
+
+    auto mem_block = block.mem_block();
+    // For new mem block instance, we have no need to write block under lock
+    // because the new mem block is invisible for other threads before `set_mem_block`.
     if (!mem_block) {
+        wlck.unlock();
         mem_block = _mem_cache->new_block_item(block_key, BlockState::CLEAN);
+        DCHECK(mem_block);
+
+        Status st = _mem_cache->write_block(block_key, mem_block, mem_segments, nullptr);
+        if(!st.ok()) {
+            _mem_cache->free_block_segments(mem_segments);
+        }
+        block.set_mem_block(mem_block, &wlck);
+    } else {
+        std::vector<BlockSegment*> old_segments;
+        Status st = _mem_cache->write_block(block_key, mem_block, mem_segments, &old_segments);
+        if(!st.ok()) {
+            _mem_cache->free_block_segments(mem_segments);
+        }
+        block.set_mem_block(mem_block);
+        wlck.unlock();
+        _mem_cache->free_block_segments(old_segments);
     }
-    DCHECK(mem_block);
-    _mem_cache->write_block(block_key, mem_block, mem_segments);
-    _mem_cache->evict_track(block_key);
+    if (!handle) {
+        _mem_cache->evict_track(block_key);
+    }
+}
+
+void StarCache::_evict_mem_block() {
+    std::vector<BlockKey> evicted;
+    _mem_cache->evict(config::FLAGS_mem_evict_batch, &evicted);
+    if (evicted.empty()) {
+        auto space_mgr = MemSpaceManager::GetInstance();
+        LOG(WARNING) << "evict no blocks"
+                     << ", quota: " << space_mgr->quota_bytes()
+                     << ", used: " << space_mgr->used_bytes();
+    }
+    _process_evicted_mem_blocks(evicted);
 }
 
 void StarCache::_evict_for_mem_block(const BlockKey& block_key) {
@@ -340,17 +390,30 @@ void StarCache::_evict_for_mem_block(const BlockKey& block_key) {
                      << ", quota: " << space_mgr->quota_bytes()
                      << ", used: " << space_mgr->used_bytes();
     }
+    _process_evicted_mem_blocks(evicted);
+}
+
+void StarCache::_process_evicted_mem_blocks(const std::vector<BlockKey>& evicted) {
     for (auto& key : evicted) {
-        BlockItem* block = _get_block(key);
-        if (!block) {
+        auto cache_item = _access_index->find(key.cache_id);
+        if (!cache_item) {
+            LOG(WARNING) << "block does not exist when evict " << key;
             continue;
         }
-        if (block->mem_block_item->state == BlockState::DIRTY || !block->disk_block_item) {
-            _flush_block(key, block);
+        auto& block = cache_item->blocks[key.block_index];
+        auto wlck = block_unique_lock(key);
+        wlck.lock();
+        auto mem_block = block.mem_block();
+        if (!mem_block) {
+            wlck.unlock();
+            continue;
+        }
+        if (mem_block->state == BlockState::DIRTY || !block.disk_block()) {
+            wlck.unlock();
+            _flush_block(cache_item, key);
         } else {
-            CacheItemPtr cache_item = _access_index->find(key.cache_id);
-            DCHECK(cache_item);
-            _set_mem_block(cache_item, key.block_index, nullptr);
+            block.set_mem_block(nullptr);
+            wlck.unlock();
         }
     }
 }
@@ -372,6 +435,21 @@ void StarCache::_evict_for_disk_block(const CacheId& cache_id) {
     }
 }
 
+CacheItemPtr StarCache::_alloc_cache_item(const std::string& cache_key, uint32_t block_count, size_t size,
+                                          uint64_t expire_time) {
+    // allocate cache item and evict
+    CacheItemPtr cache_item(nullptr);
+    for (size_t i = 0 ; i < config::FLAGS_max_retry_when_allocate; ++i) {
+        cache_item = _mem_cache->new_cache_item(cache_key, block_count, size, expire_time);
+        if (cache_item) {
+            break;
+        }
+        _evict_mem_block();
+    }
+    LOG_IF(ERROR, !cache_item) << "allocate cache item failed too many times for cache: " << cache_key;
+    return cache_item;
+}
+
 BlockSegment* StarCache::_alloc_block_segment(const BlockKey& block_key, off_t offset, const IOBuf& buf) {
     // allocate segment and evict
     BlockSegment* segment = nullptr;
@@ -386,10 +464,10 @@ BlockSegment* StarCache::_alloc_block_segment(const BlockKey& block_key, off_t o
     return segment;
 }
 
-DiskBlockItem* StarCache::_alloc_disk_block(const BlockKey& block_key) {
+DiskBlockPtr StarCache::_alloc_disk_block(const BlockKey& block_key) {
     // allocate block and evict
     const CacheId& cache_id = block_key.cache_id;
-    DiskBlockItem* disk_block = nullptr;
+    DiskBlockPtr disk_block(nullptr);
     for (size_t i = 0 ; i < config::FLAGS_max_retry_when_allocate; ++i) {
         disk_block = _disk_cache->new_block_item(cache_id);
         if (disk_block) {
@@ -399,36 +477,6 @@ DiskBlockItem* StarCache::_alloc_disk_block(const BlockKey& block_key) {
     }
     LOG_IF(ERROR, !disk_block) << "allocate disk block failed too many times for block: " << block_key;
     return disk_block;
-}
-
-bool StarCache::_set_mem_block(CacheItemPtr cache_item, uint32_t block_index, MemBlockItem* mem_block) {
-    MemBlockItem* old_mem_block = nullptr;
-    if (!cache_item->set_mem_block(block_index, mem_block, &old_mem_block)) {
-        return false;
-    }
-    if (old_mem_block) {
-        _mem_cache->free_block_item(old_mem_block);
-    }
-    return true;
-}
-
-bool StarCache::_set_disk_block(CacheItemPtr cache_item, uint32_t block_index, DiskBlockItem* disk_block) {
-    DiskBlockItem* old_disk_block = nullptr;
-    if (!cache_item->set_disk_block(block_index, disk_block, &old_disk_block)) {
-        return false;
-    }
-    if (old_disk_block) {
-        _disk_cache->free_block_item(old_disk_block);
-    }
-    return true;
-}
-
-BlockItem* StarCache::_get_block(const BlockKey& block_key) {
-    auto cache_item = _access_index->find(block_key.cache_id);
-    if (!cache_item) {
-        return nullptr;
-    }
-    return &(cache_item->blocks[block_key.block_index]);
 }
 
 } // namespace starrocks::starcache

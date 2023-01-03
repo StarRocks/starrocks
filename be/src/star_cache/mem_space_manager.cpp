@@ -14,21 +14,22 @@ void MemSpaceManager::add_cache_zone(void* base_addr, size_t size) {
     _quota_bytes += size;
 }
 
-BlockSegment* MemSpaceManager::alloc_segment(size_t size) {
-    // TODO: allocate the segment from shared memory area
-    if (_used_bytes + size > _quota_bytes * 9 / 10) {
-        return nullptr;
-    }
-    BlockSegment* segment = new BlockSegment;
-    segment->buf.resize(size);
-    _used_bytes += size;
-    return segment;
+bool MemSpaceManager::inc_mem(size_t size) {
+    static size_t upper_threshold = _quota_bytes * 9 / 10;
+    size_t old_used_bytes = _used_bytes;
+    size_t new_used_bytes = 0;
+    do {
+        new_used_bytes = old_used_bytes + size;
+        if (new_used_bytes > upper_threshold) {
+            return false;
+        }
+    } while (!_used_bytes.compare_exchange_weak(old_used_bytes, new_used_bytes));
+    return true;
 }
 
-void MemSpaceManager::free_segment(BlockSegment* segment) {
+void MemSpaceManager::dec_mem(size_t size) {
     // TODO: free the segment from shared memory area
-    _used_bytes -= segment->buf.size();
-    delete segment;
+    _used_bytes -= size;
 }
 
 } // namespace starrocks::starcache

@@ -11,17 +11,21 @@ namespace starrocks::starcache {
 template <typename T>
 class LruEvictionPolicy : public EvictionPolicy<T> {
 public:
+    using HandlePtr = typename EvictionPolicy<T>::HandlePtr;
+
     LruEvictionPolicy(size_t capacity) : _lru_cache(new_lru_cache(capacity)) {}
 
     ~LruEvictionPolicy() override;
 
 	bool add(const T& id) override;
 
-	bool touch(const T& id) override;
+	HandlePtr touch(const T& id) override;
 
 	void evict(size_t count, std::vector<T>* evicted) override;
 
 	void evict_for(const T& id, size_t count, std::vector<T>* evicted) override;
+
+	void release(void* hdl) override;
 
 	void remove(const T& id) override;
 

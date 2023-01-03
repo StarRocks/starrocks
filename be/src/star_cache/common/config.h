@@ -25,5 +25,8 @@ DECLARE_double(admission_delete_probability);
 DECLARE_double(promotion_mem_threshold);
 DECLARE_bool(enable_os_page_cache);
 DECLARE_uint32(io_align_unit_size);
+
+DECLARE_uint32(access_index_shard_bits);
+DECLARE_uint32(sharded_lock_shard_bits);
     
 } // namespace starrocks::starcache

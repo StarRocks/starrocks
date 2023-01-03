@@ -48,14 +48,14 @@ Status BlockFile::write(off_t offset, const IOBuf& buf) {
         auto data = buf.backing_block(0).data();
         if (mem_need_align(data)) {
             void* aligned_data = align_buf(buf);
-            ret = ::write(_fd, aligned_data, buf.size()); 
+            ret = ::pwrite(_fd, aligned_data, buf.size(), offset); 
             free(aligned_data);
         } else {
-            ret = ::write(_fd, buf.backing_block(0).data(), buf.size()); 
+            ret = ::pwrite(_fd, buf.backing_block(0).data(), buf.size(), offset); 
         }
     } else if (!config::FLAGS_enable_os_page_cache) {
         void* aligned_data = align_buf(buf);
-        ret = ::write(_fd, aligned_data, buf.size()); 
+        ret = ::pwrite(_fd, aligned_data, buf.size(), offset); 
         free(aligned_data);
     } else {
         struct iovec iov[block_num];

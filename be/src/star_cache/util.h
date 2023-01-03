@@ -34,6 +34,10 @@ inline uint32_t slice_upper(int slice_index) {
     return (slice_index + 1) * config::FLAGS_slice_size - 1;
 }
 
+inline uint64_t block_shard(const BlockKey& key) {
+    return key.cache_id + key.block_index;
+}
+
 uint32_t crc32(const butil::IOBuf& buf);
 
 uint64_t cachekey2id(const std::string& key);

@@ -26,7 +26,7 @@ bool CapacityBasedPromotionPolicy::check_promote(const CacheItemPtr& cache_item,
     if (UNLIKELY(_is_mem_overload())) {
         return true;
     }
-    return true;
+    return true; // Return true temperally until we add access count infomaition
     //return false;
 }
 

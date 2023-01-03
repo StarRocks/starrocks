@@ -32,7 +32,7 @@ Status DiskCache::init(const DiskCacheOptions& options) {
     return Status::OK();
 }
 
-Status DiskCache::write_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
+Status DiskCache::write_block(const CacheId& cache_id, DiskBlockPtr block, off_t offset_in_block,
                               const IOBuf& buf) const {
     if (UNLIKELY(offset_in_block % config::FLAGS_slice_size != 0)) {
         return Status::InvalidArgument(
@@ -42,12 +42,13 @@ Status DiskCache::write_block(const CacheId& cache_id, DiskBlockItem* block, off
     if (config::FLAGS_enable_disk_checksum) {
         _update_block_checksum(block, offset_in_block, buf);
     }
-    return _space_manager->write_block({ block->dir_index, block->block_index }, offset_in_block, buf);
+    auto st =  _space_manager->write_block({ block->dir_index, block->block_index }, offset_in_block, buf);
+    return st;
 }
 
-Status DiskCache::read_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block, size_t size,
+Status DiskCache::read_block(const CacheId& cache_id, DiskBlockPtr block, off_t offset_in_block, size_t size,
                              IOBuf* buf) const {
-    _eviction_policy->touch(cache_id);
+    auto handle = evict_touch(cache_id);
     if (UNLIKELY(offset_in_block % config::FLAGS_slice_size != 0)) {
         return Status::InvalidArgument(
                 strings::Substitute("offset must be aligned by slice size $0", config::FLAGS_slice_size));
@@ -63,9 +64,8 @@ Status DiskCache::read_block(const CacheId& cache_id, DiskBlockItem* block, off_
     return Status::OK();
 }
 
-Status DiskCache::writev_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
+Status DiskCache::writev_block(const CacheId& cache_id, DiskBlockPtr block, off_t offset_in_block,
                                const std::vector<IOBuf*>& bufv) const {
-    _eviction_policy->touch(cache_id);
     if (UNLIKELY(offset_in_block % config::FLAGS_slice_size != 0)) {
         return Status::InvalidArgument(
                 strings::Substitute("offset must be aligned by slice size $0", config::FLAGS_slice_size));
@@ -79,9 +79,10 @@ Status DiskCache::writev_block(const CacheId& cache_id, DiskBlockItem* block, of
     return _space_manager->writev_block({ block->dir_index, block->block_index }, offset_in_block, bufv);
 }
 
-Status DiskCache::readv_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
+Status DiskCache::readv_block(const CacheId& cache_id, DiskBlockPtr block, off_t offset_in_block,
                               const std::vector<size_t> sizev, std::vector<IOBuf*>* bufv) const {
-    _eviction_policy->touch(cache_id);
+    auto handle = evict_touch(cache_id);
+
     if (UNLIKELY(offset_in_block % config::FLAGS_slice_size != 0)) {
         return Status::InvalidArgument(
                 strings::Substitute("offset must be aligned by slice size $0", config::FLAGS_slice_size));
@@ -100,7 +101,7 @@ Status DiskCache::readv_block(const CacheId& cache_id, DiskBlockItem* block, off
     return Status::OK();
 }
 
-void DiskCache::_update_block_checksum(DiskBlockItem* block, off_t offset_in_block, const IOBuf& buf) const {
+void DiskCache::_update_block_checksum(DiskBlockPtr block, off_t offset_in_block, const IOBuf& buf) const {
     const uint32_t slice_size = config::FLAGS_slice_size;
     for (off_t off = 0; off < buf.size(); off += slice_size) {
         int index = off2slice(offset_in_block + off);
@@ -110,7 +111,7 @@ void DiskCache::_update_block_checksum(DiskBlockItem* block, off_t offset_in_blo
     }
 }
 
-bool DiskCache::_check_block_checksum(DiskBlockItem* block, off_t offset_in_block, const IOBuf& buf) const {
+bool DiskCache::_check_block_checksum(DiskBlockPtr block, off_t offset_in_block, const IOBuf& buf) const {
     const uint32_t slice_size = config::FLAGS_slice_size;
     for (off_t off = 0; off < buf.size(); off += slice_size) {
         int index = off2slice(offset_in_block + off);
@@ -123,23 +124,21 @@ bool DiskCache::_check_block_checksum(DiskBlockItem* block, off_t offset_in_bloc
     return true;
 }
 
-DiskBlockItem* DiskCache::new_block_item(const CacheId& cache_id) const {
+DiskBlockPtr DiskCache::new_block_item(const CacheId& cache_id) const {
     BlockId block_id;
     Status st = _space_manager->alloc_block(&block_id);
     if (!st.ok()) {
         LOG(ERROR) << "allocate block failed: " << st.get_error_msg();
         return nullptr;
     }
-    DiskBlockItem* block_item = new DiskBlockItem(block_id.dir_index, block_id.block_index);
+    DiskBlockPtr block_item(new DiskBlockItem(block_id.dir_index, block_id.block_index),
+          [this](DiskBlockItem* block) {
+              BlockId block_id = { .dir_index = block->dir_index, .block_index = block->block_index };
+              Status st = _space_manager->free_block(block_id);
+              LOG_IF(ERROR, !st.ok()) << "free block failed" << st.get_error_msg();
+              delete block;
+          });
     return block_item;
-}
-
-Status DiskCache::free_block_item(DiskBlockItem* block) {
-    BlockId block_id = { .dir_index = block->dir_index, .block_index = block->block_index };
-    delete block;
-    Status st = _space_manager->free_block(block_id);
-    LOG_IF(ERROR, !st.ok()) << "free block failed" << st.get_error_msg();
-    return st;
 }
 
 void DiskCache::evict_track(const CacheId& id) const {
@@ -150,8 +149,16 @@ void DiskCache::evict_untrack(const CacheId& id) const {
     _eviction_policy->remove(id);
 }
 
+EvictionPolicy<CacheId>::HandlePtr DiskCache::evict_touch(const CacheId& id) const {
+    return _eviction_policy->touch(id);
+}
+
 void DiskCache::evict_for(const CacheId& id, size_t count, std::vector<CacheId>* evicted) const {
     _eviction_policy->evict_for(id, count, evicted);
+}
+
+void DiskCache::evict(size_t count, std::vector<CacheId>* evicted) const {
+    _eviction_policy->evict(count, evicted);
 }
 
 } // namespace starrocks::starcache
