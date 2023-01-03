@@ -271,7 +271,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return false;
     }
 
-    void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) throws UserException {
+    void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
         int maxPublishingTransactions = Config.experimental_lake_publish_version_threads * 2;
         ConcurrentHashSet<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
@@ -287,14 +287,18 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
     }
 
-    private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) throws UserException {
+    private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
-            globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
+            try {
+                globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
+            } catch (UserException ex) {
+                LOG.warn("Fail to finish txn " + txnId, ex);
+            }
             return CompletableFuture.completedFuture(null);
         }
 
