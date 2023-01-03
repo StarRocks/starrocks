@@ -810,8 +810,15 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
+<<<<<<< HEAD
                         -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletTruncated(tabletId));
                 invertedIndex.eraseTabletTruncated(tabletId);
+=======
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
+                if (!FeConstants.runningUnitTest) {
+                    invertedIndex.eraseTabletForceDelete(tabletId);
+                }
+>>>>>>> 6b3db26f0 ([Enhancement] fix disk space occupation problems after insert overwrite (#16133))
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
                 continue;

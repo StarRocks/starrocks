@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
@@ -409,8 +410,18 @@ public class TabletInvertedIndex {
         }
     }
 
+<<<<<<< HEAD
     public boolean tabletTruncated(long tabletId) {
         return truncatedTablets.contains(tabletId);
+=======
+    @VisibleForTesting
+    public Set<Long> getForceDeleteTablets() {
+        return forceDeleteTablets;
+    }
+
+    public boolean tabletForceDelete(long tabletId) {
+        return forceDeleteTablets.contains(tabletId);
+>>>>>>> 6b3db26f0 ([Enhancement] fix disk space occupation problems after insert overwrite (#16133))
     }
 
     public void markTabletTruncated(long tabletId) {
