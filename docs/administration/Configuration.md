@@ -563,7 +563,7 @@ BE static parameters are as follows.
 | path_gc_check | 1 | N/A | |
 | path_gc_check_interval_second | 86400 | N/A | |
 | pipeline_exec_thread_pool_thread_num | 0 | N/A | |
-| pipeline_hdfs_scan_thread_pool_thread_num | 48 | N/A | |
+| pipeline_connector_scan_thread_num_per_cpu | 8 | N/A | The thread number per cpu of connector scanner  |
 | pipeline_max_num_drivers_per_exec_thread | 10240 | N/A | |
 | pipeline_prepare_thread_pool_queue_size | 102400 | N/A | |
 | pipeline_prepare_thread_pool_thread_num | 0 | N/A | |
