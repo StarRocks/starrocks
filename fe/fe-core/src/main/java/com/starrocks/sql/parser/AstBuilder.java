@@ -3562,12 +3562,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds);
         if (context.bracketHint() != null) {
             for (Identifier identifier : visit(context.bracketHint().identifier(), Identifier.class)) {
-                try {
-                    tableRelation.addTableHint(identifier.getValue());
-                } catch (Exception e) {
-                    // just ignore the exception if the hint is not defined, and keep the
-                    // behaviour as the original
-                }
+                // just ignore the hint if failed to add it which is the same as the previous behaviour
+                tableRelation.addTableHint(identifier.getValue());
             }
         }
 

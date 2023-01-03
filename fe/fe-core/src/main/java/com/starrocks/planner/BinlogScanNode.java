@@ -125,7 +125,7 @@ public class BinlogScanNode extends ScanNode {
         StringBuilder sb = new StringBuilder();
 
         sb.append(prefix).append("table: ").append(olapTable.getName());
-        sb.append(prefix).append("tabletList: %s").append(Joiner.on(",").join(tabletIds));
+        sb.append(prefix).append(String.format("tabletList: %s", Joiner.on(",").join(tabletIds)));
         return sb.toString();
     }
 

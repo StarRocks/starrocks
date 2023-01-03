@@ -100,7 +100,7 @@ public class MaterializedViewPlanTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  0:BinlogScanNode\n" +
-                "     table: binlog_test     tabletList: %s16336,16338"
+                "     table: binlog_test     tabletList: 16336,16338"
 
         );
     }

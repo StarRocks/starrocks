@@ -107,10 +107,16 @@ public class TableRelation extends Relation {
         }
     }
 
-    // Maybe throw IllegalArgumentException if hintName is not defined
-    public void addTableHint(String hintName) {
-        TableHint hint = TableHint.valueOf(hintName);
-        tableHints.add(hint);
+    // Return true if add the hint successfully, otherwise return false.
+    // For example, if the hint name is not defined, false will be returned.
+    public boolean addTableHint(String hintName) {
+        try {
+            TableHint hint = TableHint.valueOf(hintName);
+            tableHints.add(hint);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     public Set<TableHint> getTableHints() {
