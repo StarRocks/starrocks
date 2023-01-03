@@ -33,6 +33,9 @@ public class BrokerConfig extends ConfigBase {
     
     @ConfField
     public static int broker_ipc_port = 8000;
+
+    @ConfField
+    public static int kerberos_token_expire_seconds = 86000;
     
     @ConfField
     public static String sys_log_dir = System.getenv("BROKER_HOME") + "/log";
