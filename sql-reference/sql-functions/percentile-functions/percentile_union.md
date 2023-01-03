@@ -12,7 +12,7 @@ percentile_union(expr);
 
 ## 参数说明
 
-`epxr`: 支持的数据类型为PERCENTILE。
+`expr`: 支持的数据类型为 PERCENTILE。
 
 ## 返回值说明
 

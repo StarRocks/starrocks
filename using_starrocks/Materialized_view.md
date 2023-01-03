@@ -301,7 +301,7 @@ GROUP BY advertiser, channel;
 
 <br/>
 
-### 近似去重
+以上文表 `advertiser_view_record` 为例，如果想在查询点击广告的 UV 时实现近似去重查询加速，可基于该明细表创建一张物化视图，并使用 [hll_union()](../sql-reference/sql-functions/aggregate-functions/hll_union.md) 函数预先聚合数据。
 
 用户可以在明细表上使用表达式 `hll_union(hll_hash(col))` 创建物化视图，实现近似去重的预计算。
 

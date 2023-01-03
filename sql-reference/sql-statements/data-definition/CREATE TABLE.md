@@ -41,55 +41,58 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 具体的列类型以及范围等信息如下：
 
 * TINYINT（1字节）
-范围：-2^7 + 1 ~ 2^7 - 1
+  范围：-2^7 + 1 ~ 2^7 - 1
 
 * SMALLINT（2字节）
-范围：-2^15 + 1 ~ 2^15 - 1
+  范围：-2^15 + 1 ~ 2^15 - 1
 
 * INT（4字节）
-范围：-2^31 + 1 ~ 2^31 - 1
+  范围：-2^31 + 1 ~ 2^31 - 1
 
 * BIGINT（8字节）
-范围：-2^63 + 1 ~ 2^63 - 1
+  范围：-2^63 + 1 ~ 2^63 - 1
 
 * LARGEINT（16字节）
-范围：-2^127 + 1 ~ 2^127 - 1
+  范围：-2^127 + 1 ~ 2^127 - 1
 
 * FLOAT（4字节）
-支持科学计数法
+  支持科学计数法
 
 * DOUBLE（8字节）
-支持科学计数法
+  支持科学计数法
 
 * DECIMAL[(precision, scale)] (16字节)
-保证精度的小数类型。默认是 DECIMAL(10, 0)
+  保证精度的小数类型。默认是 DECIMAL(10, 0)
     precision: 1 ~ 38
     scale: 0 ~ precision
-其中整数部分为：precision - scale
-不支持科学计数法
+  其中整数部分为：precision - scale
+  不支持科学计数法
 
 * DATE（3字节）
-范围：0000-01-01 ~ 9999-12-31
+  范围：0000-01-01 ~ 9999-12-31
 
 * DATETIME（8字节）
-范围：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
+  范围：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
 * CHAR[(length)]
-定长字符串。长度范围：1 ~ 255。默认为 1。
+
+  定长字符串。长度范围：1 ~ 255。默认为 1。
 
 * VARCHAR[(length)]
-变长字符串。单位：字节，默认取值为 `1`。
+
+  变长字符串。单位：字节，默认取值为 `1`。
   * 对于 StarRocks 2.1 之前的版本，`length` 的取值范围为 1~65533。
   * 【公测中】自 StarRocks 2.1 版本开始，`length` 的取值范围为 1~1048576。
 
 * HLL (1~16385个字节)
-hll列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且HLL列只能通过配套的hll_union_agg、Hll_cardinality、hll_hash进行查询或使用。
+
+  hll 列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且 HLL 列只能通过配套的 [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md)、[Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md)、[hll_hash](../../sql-functions/aggregate-functions/hll_hash.md)进行查询或使用。
 
 * BITMAP
-bitmap列类型，不需要指定长度和默认值。表示整型的集合，元素最大支持到2^64 - 1。
+  bitmap列类型，不需要指定长度和默认值。表示整型的集合，元素最大支持到2^64 - 1。
 
 * ARRAY
-支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（ < 和 > ）来声明 ARRAY 类型，如 ARRAY < INT >。目前不支持将数组中的元素声明为 [Fast Decimal](../data-types/DECIMAL.md) 类型。
+  支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（ < 和 > ）来声明 ARRAY 类型，如 ARRAY < INT >。目前不支持将数组中的元素声明为 [Fast Decimal](../data-types/DECIMAL.md) 类型。
 
 **agg_type**：聚合类型，如果不指定，则该列为 key 列。否则，该列为 value 列。
 
@@ -98,11 +101,11 @@ bitmap列类型，不需要指定长度和默认值。表示整型的集合，�
 
 * SUM、MAX、MIN、REPLACE
 
-* HLL_UNION（仅用于HLL列，为HLL独有的聚合方式)。
+* HLL_UNION（仅用 HLL列，为 HLL 独有的聚合方式)。
 
 * BITMAP_UNION（仅用于 BITMAP 列，为 BITMAP 独有的聚合方式)。
 
-* REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非NULL值时会发生替换行为，如果新导入的数据是NULL，那么StarRocks仍然会保留原值。
+* REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非 NULL 值时会发生替换行为，如果新导入的数据是NULL，那么 StarRocks 仍然会保留原值。
 ```
 
 注意：
