@@ -26,10 +26,13 @@ import com.starrocks.thrift.TTypeNode;
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
 public class StructField {
+    // If name is null, that means this StructFiled is unnamed.
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "type")
     private final Type type;
+
+    // comment is not used now, it's always null.
     @SerializedName(value = "comment")
     private final String comment;
     private int position;  // in struct
@@ -122,6 +125,9 @@ public class StructField {
         }
     }
 
+    // [Named vs Named] struct<a: INT, b: STRING> is equal to struct<a: INT, b: STRING>
+    // [Unnamed vs Unnamed] struct<INT, STRING> is equal to struct<INT, STRING>
+    // [Named vs Unnamed][Always false] struct<a: INT, b: STRING> is not equal to struct<INT, STRING>
     @Override
     public boolean equals(Object other) {
         if (!(other instanceof StructField)) {
@@ -129,8 +135,15 @@ public class StructField {
         }
         StructField otherStructField = (StructField) other;
         if (name == null) {
-            return otherStructField.name == null && otherStructField.type.equals(type);
+            // If this() is unnamed struct field, other struct field must also be an unnamed struct field.
+            return otherStructField.name == null && type.equals(otherStructField.type);
         }
+
+        if (otherStructField.name == null) {
+            // If other struct field is not named struct field, return false directly.
+            return false;
+        }
+        // Both are named struct field
         return otherStructField.name.equals(name) && otherStructField.type.equals(type);
     }
 
