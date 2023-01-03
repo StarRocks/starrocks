@@ -38,5 +38,4 @@ public class RefreshMaterializedViewStatementTest {
             Assert.assertEquals("Can not find materialized view:no_exists", e.getMessage());
         }
     }
-
 }

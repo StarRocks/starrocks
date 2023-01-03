@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
@@ -407,6 +408,11 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    @VisibleForTesting
+    public Set<Long> getForceDeleteTablets() {
+        return forceDeleteTablets;
     }
 
     public boolean tabletForceDelete(long tabletId) {
