@@ -72,8 +72,8 @@ public class ExpressionTest extends PlanTestBase {
     public void testExpression1() throws Exception {
         String sql = "select sum(v1 + v2) from t0";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  1:Project\n"
-                + "  |  <slot 4> : 1: v1 + 2: v2"));
+        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1 + 2: v2)"));
     }
 
     @Test
@@ -395,8 +395,10 @@ public class ExpressionTest extends PlanTestBase {
                         "count(case when SUBSTR(DATE_FORMAT('2020-09-02 23:59:59', '%Y-%m'), 6) > 0 then v3 else v2 "
                         + "end) from t0";
         String planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: max(if(12: expr, 1: v1, 2: v2)), min(if(12: expr, 2: v2, 1: v1)), " +
+                "count(if(12: expr, 3: v3, 2: v2))");
         Assert.assertTrue(planFragment.contains("<slot 10> : substr('2020-09', 6)"));
-        Assert.assertTrue(planFragment.contains("  |  <slot 4> : if(12: expr, 1: v1, 2: v2)"));
     }
 
     @Test
@@ -609,9 +611,9 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select array_agg(array_length(array_map(x->x*2, c2))) from test_array";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
-                "  |  output: array_agg(5: array_length)"));
+                "  |  output: array_agg(array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2)))"));
         Assert.assertTrue(plan.contains("  1:Project\n" +
-                "  |  <slot 5> : array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2))"));
+                "  |  <slot 3> : 3: c2"));
 
         sql = "select array_map(x->x > count(c1), c2) from test_array group by c2";
         plan = getFragmentPlan(sql);

@@ -31,17 +31,19 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 03
 
 2:AGGREGATE (update serialize)
-|  aggregate: sum[([17: expr, DECIMAL128(30,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[(cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast([7: l_discount, DECIMAL64(15,2), true] as DECIMAL128(15,2))); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[18.02, 4197.9800000000005, 0.0, 16.0, 1.0] ESTIMATE
 |
 1:Project
 |  output columns:
-|  17 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast([7: l_discount, DECIMAL64(15,2), true] as DECIMAL128(15,2))
+|  6 <-> [6: l_extendedprice, DECIMAL64(15,2), true]
+|  7 <-> [7: l_discount, DECIMAL64(15,2), true]
 |  cardinality: 8142765
 |  column statistics:
-|  * expr-->[18.02, 4197.9800000000005, 0.0, 16.0, 3736520.0] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
+|  * l_discount-->[0.02, 0.04, 0.0, 8.0, 11.0] ESTIMATE
 |
 0:HdfsScanNode
 TABLE: lineitem

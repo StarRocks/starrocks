@@ -72,12 +72,12 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
             size_t input_chunk_size = input_chunk->num_rows();
             _aggregator->update_num_input_rows(input_chunk_size);
             COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-            RETURN_IF_ERROR(_aggregator->evaluate_exprs(input_chunk.get()));
+            RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(input_chunk.get()));
 
             if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
                 // force execute streaming
                 SCOPED_TIMER(_aggregator->streaming_timer());
-                _aggregator->output_chunk_by_streaming(chunk);
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(input_chunk.get(), chunk));
                 break;
             } else if (_aggregator->streaming_preaggregation_mode() ==
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
@@ -85,9 +85,9 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
                 TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
                 if (_aggregator->is_none_group_by_exprs()) {
-                    _aggregator->compute_single_agg_state(input_chunk_size);
+                    RETURN_IF_ERROR(_aggregator->compute_single_agg_state(input_chunk.get(), input_chunk_size));
                 } else {
-                    _aggregator->compute_batch_agg_states(input_chunk_size);
+                    RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(input_chunk.get(), input_chunk_size));
                 }
 
                 _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -120,9 +120,9 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
                     TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
                     if (_aggregator->is_none_group_by_exprs()) {
-                        _aggregator->compute_single_agg_state(input_chunk_size);
+                        RETURN_IF_ERROR(_aggregator->compute_single_agg_state(input_chunk.get(), input_chunk_size));
                     } else {
-                        _aggregator->compute_batch_agg_states(input_chunk_size);
+                        RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(input_chunk.get(), input_chunk_size));
                     }
 
                     _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -139,18 +139,20 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
                     if (zero_count == 0) {
                         SCOPED_TIMER(_aggregator->streaming_timer());
-                        _aggregator->output_chunk_by_streaming(chunk);
+                        RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(input_chunk.get(), chunk));
                     } else if (zero_count == _aggregator->streaming_selection().size()) {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        _aggregator->compute_batch_agg_states(input_chunk_size);
+                        RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(input_chunk.get(), input_chunk_size));
                     } else {
                         {
                             SCOPED_TIMER(_aggregator->agg_compute_timer());
-                            _aggregator->compute_batch_agg_states_with_selection(input_chunk_size);
+                            RETURN_IF_ERROR(_aggregator->compute_batch_agg_states_with_selection(input_chunk.get(),
+                                                                                                 input_chunk_size));
                         }
                         {
                             SCOPED_TIMER(_aggregator->streaming_timer());
-                            _aggregator->output_chunk_by_streaming_with_selection(chunk);
+                            RETURN_IF_ERROR(
+                                    _aggregator->output_chunk_by_streaming_with_selection(input_chunk.get(), chunk));
                         }
                     }
 
