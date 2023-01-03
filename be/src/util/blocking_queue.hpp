@@ -216,11 +216,6 @@ public:
         return _items.empty();
     }
 
-    void clear() {
-        std::lock_guard<Lock> l(_lock);
-        _items.clear();   
-    }
-
 protected:
     const size_t _capacity;
 

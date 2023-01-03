@@ -3279,7 +3279,6 @@ Status TabletUpdates::clear_meta() {
     }
     // Clear cached primary index.
     StorageEngine::instance()->update_manager()->index_cache().remove_by_key(_tablet.tablet_id());
-    _unused_rowsets.clear();
     STLClearObject(&_rowsets);
     STLClearObject(&_rowset_stats);
     // If this get cleared, every other thread that uses variable should recheck it's valid state after acquiring _lock
