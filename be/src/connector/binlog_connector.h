@@ -18,6 +18,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "gen_cpp/PlanNodes_constants.h"
 #include "storage/tablet.h"
 
 namespace starrocks::connector {
@@ -52,11 +53,10 @@ protected:
 };
 
 using BinlogMetaFieldMap = std::unordered_map<std::string, VectorizedFieldPtr>;
-const std::string BINLOG_PREFIX = "_binlog";
-const std::string BINLOG_OP = BINLOG_PREFIX + "_op";
-const std::string BINLOG_VERSION = BINLOG_PREFIX + "_version";
-const std::string BINLOG_SEQ_ID = BINLOG_PREFIX + "_seq_id";
-const std::string BINLOG_TIMESTAMP = BINLOG_PREFIX + "_timestamp";
+const std::string BINLOG_OP = g_PlanNodes_constants.BINLOG_OP_COLUMN_NAME;
+const std::string BINLOG_VERSION = g_PlanNodes_constants.BINLOG_VERSION_COLUMN_NAME;
+const std::string BINLOG_SEQ_ID = g_PlanNodes_constants.BINLOG_SEQ_ID_COLUMN_NAME;
+const std::string BINLOG_TIMESTAMP = g_PlanNodes_constants.BINLOG_TIMESTAMP_COLUMN_NAME;
 
 class BinlogDataSource final : public DataSource {
 public:

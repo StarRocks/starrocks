@@ -42,13 +42,19 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStreamScanNode;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
 
 /**
  * BinlogScanNode read data from binlog of SR table
@@ -204,10 +210,6 @@ public class BinlogScanNode extends ScanNode {
         return false;
     }
 
-    public static String BINLOG_OP_COLUMN_NAME = "_binlog_op";
-    public static String BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
-    public static String BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
-    public static String BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
     public static List<Column> appendBinlogMetaColumns(List<Column> schema) {
         List<Column> columns = new ArrayList<>(schema);
         columns.add(new Column(BINLOG_OP_COLUMN_NAME, Type.TINYINT));

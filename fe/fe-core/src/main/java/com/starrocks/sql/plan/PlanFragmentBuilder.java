@@ -2860,7 +2860,6 @@ public class PlanFragmentBuilder {
             }
 
             // Add slots from table
-            boolean hasBinlogOpSlot = false;
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
@@ -2868,20 +2867,6 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-                if (entry.getKey().getName().equals(BinlogScanNode.BINLOG_OP_COLUMN_NAME)) {
-                    hasBinlogOpSlot = true;
-                }
-            }
-
-            if (!hasBinlogOpSlot) {
-                // Add OPS column of binlog
-                SlotDescriptor opsSlot = context.getDescTbl().addSlotDescriptor(tupleDescriptor);
-                opsSlot.setIsNullable(false);
-                opsSlot.setType(Type.TINYINT);
-                opsSlot.setLabel(BinlogScanNode.BINLOG_OP_COLUMN_NAME);
-                ColumnRefOperator columnRef = new ColumnRefOperator(opsSlot.getId().asInt(), opsSlot.getType(),
-                        BinlogScanNode.BINLOG_OP_COLUMN_NAME, opsSlot.getIsNullable());
-                context.getColRefToExpr().put(columnRef, new SlotRef(opsSlot.getLabel(), opsSlot));
             }
 
             // set predicate
