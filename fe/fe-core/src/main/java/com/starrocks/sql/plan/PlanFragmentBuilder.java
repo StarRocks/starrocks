@@ -214,7 +214,7 @@ public class PlanFragmentBuilder {
         List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
         ExecPlan execPlan = new ExecPlan(connectContext, colNames, optExpr, outputColumns);
         PlanFragment planFragment = new PhysicalPlanTranslator(columnRefFactory).translate(optExpr, execPlan);
-        createOutputFragment(planFragment, execPlan, outputColumns, false);
+        // createOutputFragment(planFragment, execPlan, outputColumns, false);
         execPlan.setPlanCount(optExpr.getPlanCount());
         createStmt.setMaintenancePlan(execPlan, columnRefFactory);
 
