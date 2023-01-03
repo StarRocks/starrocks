@@ -2,25 +2,25 @@
 
 ## Description
 
-Create a MAP value from the given pair of key item array and value item array.
+Creates a MAP value from the given pair of key item array and value item array.
 
 ## Syntax
 
-```
+```Haskell
 MAP map_from_arrays(ARRAY keys, ARRAY values)
 ```
 
 ## Parameters
 
-`keys`: To construct the keys of the result MAP. Now users must make sure the elements of keys are unique.
-`values`: To construct the values of the result MAP.
+- `keys`: uses to construct the keys of the result MAP. Make sure the elements of keys are unique.
+- `values`: used to construct the values of the result MAP.
 
 ## Return value
 
-Return a MAP which is consisted from the input keys and values.
+Returns a MAP that is constructed from the input keys and values.
 
 keys and values must have the same length, otherwise it will return an error.
-If keys or values is NULL, this function will return NULL.
+If keys or values are NULL, this function will return NULL.
 
 ## Examples
 
