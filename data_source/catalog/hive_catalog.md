@@ -201,7 +201,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及�
 
 3. 重启所有 FE 和 BE。
 
-## 创建Hive catalog
+## 创建 Hive catalog
 
 以上相关配置完成后，即可创建 Hive catalog，语法如下。
 
