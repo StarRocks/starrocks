@@ -528,10 +528,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  equal join conjunct: [29: cast, BIGINT, false] = [30: add, BIGINT, false]\n" +
                 "  |  output columns: 14, 15, 20, 22\n" +
                 "  |  cardinality: 600000000");
-        assertContains(plan, "|----5:EXCHANGE\n" +
+        assertContains(plan, "  |----5:EXCHANGE\n" +
+                "  |       distribution type: SHUFFLE\n" +
+                "  |       partition exprs: [30: add, BIGINT, false]\n" +
                 "  |       cardinality: 150000000\n" +
                 "  |    \n" +
                 "  2:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [29: cast, BIGINT, false]\n" +
                 "     cardinality: 600000000");
         sql =
                 "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1 " +

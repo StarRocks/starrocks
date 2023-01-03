@@ -27,6 +27,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 6:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 3
 column statistics:
 * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
@@ -79,6 +80,8 @@ OutPut Exchange Id: 06
 |  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
 |
 3:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [9: L_RETURNFLAG, VARCHAR, false], [10: L_LINESTATUS, VARCHAR, false]
 cardinality: 3
 
 PLAN FRAGMENT 2(F00)

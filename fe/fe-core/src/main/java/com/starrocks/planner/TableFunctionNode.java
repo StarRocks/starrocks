@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -68,6 +69,15 @@ public class TableFunctionNode extends PlanNode {
         msg.table_function_node.setParam_columns(paramSlots);
         msg.table_function_node.setOuter_columns(outerSlots);
         msg.table_function_node.setFn_result_columns(fnResultSlots);
+    }
+
+    @Override
+    protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
+        StringBuilder output = new StringBuilder();
+        output.append(prefix).append("tableFunctionName: ").append(tableFunction.getFunctionName()).append('\n');
+        output.append(prefix).append("columns: ").append(tableFunction.getDefaultColumnNames()).append('\n');
+        output.append(prefix).append("returnTypes: ").append(tableFunction.getTableFnReturnTypes()).append('\n');
+        return output.toString();
     }
 
     @Override

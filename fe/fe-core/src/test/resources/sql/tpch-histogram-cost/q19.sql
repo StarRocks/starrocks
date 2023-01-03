@@ -47,6 +47,7 @@ RESULT SINK
 |  * sum-->[810.9, NaN, 0.0, 8.0, NaN] ESTIMATE
 |
 6:EXCHANGE
+distribution type: GATHER
 cardinality: 0
 
 PLAN FRAGMENT 1(F00)
@@ -82,6 +83,7 @@ OutPut Exchange Id: 06
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 3805.9126998620504] ESTIMATE
 |
 |----3:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 6051300
 |
 1:Project

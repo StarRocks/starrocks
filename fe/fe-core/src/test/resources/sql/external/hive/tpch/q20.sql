@@ -43,6 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 26:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 40000
 column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -89,9 +90,13 @@ OutPut Exchange Id: 26
 |  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 40000.0] ESTIMATE
 |
 |----22:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [1: s_suppkey, INT, true]
 |       cardinality: 40000
 |
 15:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [13: ps_suppkey, INT, true]
 cardinality: 39032168
 
 PLAN FRAGMENT 2(F09)
@@ -126,6 +131,7 @@ OutPut Exchange Id: 22
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----19:EXCHANGE
+|       distribution type: BROADCAST
 |       cardinality: 1
 |
 16:HdfsScanNode
@@ -200,6 +206,8 @@ OutPut Exchange Id: 15
 |  * sum-->[1.0, 1.5047014083835206E14, 0.0, 8.0, 50.0] ESTIMATE
 |
 |----12:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [12: ps_partkey, INT, true]
 |       cardinality: 20000000
 |
 4:AGGREGATE (merge finalize)
@@ -212,6 +220,8 @@ OutPut Exchange Id: 15
 |  * sum-->[1.0, 1.5047014083835206E14, 0.0, 8.0, 50.0] ESTIMATE
 |
 3:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [28: l_partkey, INT, true]
 cardinality: 86738152
 probe runtime filters:
 - filter_id = 1, probe_expr = (28: l_partkey)
@@ -248,9 +258,13 @@ OutPut Exchange Id: 12
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 |
 |----9:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [17: p_partkey, INT, true]
 |       cardinality: 5000000
 |
 6:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [12: ps_partkey, INT, true]
 cardinality: 80000000
 
 PLAN FRAGMENT 6(F04)
