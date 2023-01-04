@@ -38,6 +38,8 @@
 
 namespace starrocks::pipeline {
 
+
+
 class ExchangeSinkOperator::Channel {
 public:
     // Create channel to send data to particular ipaddress/port/query/node
@@ -249,9 +251,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
         if (auto delta_statistic = state->intermediate_query_statistic()) {
             delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
         }
-        // as _chunk_request is moved to info and sent by RPC, do not copy it here.
         butil::IOBuf attachment;
-        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment, false);
+        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(
+                _chunk_request, attachment, _current_request_bytes >= config::brpc_max_body_size);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
                                   attachment_physical_bytes};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
@@ -712,16 +714,16 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     return Status::OK();
 }
 
-// a chunk_request should be copied if it will be sent by many times.
+// chunk_request should be copied if it will be sent by many times or its size >= config::brpc_max_body_size.
 int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
                                                         butil::IOBuf& attachment, bool copy) {
     int64_t attachment_physical_bytes = 0;
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
         auto chunk = chunk_request->mutable_chunks(i);
         chunk->set_data_size(chunk->data().size());
-        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
 
-        if (copy || (_encode_context != nullptr && _encode_context->get_session_encode_level() >= 32)) {
+        if (copy) {
+            int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
             attachment.append(chunk->data());
             attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
             chunk->clear_data();
