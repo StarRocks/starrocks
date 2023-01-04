@@ -98,6 +98,7 @@ protected:
         const std::string rowset_dir = config::storage_root_path + "/data/rowset_test";
         ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
         ASSERT_TRUE(fs::create_directories(config::storage_root_path + "/data/rowset_test_seg").ok());
+        ASSERT_TRUE(fs::create_directories(config::storage_root_path + "/data/rowset_test_delete").ok());
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
         i++;
     }
@@ -894,4 +895,64 @@ TEST_F(RowsetTest, SegmentWriteTest) {
     }
 }
 
+TEST_F(RowsetTest, SegmentDeleteWriteTest) {
+    auto tablet = create_tablet(12345, 1111);
+    int64_t num_rows = 1024;
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(12345, &tablet->tablet_schema(), &writer_context);
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+
+    Int64Column deletes;
+    std::unique_ptr<SegmentPB> seg_info = std::make_unique<SegmentPB>();
+    {
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto& cols = chunk->columns();
+        for (auto i = 0; i < num_rows; i++) {
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[4]->append_datum(Datum(static_cast<int32_t>(1)));
+            if (i % 2 == 1) {
+                deletes.append(i);
+            }
+        }
+        ASSERT_OK(rowset_writer->flush_chunk_with_deletes(*chunk, deletes, seg_info.get()));
+
+        LOG(INFO) << "segment " << seg_info->data_size() << " delete " << seg_info->delete_data_size();
+    }
+
+    RowsetSharedPtr rowset = rowset_writer->build().value();
+    ASSERT_EQ(num_rows, rowset->rowset_meta()->num_rows());
+    ASSERT_EQ(1, rowset->rowset_meta()->num_segments());
+
+    std::unique_ptr<RowsetWriter> segment_rowset_writer;
+    writer_context.rowset_path_prefix = config::storage_root_path + "/data/rowset_test_delete";
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &segment_rowset_writer).ok());
+
+    std::shared_ptr<FileSystem> fs = FileSystem::CreateSharedFromString(rowset->rowset_path()).value();
+
+    auto seg_path = rowset->segment_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
+    auto seg_del_path = rowset->segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
+
+    auto rfile = std::move(fs->new_random_access_file(seg_path).value());
+    auto dfile = std::move(fs->new_random_access_file(seg_del_path).value());
+
+    butil::IOBuf data;
+    auto buf = new uint8[seg_info->data_size()];
+    ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
+    data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
+
+    auto del_buf = new uint8[seg_info->delete_data_size()];
+    ASSERT_TRUE(dfile->read_fully(del_buf, seg_info->delete_data_size()).ok());
+    data.append_user_data(del_buf, seg_info->delete_data_size(), [](void* buf) { delete[] (uint8*)buf; });
+
+    auto st = segment_rowset_writer->flush_segment(*seg_info, data);
+    LOG(INFO) << st;
+    ASSERT_TRUE(st.ok());
+}
 } // namespace starrocks
