@@ -3249,6 +3249,14 @@ Status PersistentIndex::_merge_compaction() {
         return Status::InternalError("cannot do merge_compaction without l1");
     }
     // if _l0 is empty() and _l1_vec only has one _l1, we can rename it directly
+    if (_l0->size() == 0) {
+        if (!_has_l1 && _l1_vec.size() == 1) {
+            const std::string idx_file_path =
+                    strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
+            const std::string idx_file_path_tmp = _l1_vec[0]->_file->filename();
+            return FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path);
+        }
+    }
     auto writer = std::make_unique<ImmutableIndexWriter>();
     const std::string idx_file_path =
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
