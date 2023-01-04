@@ -2852,15 +2852,12 @@ public class PlanFragmentBuilder {
 
             BinlogScanNode binlogScanNode = new BinlogScanNode(context.getNextNodeId(), tupleDescriptor);
             binlogScanNode.computeStatistics(optExpr.getStatistics());
-
-            // Add OPS column of binlog
-            SlotDescriptor opsSlot = context.getDescTbl().addSlotDescriptor(tupleDescriptor);
-            opsSlot.setIsNullable(false);
-            opsSlot.setType(Type.TINYINT);
-            opsSlot.setLabel("ops");
-            ColumnRefOperator columnRef =
-                    new ColumnRefOperator(opsSlot.getId().asInt(), opsSlot.getType(), "ops", opsSlot.getIsNullable());
-            context.getColRefToExpr().put(columnRef, new SlotRef(opsSlot.getLabel(), opsSlot));
+            try {
+                binlogScanNode.computeScanRanges();
+            } catch (UserException e) {
+                throw new StarRocksPlannerException(
+                        "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
+            }
 
             // Add slots from table
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
