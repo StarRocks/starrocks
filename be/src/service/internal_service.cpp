@@ -169,7 +169,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     st.to_protobuf(response->mutable_status());
     TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
     if (!st.ok()) {
-        LOG(WARNING) << msg << " failed.";
+        LOG(WARNING) << "failed to " << msg;
     }
     if (done != nullptr) {
         // NOTE: only when done is not null, we can set response status
