@@ -1841,6 +1841,9 @@ public class PlanFragmentBuilder {
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
             sortNode.setHasNullableGenerateChild();
             sortNode.computeStatistics(optExpr.getStatistics());
+            if (shouldBuildGlobalRuntimeFilter()) {
+                sortNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl());
+            }
 
             inputFragment.setPlanRoot(sortNode);
             return inputFragment;
@@ -1947,7 +1950,7 @@ public class PlanFragmentBuilder {
             }
 
             if (shouldBuildGlobalRuntimeFilter()) {
-                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
+                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl());
             }
 
             leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
@@ -2084,7 +2087,7 @@ public class PlanFragmentBuilder {
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
 
             if (shouldBuildGlobalRuntimeFilter()) {
-                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
+                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl());
             }
 
             return buildJoinFragment(context, leftFragment, rightFragment, distributionMode, joinNode);

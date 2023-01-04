@@ -48,6 +48,11 @@ enum TRuntimeFilterBuildJoinMode {
   REPLICATED
 }
 
+enum TRuntimeFilterBuildType {
+  JOIN_FILTER,
+  TOPN_FILTER
+}
+
 struct TRuntimeFilterDescription {
   // Filter unique id (within a query)
   1: optional i32 filter_id
@@ -91,6 +96,8 @@ struct TRuntimeFilterDescription {
   // partition_by_exprs are used for computing partition ids in probe side
   // when partition_by_exprs are not equal to probe_expr.
   15: optional map<Types.TPlanNodeId, list<Exprs.TExpr>> plan_node_id_to_partition_by_exprs;
+
+  16: optional TRuntimeFilterBuildType filter_type;
 }
 
 struct TRuntimeFilterProberParams {

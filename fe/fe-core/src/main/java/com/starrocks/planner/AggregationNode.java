@@ -99,7 +99,6 @@ public class AggregationNode extends PlanNode {
         updateplanNodeName();
     }
 
-
     // Unsets this node as requiring finalize. Only valid to call this if it is
     // currently marked as needing finalize.
     public void unsetNeedsFinalize() {
@@ -116,7 +115,9 @@ public class AggregationNode extends PlanNode {
         useStreamingPreagg = canUseStreamingPreAgg && aggInfo.getGroupingExprs().size() > 0;
     }
 
-    public AggregateInfo getAggInfo() { return aggInfo; }
+    public AggregateInfo getAggInfo() {
+        return aggInfo;
+    }
 
     /**
      * Have this node materialize the aggregation's intermediate tuple instead of
@@ -228,7 +229,8 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
-        msg.agg_node.setInterpolate_passthrough(useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
+        msg.agg_node.setInterpolate_passthrough(
+                useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
     }
 
     protected String getDisplayLabelDetail() {
@@ -265,7 +267,8 @@ public class AggregationNode extends PlanNode {
         }
 
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
+            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel))
+                    .append("\n");
         }
         if (useSortAgg) {
             output.append(detailPrefix).append("sorted streaming: true\n");
@@ -296,7 +299,7 @@ public class AggregationNode extends PlanNode {
             if (!(gexpr instanceof SlotRef)) {
                 continue;
             }
-            if (((SlotRef)gexpr).getSlotId().asInt() == ((SlotRef)expr).getSlotId().asInt()) {
+            if (((SlotRef) gexpr).getSlotId().asInt() == ((SlotRef) expr).getSlotId().asInt()) {
                 newSlotExprs.add(gexpr);
             }
         }
@@ -304,7 +307,8 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -313,7 +317,7 @@ public class AggregationNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 

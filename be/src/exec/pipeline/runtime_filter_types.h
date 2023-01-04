@@ -126,10 +126,6 @@ public:
         get_holder(id)->set_collector(std::move(collector));
     }
 
-    RuntimeBloomFilterList& get_bloom_filters(TPlanNodeId id) {
-        return get_holder(id)->get_collector()->get_bloom_filters();
-    }
-
     void close_all_in_filters(RuntimeState* state) {
         for (auto& [_, holder] : _holders) {
             if (auto* collector = holder->get_collector()) {

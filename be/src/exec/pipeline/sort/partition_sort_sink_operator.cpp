@@ -18,9 +18,15 @@
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/expr.h"
+#include "exprs/runtime_filter_bank.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
 using namespace starrocks;
@@ -52,6 +58,27 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
                                                                          _sort_exec_exprs, _order_by_types);
     RETURN_IF_ERROR(materialize_chunk);
     TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
+
+    const auto& build_runtime_filters = _sort_context->build_runtime_filters();
+    if (!build_runtime_filters.empty()) {
+        auto runtime_filter = _chunks_sorter->runtime_filters(state->obj_pool());
+        if (runtime_filter == nullptr) {
+            return Status::OK();
+        }
+        DCHECK_EQ(runtime_filter->size(), build_runtime_filters.size());
+        std::list<RuntimeFilterBuildDescriptor*> build_descs(build_runtime_filters.begin(),
+                                                             build_runtime_filters.end());
+        for (size_t i = 0; i < build_runtime_filters.size(); ++i) {
+            build_runtime_filters[i]->set_or_intersect_filter((*runtime_filter)[i]);
+            auto rf = build_runtime_filters[i]->runtime_filter();
+            VLOG(1) << "runtime filter version:" << rf->rf_version() << "," << rf->debug_string() << rf;
+            RuntimeBloomFilterList lst = {build_runtime_filters[i]};
+            _sort_context->set_runtime_filter_collector(
+                    _hub, _plan_node_id,
+                    std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, std::move(lst)));
+        }
+        state->runtime_filter_port()->publish_runtime_filters(build_descs);
+    }
     return Status::OK();
 }
 
@@ -101,7 +128,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<PartitionSortSinkOperator>(this, _id, _plan_node_id, driver_sequence, chunks_sorter,
                                                            _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
-                                                           sort_context.get());
+                                                           sort_context.get(), _runtime_filter_hub);
     return ope;
 }
 

@@ -64,11 +64,12 @@ private:
 
     // True if the _limit comes from DEFAULT_ORDER_BY_LIMIT and option
     // ABORT_ON_DEFAULT_LIMIT_EXCEEDED is set.
-    bool _abort_on_default_limit_exceeded;
+    bool _abort_on_default_limit_exceeded = false;
 
     std::unique_ptr<ChunksSorter> _chunks_sorter;
 
     RuntimeProfile::Counter* _sort_timer;
+    std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
 
 } // namespace starrocks

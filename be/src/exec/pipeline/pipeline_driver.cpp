@@ -97,7 +97,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         const auto* global_rf_collector = op->runtime_bloom_filters();
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
-                _global_rf_descriptors.emplace_back(desc);
+                if (!desc->skip_wait()) {
+                    _global_rf_descriptors.emplace_back(desc);
+                }
             }
 
             _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());

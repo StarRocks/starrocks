@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
@@ -304,7 +305,7 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -317,7 +318,7 @@ public abstract class SetOperationNode extends PlanNode {
             boolean pushDown = false;
             // try to push all children if any expr of a child can match `probeExpr`
             for (int i = 0; i < materializedResultExprLists_.size(); i++) {
-                pushDown |= pushdownRuntimeFilterForChildOrAccept(description, probeExpr,
+                pushDown |= pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
                         candidatesOfSlotExprForChild(probeExpr, i), partitionByExprs,
                         candidatesOfSlotExprsForChild(partitionByExprs, i), i, false);
             }

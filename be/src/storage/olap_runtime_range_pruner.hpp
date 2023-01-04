@@ -18,9 +18,9 @@
 
 #include "exec/olap_common.h"
 #include "exprs/runtime_filter_bank.h"
+#include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
-#include "storage/column_predicate.h"
 
 namespace starrocks {
 namespace detail {
@@ -61,11 +61,21 @@ struct RuntimeColumnPredicateBuilder {
             const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
 
             using ValueType = typename RunTimeTypeTraits<mapping_type>::CppType;
-            SQLFilterOp min_op = to_olap_filter_type(TExprOpcode::GE, false);
+            SQLFilterOp min_op;
+            if (filter->left_open_interval()) {
+                min_op = to_olap_filter_type(TExprOpcode::GE, false);
+            } else {
+                min_op = to_olap_filter_type(TExprOpcode::GT, false);
+            }
             ValueType min_value = filter->min_value();
             range.add_range(min_op, static_cast<value_type>(min_value));
 
-            SQLFilterOp max_op = to_olap_filter_type(TExprOpcode::LE, false);
+            SQLFilterOp max_op;
+            if (filter->right_open_interval()) {
+                max_op = to_olap_filter_type(TExprOpcode::LE, false);
+            } else {
+                max_op = to_olap_filter_type(TExprOpcode::LT, false);
+            }
             ValueType max_value = filter->max_value();
             range.add_range(max_op, static_cast<value_type>(max_value));
 
@@ -79,6 +89,7 @@ struct RuntimeColumnPredicateBuilder {
 
             for (auto& f : filters) {
                 std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
+                VLOG(1) << "build runtime predicate:" << p->debug_string();
                 p->set_index_filter_only(f.is_index_filter_only);
                 preds.emplace_back(std::move(p));
             }
@@ -89,27 +100,27 @@ struct RuntimeColumnPredicateBuilder {
 };
 } // namespace detail
 
-inline Status OlapRuntimeScanRangePruner::_update(RuntimeFilterArrivedCallBack&& updater) {
+inline Status OlapRuntimeScanRangePruner::_update(RuntimeFilterArrivedCallBack&& updater, size_t raw_read_rows) {
     if (_arrived_runtime_filters_masks.empty()) {
         return Status::OK();
     }
-    size_t cnt = 0;
     for (size_t i = 0; i < _arrived_runtime_filters_masks.size(); ++i) {
-        if (_arrived_runtime_filters_masks[i] == 0 && _unarrived_runtime_filters[i]->runtime_filter()) {
-            ASSIGN_OR_RETURN(auto predicates, _get_predicates(i));
-            auto raw_predicates = _as_raw_predicates(predicates);
-            if (!raw_predicates.empty()) {
-                RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
+        if (auto rf = _unarrived_runtime_filters[i]->runtime_filter()) {
+            size_t rf_version = rf->rf_version();
+            if (_arrived_runtime_filters_masks[i] == 0 ||
+                (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threhold)) {
+                ASSIGN_OR_RETURN(auto predicates, _get_predicates(i));
+                auto raw_predicates = _as_raw_predicates(predicates);
+                if (!raw_predicates.empty()) {
+                    RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
+                }
+                _arrived_runtime_filters_masks[i] = true;
+                _rf_versions[i] = rf_version;
+                _raw_read_rows = raw_read_rows;
             }
-            _arrived_runtime_filters_masks[i] = true;
         }
-        cnt += _arrived_runtime_filters_masks[i];
     }
 
-    // all filters arrived
-    if (cnt == _arrived_runtime_filters_masks.size()) {
-        _arrived_runtime_filters_masks.clear();
-    }
     return Status::OK();
 }
 
@@ -138,6 +149,7 @@ inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& 
             _unarrived_runtime_filters.emplace_back(params.unarrived_runtime_filters[i]);
             _slot_descs.emplace_back(params.slot_descs[i]);
             _arrived_runtime_filters_masks.emplace_back();
+            _rf_versions.emplace_back();
         }
     }
 }

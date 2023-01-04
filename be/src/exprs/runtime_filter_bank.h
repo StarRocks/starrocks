@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <mutex>
 #include <set>
 
@@ -86,6 +87,15 @@ public:
     int8_t join_mode() const { return _join_mode; }
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
     void set_runtime_filter(JoinRuntimeFilter* rf) { _runtime_filter = rf; }
+    void set_or_intersect_filter(JoinRuntimeFilter* rf) {
+        std::lock_guard guard(_mutex);
+        if (_runtime_filter) {
+            _runtime_filter->intersect(rf);
+        } else {
+            _runtime_filter = rf;
+        }
+    }
+
     JoinRuntimeFilter* runtime_filter() { return _runtime_filter; }
     void set_is_pipeline(bool flag) { _is_pipeline = flag; }
     bool is_pipeline() const { return _is_pipeline; }
@@ -106,6 +116,7 @@ private:
     std::vector<TNetworkAddress> _merge_nodes;
     JoinRuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
+    std::mutex _mutex;
 };
 
 class RuntimeFilterProbeDescriptor {
@@ -118,6 +129,8 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
     int32_t filter_id() const { return _filter_id; }
+    bool skip_wait() const { return _skip_wait; }
+    bool is_topn_filter() const { return _is_topn_filter; }
     ExprContext* probe_expr_ctx() { return _probe_expr_ctx; }
     const JoinRuntimeFilter* runtime_filter() const { return _runtime_filter.load(); }
     void set_runtime_filter(const JoinRuntimeFilter* rf);
@@ -165,6 +178,8 @@ private:
     int64_t _open_timestamp = 0;
     int64_t _ready_timestamp = 0;
     TRuntimeFilterBuildJoinMode::type _join_mode;
+    bool _is_topn_filter = false;
+    bool _skip_wait = false;
     std::vector<int32_t> _bucketseq_to_partition;
     std::vector<ExprContext*> _partition_by_exprs_contexts;
 };
@@ -220,6 +235,10 @@ public:
     void init_counter();
     void set_plan_node_id(int id) { _plan_node_id = id; }
     int plan_node_id() { return _plan_node_id; }
+    bool has_topn_filter() const {
+        return std::any_of(_descriptors.begin(), _descriptors.end(),
+                           [](const auto& entry) { return entry.second->is_topn_filter(); });
+    }
 
 private:
     void update_selectivity(Chunk* chunk);

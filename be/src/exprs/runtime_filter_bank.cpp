@@ -21,6 +21,7 @@
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
 #include "exprs/runtime_filter.h"
+#include "gen_cpp/RuntimeFilter_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
@@ -217,6 +218,8 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _build_plan_node_id = desc.build_plan_node_id;
     _runtime_filter.store(nullptr);
     _join_mode = desc.build_join_mode;
+    _is_topn_filter = desc.__isset.filter_type && desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER;
+    _skip_wait = _is_topn_filter;
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -370,7 +373,7 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
     for (auto& kv : seletivity_map) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
-        if (filter == nullptr) {
+        if (filter == nullptr || filter->always_true()) {
             continue;
         }
         auto* ctx = rf_desc->probe_expr_ctx();
@@ -461,7 +464,7 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     for (auto& kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
-        if (filter == nullptr) {
+        if (filter == nullptr || filter->always_true()) {
             continue;
         }
         auto& selection = eval_context.running_context.use_merged_selection

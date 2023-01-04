@@ -21,6 +21,7 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type_infra.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
@@ -103,6 +104,28 @@ Status ChunksSorterTopn::done(RuntimeState* state) {
     }
 
     return Status::OK();
+}
+
+std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* pool) {
+    if (!_init_merged_segment) {
+        return nullptr;
+    }
+
+    const size_t top_n_rid = _get_number_of_rows_to_sort() - 1;
+    const auto& order_by_column = _merged_segment.order_by_columns[0];
+
+    if (_runtime_filter.empty()) {
+        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>((*_sort_exprs)[0]->root()->type().type, false,
+                                                              detail::SortRuntimeFilterBuilder(), pool, order_by_column,
+                                                              top_n_rid, _sort_desc.descs[0].asc_order());
+        _runtime_filter.emplace_back(rf);
+    } else {
+        type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,
+                                                detail::SortRuntimeFilterUpdater(), _runtime_filter.back(),
+                                                order_by_column, top_n_rid, _sort_desc.descs[0].asc_order());
+    }
+
+    return &_runtime_filter;
 }
 
 Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {

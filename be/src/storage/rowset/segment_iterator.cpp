@@ -395,20 +395,22 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
-    return _opts.runtime_range_pruner.update_range_if_arrived([this](auto cid, const PredicateList& predicates) {
-        const ColumnPredicate* del_pred;
-        auto iter = _del_predicates.find(cid);
-        del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
-        SparseRange r;
-        RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
-        size_t prev_size = _scan_range.span_size();
-        SparseRange res;
-        _range_iter = _range_iter.intersection(r, &res);
-        std::swap(res, _scan_range);
-        _range_iter.set_range(&_scan_range);
-        _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
-        return Status::OK();
-    });
+    return _opts.runtime_range_pruner.update_range_if_arrived(
+            [this](auto cid, const PredicateList& predicates) {
+                const ColumnPredicate* del_pred;
+                auto iter = _del_predicates.find(cid);
+                del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
+                SparseRange r;
+                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
+                size_t prev_size = _scan_range.span_size();
+                SparseRange res;
+                _range_iter = _range_iter.intersection(r, &res);
+                std::swap(res, _scan_range);
+                _range_iter.set_range(&_scan_range);
+                _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+                return Status::OK();
+            },
+            _opts.stats->raw_rows_read);
 }
 
 template <bool check_global_dict>

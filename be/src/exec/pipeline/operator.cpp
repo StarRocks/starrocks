@@ -297,4 +297,12 @@ bool OperatorFactory::has_runtime_filters() const {
     return global_rf_collector != nullptr && !global_rf_collector->descriptors().empty();
 }
 
+bool OperatorFactory::has_topn_filter() const {
+    if (_runtime_filter_collector == nullptr) {
+        return false;
+    }
+    auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
+    return global_rf_collector != nullptr && global_rf_collector->has_topn_filter();
+}
+
 } // namespace starrocks::pipeline
