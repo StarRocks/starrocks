@@ -28,8 +28,8 @@ public class StructTypeTest extends PlanTestBase {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("create table test(c0 INT, " +
-                "c1 struct<a:array<struct<b:int>>>," +
-                "c2 struct<a:int,b:double>) " +
+                "c1 struct<a array<struct<b int>>>," +
+                "c2 struct<a int,b double>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         FeConstants.runningUnitTest = false;

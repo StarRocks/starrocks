@@ -36,6 +36,8 @@ public class StructField {
     private final String name;
     @SerializedName(value = "type")
     private final Type type;
+
+    // comment is not used now, it's always null.
     @SerializedName(value = "comment")
     private final String comment;
     private int position;  // in struct
