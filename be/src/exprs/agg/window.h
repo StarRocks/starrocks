@@ -106,7 +106,12 @@ public:
         InputColumnType* column = down_cast<InputColumnType*>(data_column);
         auto value = AggregateFunctionStateHelper<State>::data(state).value;
         for (size_t i = start; i < end; ++i) {
-            AggDataTypeTraits<PT>::append_value(column, value);
+            // TODO: do not hack the string type
+            if constexpr (pt_is_string<PT>) {
+                AggDataTypeTraits<PT>::append_value(column, value);
+            } else {
+                AggDataTypeTraits<PT>::assign_value(column, i, value);
+            }
         }
     }
 };
