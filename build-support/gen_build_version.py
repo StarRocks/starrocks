@@ -151,7 +151,6 @@ namespace starrocks {{
 
 const char* STARROCKS_VERSION = "{VERSION}";
 const char* STARROCKS_COMMIT_HASH = "{COMMIT_HASH}";
-const char* STARROCKS_BUILD_TYPE = "{BUILD_TYPE}";
 const char* STARROCKS_BUILD_TIME = "{BUILD_TIME}";
 const char* STARROCKS_BUILD_USER = "{BUILD_USER}";
 const char* STARROCKS_BUILD_HOST = "{BUILD_HOST}";
