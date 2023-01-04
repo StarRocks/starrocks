@@ -365,6 +365,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             return success;
         }, getLakeTaskExecutor()).exceptionally(ex -> {
             LOG.error("Fail to publish txn " + txnState.getTransactionId(), ex);
+            partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
             return false;
         });
     }
