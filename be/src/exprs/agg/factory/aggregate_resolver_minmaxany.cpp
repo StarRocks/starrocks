@@ -74,18 +74,17 @@ struct MaxByDispatcher {
 };
 
 void AggregateFuncResolver::register_minmaxany() {
-    auto maxby_types = aggregate_types();
-    maxby_types.push_back(TYPE_JSON);
-    for (auto ret_type : aggregate_types()) {
-        for (auto arg_type : aggregate_types()) {
+    auto minmax_types = aggregate_types();
+    minmax_types.push_back(TYPE_JSON);
+    for (auto ret_type : minmax_types) {
+        for (auto arg_type : minmax_types) {
             type_dispatch_all(arg_type, MaxByDispatcher(), this, ret_type);
         }
     }
 
-    for (auto type : aggregate_types()) {
+    for (auto type : minmax_types) {
         type_dispatch_all(type, MinMaxAnyDispatcher(), this);
     }
-    type_dispatch_all(TYPE_JSON, MinMaxAnyDispatcher(), this);
 }
 
 } // namespace starrocks
