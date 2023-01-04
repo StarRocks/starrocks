@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -26,6 +27,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -41,7 +43,6 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStreamScanNode;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,6 +50,11 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
 
 /**
  * BinlogScanNode read data from binlog of SR table
@@ -85,7 +91,12 @@ public class BinlogScanNode extends ScanNode {
     }
 
     protected TBinlogOffset getBinlogOffset(long tabletId) {
-        throw new NotImplementedException("TODO");
+        TBinlogOffset offset = new TBinlogOffset();
+        offset.setTablet_id(tabletId);
+        // TODO -1 indicates that read from the oldest binlog
+        offset.setVersion(-1);
+        offset.setLsn(-1);
+        return offset;
     }
 
     @Override
@@ -120,7 +131,7 @@ public class BinlogScanNode extends ScanNode {
         StringBuilder sb = new StringBuilder();
 
         sb.append(prefix).append("table: ").append(olapTable.getName());
-        sb.append(prefix).append("tabletList: %s").append(Joiner.on(",").join(tabletIds));
+        sb.append(prefix).append(String.format("tabletList: %s", Joiner.on(",").join(tabletIds)));
         return sb.toString();
     }
 
@@ -148,7 +159,7 @@ public class BinlogScanNode extends ScanNode {
                 TBinlogOffset binlogOffset = getBinlogOffset(tabletId);
                 TBinlogScanRange binlogRange = new TBinlogScanRange();
                 binlogRange.setTablet_id(tabletId);
-                binlogRange.setOffset(getBinlogOffset(tabletId));
+                binlogRange.setOffset(binlogOffset);
                 binlogRange.setPartition_id(partitionId);
                 binlogRange.setTable_id(tableId);
                 binlogRange.setDb_name(dbName);
@@ -197,5 +208,14 @@ public class BinlogScanNode extends ScanNode {
     @Override
     public boolean canDoReplicatedJoin() {
         return false;
+    }
+
+    public static List<Column> appendBinlogMetaColumns(List<Column> schema) {
+        List<Column> columns = new ArrayList<>(schema);
+        columns.add(new Column(BINLOG_OP_COLUMN_NAME, Type.TINYINT));
+        columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, Type.BIGINT));
+        columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));
+        columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, Type.BIGINT));
+        return columns;
     }
 }

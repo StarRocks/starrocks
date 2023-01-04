@@ -544,6 +544,24 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
         return Status::OK();
     }
+    case TPlanNodeType::STREAM_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        std::string connector_name;
+        StreamSourceType::type source_type = new_node.stream_scan_node.source_type;
+        switch (source_type) {
+        case StreamSourceType::BINLOG: {
+            connector_name = connector::Connector::BINLOG;
+            break;
+        }
+        default:
+            return Status::InternalError(fmt::format("Stream scan node does not support source type {}", source_type));
+        };
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector_name;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
     case TPlanNodeType::STREAM_AGG_NODE: {
         *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
         return Status::OK();
@@ -800,6 +818,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

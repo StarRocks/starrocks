@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -214,6 +215,12 @@ public class AstToSQLBuilder {
         public String visitTable(TableRelation node, Void outerScope) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(node.getName().toSql());
+
+            for (TableRelation.TableHint hint : CollectionUtils.emptyIfNull(node.getTableHints())) {
+                sqlBuilder.append(" [");
+                sqlBuilder.append(hint.name());
+                sqlBuilder.append("] ");
+            }
 
             if (node.getPartitionNames() != null) {
                 List<String> partitionNames = node.getPartitionNames().getPartitionNames();

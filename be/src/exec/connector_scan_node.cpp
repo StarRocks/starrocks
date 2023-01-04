@@ -20,6 +20,7 @@
 #include "common/config.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
@@ -152,7 +153,7 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
-
+    bool stream_data_source = _data_source_provider->stream_data_source();
     int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
     if (config::connector_dynamic_chunk_buffer_limiter_enable && mem_limit > 0) {
         // port from olap scan node.
@@ -160,11 +161,17 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
         size_t default_buffer_capacity = max_buffer_capacity;
         pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
                 max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
-        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop,
-                                                                           std::move(buffer_limiter));
+        scan_op = !stream_data_source ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+                                                context->next_operator_id(), this, dop, std::move(buffer_limiter))
+                                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
+                                                context->next_operator_id(), this, dop, std::move(buffer_limiter));
     } else {
-        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-                context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
+        scan_op = !stream_data_source ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+                                                context->next_operator_id(), this, dop,
+                                                std::make_unique<pipeline::UnlimitedChunkBufferLimiter>())
+                                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
+                                                context->next_operator_id(), this, dop,
+                                                std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
     }
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
