@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
@@ -61,7 +60,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> failedTablets) throws TransactionException {
+                          List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
@@ -189,7 +188,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                             failedReplicaInfoSB.append(
                                     String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
                                             backend == null ? "" : backend.getHost(), replica.getVersion(),
-                                            replica.getLastSuccessVersion()));
+                                            replica.getLastFailedVersion()));
+                            replica.get
                             // not remove rollup task here, because the commit maybe failed
                             // remove rollup task when commit successfully
                             errorReplicaIds.add(replica.getId());
