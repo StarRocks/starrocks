@@ -36,6 +36,7 @@
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+#include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
@@ -142,15 +143,18 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& coord = request.common().coord;
     const auto& query_id = request.common().params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
+    const auto& is_stream_pipeline = request.is_stream_pipeline();
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
+    _fragment_ctx->set_is_stream_pipeline(is_stream_pipeline);
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(fragment_instance_id) << " backend_num=" << request.backend_num();
+              << " fragment_instance_id=" << print_id(fragment_instance_id)
+              << " is_stream_pipeline=" << is_stream_pipeline << " backend_num=" << request.backend_num();
 
     return Status::OK();
 }

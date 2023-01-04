@@ -67,6 +67,7 @@
 #include "exec/repeat_node.h"
 #include "exec/schema_scan_node.h"
 #include "exec/select_node.h"
+#include "exec/stream/stream_aggregate_node.h"
 #include "exec/table_function_node.h"
 #include "exec/topn_node.h"
 #include "exec/union_node.h"
@@ -541,6 +542,10 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         connector_scan_node.connector_name = connector::Connector::LAKE;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::STREAM_AGG_NODE: {
+        *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
         return Status::OK();
     }
     default:

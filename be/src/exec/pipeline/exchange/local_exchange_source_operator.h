@@ -60,6 +60,20 @@ public:
         return Status::OK();
     }
 
+    bool is_epoch_finished() const override {
+        std::lock_guard<std::mutex> l(_chunk_lock);
+        return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
+    }
+    Status set_epoch_finishing(RuntimeState* state) override {
+        std::lock_guard<std::mutex> l(_chunk_lock);
+        _is_epoch_finished = true;
+        return Status::OK();
+    }
+    Status reset_epoch(RuntimeState* state) override {
+        _is_epoch_finished = false;
+        return Status::OK();
+    }
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
@@ -75,6 +89,9 @@ private:
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<LocalExchangeMemoryManager>& _memory_manager;
+
+    // STREAM MV
+    bool _is_epoch_finished = false;
 };
 
 class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
