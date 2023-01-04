@@ -56,6 +56,9 @@ namespace starrocks {
 
 class ExecEnv;
 
+int64_t curr_report_version();
+int64_t next_report_version();
+
 class TaskWorkerPoolBase {
 public:
     static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,

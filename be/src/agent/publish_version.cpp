@@ -19,6 +19,7 @@
 #include "common/compiler_util.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
+#include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
 #include "storage/data_dir.h"
 #include "storage/storage_engine.h"
@@ -48,10 +49,9 @@ struct TabletPublishVersionTask {
     int64_t max_continuous_version{0};
 };
 
-void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
+void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionRequest& publish_version_req,
                               TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs) {
     int64_t start_ts = MonotonicMillis();
-    auto& publish_version_req = publish_version_task.task_req;
     int64_t transaction_id = publish_version_req.transaction_id;
 
     Span span = Tracer::Instance().start_trace_or_add_span("run_publish_version_task",
@@ -166,8 +166,6 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
 
     // TODO: add more information to status, rather than just first error tablet
     st.to_thrift(&finish_task.task_status);
-    finish_task.__set_task_type(publish_version_task.task_type);
-    finish_task.__set_signature(publish_version_task.signature);
     if (!error_tablet_ids.empty()) {
         finish_task.__isset.error_tablet_ids = true;
     }

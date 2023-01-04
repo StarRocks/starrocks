@@ -63,6 +63,8 @@ struct TMVCommitEpochTask {
     1: optional TMVEpoch epoch
     
     2: optional list<AgentService.TPartitionVersionInfo> partition_version_infos
+    3: optional Types.TTransactionId transaction_id
+    4: optional i64 commit_timestamp
 }
 
 // TOD
