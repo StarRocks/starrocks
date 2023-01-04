@@ -92,6 +92,9 @@ public:
         ss << "]";
         return ss.str();
     }
+    // STREAM MV
+    Status reset_epoch(RuntimeState* state);
+    void count_down_epoch_finished_driver(RuntimeState* state);
 
 private:
     uint32_t _id = 0;
@@ -99,6 +102,9 @@ private:
     OpFactories _op_factories;
     Drivers _drivers;
     std::atomic<size_t> _num_finished_drivers = 0;
+
+    // STREAM MV
+    std::atomic<size_t> _num_epoch_finished_drivers = 0;
 };
 
 } // namespace pipeline
