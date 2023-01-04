@@ -374,6 +374,8 @@ void QueryContextManager::report_fragments_with_same_host(
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
                 reported[i] = true;
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -470,6 +472,8 @@ void QueryContextManager::report_fragments(
 
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -485,6 +489,8 @@ void QueryContextManager::report_fragments(
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fe_addr;
                 LOG(WARNING) << ss.str();
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 exec_env->frontend_client_cache()->close_connections(fe_addr);
                 continue;
             }

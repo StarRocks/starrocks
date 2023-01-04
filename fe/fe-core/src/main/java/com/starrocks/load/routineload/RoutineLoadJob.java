@@ -83,6 +83,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TransactionException;
@@ -716,6 +717,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             StreamLoadPlanner planner =
                     new StreamLoadPlanner(db, (OlapTable) table, StreamLoadInfo.fromRoutineLoadJob(this));
             TExecPlanFragmentParams planParams = planner.plan(loadId);
+            planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
