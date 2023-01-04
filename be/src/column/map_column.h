@@ -181,6 +181,8 @@ public:
 
     size_t get_map_size(size_t idx) const;
 
+    Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
+
 private:
     // keys must be NullableColumn
     ColumnPtr _keys;
