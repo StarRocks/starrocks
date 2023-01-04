@@ -38,8 +38,6 @@
 
 namespace starrocks::pipeline {
 
-
-
 class ExchangeSinkOperator::Channel {
 public:
     // Create channel to send data to particular ipaddress/port/query/node
