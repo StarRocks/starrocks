@@ -423,4 +423,8 @@ public class ReplayFromDumpTest {
                 "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)"));
         Assert.assertTrue(replayPair.second.contains("OLAP TABLE SINK"));
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b5e972cf3 ([BugFix] Fix merge memo lose best expression (#16135))
 }
