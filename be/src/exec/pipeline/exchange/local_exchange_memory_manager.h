@@ -17,6 +17,7 @@
 #include <atomic>
 
 #include "common/config.h"
+#include "common/logging.h"
 
 namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
