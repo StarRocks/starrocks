@@ -18,7 +18,9 @@ package com.starrocks.sql.optimizer.rule;
 public enum RuleType {
     NONE,
 
-    TF_JOIN_ASSOCIATIVITY,
+    TF_JOIN_ASSOCIATIVITY_INNER,
+
+    TF_JOIN_ASSOCIATIVITY_OUTER,
     TF_JOIN_COMMUTATIVITY,
     TF_JOIN_LEFT_ASSCOM,
     TF_JOIN_COMMUTATIVITY_WITHOUT_INNER,

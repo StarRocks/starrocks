@@ -59,15 +59,17 @@ import java.util.Map;
 
 public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
-    private final boolean isInnerMode;
+    public final boolean isInnerMode;
 
-    public static final JoinAssociativityRule INNER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(true);
+    public static final JoinAssociativityRule INNER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
+            RuleType.TF_JOIN_ASSOCIATIVITY_INNER,true);
 
-    public static final JoinAssociativityRule OUTER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(false);
+    public static final JoinAssociativityRule OUTER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
+            RuleType.TF_JOIN_ASSOCIATIVITY_OUTER, false);
 
 
-    private JoinAssociativityRule(boolean isInnerMode) {
-        super(RuleType.TF_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
+    private JoinAssociativityRule(RuleType ruleType, boolean isInnerMode) {
+        super(ruleType, Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)))

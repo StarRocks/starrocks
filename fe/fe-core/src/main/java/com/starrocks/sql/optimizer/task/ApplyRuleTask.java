@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -77,6 +78,12 @@ public class ApplyRuleTask extends OptimizerTask {
         List<OptExpression> newExpressions = Lists.newArrayList();
         List<OptExpression> extractExpressions = Lists.newArrayList();
         while (extractExpr != null) {
+            if (rule instanceof JoinAssociativityRule) {
+                JoinAssociativityRule rule1 = (JoinAssociativityRule) rule;
+                if (rule1.isInnerMode) {
+                    int a = 1;
+                }
+            }
             if (!rule.check(extractExpr, context.getOptimizerContext())) {
                 extractExpr = binder.next();
                 continue;
