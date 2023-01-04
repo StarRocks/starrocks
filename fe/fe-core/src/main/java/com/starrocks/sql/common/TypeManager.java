@@ -15,10 +15,13 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -40,6 +43,12 @@ public class TypeManager {
         }
         if (t1.isArrayType() && t2.isArrayType()) {
             return getCommonArrayType((ArrayType) t1, (ArrayType) t2);
+        }
+        if (t1.isMapType() && t2.isMapType()) {
+            return getCommonMapType((MapType) t1, (MapType) t2);
+        }
+        if (t1.isStructType() && t2.isStructType()) {
+            return getCommonStructType((StructType) t1, (StructType) t2);
         }
         if (t1.isNull() || t2.isNull()) {
             return t1.isNull() ? t2 : t1;
@@ -71,6 +80,33 @@ public class TypeManager {
         return common.isValid() ? new ArrayType(common) : common;
     }
 
+    private static Type getCommonMapType(MapType t1, MapType t2) {
+        Type keyCommon = getCommonSuperType(t1.getKeyType(), t2.getKeyType());
+        if (!keyCommon.isValid()) {
+            return Type.INVALID;
+        }
+        Type valueCommon = getCommonSuperType(t1.getValueType(), t2.getValueType());
+        if (!valueCommon.isValid()) {
+            return Type.INVALID;
+        }
+        return new MapType(keyCommon, valueCommon);
+    }
+
+    private static Type getCommonStructType(StructType t1, StructType t2) {
+        if (t1.getFields().size() != t1.getFields().size()) {
+            return Type.INVALID;
+        }
+        List<Type> fieldTypes = Lists.newArrayList();
+        for (int i = 0; i < t1.getFields().size(); ++i) {
+            Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+            if (!fieldCommon.isValid()) {
+                return Type.INVALID;
+            }
+        }
+        // TODO(alvin): needed to assign field names for this struct type
+        return new StructType(fieldTypes);
+    }
+
     public static Expr addCastExpr(Expr expr, Type targetType) {
         try {
             if (targetType.matchesType(expr.getType()) || targetType.isNull()) {
@@ -88,6 +124,26 @@ public class TypeManager {
                 if (!Type.canCastTo(originArrayItemType, ((ArrayType) targetType).getItemType())) {
                     throw new SemanticException("Cannot cast '" + expr.toSql()
                             + "' from " + originArrayItemType + " to " + ((ArrayType) targetType).getItemType());
+                }
+            } else if (expr.getType().isMapType()) {
+                if (!targetType.isMapType()) {
+                    throw new SemanticException(
+                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
+                }
+
+                if (!Type.canCastTo(expr.getType(), targetType)) {
+                    throw new SemanticException("Cannot cast '" + expr.toSql()
+                            + "' from " + expr.getType() + " to " + ((ArrayType) targetType).getItemType());
+                }
+            } else if (expr.getType().isStructType()) {
+                if (!targetType.isStructType()) {
+                    throw new SemanticException(
+                            "Cannot cast '" + expr.toSql() + "' from " + expr.getType() + " to " + targetType);
+                }
+
+                if (!Type.canCastTo(expr.getType(), targetType)) {
+                    throw new SemanticException("Cannot cast '" + expr.toSql()
+                            + "' from " + expr.getType() + " to " + ((ArrayType) targetType).getItemType());
                 }
             } else {
                 if (!Type.canCastTo(expr.getType(), targetType)) {
@@ -131,10 +187,6 @@ public class TypeManager {
         }
 
         return BinaryPredicate.getCmpType(type1, type2);
-    }
-
-    public static Type getCompatibleTypeForIf(List<Type> types) {
-        return getCompatibleType(types, "If");
     }
 
     public static Type getCompatibleTypeForCaseWhen(List<Type> types) {
