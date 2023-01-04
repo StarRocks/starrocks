@@ -242,8 +242,6 @@ public class Memo {
                     // existingGroupExpression merge the state of groupExpression
                     existGroupExpression.mergeGroupExpression(reinsertExpression);
                 } else {
-                    // reinsertExpression and existGroupExpression are not in the same group, need to merge them.
-                    reinsertExpression.getGroup().deleteBestExpression(reinsertExpression);
                     needMergeGroup.put(reinsertExpression.getGroup(), existGroupExpression.getGroup());
                 }
             }
