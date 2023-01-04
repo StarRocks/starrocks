@@ -79,6 +79,8 @@ public:
 
     void setup_runtime(RuntimeProfile* profile) override;
 
+    std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
+
 private:
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
@@ -141,6 +143,8 @@ private:
     const size_t _limit;
     const size_t _offset;
     const TTopNType::type _topn_type;
+
+    std::vector<JoinRuntimeFilter*> _runtime_filter;
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_timer = nullptr;

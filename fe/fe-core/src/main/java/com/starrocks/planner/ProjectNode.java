@@ -161,9 +161,8 @@ public class ProjectNode extends PlanNode {
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
-
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
@@ -174,7 +173,7 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 

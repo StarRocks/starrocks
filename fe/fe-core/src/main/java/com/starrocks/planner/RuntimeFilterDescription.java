@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
@@ -21,6 +20,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
+import com.starrocks.thrift.TRuntimeFilterBuildType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TUniqueId;
@@ -37,6 +37,13 @@ import java.util.stream.Collectors;
 // but comparing to thrift definition, this class has some handy methods and
 // `toExplainString()` for explaining sql
 public class RuntimeFilterDescription {
+    public enum RuntimeFilterType {
+        TOPN_FILTER,
+        JOIN_FILTER
+    }
+
+    ;
+
     private int filterId;
     private int buildPlanNodeId;
     private Expr buildExpr;
@@ -59,6 +66,8 @@ public class RuntimeFilterDescription {
 
     private boolean onlyLocal;
 
+    private RuntimeFilterType type;
+
     private List<Integer> bucketSeqToInstance = Lists.newArrayList();
     // partitionByExprs are used for computing partition ids in probe side when
     // join's equal conjuncts size > 1.
@@ -78,6 +87,7 @@ public class RuntimeFilterDescription {
         equalForNull = false;
         sessionVariable = sv;
         onlyLocal = false;
+        type = RuntimeFilterType.JOIN_FILTER;
     }
 
     public boolean getEqualForNull() {
@@ -104,7 +114,18 @@ public class RuntimeFilterDescription {
         buildCardinality = value;
     }
 
+    public RuntimeFilterType runtimeFilterType() {
+        return type;
+    }
+
+    public void setRuntimeFilterType(RuntimeFilterType type) {
+        this.type = type;
+    }
+
     public boolean canProbeUse(PlanNode node) {
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+            return false;
+        }
         // if we don't across exchange node, that's to say this is in local fragment instance.
         // we don't need to use adaptive strategy now. we are using a conservative way.
         if (inLocalFragmentInstance()) {
@@ -338,6 +359,13 @@ public class RuntimeFilterDescription {
                 }
             }
         }
+
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+            t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
+        } else {
+            t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
+        }
+
         return t;
     }
 

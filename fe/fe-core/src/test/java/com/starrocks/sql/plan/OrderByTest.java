@@ -525,4 +525,30 @@ public class OrderByTest extends PlanTestBase {
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: 1: v1");
     }
+
+    @Test
+    public void testTopNFilter() throws Exception {
+        String sql = "select * from test_all_type_not_null order by t1a limit 10";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: [1, VARCHAR, false] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 1> 1: t1a)");
+
+        // TopN filter only works in no-nullable column
+        sql = "select * from test_all_type order by t1a limit 10";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "runtime filters");
+
+        // only first order by column can use top n filter
+        sql = "select * from test_all_type_not_null order by t1a, t1b limit 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: [1, VARCHAR, false] ASC, [2, SMALLINT, false] ASC\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (<slot 1> 1: t1a), remote = false");
+    }
 }
