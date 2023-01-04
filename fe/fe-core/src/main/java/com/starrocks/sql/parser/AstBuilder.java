@@ -3562,9 +3562,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds);
         if (context.bracketHint() != null) {
             for (Identifier identifier : visit(context.bracketHint().identifier(), Identifier.class)) {
-                if (identifier.getValue().equals("_META_")) {
-                    tableRelation.setMetaQuery(true);
-                }
+                // just ignore the hint if failed to add it which is the same as the previous behaviour
+                tableRelation.addTableHint(identifier.getValue());
             }
         }
 

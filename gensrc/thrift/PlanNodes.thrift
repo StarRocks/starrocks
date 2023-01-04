@@ -972,6 +972,12 @@ struct TConnectorScanNode {
   // 2: optional THdfsScanNode hdfs_scan_node
 }
 
+// binlog meta column names
+const string BINLOG_OP_COLUMN_NAME = "_binlog_op";
+const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
+const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
+const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
+
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
 }
