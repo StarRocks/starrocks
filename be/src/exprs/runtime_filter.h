@@ -228,7 +228,9 @@ public:
     virtual std::string debug_string() const = 0;
 
     void set_join_mode(int8_t join_mode) { _join_mode = join_mode; }
-    size_t version() const { return _version; }
+    // RuntimeFilter version
+    //
+    size_t rf_version() const { return _rf_version; }
 
     virtual size_t max_serialized_size() const;
     virtual size_t serialize(uint8_t* data) const;
@@ -252,7 +254,7 @@ public:
     virtual JoinRuntimeFilter* create_empty(ObjectPool* pool) = 0;
 
 protected:
-    void _update_version() { _version++; }
+    void _update_version() { _rf_version++; }
 
     bool _has_null = false;
     size_t _size = 0;
@@ -261,7 +263,7 @@ protected:
     size_t _num_hash_partitions = 0;
     std::vector<SimdBlockFilter> _hash_partition_bf;
     bool _always_true = false;
-    size_t _version = 0;
+    size_t _rf_version = 0;
 };
 
 // The join runtime filter implement by bloom filter
@@ -279,6 +281,7 @@ public:
         return p;
     };
 
+    // create a min/max LT/GT RuntimeFilter with val
     template <bool is_min>
     static RuntimeBloomFilter* create_with_range(ObjectPool* pool, CppType val) {
         auto* p = pool->add(new RuntimeBloomFilter());
@@ -292,10 +295,10 @@ public:
 
         if constexpr (is_min) {
             p->_min = val;
-            p->_left_open_stage = false;
+            p->_left_open_interval = false;
         } else {
             p->_max = val;
-            p->_right_open_stage = false;
+            p->_right_open_interval = false;
         }
 
         p->_always_true = true;
@@ -352,8 +355,8 @@ public:
 
     CppType max_value() const { return _max; }
 
-    bool left_open_stage() const { return _left_open_stage; }
-    bool right_open_stage() const { return _right_open_stage; }
+    bool left_open_interval() const { return _left_open_interval; }
+    bool right_open_interval() const { return _right_open_interval; }
 
     void evaluate(Column* input_column, RunningContext* ctx) const override {
         if (_num_hash_partitions != 0) {
@@ -363,11 +366,15 @@ public:
         }
     }
 
+    // this->min = std::min(other->min, this->min)
+    // this->max = std::max(other->max, this->max)
     void merge(const JoinRuntimeFilter* rf) override {
         JoinRuntimeFilter::merge(rf);
         _merge_min_max(down_cast<const RuntimeBloomFilter*>(rf));
     }
 
+    // this->min = std::max(other->min, this->min)
+    // this->max = std::min(other->max, this->max)
     void intersect(const JoinRuntimeFilter* rf) override {
         auto other = down_cast<const RuntimeBloomFilter*>(rf);
 
@@ -766,8 +773,8 @@ private:
     std::string _slice_min;
     std::string _slice_max;
     bool _has_min_max = true;
-    bool _left_open_stage = true;
-    bool _right_open_stage = true;
+    bool _left_open_interval = true;
+    bool _right_open_interval = true;
 };
 
 } // namespace starrocks

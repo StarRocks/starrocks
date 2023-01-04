@@ -225,11 +225,6 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
             msg.sort_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
         }
-        if (!buildRuntimeFilters.isEmpty()) {
-            List<TRuntimeFilterDescription> tRuntimeFilterDescriptions =
-                    RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters);
-            msg.sort_node.setBuild_runtime_filters(tRuntimeFilterDescriptions);
-        }
     }
 
     @Override

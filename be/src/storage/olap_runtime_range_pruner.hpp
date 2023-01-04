@@ -62,7 +62,7 @@ struct RuntimeColumnPredicateBuilder {
 
             using ValueType = typename RunTimeTypeTraits<mapping_type>::CppType;
             SQLFilterOp min_op;
-            if (filter->left_open_stage()) {
+            if (filter->left_open_interval()) {
                 min_op = to_olap_filter_type(TExprOpcode::GE, false);
             } else {
                 min_op = to_olap_filter_type(TExprOpcode::GT, false);
@@ -71,7 +71,7 @@ struct RuntimeColumnPredicateBuilder {
             range.add_range(min_op, static_cast<value_type>(min_value));
 
             SQLFilterOp max_op;
-            if (filter->right_open_stage()) {
+            if (filter->right_open_interval()) {
                 max_op = to_olap_filter_type(TExprOpcode::LE, false);
             } else {
                 max_op = to_olap_filter_type(TExprOpcode::LT, false);
@@ -106,16 +106,16 @@ inline Status OlapRuntimeScanRangePruner::_update(RuntimeFilterArrivedCallBack&&
     }
     for (size_t i = 0; i < _arrived_runtime_filters_masks.size(); ++i) {
         if (auto rf = _unarrived_runtime_filters[i]->runtime_filter()) {
-            size_t rf_version = rf->version();
+            size_t rf_version = rf->rf_version();
             if (_arrived_runtime_filters_masks[i] == 0 ||
-                (rf_version > _versions[i] && raw_read_rows - _raw_read_rows > rf_update_threhold)) {
+                (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threhold)) {
                 ASSIGN_OR_RETURN(auto predicates, _get_predicates(i));
                 auto raw_predicates = _as_raw_predicates(predicates);
                 if (!raw_predicates.empty()) {
                     RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
                 }
                 _arrived_runtime_filters_masks[i] = true;
-                _versions[i] = rf_version;
+                _rf_versions[i] = rf_version;
                 _raw_read_rows = raw_read_rows;
             }
         }
@@ -149,7 +149,7 @@ inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& 
             _unarrived_runtime_filters.emplace_back(params.unarrived_runtime_filters[i]);
             _slot_descs.emplace_back(params.slot_descs[i]);
             _arrived_runtime_filters_masks.emplace_back();
-            _versions.emplace_back();
+            _rf_versions.emplace_back();
         }
     }
 }

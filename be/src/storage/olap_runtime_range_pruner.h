@@ -61,7 +61,7 @@ private:
     std::vector<const RuntimeFilterProbeDescriptor*> _unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> _slot_descs;
     std::vector<bool> _arrived_runtime_filters_masks;
-    std::vector<size_t> _versions;
+    std::vector<size_t> _rf_versions;
     PredicateParser* _parser = nullptr;
     size_t _raw_read_rows = 0;
 
