@@ -20,13 +20,14 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/column_predicate.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
 // Parameters used to create a TableReader.
 struct TableReaderParams {
     // table schema
-    VectorizedSchema schema;
+    TOlapTableSchemaParam schema;
     // Version of data to read
     uint64_t version;
     // table and partition info, used to find the tablet that a key belongs to
@@ -87,10 +88,18 @@ public:
      *       it's better to let execution engine to do the ordering(rather then storage engine)
      */
     StatusOr<ChunkIteratorPtr> scan(const std::vector<std::string>& value_columns,
-                                    const std::vector<ColumnPredicate*>& predicates);
+                                    const std::vector<const ColumnPredicate*>& predicates);
 
 private:
+    StatusOr<ChunkIteratorPtr> _base_scan(VectorizedSchema& value_schema,
+                                          const std::vector<const ColumnPredicate*>& predicates);
+    void _build_get_predicates(DatumTuple& tuple, std::vector<const ColumnPredicate*>* predicates,
+                               ObjectPool& obj_pool);
+    Status _build_value_schema(const std::vector<std::string>& value_columns, VectorizedSchema* schema);
+
     TableReaderParams _params;
+    std::vector<TabletSharedPtr> _local_tablets;
+    VectorizedSchema _tablet_schema;
 };
 
 } // namespace starrocks
