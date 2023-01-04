@@ -2,7 +2,7 @@
 
 The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions. However, the Primary Key model does not support changing data by using [Spark Load](../loading/SparkLoad.md) or [INSERT](../loading/InsertInto.md).
 
-StarRocks also supports partial updates. This feature is in preview.
+StarRocks also supports partial updates and conditional updates.
 
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
