@@ -340,6 +340,9 @@ public:
     // MUST be invoked after init_runtime_filter.
     bool has_runtime_filters() const;
 
+    // Whether it has any runtime filter built by TopN node.
+    bool has_topn_filter() const;
+
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
 

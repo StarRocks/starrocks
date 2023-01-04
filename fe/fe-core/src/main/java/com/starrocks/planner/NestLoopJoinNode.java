@@ -17,6 +17,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotRef;
@@ -54,7 +55,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
      * Build the filter if inner table contains only one row, which is a common case for scalar subquery
      */
     @Override
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator) {
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
@@ -77,7 +78,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
 
-                if (getChild(0).pushDownRuntimeFilters(rf, left, probePartitionByExprs)) {
+                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
