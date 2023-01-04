@@ -2986,7 +2986,7 @@ Status TabletUpdates::check_and_remove_rowset() {
     if (!_unused_rowsets.empty()) {
         std::string msg =
                 strings::Substitute("some rowsets of tablet: $0 are still been referenced", _tablet.tablet_id());
-        LOG(WARNING) << "msg";
+        LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
     return Status::OK();
