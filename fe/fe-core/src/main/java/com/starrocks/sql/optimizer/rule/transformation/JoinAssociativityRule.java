@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.ImmutableList;
@@ -62,11 +61,10 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
     public final boolean isInnerMode;
 
     public static final JoinAssociativityRule INNER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
-            RuleType.TF_JOIN_ASSOCIATIVITY_INNER,true);
+            RuleType.TF_JOIN_ASSOCIATIVITY_INNER, true);
 
     public static final JoinAssociativityRule OUTER_JOIN_ASSOCIATIVITY_RULE = new JoinAssociativityRule(
             RuleType.TF_JOIN_ASSOCIATIVITY_OUTER, false);
-
 
     private JoinAssociativityRule(RuleType ruleType, boolean isInnerMode) {
         super(ruleType, Pattern.create(OperatorType.LOGICAL_JOIN)
@@ -102,9 +100,9 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
     @Override
     public ScalarOperator rewriteNewTopOnCondition(JoinOperator topJoinType, ProjectionSplitter splitter,
-                                         ScalarOperator newTopOnCondition,
-                                         ColumnRefSet newBotJoinOutputCols,
-                                         ColumnRefFactory columnRefFactory) {
+                                                   ScalarOperator newTopOnCondition,
+                                                   ColumnRefSet newBotJoinOutputCols,
+                                                   ColumnRefFactory columnRefFactory) {
         if (JoinOperator.INNER_JOIN == topJoinType && newTopOnCondition != null) {
             // rewrite on condition like 'tblA.col = tblB.col + tblC.col' to 'tblA.col = add'
             // and add the add->tblB.col + tblC.col map to projectMap
@@ -133,7 +131,6 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
         private final Map<ScalarOperator, ColumnRefOperator> exprToColumnRefMap;
 
-
         public JoinOnConditionShuttle(ColumnRefSet newBotJoinOutputCols, ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
             this.exprToColumnRefMap = Maps.newHashMap();
@@ -142,16 +139,17 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
         public List<ColumnEntry> getColumnEntries() {
             List<ColumnEntry> entryList = Lists.newArrayList();
-            exprToColumnRefMap.entrySet().stream().forEach(e -> entryList.add(new ColumnEntry(e.getValue(), e.getKey())));
+            exprToColumnRefMap.entrySet().stream()
+                    .forEach(e -> entryList.add(new ColumnEntry(e.getValue(), e.getKey())));
             return entryList;
         }
-
 
         public ScalarOperator rewriteOnCondition(ScalarOperator onCondition) {
             ScalarOperator copy = onCondition.clone();
             ScalarOperator newOnCondition = copy.accept(this, null);
             ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
-            newOnCondition = scalarOperatorRewriter.rewrite(newOnCondition, ImmutableList.of(new NormalizePredicateRule()));
+            newOnCondition =
+                    scalarOperatorRewriter.rewrite(newOnCondition, ImmutableList.of(new NormalizePredicateRule()));
             return newOnCondition;
         }
 
@@ -159,7 +157,6 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
         public ScalarOperator visit(ScalarOperator operator, Void context) {
             return operator;
         }
-
 
         @Override
         public ScalarOperator visitCall(CallOperator call, Void context) {
