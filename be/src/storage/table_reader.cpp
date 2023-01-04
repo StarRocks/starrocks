@@ -60,10 +60,7 @@ Status TableReader::multi_get(const Chunk& keys, const std::vector<std::string>&
         predicates.clear();
         _build_get_predicates(tuple, &predicates);
         StatusOr<ChunkIteratorPtr> status_or = _base_scan(value_schema, predicates);
-        if (!status_or.ok()) {
-            status = status_or.status();
-            break;
-        }
+        RETURN_IF(!status_or.ok(), status_or.status());
         ChunkIteratorPtr iterator = status_or.value();
         read_chunk->reset();
         status = iterator->get_next(read_chunk.get());
