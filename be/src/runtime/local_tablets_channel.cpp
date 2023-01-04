@@ -229,7 +229,7 @@ void LocalTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWrite
     count_down_latch.wait();
 
     // We need wait all secondary replica commit before we close the channel
-    if (_is_replicated_storage && close_channel) {
+    if (_is_replicated_storage && close_channel && response->status().status_code() == TStatusCode::OK) {
         bool timeout = false;
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
             // Wait util seconary replica commit/abort by primary
