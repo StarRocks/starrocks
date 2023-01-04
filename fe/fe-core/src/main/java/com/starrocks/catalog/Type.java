@@ -1062,6 +1062,9 @@ public abstract class Type implements Cloneable {
         } else if (from.isStructType() && to.isStructType()) {
             StructType fromStruct = (StructType) from;
             StructType toStruct = (StructType) to;
+            if (fromStruct.getFields().size() != toStruct.getFields().size()) {
+                return false;
+            }
             for (int i = 0; i < fromStruct.getFields().size(); ++i) {
                 if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
                     return false;
