@@ -590,4 +590,8 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: 26: cast = 8: c_0_1\n" +
                 "  |  other join predicates: 8: c_0_1 <= 26: cast, 8: c_0_1 < 26: cast, 8: c_0_1 >= 26: cast"));
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b5e972cf3 ([BugFix] Fix merge memo lose best expression (#16135))
 }
