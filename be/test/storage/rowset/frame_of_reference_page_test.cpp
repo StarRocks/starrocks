@@ -25,6 +25,7 @@
 
 #include <memory>
 
+#include "gen_cpp/Types_types.h"
 #include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
@@ -35,7 +36,16 @@
 
 using starrocks::PageBuilderOptions;
 using starrocks::PageDecoderOptions;
-using starrocks::operator<<;
+
+namespace std {
+std::ostream& operator<<(std::ostream& os, __int128 const& value) {
+    return starrocks::operator<<(os, value);
+}
+
+std::istream& operator>>(std::istream& is, __int128& value) {
+    return starrocks::operator>>(is, value);
+}
+} // namespace std
 
 namespace starrocks {
 class FrameOfReferencePageTest : public testing::Test {

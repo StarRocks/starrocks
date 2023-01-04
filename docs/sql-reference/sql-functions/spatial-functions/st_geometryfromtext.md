@@ -1,16 +1,16 @@
 # ST_GeometryFromText,ST_GeomFromText
 
-## description
+## Description
 
-### Syntax
+Converts a WKT (Well Known Text) to the corresponding memory geometry.
+
+## Syntax
 
 ```Haskell
 GEOMETRY ST_GeometryFromText(VARCHAR wkt)
 ```
 
-Convert a WKT (Well Known Text) to the corresponding memory geometry.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT ST_AsText(ST_GeometryFromText("LINESTRING (1 1, 2 2)"));

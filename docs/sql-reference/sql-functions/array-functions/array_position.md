@@ -2,7 +2,7 @@
 
 ## Description
 
-Obtain the position of an element in an array.
+Obtains the position of an element in an array.
 
 ## Syntax
 

@@ -150,7 +150,8 @@ public:
     // update meta after state of a rowset commit is applied
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
                                       std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
-                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index);
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                      const starrocks::RowsetMetaPB* rowset_meta);
 
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
@@ -202,6 +203,12 @@ public:
     static Status clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 
     static Status remove_tablet_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, TSchemaHash schema_hash);
+
+    static Status remove_primary_key_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
+
+    static Status remove_table_meta(DataDir* store, TTableId table_id);
+
+    static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
 };
 
 } // namespace starrocks

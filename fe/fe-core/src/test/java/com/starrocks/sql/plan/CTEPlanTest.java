@@ -100,12 +100,12 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with x0 as (select * from t0) " +
                 "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
+        Assert.assertTrue(plan.contains("  MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
+                "    EXCHANGE ID: 01\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 04\n" +
+                "    EXCHANGE ID: 03\n" +
                 "    RANDOM"));
 
         sql = "with x0 as (select * from t0) " +
@@ -113,10 +113,10 @@ public class CTEPlanTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
+                "    EXCHANGE ID: 01\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 04\n" +
+                "    EXCHANGE ID: 03\n" +
                 "    RANDOM"));
     }
 
@@ -205,7 +205,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "(select * from xx where xx.v2 = 2 limit 1) x1 join " +
                 "(select * from xx where xx.v3 = 4 limit 3) x2 on x1.v2=x2.v3;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: (3: v3 = 4) OR (2: v2 = 2)\n" +
@@ -213,10 +213,10 @@ public class CTEPlanTest extends PlanTestBase {
                 "     rollup: t0\n" +
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
-                "     cardinality=0\n" +
+                "     cardinality=1\n" +
                 "     avgRowSize=24.0\n" +
                 "     numNodes=0\n" +
-                "     limit: 3"));
+                "     limit: 3");
     }
 
     @Test
@@ -273,10 +273,10 @@ public class CTEPlanTest extends PlanTestBase {
 
         String plan = getFragmentPlan(sql);
         defaultCTEReuse();
-        assertContains(plan, "  6:SELECT\n" +
+        assertContains(plan, "3:SELECT\n" +
                 "  |  predicates: 4: v1 = 2\n" +
                 "  |  \n" +
-                "  5:Project\n" +
+                "  2:Project\n" +
                 "  |  <slot 4> : 1: v1\n" +
                 "  |  <slot 5> : 2: v2\n" +
                 "  |  <slot 6> : 3: v3");
@@ -565,5 +565,67 @@ public class CTEPlanTest extends PlanTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testNullTypeHack() throws Exception {
+        String sql = "WITH cte_1 AS (\n" +
+                "  SELECT null v1\n" +
+                ")\n" +
+                "SELECT  \n" +
+                "  CASE \n" +
+                "    WHEN a.v1 = b.v1 THEN 1 \n" +
+                "    ELSE -1 \n" +
+                "  END IS_OK\n" +
+                "FROM cte_1 a, cte_1 b";
+
+        String plan = getThriftPlan(sql);
+        assertNotContains(plan, "NULL_TYPE");
+    }
+
+    @Test
+    public void testMergePushdownPredicate() throws Exception {
+        String sql = "with with_t_0 as (select v1, v2, v4 from t0 join t1),\n" +
+                "with_t_1 as (select v1, v2, v5 from t0 join t1)\n" +
+                "select v5, 1 from with_t_1 join with_t_0 left semi join\n" +
+                "(select v2 from with_t_0 where v4 = 123) subwith_t_0\n" +
+                "on with_t_0.v1 = subwith_t_0.v2 and with_t_0.v1 > 0\n" +
+                "where with_t_0.v4 < 100;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:SELECT\n" +
+                "  |  predicates: 19: v1 > 0, 22: v4 < 100");
+        assertContains(plan, "9:SELECT\n" +
+                "  |  predicates: 26: v2 > 0, 28: v4 = 123");
+    }
+
+    @Test
+    public void testMultiDistinctWithLimit() throws Exception {
+        {
+            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(DISTINCT 1: v1), avg(DISTINCT 2: v2)\n" +
+                    "  |  group by: \n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
+        }
+        {
+            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 group by v3 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 4> : 4: sum\n" +
+                    "  |  <slot 5> : 5: avg\n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(DISTINCT 1: v1), avg(DISTINCT 2: v2)\n" +
+                    "  |  group by: 3: v3\n" +
+                    "  |  limit: 1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
+        }
     }
 }

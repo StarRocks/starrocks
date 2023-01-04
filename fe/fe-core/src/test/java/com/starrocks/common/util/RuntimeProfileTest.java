@@ -343,8 +343,8 @@ public class RuntimeProfileTest {
         Assert.assertNull(profile1.getCounter("__MAX_OF_time1"));
         Assert.assertNotNull(profile1.getCounter("__MIN_OF_time2"));
         Assert.assertNotNull(profile1.getCounter("__MAX_OF_time2"));
-        Assert.assertNull(profile1.getCounter("__MIN_OF_count1"));
-        Assert.assertNull(profile1.getCounter("__MAX_OF_count1"));
+        Assert.assertNotNull(profile1.getCounter("__MIN_OF_count1"));
+        Assert.assertNotNull(profile1.getCounter("__MAX_OF_count1"));
         Assert.assertNotNull(profile1.getCounter("__MIN_OF_count2"));
         Assert.assertNotNull(profile1.getCounter("__MAX_OF_count2"));
     }
@@ -380,9 +380,13 @@ public class RuntimeProfileTest {
         RuntimeProfile mergedProfile = profiles.get(0);
         Assert.assertEquals(13, mergedProfile.getCounterMap().size());
         RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
-        Assert.assertEquals(5, mergedProfile.getCounterMap().size());
+        Assert.assertEquals(7, mergedProfile.getCounterMap().size());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1"));
         Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("__MIN_OF_count1"));
+        Assert.assertEquals(1, mergedProfile.getCounterMap().get("__MIN_OF_count1").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("__MAX_OF_count1"));
+        Assert.assertEquals(1, mergedProfile.getCounterMap().get("__MAX_OF_count1").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
         Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1_sub").getValue());
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2"));

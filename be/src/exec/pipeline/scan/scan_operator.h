@@ -56,6 +56,8 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
+    void set_query_ctx(const QueryContextPtr& query_ctx);
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -85,7 +87,7 @@ private:
                                    int64_t scan_bytes);
     void _detach_chunk_sources();
 
-    void _merge_chunk_source_profiles();
+    void _merge_chunk_source_profiles(RuntimeState* state);
     size_t _buffer_unplug_threshold() const;
 
     inline void _set_scan_status(const Status& status) {

@@ -104,6 +104,7 @@ public class FileSystemManager {
     private static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
     private static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
     private static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
+    private static final String FS_S3A_PATH_STYLE_ACCESS = "fs.s3a.path.style.access";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
     private static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
@@ -416,7 +417,7 @@ public class FileSystemManager {
                 } else {
                     dfsFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 }
-                fileSystem.setFileSystem(dfsFileSystem);
+                fileSystem.setFileSystem(dfsFileSystem, authentication.equals(AUTHENTICATION_KERBEROS));
             }
             return fileSystem;
         } catch (Exception e) {
@@ -443,6 +444,7 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_S3A_ENDPOINT, "");
+        String pathStyleAccess = properties.getOrDefault(FS_S3A_PATH_STYLE_ACCESS, "false");
         String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = properties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
         String awsCredProvider = properties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
@@ -472,6 +474,7 @@ public class FileSystemManager {
                 conf.set(FS_S3A_ACCESS_KEY, accessKey);
                 conf.set(FS_S3A_SECRET_KEY, secretKey);
                 conf.set(FS_S3A_ENDPOINT, endpoint);
+                conf.set(FS_S3A_PATH_STYLE_ACCESS, pathStyleAccess);
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 if (awsCredProvider != null) {
@@ -971,7 +974,7 @@ public class FileSystemManager {
         public void run() {
             try {
                 for (BrokerFileSystem fileSystem : cachedFileSystem.values()) {
-                    if (fileSystem.isExpired(BrokerConfig.client_expire_seconds)) {
+                    if (fileSystem.isExpired()) {
                         logger.info("file system " + fileSystem + " is expired, close and remove it");
                         fileSystem.getLock().lock();
                         try {

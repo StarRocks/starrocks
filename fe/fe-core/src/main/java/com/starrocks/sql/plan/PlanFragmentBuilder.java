@@ -1329,14 +1329,8 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
-                if (withLocalShuffle) {
-                    inputFragment.setEnableSharedScan(true);
-                    inputFragment.setAssignScanRangesPerDriverSeq(false);
-                } else {
-                    inputFragment.setEnableSharedScan(false);
-                    inputFragment.setAssignScanRangesPerDriverSeq(true);
-                }
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
+                inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1604,6 +1598,26 @@ public class PlanFragmentBuilder {
             return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
         }
 
+        private void setNullableForJoin(JoinOperator joinOperator,
+                                        PlanFragment leftFragment, PlanFragment rightFragment, ExecPlan context) {
+            Set<TupleId> nullableTupleIds = new HashSet<>();
+            nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
+            nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
+            if (joinOperator.isLeftOuterJoin()) {
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isRightOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isFullOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            }
+            for (TupleId tupleId : nullableTupleIds) {
+                TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(tupleId);
+                tupleDescriptor.getSlots().forEach(slot -> slot.setIsNullable(true));
+                tupleDescriptor.computeMemLayout();
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
@@ -1664,7 +1678,8 @@ public class PlanFragmentBuilder {
                         onPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
-
+                
+                setNullableForJoin(node.getJoinType(), leftFragment, rightFragment, context);
                 NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                         leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                         null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
@@ -1685,10 +1700,7 @@ public class PlanFragmentBuilder {
                 context.getFragments().add(leftFragment);
 
                 leftFragment.setPlanRoot(joinNode);
-                if (!rightFragment.getChildren().isEmpty()) {
-                    // right table isn't value operator
-                    leftFragment.addChild(rightFragment.getChild(0));
-                }
+                leftFragment.addChildren(rightFragment.getChildren());
 
                 if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
                     joinNode.setReplicated(true);
@@ -1770,20 +1782,7 @@ public class PlanFragmentBuilder {
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
-                List<PlanFragment> nullablePlanFragments = new ArrayList<>();
-                if (joinOperator.isLeftOuterJoin()) {
-                    nullablePlanFragments.add(rightFragment);
-                } else if (joinOperator.isRightOuterJoin()) {
-                    nullablePlanFragments.add(leftFragment);
-                } else if (joinOperator.isFullOuterJoin()) {
-                    nullablePlanFragments.add(leftFragment);
-                    nullablePlanFragments.add(rightFragment);
-                }
-                for (PlanFragment planFragment : nullablePlanFragments) {
-                    for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                }
+                setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
 
                 JoinNode joinNode;
                 if (node instanceof PhysicalHashJoinOperator) {
@@ -1884,10 +1883,6 @@ public class PlanFragmentBuilder {
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
 
-                    if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                        leftFragment.setEnableSharedScan(false);
-                    }
-
                     return leftFragment;
                 } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     setJoinPushDown(joinNode);
@@ -1926,8 +1921,6 @@ public class PlanFragmentBuilder {
                         leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, joinNode);
                     }
-
-                    leftFragment.setEnableSharedScan(false);
 
                     return leftFragment;
                 }
@@ -1989,7 +1982,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
@@ -2011,7 +2004,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }

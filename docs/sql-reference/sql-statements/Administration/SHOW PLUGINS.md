@@ -1,6 +1,6 @@
 # SHOW PLUGINS
 
-## description
+## Description
 
 This statement is used to view the installed plugins.
 
@@ -12,7 +12,7 @@ SHOW PLUGINS;
 
 This command will display all built-in plugins and custom plugins.
 
-## example
+## Examples
 
 1. Show the installed plugins:
 

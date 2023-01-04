@@ -1,16 +1,16 @@
 # SUM
 
-## description
+## Description
 
-### Syntax
+Resurns the sum of all values of the selected fields.
+
+## Syntax
 
 ```Haskell
 SUM(expr)
 ```
 
-It resurns the sum of all values of the selected fields.
-
-## example
+## Examples
 
 ```plain text
 MySQL > select sum(scan_rows)

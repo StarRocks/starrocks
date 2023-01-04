@@ -264,7 +264,11 @@ public enum ErrorCode {
     ERR_BAD_CATALOG_AND_DB_ERROR(5080, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog.db '%s'"),
     ERR_UNSUPPORTED_SQL_PATTERN(5081, new byte[] {'4', '2', '0', '0', '0'},
-            "Only support like 'function_pattern' syntax.");
+            "Only support like 'function_pattern' syntax."),
+
+    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
+            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

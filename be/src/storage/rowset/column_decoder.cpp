@@ -27,8 +27,10 @@ Status ColumnDecoder::encode_to_global_id(vectorized::Column* datas, vectorized:
                 if (LIKELY(iter != ed)) {
                     lowcard_data[i] = iter->second;
                 } else {
-                    return Status::InternalError(fmt::format("Not Found string in global dict: {}",
-                                                             binary_column->get_slice(i).to_string()));
+                    // corner case:
+                    // if this column is unique model, and it is also a value column (replace aggregate)
+                    // the value won't found in global dict, then it will be replaced in other rowset value
+                    lowcard_data[i] = 0;
                 }
             }
         }
@@ -44,8 +46,8 @@ Status ColumnDecoder::encode_to_global_id(vectorized::Column* datas, vectorized:
             if (LIKELY(iter != ed)) {
                 lowcard_data[i] = iter->second;
             } else {
-                return Status::InternalError(
-                        fmt::format("Not Found string in global dict: {}", binary_column->get_slice(i).to_string()));
+                // same reason as above
+                lowcard_data[i] = 0;
             }
         }
     }

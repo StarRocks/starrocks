@@ -173,6 +173,21 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testReplyOnlineCase_JoinEliminateNulls() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/join_eliminate_nulls"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setNewPlanerAggStage(2);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  6:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', name) " +
+                "= 'ocms_fengyang56' WHEN '0' THEN TRUE ELSE FALSE END\n" +
+                "  |  cardinality: 2500"));
+    }
+
+
+    @Test
     public void testTPCH20() throws Exception {
         compareDumpWithOriginTest("tpchcost/q20");
     }
@@ -527,7 +542,10 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
                         TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains("<slot 186> : 186: S_SUPPKEY"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  95:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 186: S_SUPPKEY = 202: cast\n"));
     }
 
     @Test
@@ -535,7 +553,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains(" 38:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 40:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
 
@@ -560,14 +578,16 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 21:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  22:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNotNulls < 24: countRows THEN NULL ELSE FALSE END IS NULL"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  14:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  other join predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, " +
+                "CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL " +
+                "WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNotNulls < 24: countRows THEN NULL ELSE FALSE END IS NULL\n"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("5:HASH JOIN\n" +
+                "  |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: c_0_0 = 17: c_0_0\n" +
-                "  |  other join predicates: if(17: c_0_0 != 1: c_0_0, 4: c_0_3, 19: c_0_3) = 18: expr\n"));
+                "  |  equal join conjunct: 26: cast = 8: c_0_1\n" +
+                "  |  other join predicates: 8: c_0_1 <= 26: cast, 8: c_0_1 < 26: cast, 8: c_0_1 >= 26: cast"));
     }
 }

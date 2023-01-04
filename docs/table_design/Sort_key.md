@@ -33,7 +33,7 @@ The following examples show allowed sort key columns and unallowed sort key colu
   - `city_code` and `user_name`
   - `site_id`, `city_code`, and `pv`
 
-The following sections provide examples of how to define sort key columns when you create tables that use various data models.
+The following sections provide examples of how to define sort key columns when you create tables that use various data models. These examples are suitable for StarRocks clusters that have at least three BEs.
 
 ### Duplicate Key
 
@@ -137,7 +137,7 @@ As described above, when your query filters on both `site_id` and `city_code`, S
 
 Additionally, note that a large number of sort key columns also increase memory consumption. To reduce memory consumption, StarRocks imposes the following limits on the usage of prefix indexes:
 
-- The prefix index entry of a block must be composed of the prefix of the table's sort key columns in the first row of that block. 
+- The prefix index entry of a block must be composed of the prefix of the table's sort key columns in the first row of that block.
 
 - A prefix index can be created on a maximum of 3 columns.
 

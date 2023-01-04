@@ -63,18 +63,22 @@ public class Field {
             if (relationAlias == null) {
                 return false;
             }
-            return relationAlias.getTbl().equals(expr.getTblNameWithoutAnalyzed().getTbl())
-                    && expr.getColumnName().equalsIgnoreCase(this.name);
+            return matchesPrefix(expr.getTblNameWithoutAnalyzed()) && expr.getColumnName().equalsIgnoreCase(this.name);
         } else {
             return expr.getColumnName().equalsIgnoreCase(this.name);
         }
     }
 
-    public boolean matchesPrefix(TableName prefix) {
-        if (relationAlias != null) {
-            return relationAlias.getTbl().equals(prefix.getTbl());
+    public boolean matchesPrefix(TableName tableName) {
+        if (tableName.getCatalog() != null && !tableName.getCatalog().equals(relationAlias.getCatalog())) {
+            return false;
         }
-        return false;
+
+        if (tableName.getDb() != null && !tableName.getDb().equals(relationAlias.getDb())) {
+            return false;
+        }
+
+        return tableName.getTbl().equals(relationAlias.getTbl());
     }
 
     @Override

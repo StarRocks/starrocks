@@ -112,8 +112,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SQL_SAFE_UPDATES = "sql_safe_updates";
     public static final String NET_BUFFER_LENGTH = "net_buffer_length";
     public static final String CODEGEN_LEVEL = "codegen_level";
-    // mem limit can't smaller than bufferpool's default page size
-    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
@@ -170,6 +168,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
+    public static final String RESOURCE_GROUP_ID_V2 = "resource_group_id";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -276,6 +275,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
+
+    // Limitations
+    // mem limit can't smaller than bufferpool's default page size
+    public static final long MIN_EXEC_MEM_LIMIT = 2097152;
+    // query timeout cannot greater than one month
+    public static final int MAX_QUERY_TIMEOUT = 259200;
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -478,7 +483,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
-    @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, flag = VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
+            show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
     private int resourceGroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
@@ -704,16 +710,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public long getSqlSelectLimit() {
-        if (sqlSelectLimit < 0) {
-            return DEFAULT_SELECT_LIMIT;
-        }
         return sqlSelectLimit;
     }
 
     public void setSqlSelectLimit(long limit) {
-        if (limit < 0) {
-            return;
-        }
         this.sqlSelectLimit = limit;
     }
 
@@ -726,11 +726,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setMaxExecMemByte(long maxExecMemByte) {
-        if (maxExecMemByte < MIN_EXEC_MEM_LIMIT) {
-            this.maxExecMemByte = MIN_EXEC_MEM_LIMIT;
-        } else {
-            this.maxExecMemByte = maxExecMemByte;
-        }
+        this.maxExecMemByte = maxExecMemByte;
     }
 
     public void setLoadMemLimit(long loadMemLimit) {

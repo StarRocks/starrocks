@@ -1,16 +1,16 @@
 # array_length
 
-## description
+## Description
 
-### Syntax
+Returns the number of elements in the array. The result type is INT. if the parameter is NULL, the result is also NULL.
+
+## Syntax
 
 ```Haskell
 array_length(any_array)
 ```
 
-Returns the number of elements in the array. The result type is INT. if the parameter is NULL, the result is also NULL.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_length([1,2,3]);

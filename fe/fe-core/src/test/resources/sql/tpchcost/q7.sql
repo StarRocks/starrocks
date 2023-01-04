@@ -45,12 +45,12 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 25:MERGING-EXCHANGE
-cardinality: 250
+cardinality: 352
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -61,25 +61,25 @@ OutPut Exchange Id: 25
 24:SORT
 |  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, SMALLINT, false] ASC
 |  offset: 0
-|  cardinality: 250
+|  cardinality: 352
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 |
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 250
+|  cardinality: 352
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 |
 22:EXCHANGE
-cardinality: 297
+cardinality: 352
 
 PLAN FRAGMENT 2(F00)
 
@@ -91,12 +91,12 @@ OutPut Exchange Id: 22
 |  STREAMING
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 297
+|  cardinality: 352
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 296.630859375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 |
 20:Project
 |  output columns:

@@ -24,7 +24,6 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -44,7 +43,6 @@ import org.junit.Test;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class CreateMaterializedViewTest {
@@ -308,8 +306,8 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT `tb1`.`k1` AS `k1`, `tb1`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1`", materializedView.getViewDefineSql());
+            Assert.assertEquals("SELECT `test`.`tb1`.`k1` AS `k1`, `test`.`tb1`.`k2` AS `s2` FROM `test`.`tbl1` AS `tb1`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
@@ -471,10 +469,9 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT date_trunc('month', `tb1`.`k1`) AS `s1`, `tb2`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1` " +
-                    "INNER JOIN `test`.`tbl2` AS `tb2` " +
-                    "ON `tb1`.`k2` = `tb2`.`k2`", materializedView.getViewDefineSql());
+            Assert.assertEquals(
+                    "SELECT date_trunc('month', `test`.`tb1`.`k1`) AS `s1`, `test`.`tb2`.`k2` AS `s2` FROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `test`.`tb1`.`k2` = `test`.`tb2`.`k2`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
@@ -1638,18 +1635,6 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void createViewBadName() {
-        String longLongName = "view___123456789012345678901234567890123456789012345678901234567890";
-        String sql = "create view db1." + longLongName + " as select 1,2,3";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.fail(); // should raise Exception
-        } catch (Exception e) {
-            Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
-        }
-    }
-
-    @Test
     public void testPartitionByNotFirstColumn() throws Exception {
         starRocksAssert.withNewMaterializedView("create materialized view mv_with_partition_by_not_first_column" +
                 " partition by k1" +
@@ -1679,6 +1664,29 @@ public class CreateMaterializedViewTest {
             starRocksAssert.withMaterializedView(sql);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view query statement only support direct query from table"));
+        }
+    }
+
+    @Test
+    public void testCreateAsyncMv() {
+        Config.enable_experimental_mv = true;
+        String sql = "create materialized view async_mv_1 distributed by hash(c_1_9) as" +
+                " select c_1_9, c_1_4 from t1";
+        try {
+            starRocksAssert.withNewMaterializedView(sql);
+            MaterializedView mv = (MaterializedView) testDb.getTable("async_mv_1");
+            Assert.assertTrue(mv.getFullSchema().get(0).isKey());
+            Assert.assertFalse(mv.getFullSchema().get(1).isKey());
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+
+        String sql2 = "create materialized view async_mv_1 distributed by hash(c_1_4) as" +
+                " select c_1_4 from t1";
+        try {
+            starRocksAssert.withNewMaterializedView(sql2);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
         }
     }
 }

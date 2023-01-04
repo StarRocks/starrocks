@@ -49,7 +49,7 @@ public:
         int i = 0;
         for (auto [expect_key, expect_value] : expected) {
             EXPECT_EQ(expect_key, result_key->get(i).get_slice());
-            EXPECT_EQ(JsonValue::parse(expect_value).value(), *result_value->get(i).get_json());
+            EXPECT_EQ(expect_value, result_value->get(i).get_json()->to_string_uncheck());
             i++;
         }
 
@@ -64,7 +64,7 @@ TEST_F(JsonEachTest, json_each_object) {
     std::vector<std::tuple<std::string, std::string>> expect = {
         {"k1", "1"},
         {"k2", "\"str\""},
-        {"k3", "[1,2,3]"},
+        {"k3", "[1, 2, 3]"},
         {"k4", "null"},
         {"k5", "{}"},
     };

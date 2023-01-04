@@ -1,16 +1,16 @@
 # ltrim
 
-## description
+## Description
 
-### Syntax
+Removes the leading spaces from the beginning of the `str` argument.
+
+## Syntax
 
 ```Haskell
 VARCHAR ltrim(VARCHAR str)
 ```
 
-This function removes the leading spaces from the beginning of the str argument.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT ltrim('   ab d');

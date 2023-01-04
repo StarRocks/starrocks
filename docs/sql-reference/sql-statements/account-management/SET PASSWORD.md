@@ -1,6 +1,6 @@
 # SET PASSWORD
 
-## description
+## Description
 
 ### Syntax
 
@@ -19,7 +19,7 @@ PASSWORD() inputs plaintext passwords, while the direct usage of strings require
 
 Modifying passwords of other users requires administrator privileges.
 
-## example
+## Examples
 
 1. Modify the password of the current user
 

@@ -1593,6 +1593,16 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testAliasView3() throws Exception {
+        String createView = "create view alias_view(a, b) as select v1,v2 from test.t0";
+        starRocksAssert.withView(createView);
+
+        String plan = getFragmentPlan("select test.t.a from test.alias_view t");
+        assertContains(plan, "OUTPUT EXPRS:1: v1");
+        starRocksAssert.dropView("alias_view");
+    }
+
+    @Test
     public void testExpressionRewriteView() throws Exception {
         String sql =
                 "select from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd') as x1, sum(t1c) as x3 " +

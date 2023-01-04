@@ -30,6 +30,7 @@ import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -245,7 +246,7 @@ public class ReportHandler extends Daemon {
             if (oldTask == null) {
                 reportQueue.put(reportTask);
             } else {
-                LOG.info("update be {} report task {}", oldTask.beId, oldTask);
+                LOG.info("update be {} report task, type: {}", oldTask.beId, oldTask.type);
             }
             pendingTaskMap.get(reportTask.type).put(reportTask.beId, reportTask);
         }
@@ -602,17 +603,34 @@ public class ReportHandler extends Daemon {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
+        DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
             Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
             db.writeLock();
+            long lockStartTime = System.currentTimeMillis();
             try {
                 int deleteCounter = 0;
                 List<Long> tabletIds = tabletDeleteFromMeta.get(dbId);
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {
+                    // Because we need to write bdb with db write lock hold,
+                    // to avoid block other threads too long, we periodically release and
+                    // acquire the db write lock (every MAX_DB_WLOCK_HOLDING_TIME_MS milliseconds).
+                    long currentTime = System.currentTimeMillis();
+                    if (currentTime - lockStartTime > MAX_DB_WLOCK_HOLDING_TIME_MS) {
+                        db.writeUnlock();
+                        db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+                        if (db == null) {
+                            continue DB_TRAVERSE;
+                        }
+                        db.writeLock();
+                        lockStartTime = currentTime;
+                    }
+
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
                         continue;
@@ -762,14 +780,18 @@ public class ReportHandler extends Daemon {
             AgentTaskExecutor.submit(createReplicaBatchTask);
         }
     }
-
     private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
-                                           long tabletId, int schemaHash, String reason) {
+                                           long tabletId, int schemaHash, String reason, boolean force) {
         DropReplicaTask task =
-                new DropReplicaTask(backendId, tabletId, schemaHash, false);
+                new DropReplicaTask(backendId, tabletId, schemaHash, force);
         batchTask.addTask(task);
         LOG.info("delete tablet[{}] from backend[{}] because {}",
                 tabletId, backendId, reason);
+    }
+
+    private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
+                                           long tabletId, int schemaHash, String reason) {
+        addDropReplicaTask(batchTask, backendId, tabletId, schemaHash, reason, false);
     }
 
     private static void deleteFromBackend(Map<Long, TTablet> backendTablets,
@@ -788,7 +810,8 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta");
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletTruncated(tabletId));
+                invertedIndex.eraseTabletTruncated(tabletId);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
                 continue;
@@ -872,6 +895,20 @@ public class ReportHandler extends Daemon {
             for (int i = 0; i < tabletMetaList.size(); i++) {
                 long tabletId = tabletIds.get(i);
                 TabletMeta tabletMeta = tabletMetaList.get(i);
+                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+                if (db == null) {
+                    continue;
+                }
+                db.readLock();
+                try {
+                    OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                    if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                        // Currently, primary key table doesn't support tablet migration between local disks.
+                        continue;
+                    }
+                } finally {
+                    db.readUnlock();
+                }
                 // always get old schema hash(as effective one)
                 int effectiveSchemaHash = tabletMeta.getOldSchemaHash();
                 StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId,

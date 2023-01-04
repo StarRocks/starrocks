@@ -280,7 +280,7 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
-    public static void addMockBackend(int backendId) throws Exception {
+    public static Backend addMockBackend(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
 
@@ -298,6 +298,8 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
+
+        return be;
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
@@ -368,16 +370,22 @@ public class UtFrameUtils {
                     !statementBase.isExplain()) {
                 String viewName = "view" + INDEX.getAndIncrement();
                 String createView = "create view " + viewName + " as " + originStmt;
-                CreateViewStmt createTableStmt =
-                        (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                CreateViewStmt createTableStmt;
                 try {
-                    StatementBase viewStatement =
-                            com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
-                                    connectContext.getSessionVariable().getSqlMode()).get(0);
-                    com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
-                } catch (Exception e) {
-                    System.out.println(e.getMessage());
-                    throw e;
+                    createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                    try {
+                        StatementBase viewStatement =
+                                com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                        connectContext.getSessionVariable().getSqlMode()).get(0);
+                        com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
+                    } catch (Exception e) {
+                        System.out.println(e.getMessage());
+                        throw e;
+                    }
+                } catch (SemanticException | AnalysisException e) {
+                    if (!e.getMessage().contains("Duplicate column name")) {
+                        throw e;
+                    }
                 }
             }
 

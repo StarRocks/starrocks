@@ -25,10 +25,25 @@ bool WorkGroupSchedEntity<Q>::is_sq_wg() const {
     return _workgroup->is_sq_wg();
 }
 
+template <typename Q>
+void WorkGroupSchedEntity<Q>::incr_runtime_ns(int64_t runtime_ns) {
+    _vruntime_ns += runtime_ns / cpu_limit();
+    _unadjusted_runtime_ns += runtime_ns;
+}
+
+template <typename Q>
+void WorkGroupSchedEntity<Q>::adjust_runtime_ns(int64_t runtime_ns) {
+    _vruntime_ns += runtime_ns / cpu_limit();
+}
+
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
 template class WorkGroupSchedEntity<ScanTaskQueue>;
 
-///WorkGroup.
+/// WorkGroup.
+RunningQueryToken::~RunningQueryToken() {
+    wg->decr_num_queries();
+}
+
 WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
                      size_t concurrency, WorkGroupType type)
         : _name(name),
@@ -149,7 +164,7 @@ void WorkGroup::decr_num_running_drivers() {
     }
 }
 
-Status WorkGroup::try_incr_num_queries() {
+StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token() {
     int64_t old = _num_running_queries.fetch_add(1);
     if (_concurrency_limit != ABSENT_CONCURRENCY_LIMIT && old >= _concurrency_limit) {
         _num_running_queries.fetch_sub(1);
@@ -157,7 +172,7 @@ Status WorkGroup::try_incr_num_queries() {
         return Status::TooManyTasks(fmt::format("Exceed concurrency limit: {}", _concurrency_limit));
     }
     _num_total_queries++;
-    return Status::OK();
+    return std::make_unique<RunningQueryToken>(shared_from_this());
 }
 
 void WorkGroup::decr_num_queries() {
@@ -297,15 +312,33 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
     _wg_metrics[wg->name()] = wg->unique_id();
 }
 
+double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
+    if (sum_value <= 0) {
+        return 0;
+    }
+    return double(curr_value) / sum_value;
+}
+
 void WorkGroupManager::update_metrics_unlocked() {
     int64_t sum_cpu_runtime_ns = 0;
     int64_t sum_scan_runtime_ns = 0;
     int64_t sum_connector_scan_runtime_ns = 0;
     for (const auto& [_, wg] : _workgroups) {
-        sum_cpu_runtime_ns += wg->driver_sched_entity()->runtime_ns();
-        sum_scan_runtime_ns += wg->scan_sched_entity()->runtime_ns();
-        sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->runtime_ns();
+        wg->driver_sched_entity()->mark_curr_runtime_ns();
+        wg->scan_sched_entity()->mark_curr_runtime_ns();
+        wg->connector_scan_sched_entity()->mark_curr_runtime_ns();
+
+        sum_cpu_runtime_ns += wg->driver_sched_entity()->growth_runtime_ns();
+        sum_scan_runtime_ns += wg->scan_sched_entity()->growth_runtime_ns();
+        sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->growth_runtime_ns();
     }
+    DeferOp mark_last_runtime_op([this] {
+        for (const auto& [_, wg] : _workgroups) {
+            wg->driver_sched_entity()->mark_last_runtime_ns();
+            wg->scan_sched_entity()->mark_last_runtime_ns();
+            wg->connector_scan_sched_entity()->mark_last_runtime_ns();
+        }
+    });
 
     for (const auto& [name, wg_id] : _wg_metrics) {
         auto wg_it = _workgroups.find(wg_id);
@@ -313,15 +346,11 @@ void WorkGroupManager::update_metrics_unlocked() {
             const auto& wg = wg_it->second;
             VLOG(2) << "workgroup update_metrics " << name;
 
-            double cpu_expected_use_ratio = _sum_cpu_limit == 0 ? 0 : double(wg->cpu_limit()) / _sum_cpu_limit;
-            double cpu_use_ratio =
-                    sum_cpu_runtime_ns <= 0 ? 0 : double(wg->driver_sched_entity()->runtime_ns()) / sum_cpu_runtime_ns;
-            double scan_use_ratio =
-                    sum_scan_runtime_ns <= 0 ? 0 : double(wg->scan_sched_entity()->runtime_ns()) / sum_scan_runtime_ns;
-            double connector_scan_use_ratio =
-                    sum_connector_scan_runtime_ns <= 0
-                            ? 0
-                            : double(wg->connector_scan_sched_entity()->runtime_ns()) / sum_connector_scan_runtime_ns;
+            double cpu_expected_use_ratio = _calculate_ratio(wg->cpu_limit(), _sum_cpu_limit);
+            double cpu_use_ratio = _calculate_ratio(wg->driver_sched_entity()->growth_runtime_ns(), sum_cpu_runtime_ns);
+            double scan_use_ratio = _calculate_ratio(wg->scan_sched_entity()->growth_runtime_ns(), sum_scan_runtime_ns);
+            double connector_scan_use_ratio = _calculate_ratio(wg->connector_scan_sched_entity()->growth_runtime_ns(),
+                                                               sum_connector_scan_runtime_ns);
 
             _wg_cpu_limit_metrics[name]->set_value(cpu_expected_use_ratio);
             _wg_cpu_metrics[name]->set_value(cpu_use_ratio);
@@ -444,14 +473,21 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (version_it == _workgroup_versions.end()) {
         return;
     }
-    auto version_id = version_it->second;
-    DCHECK(version_id < wg->version());
-    auto unique_id = WorkGroup::create_unique_id(id, version_id);
+
+    auto curr_version = version_it->second;
+    if (wg->version() <= curr_version) {
+        LOG(WARNING) << "try to delete workgroup with fresher version: "
+                     << "[delete_version=" << wg->version() << "] "
+                     << "[curr_version=" << curr_version << "]";
+        return;
+    }
+
+    auto unique_id = WorkGroup::create_unique_id(id, curr_version);
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
         _workgroup_expired_versions.push_back(unique_id);
-        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << version_id << ")";
+        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
     }
     LOG(INFO) << "delete workgroup " << wg->name();
 }

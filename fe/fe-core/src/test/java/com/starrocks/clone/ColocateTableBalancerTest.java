@@ -243,7 +243,7 @@ public class ColocateTableBalancerTest {
                 result = false;
                 minTimes = 0;
                 myBackend3.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_repair_delay_factor_second * 1000 * 20;
+                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2;
                 minTimes = 0;
 
                 // backend4 not available, and dead for a short time
@@ -552,7 +552,7 @@ public class ColocateTableBalancerTest {
                 result = false;
                 minTimes = 0;
                 myBackend3.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_repair_delay_factor_second * 1000 * 20;
+                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2;
                 minTimes = 0;
 
                 // backend4 not available, and dead for a short time
@@ -632,7 +632,7 @@ public class ColocateTableBalancerTest {
                 result = false;
                 minTimes = 0;
                 myBackend3.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_repair_delay_factor_second * 1000 * 20;
+                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2;
                 minTimes = 0;
 
                 // backend4 available, not alive but dead for a short time
@@ -909,7 +909,7 @@ public class ColocateTableBalancerTest {
                 result = false;
                 minTimes = 0;
                 myBackend5.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_repair_delay_factor_second * 1000 * 20;
+                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2;
                 minTimes = 0;
                 myBackend5.getHost();
                 result = "192.168.0.115";

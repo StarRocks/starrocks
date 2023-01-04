@@ -38,7 +38,7 @@ Status NLJoinProbeOperator::prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("JoinConjuncts", _sql_join_conjuncts);
 
     _permute_rows_counter = ADD_COUNTER(_unique_metrics, "PermuteRows", TUnit::UNIT);
-    if (_is_left_join()) {
+    if (_is_left_join() || _is_left_anti_join()) {
         _permute_left_rows_counter = ADD_COUNTER(_unique_metrics, "PermuteLeftJoinRows", TUnit::UNIT);
     }
     return Operator::prepare(state);
@@ -70,8 +70,8 @@ void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
 }
 
 bool NLJoinProbeOperator::_skip_probe() const {
-    // Empty build tbale could skip probe unless it's LEFT JOIN
-    return is_ready() && !_is_left_join() && _cross_join_context->is_build_chunk_empty();
+    // Empty build table could skip probe unless it's LEFT/FULL OUTER JOIN or LEFT ANTI JOIN
+    return is_ready() && !_is_left_join() && !_is_left_anti_join() && _cross_join_context->is_build_chunk_empty();
 }
 
 void NLJoinProbeOperator::_check_post_probe() const {
@@ -181,7 +181,12 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
         SlotDescriptor* slot = _col_types[i];
         bool is_probe = i < _probe_column_count;
         bool nullable = _col_types[i]->is_nullable();
+        // OUTER JOIN must be nullable
         if ((is_probe && _is_right_join()) || (!is_probe && _is_left_join())) {
+            nullable = true;
+        }
+        // Right side of LEFT SEMI/ANTI JOIN must be nullable
+        if (!is_probe && (_is_left_anti_join() || _is_left_semi_join())) {
             nullable = true;
         }
         if (is_probe && _probe_chunk) {
@@ -214,6 +219,13 @@ void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     vectorized::FilterPtr filter;
+
+    // directly return all probe chunk when it's left anti join and right input is empty
+    if (_is_left_anti_join() && _num_build_chunks() == 0) {
+        _permute_left_join(state, chunk, 0, _probe_chunk->num_rows());
+        return Status::OK();
+    }
+
     bool apply_filter = (!_is_left_semi_join() && !_is_left_anti_join()) || _num_build_chunks() == 0;
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
@@ -325,7 +337,14 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
 ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
     // TODO: optimize the loop order for small build chunk
     ChunkPtr chunk = _init_output_chunk(state);
-    _probe_row_start = _probe_row_current;
+    bool probe_started = false;
+    _probe_row_start = 0;
+    auto probe_row_start = [&]() {
+        if (!probe_started) {
+            probe_started = true;
+            _probe_row_start = _probe_row_current;
+        }
+    };
     for (; _probe_row_current < _probe_chunk->num_rows(); ++_probe_row_current) {
         // Last build chunk must permute a chunk
         bool is_last_build_chunk = _curr_build_chunk_index == _num_build_chunks() - 1 && _num_build_chunks() > 1;
@@ -333,6 +352,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(0);
             _probe_row_finished = true;
+            probe_row_start();
             return chunk;
         }
 
@@ -341,6 +361,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
         while (!_probe_row_finished && _curr_build_chunk_index < _num_build_chunks()) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(_curr_build_chunk_index + 1);
+            probe_row_start();
             if (chunk->num_rows() >= state->chunk_size()) {
                 return chunk;
             }
@@ -386,6 +407,7 @@ void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk
             DCHECK_LT(probe_row_index, src_col->size());
             dst_col->append(*src_col, probe_row_index, probe_rows);
         } else {
+            DCHECK(dst_col->is_nullable());
             dst_col->append_nulls(probe_rows);
         }
     }
@@ -473,6 +495,11 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         if (ChunkPtr res = _output_accumulator.pull()) {
             return res;
+        }
+
+        if (_output_accumulator.reach_limit()) {
+            _output_accumulator.finalize();
+            return _output_accumulator.pull();
         }
     }
     _output_accumulator.finalize();

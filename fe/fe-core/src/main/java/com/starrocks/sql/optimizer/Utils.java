@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -36,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -432,12 +432,14 @@ public class Utils {
     }
 
     public static ColumnRefOperator findSmallestColumnRef(List<ColumnRefOperator> columnRefOperatorList) {
-        Preconditions.checkState(!columnRefOperatorList.isEmpty());
+        if (CollectionUtils.isEmpty(columnRefOperatorList)) {
+            return null;
+        }
         ColumnRefOperator smallestColumnRef = columnRefOperatorList.get(0);
         int smallestColumnLength = Integer.MAX_VALUE;
         for (ColumnRefOperator columnRefOperator : columnRefOperatorList) {
             Type columnType = columnRefOperator.getType();
-            if (columnType.isScalarType()) {
+            if (columnType.isScalarType() && !columnType.isUnknown() && !columnType.isInvalid()) {
                 int columnLength = columnType.getTypeSize();
                 if (columnLength < smallestColumnLength) {
                     smallestColumnRef = columnRefOperator;

@@ -88,11 +88,6 @@ public class AnalyzerUtils {
             dbName = session.getDatabase();
         }
 
-        if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-            throw new StarRocksPlannerException("Access denied. need the SELECT " + dbName + " privilege(s)",
-                    ErrorType.USER_ERROR);
-        }
-
         Database db = session.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
             return null;
@@ -103,6 +98,12 @@ public class AnalyzerUtils {
 
         if (fn == null) {
             return null;
+        }
+
+        if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+            throw new StarRocksPlannerException(String.format("Access denied. " +
+                    "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                    ErrorType.USER_ERROR);
         }
 
         if (!Config.enable_udf) {
@@ -423,4 +424,37 @@ public class AnalyzerUtils {
         return newType;
     }
 
+    public static Type transformTypeForMv(Type srcType) {
+        Type newType;
+        if (srcType.isScalarType()) {
+            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.CHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
+                int len = ScalarType.MAX_VARCHAR_LENGTH;
+                if (srcType instanceof ScalarType) {
+                    ScalarType scalarType = (ScalarType) srcType;
+                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
+                        len = scalarType.getLength();
+                    }
+                }
+                ScalarType stringType = ScalarType.createVarcharType(len);
+                stringType.setAssignedStrLenInColDefinition();
+                newType = stringType;
+            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
+                        srcType.getPrecision(), srcType.getDecimalDigits());
+            } else if (srcType.isOnlyMetricType()) {
+                throw new SemanticException("Unsupported Mv aggregate type: %s", srcType);
+            } else {
+                newType = ScalarType.createType(srcType.getPrimitiveType());
+            }
+        } else if (srcType.isArrayType()) {
+            newType = new ArrayType(transformTypeForMv(((ArrayType) srcType).getItemType()));
+        } else {
+            throw new SemanticException("Unsupported Mv transform type: %s", srcType);
+        }
+        return newType;
+    }
 }

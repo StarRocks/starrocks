@@ -1005,8 +1005,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
             LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
             return;

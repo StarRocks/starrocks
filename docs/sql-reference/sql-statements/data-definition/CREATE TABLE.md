@@ -40,7 +40,12 @@ col_type：Column type
 
 Specific column information, such as types and ranges: 
 
-
+- DATE (3 bytes): Ranges from 0000-01-01 to 9999-12-31.
+- DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
+- CHAR[(length)]: Fixed length string. Range：1 ~ 255. Default value: 1.
+- VARCHAR[(length)]: A variable-length string. The default value is 1. Unit: bytes. In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533. [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
+- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md).
+- BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
 * TINYINT（1 byte）
 
@@ -118,7 +123,10 @@ Fixed length string. Range：1 ~ 255. Default value: 1.
 
 * VARCHAR[(length)]
 
-Variable length string. Range：1 ~ 1048576
+A variable-length string. The default value is 1. Unit: bytes.
+
+- In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533.
+- [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
 
 
 
@@ -179,14 +187,7 @@ Syntax:
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
-Note:
-
-index_name: Index name
-
-col_name: Column name
-
-> Note:
-> Currently only BITMAP index is supported and it only applies to single columns.
+You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
 ### ENGINE type
 
@@ -374,11 +375,13 @@ PROPERTIES (
 )
 ```
 
-storage_medium: SSD or HDD could be specified as the initial storage media. You can specify default initial storage medium by specifying default_storage_medium=xxx through FE configuration file fe.conf. If no medium is specified, the default is HDD.
+storage_medium: SSD or HDD can be specified as the initial storage medium.
 
-**Note**: When FE configuration item enable_strict_storage_medium_check is True and if storage medium is not set in the cluster, the statement for table creating will report an error: Failed to find enough host in all backends with storage medium is SSD|HDD.
+> **Note**
+>
+> When the FE configuration item `enable_strict_storage_medium_check` is `True` and the storage medium is not specified, the statement for creating a table will report an error: Failed to find enough host in all backends with storage medium is SSD|HDD.
 
-storage_cooldown_time: When the storage medium is SSD, please specify its storage cooldown time. The default time is 30 days. Format: "yyyy-MM-dd HH:mm:ss"
+storage_cooldown_time: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, auto-cooldown is not performed by default.
 
 replication_num: number of replicas in the specified partition. Default number: 3.
 
@@ -581,7 +584,7 @@ PROPERTIES
 )
 ```
 
-- Create a table that contain HLL columns.
+- Create a table that contains HLL columns.
 
 ```SQL
 CREATE TABLE example_db.example_table

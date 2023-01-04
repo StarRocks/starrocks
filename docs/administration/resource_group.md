@@ -244,7 +244,7 @@ ALTER RESOURCE GROUP <group_name> ADD (user='string', role='string', query_type 
 Execute the following statement to delete a classifier from a resource group:
 
 ```SQL
-ALTER RESOURCE GROUP <group_name> DROP (CLASSIFER_ID_1, CLASSIFIER_ID_2, ...);
+ALTER RESOURCE GROUP <group_name> DROP (CLASSIFIER_ID_1, CLASSIFIER_ID_2, ...);
 ```
 
 Execute the following statement to delete all classifiers of a resource group:

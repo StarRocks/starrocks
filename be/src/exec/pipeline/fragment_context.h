@@ -46,10 +46,6 @@ public:
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
-    void set_report_profile() { _is_report_profile = true; }
-    bool is_report_profile() { return _is_report_profile; }
-    void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
-    const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
@@ -118,10 +114,6 @@ private:
     // Id of this instance
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
-
-    bool _is_report_profile = false;
-    // Level of profile
-    TPipelineProfileLevel::type _profile_level;
 
     // promise used to determine whether fragment finished its execution
     FragmentPromise _finish_promise;

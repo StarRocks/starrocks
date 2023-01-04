@@ -113,9 +113,6 @@ public:
     // Initiate cancellation. Must not be called until after prepare() returned.
     void cancel();
 
-    // Releases the thread token for this fragment executor.
-    void release_thread_token();
-
     // call these only after prepare()
     RuntimeState* runtime_state() { return _runtime_state; }
 
@@ -152,9 +149,6 @@ private:
     // true if close() has been called
     bool _closed;
 
-    // true if this fragment has not returned the thread token to the thread resource mgr
-    bool _has_thread_token;
-
     bool _is_report_success;
 
     // If this is set to false, and '_is_report_success' is false as well,
@@ -183,15 +177,6 @@ private:
 
     // Number of rows returned by this fragment
     RuntimeProfile::Counter* _rows_produced_counter = nullptr;
-
-    // Average number of thread tokens for the duration of the plan fragment execution.
-    // Fragments that do a lot of cpu work (non-coordinator fragment) will have at
-    // least 1 token.  Fragments that contain a hdfs scan node will have 1+ tokens
-    // depending on system load.  Other nodes (e.g. hash join node) can also reserve
-    // additional tokens.
-    // This is a measure of how much CPU resources this fragment used during the course
-    // of the execution.
-    RuntimeProfile::Counter* _average_thread_tokens = nullptr;
 
     // It is shared with BufferControlBlock and will be called in two different
     // threads. But their calls are all at different time, there is no problem of

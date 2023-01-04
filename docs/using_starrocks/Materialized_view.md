@@ -370,7 +370,11 @@ After the materialized view is created, the sub-query `count(distinct user_id)` 
 
 #### Approximate de-duplication
 
+<<<<<<< HEAD
 Use the table `advertiser_view_record` above as an example again. To accelerate the approximate de-duplication query, you can create a materialized view based on this table and use the hll_union function to pre-aggregate the data.
+=======
+Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a materialized view based on this table and use the [hll_union()](../sql-reference/sql-functions/aggregate-functions/hll_union.md) function to pre-aggregate the data.
+>>>>>>> 9ca669bd8 ([Doc] add links for hll functions (#16142))
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv2 AS
@@ -416,6 +420,8 @@ When a query is executed with a materialized view, the original query statement 
 
 - Creating too many materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in materialized view and base table will be updated synchronously. If a base table contains `n` materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
 
+- You must use the GROUP BY clause when using aggregate functions and specify the GROUP BY column in your SELECT list.
+
 ## Model data warehouse with materialized view
 
 > **CAUTION**
@@ -427,16 +433,22 @@ StarRocks 2.4 supports creating asynchronous materialized views for multiple bas
 As for the current version, multi-table materialized views support two refresh strategies:
 
 - **Async refresh**
-  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
+
+  Async refresh strategy allows materialized views to refresh through asynchronous refresh tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views.
 
 - **Manual refresh**
-  With manual refresh strategy, you can trigger a refresh task for a materialized view by running a SQL command. It does not guarantee strict consistency between the base table and its subordinate materialized views.
+
+  You can manually trigger a refresh task for an async materialized view. It does not guarantee strict consistency between the base table and its subordinate materialized views.
 
 ### Preparation
 
 #### Enable async materialized view
 
-To use the async materialized view feature, you need to set the configuration item `enable_experimental_mv` as `true` in the FE configuration file **fe.conf**, and restart the cluster to allow the configuration take effect.
+To use the async materialized view feature, you need to set the configuration item `enable_experimental_mv` as `true` using the following statement:
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("enable_experimental_mv"="true");
+```
 
 #### Create base tables
 
@@ -444,7 +456,7 @@ The following examples involve two base tables:
 
 - Table `goods` records the item ID `item_id1`, item name `item_name`, and item price `price`.
 
-- Table `order_list` records the order ID ``, client ID ``, item ID `item_id2`, and order date `order_date`.
+- Table `order_list` records the order ID `order_id`, client ID `client_id`, item ID `item_id2`, and order date `order_date`.
 
 Column `item_id1` is equivalent to column `item_id2`.
 
@@ -641,6 +653,6 @@ DROP MATERIALIZED VIEW order_mv;
 
 - You can build a multi-table materialized view under async or manual refresh strategies.
 
-- Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement; if there is an aggregate function in the query statement, the partition keys and bucket keys must be in the GROUP BY clause.
+- Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement.
 
 - The query statement does not support random functions, including rand((), random(), uuid()), and sleep().

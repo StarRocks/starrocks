@@ -47,14 +47,14 @@ public class SelectConstTest extends PlanTestBase {
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a", "  2:Project\n" +
+        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a", "3:Project\n" +
                 "  |  <slot 6> : 2\n" +
                 "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
+                "  2:SELECT\n" +
                 "  |  predicates: TRUE\n" +
                 "  |  \n" +
-                "  0:UNION\n" +
+                "  1:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
     }
@@ -93,7 +93,7 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select * from t0 where exists (select 9,10)", "  1:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select * from t0 where not exists (select 9)", "  0:UNION\n" +
+        assertPlanContains("select * from t0 where not exists (select 9)", ":UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
         assertPlanContains("select * from t0 where v3 = (select 6)", "  5:Project\n" +

@@ -121,7 +121,7 @@ public class AST2SQL {
 
             if (relation.isResolvedInFromClause()) {
                 if (relation.getAlias() != null) {
-                    sqlBuilder.append(" AS ").append(relation.getAlias());
+                    sqlBuilder.append(" AS ").append(relation.getAlias().getTbl());
                 }
                 return sqlBuilder.toString();
             }
@@ -191,7 +191,8 @@ public class AST2SQL {
 
         @Override
         public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")" + " " + subquery.getAlias();
+            return "(" + visit(subquery.getQueryStatement()) + ")"
+                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias());
         }
 
         @Override
@@ -201,7 +202,7 @@ public class AST2SQL {
 
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append(node.getAlias());
+                sqlBuilder.append(node.getAlias().getTbl());
             }
             return sqlBuilder.toString();
         }
@@ -280,7 +281,7 @@ public class AST2SQL {
 
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append(node.getAlias());
+                sqlBuilder.append(node.getAlias().getTbl());
             }
             return sqlBuilder.toString();
         }
@@ -304,7 +305,7 @@ public class AST2SQL {
                 values.add(rowBuilder.toString());
             }
             sqlBuilder.append(Joiner.on(", ").join(values));
-            sqlBuilder.append(") ").append(node.getAlias());
+            sqlBuilder.append(") ").append(node.getAlias().getTbl());
 
             return sqlBuilder.toString();
         }
@@ -321,7 +322,7 @@ public class AST2SQL {
 
             sqlBuilder.append(")");
             if (node.getAlias() != null) {
-                sqlBuilder.append(" ").append(node.getAlias());
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
             }
             return sqlBuilder.toString();
         }
@@ -460,7 +461,7 @@ public class AST2SQL {
 
             }
             strBuilder.append("EXISTS ");
-            strBuilder.append(printWithParentheses(node.getChild(0)));
+            strBuilder.append(visit(node.getChild(0)));
             return strBuilder.toString();
         }
 
@@ -533,6 +534,7 @@ public class AST2SQL {
             return node.getColumnName();
         }
 
+        @Override
         public String visitSubquery(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }

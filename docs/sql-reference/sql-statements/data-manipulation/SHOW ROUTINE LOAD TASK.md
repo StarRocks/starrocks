@@ -1,6 +1,6 @@
 # SHOW ROUTINE LOAD TASK
 
-## example
+## Examples
 
 1. Displays the subtask information of the routine import task named test1.
 

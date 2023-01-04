@@ -71,7 +71,15 @@ public class TableRelation extends Relation {
     @Override
     public TableName getResolveTableName() {
         if (alias != null) {
-            return alias;
+            if (name.getDb() != null) {
+                if (name.getCatalog() != null) {
+                    return new TableName(name.getCatalog(), name.getDb(), alias.getTbl());
+                } else {
+                    return new TableName(name.getDb(), alias.getTbl());
+                }
+            } else {
+                return alias;
+            }
         } else {
             return name;
         }

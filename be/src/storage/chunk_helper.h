@@ -76,19 +76,24 @@ public:
 // Accumulate small chunk into desired size
 class ChunkAccumulator {
 public:
+    // Avoid accumulate too many chunks in case that chunks' selectivity is very low
+    static inline size_t kAccumulateLimit = 64;
+
     ChunkAccumulator() = default;
     ChunkAccumulator(size_t desired_size);
     void set_desired_size(size_t desired_size);
     void reset();
-    Status push(vectorized::ChunkPtr&& chunk);
     void finalize();
     bool empty() const;
+    bool reach_limit() const;
+    Status push(vectorized::ChunkPtr&& chunk);
     vectorized::ChunkPtr pull();
 
 private:
     size_t _desired_size;
     vectorized::ChunkPtr _tmp_chunk;
     std::deque<vectorized::ChunkPtr> _output;
+    size_t _accumulate_count = 0;
 };
 
 } // namespace starrocks

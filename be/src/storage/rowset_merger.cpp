@@ -75,7 +75,12 @@ struct MergeEntry {
         rowset_release_guard.reset();
     }
 
-    Status init() { return next(); }
+    Status init() {
+        if (segment_itr == nullptr) {
+            return Status::EndOfFile("End of merge entry iterator");
+        }
+        return next();
+    }
 
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);

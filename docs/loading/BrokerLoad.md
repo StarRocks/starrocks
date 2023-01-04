@@ -40,23 +40,25 @@ Broker Load supports the following storage systems:
 
 Brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
-## Principles
+## How it works
 
 After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of BEs and the size of the data file you want to load, and then assigns each portion of the query plan to a specific BE. During the load, each BE pulls the data of the data file by using the broker, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/4.3-1.png)
+![Workflow of Broker Load](../assets/4.3-1-en.png)
 
 ## Basic operations
 
 ### Create a load job
 
 This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
 #### Data examples
 
@@ -155,13 +157,14 @@ WITH BROKER "mybroker"
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )
 ```
 
 > **NOTE**
 >
-> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> - The S3A protocol is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
 
 #### Load data from Google GCS
 

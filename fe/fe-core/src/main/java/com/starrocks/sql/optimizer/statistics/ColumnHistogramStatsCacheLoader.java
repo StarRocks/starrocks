@@ -16,8 +16,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -45,8 +47,10 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData =
-                        queryHistogramStatistics(cacheKey.tableId, Lists.newArrayList(cacheKey.column));
+                        queryHistogramStatistics(connectContext, cacheKey.tableId, Lists.newArrayList(cacheKey.column));
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
                 if (!statisticData.isEmpty()) {
                     return Optional.of(convert2Histogram(statisticData.get(0)));
@@ -74,7 +78,10 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                     columns.add(key.column);
                     result.put(key, Optional.empty());
                 }
-                List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(tableId, columns);
+                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                connectContext.setThreadLocalInfo();
+
+                List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(connectContext, tableId, columns);
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
                     Histogram histogram = convert2Histogram(histogramStatsData);
                     result.put(new ColumnStatsCacheKey(histogramStatsData.tableId, histogramStatsData.columnName),
@@ -97,8 +104,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return asyncLoad(key, executor);
     }
 
-    public List<TStatisticData> queryHistogramStatistics(long tableId, List<String> column) {
-        return statisticExecutor.queryHistogram(tableId, column);
+    public List<TStatisticData> queryHistogramStatistics(ConnectContext context, long tableId, List<String> column) {
+        return statisticExecutor.queryHistogram(context, tableId, column);
     }
 
     private Histogram convert2Histogram(TStatisticData statisticData) throws AnalysisException {

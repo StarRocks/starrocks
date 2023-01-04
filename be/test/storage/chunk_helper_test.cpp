@@ -294,6 +294,16 @@ TEST_F(ChunkHelperTest, Accumulator) {
         output_rows += output->num_rows();
     }
     EXPECT_EQ(input_rows, output_rows);
+
+    // push empty chunks
+    for (int i = 0; i < ChunkAccumulator::kAccumulateLimit; i++) {
+        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+        accumulator.push(std::move(chunk));
+    }
+    EXPECT_TRUE(accumulator.reach_limit());
+    auto output = accumulator.pull();
+    EXPECT_EQ(nullptr, output);
+    EXPECT_FALSE(accumulator.reach_limit());
 }
 
 } // namespace vectorized

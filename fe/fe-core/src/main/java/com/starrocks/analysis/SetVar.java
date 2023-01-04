@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -36,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TTabletInternalParallelMode;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 
 // change one variable.
@@ -145,11 +145,11 @@ public class SetVar implements ParseNode {
 
         // Check variable load_mem_limit value is valid
         if (getVariable().equalsIgnoreCase(SessionVariable.LOAD_MEM_LIMIT)) {
-            checkNonNegativeLongVariable(SessionVariable.LOAD_MEM_LIMIT);
+            checkRangeLongVariable(SessionVariable.LOAD_MEM_LIMIT, 0L, null);
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.QUERY_MEM_LIMIT)) {
-            checkNonNegativeLongVariable(SessionVariable.QUERY_MEM_LIMIT);
+            checkRangeLongVariable(SessionVariable.QUERY_MEM_LIMIT, 0L, null);
         }
 
         try {
@@ -160,23 +160,44 @@ public class SetVar implements ParseNode {
             }
 
             if (getVariable().equalsIgnoreCase(SessionVariable.EXEC_MEM_LIMIT)) {
-                this.expression = new StringLiteral(Long.toString(ParseUtil.analyzeDataVolumn(getResolvedExpression().getStringValue())));
+                this.expression = new StringLiteral(
+                        Long.toString(ParseUtil.analyzeDataVolumn(getResolvedExpression().getStringValue())));
                 this.resolvedExpression = (LiteralExpr) this.expression;
+                checkRangeLongVariable(SessionVariable.EXEC_MEM_LIMIT, SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
         } catch (UserException e) {
             throw new SemanticException(e.getMessage());
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.SQL_SELECT_LIMIT)) {
-            checkNonNegativeLongVariable(SessionVariable.SQL_SELECT_LIMIT);
+            checkRangeLongVariable(SessionVariable.SQL_SELECT_LIMIT, 0L, null);
+        }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)) {
+            checkRangeLongVariable(SessionVariable.QUERY_TIMEOUT, 1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
+        }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
+            checkRangeLongVariable(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT, 1L, null);
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
-            String wgName = getResolvedExpression().getStringValue();
-            if (!StringUtils.isEmpty(wgName)) {
-                ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(wgName);
+            String rgName = getResolvedExpression().getStringValue();
+            if (!StringUtils.isEmpty(rgName)) {
+                TWorkGroup wg =
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
                 if (wg == null) {
-                    throw new SemanticException("resource group not exists: " + wgName);
+                    throw new SemanticException("resource group not exists: " + rgName);
+                }
+            }
+        } else if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP_ID) ||
+                getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP_ID_V2)) {
+            long rgID = getResolvedExpression().getLongValue();
+            if (rgID > 0) {
+                TWorkGroup wg =
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(rgID);
+                if (wg == null) {
+                    throw new SemanticException("resource group not exists: " + rgID);
                 }
             }
         }
@@ -195,12 +216,15 @@ public class SetVar implements ParseNode {
         return toSql();
     }
 
-    private void checkNonNegativeLongVariable(String field) {
+    private void checkRangeLongVariable(String field, Long min, Long max) {
         String value = getResolvedExpression().getStringValue();
         try {
             long num = Long.parseLong(value);
-            if (num < 0) {
-                throw new SemanticException(field + " must be equal or greater than 0.");
+            if (min != null && num < min) {
+                throw new SemanticException(String.format("%s must be equal or greater than %d.", field, min));
+            }
+            if (max != null && num > max) {
+                throw new SemanticException(String.format("%s must be equal or smaller than %d.", field, max));
             }
         } catch (NumberFormatException ex) {
             throw new SemanticException(field + " is not a number");

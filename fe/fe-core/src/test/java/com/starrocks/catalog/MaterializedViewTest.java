@@ -575,4 +575,12 @@ public class MaterializedViewTest {
         Assert.assertEquals("500", taskProperties.get("query_timeout"));
         Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
     }
+
+    @Test
+    public void testMvMysqlType() {
+        MaterializedView mv = new MaterializedView();
+        String mysqlType = mv.getMysqlType();
+        Assert.assertEquals("VIEW", mysqlType);
+    }
+
 }

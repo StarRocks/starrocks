@@ -436,10 +436,12 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterator
     for (int64_t i = 0; i < num_segments(); i++) {
         auto& seg_ptr = segments()[i];
         if (seg_ptr->num_rows() == 0) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
         if (!res.ok()) {

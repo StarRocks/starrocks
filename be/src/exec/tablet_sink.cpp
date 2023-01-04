@@ -28,6 +28,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -55,7 +56,7 @@ namespace starrocks::stream_load {
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id)
         : _parent(parent), _index_id(index_id), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
+    _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() {
@@ -222,7 +223,8 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
 
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
-        StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+        StatusOr<ChunkPB> res = Status::OK();
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
             _cancelled = true;
             _err_st = res.status();
@@ -968,12 +970,14 @@ Status OlapTableSink::try_close(RuntimeState* state) {
     bool intolerable_failure = false;
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
-            auto st = ch->try_close();
-            if (!st.ok()) {
-                LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
-                err_st = st;
-                index_channel->mark_as_failed(ch);
+            if (!index_channel->is_failed_channel(ch)) {
+                auto st = ch->try_close();
+                if (!st.ok()) {
+                    LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                                 << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                    err_st = st;
+                    index_channel->mark_as_failed(ch);
+                }
             }
             if (index_channel->has_intolerable_failure()) {
                 intolerable_failure = true;
@@ -998,6 +1002,13 @@ bool OlapTableSink::is_close_done() {
     }
 
     return _close_done;
+}
+
+void OlapTableSink::cancel() {
+    Status st = Status::Cancelled("cancel");
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&st](NodeChannel* ch) { ch->cancel(st); });
+    }
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {

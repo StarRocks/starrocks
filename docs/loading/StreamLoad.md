@@ -38,19 +38,15 @@ You can use the `streaming_load_max_mb` parameter to specify the maximum size of
 
 Stream Load does not support loading the data of a CSV file that contains a JSON-formatted column.
 
-## Principles
+## How it works
 
-If you choose the loading method Stream Load, you must submit a load request on your client to an FE according to HTTP. The FE uses an HTTP redirect to forward the load request to a specific BE.
-
-> **NOTE**
->
-> You can also create a load job on your client to send a load request to a BE of your choice.
-
-The BE that receives the load request runs as the Coordinator BE to split data based on the used schema into portions and assign each portion of the data to the other involved BEs. After the load finishes, the Coordinator BE returns the result of the load job to your client.
+You can submit a load request on your client to an FE according to HTTP, and the FE then uses an HTTP redirect to forward the load request to a specific BE. You can also directly submit a load request on your client to a BE of your choice.
 
 > **NOTE**
 >
-> If you send load requests to an FE, the FE uses a polling mechanism to decide which BE will receive the load requests. The polling mechanism helps achieve load balancing within your StarRocks cluster. Therefore, we recommend that you send load requests to an FE and let the FE decide which BE will run as the Coordinator BE to process the load requests.
+> If you submit load requests to an FE, the FE uses a polling mechanism to decide which BE will serve as a coordinator to receive and process the load requests. The polling mechanism helps achieve load balancing within your StarRocks cluster. Therefore, we recommend that you send load requests to an FE.
+
+The BE that receives the load request runs as the Coordinator BE to split data based on the used schema into portions and assign each portion of the data to the other involved BEs. After the load finishes, the Coordinator BE returns the result of the load job to your client. Note that if you stop the Coordinator BE during the load, the load job fails.
 
 The following figure shows the workflow of a Stream Load job.
 
@@ -61,6 +57,8 @@ The following figure shows the workflow of a Stream Load job.
 ### Create a load job
 
 This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
 #### Load CSV data
 

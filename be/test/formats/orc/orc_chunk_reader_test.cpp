@@ -1178,7 +1178,7 @@ Padding ratio: 0%
 TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
     SlotDesc slot_descs[] = {
             {"col_upper_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-            {"col_upper_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+            {"col_upper_CHAR", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
             {""},
     };
 
@@ -1213,7 +1213,6 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
         Slice s = char_col->get(0).get_slice();
         std::string res(s.data, s.size);
         EXPECT_EQ(res, "nihao");
-
     }
 }
 

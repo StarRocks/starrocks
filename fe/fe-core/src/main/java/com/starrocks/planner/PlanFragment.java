@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * PlanFragments form a tree structure via their ExchangeNodes. A tree of fragments
@@ -119,9 +120,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int parallelExecNum = 1;
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
-
-    // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
-    protected boolean enableSharedScan = true;
 
     // Whether to assign scan ranges to each driver sequence of pipeline,
     // for the normal backend assignment (not colocate, bucket, and replicated join).
@@ -209,14 +207,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setPipelineDop(int dop) {
         this.pipelineDop = dop;
-    }
-
-    public void setEnableSharedScan(boolean enable) {
-        this.enableSharedScan = enable;
-    }
-
-    public boolean isEnableSharedScan() {
-        return enableSharedScan;
     }
 
     public boolean isAssignScanRangesPerDriverSeq() {
@@ -316,6 +306,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Create thrift fragment with the unique fields, including
      * - output_sink (only for MultiCastDataStreamSink and ExportSink).
+     *
      * @return The thrift fragment with the unique fields.
      */
     public TPlanFragment toThriftForUniqueFields() {
@@ -540,7 +531,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     // For plan fragment has join
     public void mergeQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.queryGlobalDicts.addAll(dicts);
+        if (this.queryGlobalDicts != dicts) {
+            this.queryGlobalDicts = Stream.concat(this.queryGlobalDicts.stream(), dicts.stream()).distinct()
+                    .collect(Collectors.toList());
+        }
     }
 
     public void setLoadGlobalDicts(

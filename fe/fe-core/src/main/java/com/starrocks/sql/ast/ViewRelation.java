@@ -31,7 +31,11 @@ public class ViewRelation extends Relation {
     @Override
     public TableName getResolveTableName() {
         if (alias != null) {
-            return alias;
+            if (name.getDb() != null) {
+                return new TableName(name.getDb(), alias.getTbl());
+            } else {
+                return alias;
+            }
         } else {
             return name;
         }

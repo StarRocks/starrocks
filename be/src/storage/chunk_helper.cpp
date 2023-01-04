@@ -413,6 +413,7 @@ void ChunkAccumulator::set_desired_size(size_t desired_size) {
 void ChunkAccumulator::reset() {
     _output.clear();
     _tmp_chunk.reset();
+    _accumulate_count = 0;
 }
 
 Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
@@ -436,6 +437,7 @@ Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
         }
         start += need_rows;
     }
+    _accumulate_count++;
     return Status::OK();
 }
 
@@ -443,12 +445,18 @@ bool ChunkAccumulator::empty() const {
     return _output.empty();
 }
 
+bool ChunkAccumulator::reach_limit() const {
+    return _accumulate_count >= kAccumulateLimit;
+}
+
 vectorized::ChunkPtr ChunkAccumulator::pull() {
     if (!_output.empty()) {
         auto res = std::move(_output.front());
         _output.pop_front();
+        _accumulate_count = 0;
         return res;
     }
+    _accumulate_count = 0;
     return nullptr;
 }
 
@@ -456,6 +464,7 @@ void ChunkAccumulator::finalize() {
     if (_tmp_chunk) {
         _output.emplace_back(std::move(_tmp_chunk));
     }
+    _accumulate_count = 0;
 }
 
 } // namespace starrocks

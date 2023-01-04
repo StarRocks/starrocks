@@ -4,6 +4,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
@@ -249,8 +250,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE not in ('1998-04-10', '1994-04-11', '1994-04-12');";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "3:AGGREGATE (merge finalize)");
-        assertContains(plan, "1:AGGREGATE (update serialize)");
+        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "2:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -260,8 +261,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql =
                 "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "3:AGGREGATE (merge finalize)");
-        assertContains(plan, "1:AGGREGATE (update serialize)");
+        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "2:AGGREGATE (update serialize)");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -474,7 +475,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  4:Project\n" +
-                "  |  <slot 1> : 1: C_CUSTKEY");
+                "  |  <slot 21> : 1");
         checkTwoPhaseAgg(plan);
     }
 
@@ -622,16 +623,17 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         // eval predicate cardinality in scan node
-        assertContains(plan, "0:OlapScanNode\n" +
+        assertContains(plan, "4:OlapScanNode\n" +
                 "     table: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
-                "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
+                "     Predicates: 18: N_NATIONKEY IN (1, 2)\n" +
                 "     partitionsRatio=1/1, tabletsRatio=1/1");
         // eval predicate cardinality in join node
-        assertContains(plan, "3:NESTLOOP JOIN\n" +
+        assertContains(plan, "6:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
-                "  |  cardinality: 2");
+                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) " +
+                "OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
+                "  |  cardinality: 1");
     }
 
     @Test
@@ -657,8 +659,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "      ) t1\n" +
                 "  ) t2;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 11:AGGREGATE (update finalize)");
-        assertContains(plan, "10:Project");
+        assertContains(plan, " 12:AGGREGATE (update finalize)");
+        assertContains(plan, "11:Project");
     }
 
     @Test
@@ -996,9 +998,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testPruneAggNode() throws Exception {
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(3);
         String sql = "select count(distinct C_NAME) from customer group by C_CUSTKEY;";
-        String plan = getFragmentPlan(sql);
-
-        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+        ExecPlan plan = getExecPlan(sql);
+        PlanFragment fragment = plan.getFragments().get(1);
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(plan.getExplainString(TExplainLevel.NORMAL), "2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: C_NAME)\n" +
                 "  |  group by: 1: C_CUSTKEY\n" +
                 "  |  \n" +
@@ -1007,8 +1010,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
         sql = "select count(distinct C_CUSTKEY) from customer;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, " 2:AGGREGATE (update serialize)\n" +
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(1);
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(plan.getExplainString(TExplainLevel.NORMAL), " 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(1: C_CUSTKEY)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -1018,8 +1023,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(0);
 
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, " 2:AGGREGATE (update serialize)\n" +
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(1);
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(plan.getExplainString(TExplainLevel.NORMAL), " 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -1027,13 +1034,77 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: 1: C_CUSTKEY, 2: C_NAME");
 
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer group by C_CUSTKEY;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(1);
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(plan.getExplainString(TExplainLevel.NORMAL), "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
                 "  |  group by: 1: C_CUSTKEY\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update serialize)\n" +
                 "  |  group by: 1: C_CUSTKEY, 2: C_NAME");
+    }
+
+    @Test
+    public void testAggNodeAndBucketDistribution() throws Exception {
+        // For the local one-phase aggregation, enable AssignScanRangesPerDriverSeq.
+        String sql = "select count(1) from customer group by C_CUSTKEY";
+        ExecPlan plan = getExecPlan(sql);
+        PlanFragment fragment = plan.getFragments().get(1);
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: 1: C_CUSTKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // For the none-local one-phase aggregation, disable AssignScanRangesPerDriverSeq.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(1);
+        sql = "select count(1) from customer group by C_NAME";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 2: C_NAME\n" +
+                "\n" +
+                "  0:OlapScanNode");
+
+        // For the two-phase aggregation, disable AssignScanRangesPerDriverSeq.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select count(1) from customer group by C_NAME";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: 2: C_NAME\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // For the none-pruned four-phase aggregation, disable AssignScanRangesPerDriverSeq.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(0);
+        sql = "select count(distinct C_ADDRESS) from customer group by C_NAME";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: C_NAME, 3: C_ADDRESS\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // For the none-pruned three-phase aggregation, disable AssignScanRangesPerDriverSeq.
+        sql = "select count(distinct C_ADDRESS) from customer";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 3: C_ADDRESS\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -1121,11 +1192,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select * from t0 j0 join " +
                 "(select v3, sum(v2) as x2 from t0 group by v3) j1 on j0.v3 = j1.v3 and j0.v2 = j1.x2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 05\n" +
-                "    UNPARTITIONED\n" +
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    HASH_PARTITIONED: 6: v3, 7: sum\n" +
                 "\n" +
-                "  4:AGGREGATE (merge finalize)");
+                "  5:AGGREGATE (merge finalize)");
     }
 
     @Test

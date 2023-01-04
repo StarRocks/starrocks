@@ -1,63 +1,96 @@
 # CREATE REPOSITORY
 
-## description
+## Description
 
-This statement is used to create the repository. The repository is used for backup or restore. Only root or superuser users can create repository.
+Creates a repository in a remote storage system that is used to store data snapshots for [Backup and restore data](../../../administration/Backup_and_restore.md).
 
-Syntax:
+> **CAUTION**
+>
+> Only root user and superuser can create a repository.
 
-```sql
-CREATE [READ ONLY] REPOSITORY `repo_name`
-WITH BROKER `broker_name`
-ON LOCATION `repo_location`
-PROPERTIES ("key"="value", ...);
+For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md).
+
+## Syntax
+
+```SQL
+CREATE [READ ONLY] REPOSITORY <repository_name>
+WITH BROKER <broker_name>
+ON LOCATION "<repository_location>"
+PROPERTIES ("key"="value", ...)
 ```
 
-Note:
+## Parameters
 
-1. The creation of repositories depends on existing brokers.
-2. If it is a read-only repository, it can only be restored on the repository. If not, it can be backed up and restored.
-3. PROPERTIES vary depending on broker of different types.
+| **Parameter**       | **Description**                                              |
+| ------------------- | ------------------------------------------------------------ |
+| READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only warehouse for the new cluster and only grant it RESTORE permissions.|
+| broker_name         | The name of the broker used to create the repository.
+| repository_name     | Repository name.                                             |
+| repository_location | Location of the repository in the remote storage system.     |
+| PROPERTIES          | Username/password or access key/endpoint to the remote storage system. See [Examples](#examples) for more instructions. |
 
-## example
+**PROPERTIES**:
 
-1. Create a repository named bos_repo based on BOS broker "bos_broker", and the data root directory is: bos://palo_backup.
+StarRocks Supports creating repository in HDFS, S3, OSS, and COS.
 
-    ```sql
-    CREATE REPOSITORY `bos_repo`
-    WITH BROKER `bos_broker`
-    ON LOCATION "bos://starRocks_backup"
-    PROPERTIES
-    (
-        "bos_endpoint" = "http://gz.bcebos.com",
-        "bos_accesskey" = "069fc2786e664e63a5f111111114ddbs22",
-        "bos_secret_accesskey"="70999999999999de274d59eaa980a"
-    );
-    ```
+- HDFS：
+  - "username"：Username used to log in HDFS.
+  - "password"：Password used to log in HDFS.
 
-2. Create a same repository as in example 1, but with read-only attribute:
+- S3：
+  - "fs.s3a.access.key"：Access Key used to log in S3.
+  - "fs.s3a.secret.key"：Secret Key used to log in S3.
+  - "fs.s3a.endpoint"：Endpoint of the S3 storage.
 
-    ```sql
-    CREATE READ ONLY REPOSITORY `bos_repo`
-    WITH BROKER `bos_broker`
-    ON LOCATION "bos://starRocks_backup"
-    PROPERTIES
-    (
-        "bos_endpoint" = "http://gz.bcebos.com",
-        "bos_accesskey" = "069fc2786e664e63a5f111111114ddbs22",
-        "bos_secret_accesskey"="70999999999999de274d59eaa980a"
-    );
-    ```
+- For OSS：
+  - "fs.oss.accessKeyId"：Access Key ID used to log in OSS.
+  - "fs.oss.accessKeySecret"：Access Key Secret used to log in OSS.
+  - "fs.oss.endpoint"：Endpoint of the OSS storage.
 
-3. Create a repository named hdfs_repo based on Baidu HDFS broker "hdfs_broker", and the data root directory is: hdfs://hadoop-name-node:54310/path/to/repo./
+- For COS：
+  - "fs.cosn.userinfo.secretId"：Secret ID used to log in COS.
+  - "fs.cosn.userinfo.secretKey"：Secret Key used to log in COS.
+  - "fs.cosn.bucket.endpoint_suffix"：COS endpoint suffix.
 
-    ```sql
-    CREATE REPOSITORY `hdfs_repo`
-    WITH BROKER `hdfs_broker`
-    ON LOCATION "hdfs://hadoop-name-node:54310/path/to/repo/"
-    PROPERTIES
-    (
-        "username" = "user",
-        "password" = "password"
-    );
-    ```
+## Examples
+
+Example 1: creates a repository named `oss_repo` using the remote storage directory `oss://starRocks_backup`.
+
+```SQL
+CREATE REPOSITORY oss_repo
+WITH BROKER oss_broker
+ON LOCATION "oss://starRocks_backup"
+PROPERTIES
+(
+    "fs.oss.accessKeyId" = "xxx",
+    "fs.oss.accessKeySecret" = "yyy",
+    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+);
+```
+
+Example 2: creates a read-only repository named `oss_repo` using the remote storage directory `oss://starRocks_backup`.
+
+```SQL
+CREATE READ ONLY REPOSITORY oss_repo
+WITH BROKER oss_broker
+ON LOCATION "oss://starRocks_backup"
+PROPERTIES
+(
+    "fs.oss.accessKeyId" = "xxx",
+    "fs.oss.accessKeySecret" = "yyy",
+    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+);
+```
+
+Example 3: creates a repository named `hdfs_repo` using the remote storage directory `hdfs://hadoop-name-node:xxxxx/path/to/repo/`.
+
+```SQL
+CREATE REPOSITORY hdfs_repo
+WITH BROKER hdfs_broker
+ON LOCATION "hdfs://hadoop-name-node:xxxxx/path/to/repo/"
+PROPERTIES
+(
+    "username" = "xxxx",
+    "password" = "yyyy"
+);
+```

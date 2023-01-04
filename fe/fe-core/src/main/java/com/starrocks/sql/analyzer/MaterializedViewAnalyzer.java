@@ -184,7 +184,7 @@ public class MaterializedViewAnalyzer {
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
-                Type type = AnalyzerUtils.transformType(outputExpression.get(i).getType());
+                Type type = AnalyzerUtils.transformTypeForMv(outputExpression.get(i).getType());
                 Column column = new Column(columnOutputNames.get(i), type,
                         outputExpression.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
@@ -352,11 +352,9 @@ public class MaterializedViewAnalyzer {
         private void replaceTableAlias(SlotRef slotRef,
                                        CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
-            if (slotRef.getTblNameWithoutAnalyzed().getDb() == null) {
-                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                OlapTable table = ((OlapTable) tableNameTableMap.get(tableName));
-                slotRef.setTblName(new TableName(null, statement.getTableName().getDb(), table.getName()));
-            }
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            OlapTable table = ((OlapTable) tableNameTableMap.get(tableName));
+            slotRef.setTblName(new TableName(null, statement.getTableName().getDb(), table.getName()));
         }
 
         private void checkDistribution(CreateMaterializedViewStatement statement,

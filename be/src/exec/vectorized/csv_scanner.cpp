@@ -181,7 +181,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
 
         fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,
                                src_chunk->num_rows());
-        ASSIGN_OR_RETURN(chunk, _materialize(src_chunk));
+        ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
     } while ((chunk)->num_rows() == 0);
     return std::move(chunk);
 }
@@ -272,43 +272,6 @@ ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
         chunk->append_column(std::move(column), slots[i]->id());
     }
     return chunk;
-}
-
-// TODO(zhuming): move this function to `FileScanner` or `FileScanNode`
-StatusOr<ChunkPtr> CSVScanner::_materialize(ChunkPtr& src_chunk) {
-    SCOPED_RAW_TIMER(&_counter->materialize_ns);
-
-    if (src_chunk->num_rows() == 0) {
-        return src_chunk;
-    }
-
-    ChunkPtr dest_chunk = std::make_shared<Chunk>();
-
-    // CREATE ROUTINE LOAD routine_load_job_1
-    // on table COLUMNS (k1,k2,k3=k1)
-    // The column k3 and k1 will pointer to the same entity.
-    // The k3 should be copied to avoid this case.
-    // column_pointers is a hashset to check the repeatability.
-    HashSet<uintptr_t> column_pointers;
-    int ctx_index = 0;
-    int src_rows = src_chunk->num_rows();
-    for (const auto& slot : _dest_tuple_desc->slots()) {
-        if (!slot->is_materialized()) {
-            continue;
-        }
-
-        int dest_index = ctx_index++;
-        ASSIGN_OR_RETURN(auto dst_col, _dest_expr_ctx[dest_index]->evaluate(src_chunk.get()));
-        uintptr_t col_pointer = reinterpret_cast<uintptr_t>(dst_col.get());
-        if (column_pointers.contains(col_pointer)) {
-            dst_col = dst_col->clone();
-        } else {
-            column_pointers.emplace(col_pointer);
-        }
-        dst_col = ColumnHelper::unfold_const_column(slot->type(), src_rows, dst_col);
-        dest_chunk->append_column(dst_col, slot->id());
-    }
-    return dest_chunk;
 }
 
 void CSVScanner::_report_error(const std::string& line, const std::string& err_msg) {

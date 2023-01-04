@@ -1,6 +1,6 @@
 # BACKUP
 
-## description
+## Description
 
 This statement is used to backup data under the specified database. This command is an asynchronous operation. After successful submission, you can check progress through the SHOW BACKUP command. Only tables of OLAP type are backed up.
 
@@ -28,7 +28,7 @@ Note:
 
   "timeout" = "3600": Task timeout: one day by default. Unit: second.
 
-## example
+## Examples
 
 1. Conduct full backup of the table example_tbl under example_db to the repository example_repo:
 

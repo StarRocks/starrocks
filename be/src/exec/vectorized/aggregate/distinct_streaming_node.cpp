@@ -146,7 +146,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     }
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-                    if ((*chunk)->num_rows() > 0) {
+                    if ((*chunk) != nullptr && (*chunk)->num_rows() > 0) {
                         break;
                     } else {
                         continue;

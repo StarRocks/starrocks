@@ -1,6 +1,6 @@
 # SHOW FUNCTIONS
 
-## description
+## Description
 
 ### Syntax
 
@@ -22,7 +22,7 @@ function_pattern`: The parameter used to filter function name.
 
 Look at all the custom(builtin) functions under the database. If the user specifies the database, then look at the corresponding database. Otherwise directly query the database where the current session is located.  `SHOW` permission for this database is required.
 
-## example
+## Examples
 
 ```Plain Text
 mysql> show full functions in testDb\G

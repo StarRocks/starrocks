@@ -33,7 +33,9 @@ public:
     // check global dict is superset of local dict
     void check_global_dict();
 
+    // encode string column to global dictionary id
     Status encode_to_global_id(vectorized::Column* datas, vectorized::Column* codes);
+
     bool need_force_encode_to_global_id() const {
         return (!_all_page_dict_encoded && _global_dict) || (!_code_convert_map.has_value() && _global_dict);
     }

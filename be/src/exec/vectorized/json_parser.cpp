@@ -15,7 +15,7 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
         _data = data;
         _len = len;
 
-        _doc_stream = _parser->iterate_many(data, len);
+        _doc_stream = _parser->iterate_many(data, len, len);
 
         _doc_stream_itr = _doc_stream.begin();
 
@@ -75,12 +75,18 @@ std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
     }
 
     auto off = _doc_stream_itr.current_index();
+    if (off >= _len) {
+        return {};
+    }
     return std::string(reinterpret_cast<char*>(_data) + off, _len - off);
 }
 
 Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
         _doc = _parser->iterate(data, len, allocated);
+
+        _data = data;
+        _len = len;
 
         if (_doc.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format("the value should be array type with strip_outer_array=true, value: {}",
@@ -141,7 +147,22 @@ Status JsonArrayParser::advance() noexcept {
 }
 
 std::string JsonArrayParser::left_bytes_string(size_t sz) noexcept {
-    return std::string(_doc.current_location()).substr(0, sz);
+    if (_len == 0) {
+        return {};
+    }
+
+    const char* loc;
+    auto err = _doc.current_location().get(loc);
+    if (err) {
+        return {};
+    }
+    auto off = loc - reinterpret_cast<const char*>(_data);
+
+    if (off < 0 || off >= _len) {
+        return {};
+    }
+
+    return std::string(reinterpret_cast<const char*>(_data) + off, _len - off);
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {

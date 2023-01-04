@@ -1,16 +1,16 @@
 # STDDEV_SAMP
 
-## description
+## Description
 
-### Syntax
+Returns the sample standard deviation of the expr expression.
+
+## Syntax
 
 ```Haskell
 STDDEV_SAMP(expr)
 ```
 
-It returns the sample standard deviation of the expr expression
-
-## example
+## Examples
 
 ```plain text
 MySQL > select stddev_samp(scan_rows)

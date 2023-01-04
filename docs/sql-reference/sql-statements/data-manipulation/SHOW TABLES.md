@@ -1,6 +1,6 @@
 # SHOW TABLES
 
-## description
+## Description
 
 This statement is used to display all tables in the current db
 

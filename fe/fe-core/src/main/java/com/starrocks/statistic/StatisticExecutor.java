@@ -37,7 +37,8 @@ import java.util.List;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-    public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
+    public List<TStatisticData> queryStatisticSync(ConnectContext context,
+                                                   Long dbId, Long tableId, List<String> columnNames) {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
@@ -69,40 +70,38 @@ public class StatisticExecutor {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
 
-        return executeDQL(sql);
+        return executeDQL(context, sql);
     }
 
-    public void dropTableStatistics(Long tableIds, StatsConstants.AnalyzeType analyzeType) {
+    public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds, StatsConstants.AnalyzeType analyzeType) {
         String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
         LOG.debug("Expire statistic SQL: {}", sql);
 
-        ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
             executor.execute();
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
         }
     }
 
-    public List<TStatisticData> queryHistogram(Long tableId, List<String> columnNames) {
+    public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
-        return executeDQL(sql);
+        return executeDQL(statsConnectCtx, sql);
     }
 
-    public List<TStatisticData> queryMCV(String sql) {
-        return executeDQL(sql);
+    public List<TStatisticData> queryMCV(ConnectContext statsConnectCtx, String sql) {
+        return executeDQL(statsConnectCtx, sql);
     }
 
-    public void dropHistogram(Long tableId, List<String> columnNames) {
+    public void dropHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
-        ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
             executor.execute();
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
@@ -134,6 +133,7 @@ public class StatisticExecutor {
 
 
         ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setThreadLocalInfo();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, false, TResultSinkType.STATISTIC);
@@ -176,7 +176,10 @@ public class StatisticExecutor {
         return statistics;
     }
 
-    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob, AnalyzeStatus analyzeStatus, boolean refreshAsync) {
+    public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx,
+                                           StatisticsCollectJob statsJob,
+                                           AnalyzeStatus analyzeStatus,
+                                           boolean refreshAsync) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
@@ -185,9 +188,8 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
-            statsJob.collect(context, analyzeStatus);
+            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
+            statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
@@ -222,8 +224,7 @@ public class StatisticExecutor {
         return analyzeStatus;
     }
 
-    private List<TStatisticData> executeDQL(String sql) {
-        ConnectContext context = StatisticUtils.buildConnectContext();
+    private List<TStatisticData> executeDQL(ConnectContext context, String sql) {
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);

@@ -33,7 +33,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -77,6 +76,7 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -107,6 +107,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -142,6 +143,7 @@ import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
+    private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -229,7 +231,7 @@ public class Coordinator {
     private final boolean usePipeline;
 
     // Resource group
-    ResourceGroup resourceGroup = null;
+    TWorkGroup resourceGroup = null;
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -487,6 +489,8 @@ public class Coordinator {
                     DebugUtil.printId(queryId), descTable);
         }
 
+        resetFragmentState();
+
         // prepare information
         prepare();
 
@@ -508,6 +512,20 @@ public class Coordinator {
         prepareProfile();
     }
 
+    /**
+     * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
+     */
+    private void resetFragmentState() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment instanceof MultiCastPlanFragment) {
+                MultiCastDataSink multiSink = (MultiCastDataSink) fragment.getSink();
+                for (List<TPlanFragmentDestination> destination : multiSink.getDestinations()) {
+                    destination.clear();
+                }
+            }
+        }
+    }
+
     public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
         return fragmentExecParamsMap;
     }
@@ -517,16 +535,22 @@ public class Coordinator {
     }
 
     public void exec() throws Exception {
-        prepareExec();
-        deliverExecFragments();
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+            prepareExec();
+        }
+
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+            deliverExecFragments();
+        }
     }
 
-    public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
-        ResourceGroup resourceGroup = null;
+    public static TWorkGroup prepareResourceGroup(ConnectContext connect) {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
-            return resourceGroup;
+            return null;
         }
+
         SessionVariable sessionVariable = connect.getSessionVariable();
+        TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
@@ -537,8 +561,7 @@ public class Coordinator {
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = new ResourceGroup();
-            resourceGroup.setId(workgroupId);
+            resourceGroup =  GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
@@ -2209,7 +2232,13 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
-                int timeout = connectContext.getSessionVariable().getProfileTimeout();
+                int timeout;
+                // connectContext can be null for broker export task coordinator
+                if (connectContext != null) {
+                    timeout = connectContext.getSessionVariable().getProfileTimeout();
+                } else {
+                    timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
+                }
                 // Waiting for other fragment instances to finish execution
                 // Ideally, it should wait indefinitely, but out of defense, set timeout
                 if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
@@ -2869,14 +2898,13 @@ public class Coordinator {
                 if (isEnablePipelineEngine) {
                     commonParams.setIs_pipeline(true);
                     commonParams.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-                    commonParams.setEnable_shared_scan(
-                            sessionVariable.isEnableSharedScan() && fragment.isEnableSharedScan());
+                    commonParams.setEnable_shared_scan(sessionVariable.isEnableSharedScan());
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
 
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
                     if (enableResourceGroup && resourceGroup != null) {
-                        commonParams.setWorkgroup(resourceGroup.toThrift());
+                        commonParams.setWorkgroup(resourceGroup);
                     }
                 }
             }

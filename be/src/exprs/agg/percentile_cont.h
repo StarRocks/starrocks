@@ -11,6 +11,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "util/orlp/pdqsort.h"
 
 namespace starrocks::vectorized {
 
@@ -56,16 +57,21 @@ public:
 
         const Slice slice = column->get(row_num).get_slice();
         double rate = *reinterpret_cast<double*>(slice.data);
-        size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
+        size_t second_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
         auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
 
-        vector<InputCppType> res;
-        vector<InputCppType>& vec = this->data(state).items;
-        res.resize(vec.size() + items_size);
+        auto second_start = reinterpret_cast<InputCppType*>(data_ptr);
+        auto second_end = reinterpret_cast<InputCppType*>(data_ptr + second_size * sizeof(InputCppType));
 
-        std::merge(vec.begin(), vec.end(), reinterpret_cast<InputCppType*>(data_ptr),
-                   reinterpret_cast<InputCppType*>(data_ptr + items_size * sizeof(InputCppType)), res.begin());
-        this->data(state).items = std::move(res);
+        // TODO(murphy) reduce the copy overhead of merge algorithm
+        auto& output = this->data(state).items;
+        size_t first_size = output.size();
+        output.resize(first_size + second_size);
+        auto first_end = output.begin() + first_size;
+        std::copy(second_start, second_end, first_end);
+        // TODO: optimize it with SIMD bitonic merge
+        std::inplace_merge(output.begin(), first_end, output.end());
+
         this->data(state).rate = rate;
     }
 
@@ -83,9 +89,9 @@ public:
         memcpy(bytes.data() + old_size + sizeof(double), &items_size, sizeof(size_t));
         memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), this->data(state).items.data(),
                items_size * sizeof(InputCppType));
-        std::sort(reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t)),
-                  reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t) +
-                                                  items_size * sizeof(InputCppType)));
+        pdqsort(false, reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t)),
+                reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t) +
+                                                items_size * sizeof(InputCppType)));
 
         column->get_offset().emplace_back(new_size);
     }
@@ -93,7 +99,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         using CppType = RunTimeCppType<PT>;
         std::vector<CppType> new_vector = this->data(state).items;
-        std::sort(new_vector.begin(), new_vector.end());
+        pdqsort(false, new_vector.begin(), new_vector.end());
         const double& rate = this->data(state).rate;
 
         ResultColumnType* column = down_cast<ResultColumnType*>(to);
@@ -128,24 +134,22 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
-        Bytes& bytes = dst_column->get_bytes();
-        size_t old_size = bytes.size();
-
         if (chunk_size <= 0) {
             return;
         }
-
+        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
         InputColumnType src_column = *down_cast<const InputColumnType*>(src[0].get());
-        std::sort(src_column.get_data().begin(), src_column.get_data().end());
-
-        bytes.resize(old_size + sizeof(double) + sizeof(size_t) + chunk_size * sizeof(InputCppType));
-
-        memcpy(bytes.data() + old_size, &rate, sizeof(double));
-        memcpy(bytes.data() + old_size + sizeof(double), &chunk_size, sizeof(size_t));
-        memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), src_column.get_data().data(),
-               chunk_size * sizeof(InputCppType));
+        InputCppType* src_data = src_column.get_data().data();
+        for (auto i = 0; i < chunk_size; ++i) {
+            size_t old_size = bytes.size();
+            bytes.resize(old_size + sizeof(double) + sizeof(size_t) + sizeof(InputCppType));
+            memcpy(bytes.data() + old_size, &rate, sizeof(double));
+            *reinterpret_cast<size_t*>(bytes.data() + old_size + sizeof(double)) = 1UL;
+            memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), &src_data[i], sizeof(InputCppType));
+            dst_column->get_offset().push_back(bytes.size());
+        }
     }
 
     std::string get_name() const override { return "percentile_cont"; }

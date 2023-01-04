@@ -2,6 +2,12 @@
 
 #include "simd/simd.h"
 
+#define JOIN_HASH_MAP_TPP
+
+#ifndef JOIN_HASH_MAP_H
+#include "join_hash_map.h"
+#endif
+
 namespace starrocks::vectorized {
 template <PrimitiveType PT>
 void JoinBuildFunc<PT>::prepare(RuntimeState* runtime, JoinHashTableItems* table_items) {
@@ -1065,8 +1071,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
     size_t match_count = 0;
 
     size_t probe_row_count = _probe_state->probe_row_count;
-    if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr &&
-        _table_items->row_count != 0) {
+    DCHECK_LT(0, _table_items->row_count);
+    if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
             size_t index = _probe_state->next[i];
@@ -1466,6 +1472,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 
     size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
+        _probe_state->cur_row_match_count = 0;
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
             bool change_flag = false;
@@ -1530,7 +1537,6 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
 
             RETURN_IF_CHUNK_FULL()
         }
-        _probe_state->cur_row_match_count = 0;
     }
     _probe_state->has_null_build_tuple = true;
     PROBE_OVER()
@@ -1690,3 +1696,5 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
 }
 
 } // namespace starrocks::vectorized
+
+#undef JOIN_HASH_MAP_TPP

@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.statistic;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -10,7 +11,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
-import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -25,6 +25,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestBase {
+
+    private static long t0StatsTableId = 0;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
@@ -46,6 +49,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 ");");
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
+        t0StatsTableId = t0.getId();
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
         partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
                 .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
@@ -148,7 +152,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
-        Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
     }
 
     @Test
@@ -165,13 +169,13 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
-        Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
     }
 
     @Test
     public void testAnalyzeTable() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(10002, 16325, null,
+                new AnalyzeJob(10002, t0StatsTableId, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -213,7 +217,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
     @Test
     public void testAnalyzeColumn() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(10002, 16325, Lists.newArrayList("v2"),
+                new AnalyzeJob(10002, t0StatsTableId, Lists.newArrayList("v2"),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -227,7 +231,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
     @Test
     public void testAnalyzeColumnSample() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(10002, 16325, Lists.newArrayList("v2"),
+                new AnalyzeJob(10002, t0StatsTableId, Lists.newArrayList("v2"),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -304,53 +308,57 @@ public class StatisticsCollectJobTest extends PlanTestBase {
 
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2");
-        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v2', 10002, 'test.t0_stats', " +
-                "histogram(v2, cast(64 as int), cast(0.1 as double)),  NULL, NOW() FROM " +
-                "(SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  ORDER BY v2 LIMIT 10000000) t", sql);
+        Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', 10002, 'test.t0_stats', " +
+                        "histogram(v2, cast(64 as int), cast(0.1 as double)),  NULL, NOW() FROM " +
+                        "(SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  ORDER BY v2 LIMIT 10000000) t",
+                t0StatsTableId), sql);
 
         Map<String, String> mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v2");
-        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v2', 10002, 'test.t0_stats', " +
+        Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %s, 'v2', 10002, 'test.t0_stats', " +
                 "histogram(v2, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
                 "FROM (SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  and v2 not in (1,2) " +
-                "ORDER BY v2 LIMIT 10000000) t", sql);
+                "ORDER BY v2 LIMIT 10000000) t", t0StatsTableId), sql);
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01", "10");
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4");
-        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v4', 10002, 'test.t0_stats', " +
+        Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %s, 'v4', 10002, 'test.t0_stats', " +
                 "histogram(v4, cast(64 as int), cast(0.1 as double)),  '[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', " +
                 "NOW() FROM (SELECT v4 FROM test.t0_stats where rand() <= 0.1 and v4 is not null  and v4 not in " +
-                "(\"0000-01-01\",\"1991-01-01\") ORDER BY v4 LIMIT 10000000) t", sql);
+                "(\"0000-01-01\",\"1991-01-01\") ORDER BY v4 LIMIT 10000000) t", t0StatsTableId), sql);
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01 00:00:00", "10");
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5");
-        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v5', 10002, 'test.t0_stats', " +
-                "histogram(v5, cast(64 as int), cast(0.1 as double)),  " +
-                "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
-                "(SELECT v5 FROM test.t0_stats where rand() <= 0.1 and v5 is not null  " +
-                "and v5 not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY v5 LIMIT 10000000) t", sql);
+        Assert.assertEquals(
+                "INSERT INTO histogram_statistics SELECT " + t0StatsTableId + ", 'v5', 10002, 'test.t0_stats', " +
+                        "histogram(v5, cast(64 as int), cast(0.1 as double)),  " +
+                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                        "(SELECT v5 FROM test.t0_stats where rand() <= 0.1 and v5 is not null  " +
+                        "and v5 not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY v5 LIMIT 10000000) t",
+                sql);
 
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
                 db, olapTable, 100L, "v2");
         Assert.assertEquals("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
                 "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, 10002 as db_id, " +
-                "16325 as table_id, `v2` as column_key, count(`v2`) as column_value from test.t0_stats " +
+                +t0StatsTableId +
+                " as table_id, `v2` as column_key, count(`v2`) as column_value from test.t0_stats " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t", sql);
     }
 
     @Test
     public void testSplitColumns() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(10002, 16325, null,
+                new AnalyzeJob(10002, t0StatsTableId, null,
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,

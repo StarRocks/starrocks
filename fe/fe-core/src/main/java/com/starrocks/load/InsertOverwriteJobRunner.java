@@ -26,6 +26,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.load.InsertOverwriteJobState.OVERWRITE_FAILED;
+
 // InsertOverwriteJobRunner will execute the insert overwrite.
 // The main idea is that:
 //     1. create temporary partitions as target partitions
@@ -83,7 +85,7 @@ public class InsertOverwriteJobRunner {
             return;
         }
         try {
-            transferTo(InsertOverwriteJobState.OVERWRITE_FAILED);
+            transferTo(OVERWRITE_FAILED);
         } catch (Exception e) {
             LOG.warn("cancel insert overwrite job:{} failed", job.getJobId(), e);
         }
@@ -93,8 +95,8 @@ public class InsertOverwriteJobRunner {
         try {
             handle();
         } catch (Exception e) {
-            if (job.getJobState() != InsertOverwriteJobState.OVERWRITE_FAILED) {
-                transferTo(InsertOverwriteJobState.OVERWRITE_FAILED);
+            if (job.getJobState() != OVERWRITE_FAILED) {
+                transferTo(OVERWRITE_FAILED);
             }
             throw e;
         }
@@ -133,7 +135,13 @@ public class InsertOverwriteJobRunner {
 
     public void replayStateChange(InsertOverwriteStateChangeInfo info) {
         LOG.info("replay state change:{}", info);
-        if (job.getJobState() != info.getFromState()) {
+        // If the final status is failure, then GC must be done
+        if (info.getToState() == OVERWRITE_FAILED) {
+            job.setJobState(OVERWRITE_FAILED);
+            LOG.info("replay insert overwrite job:{} to FAILED", job.getJobId());
+            gc(true);
+            return;
+        } else if (job.getJobState() != info.getFromState()) {
             LOG.warn("invalid job info. current state:{}, from state:{}", job.getJobState(), info.getFromState());
             return;
         }
@@ -143,11 +151,6 @@ public class InsertOverwriteJobRunner {
                 job.setSourcePartitionIds(info.getSourcePartitionIds());
                 job.setTmpPartitionIds(info.getTmpPartitionIds());
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
-                break;
-            case OVERWRITE_FAILED:
-                job.setJobState(InsertOverwriteJobState.OVERWRITE_FAILED);
-                LOG.info("replay insert overwrite job:{} to FAILED", job.getJobId());
-                gc(true);
                 break;
             case OVERWRITE_SUCCESS:
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_SUCCESS);
@@ -238,7 +241,7 @@ public class InsertOverwriteJobRunner {
             }
             if (!isReplay) {
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
-                        InsertOverwriteJobState.OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getTmpPartitionIds());
+                        OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
             }
         } catch (Exception e) {

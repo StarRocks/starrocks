@@ -1,6 +1,6 @@
 # INSTALL PLUGIN
 
-## description
+## Description
 
 This statement is used to install a plugin,
 
@@ -20,7 +20,7 @@ INSTALL PLUGIN FROM [source] [PROPERTIES ("key"="value", ...)]
 
 PROPERTIES supports setting some configurations of plugins, such as setting the  md5sum value of the zip file, etc.
 
-## example
+## Examples
 
 1. Install a plugin from local zip file:
 

@@ -152,6 +152,15 @@ public class PublishVersionTask extends AgentTask {
             LOG.warn("db not found dbid={}", dbId);
             return;
         }
+        List<Long> droppedTablets = new ArrayList<>();
+        for (int i = 0; i < tabletVersions.size(); i++) {
+            if (replicas.get(i) == null) {
+                droppedTablets.add(tabletVersions.get(i).tablet_id);
+            }
+        }
+        if (!droppedTablets.isEmpty()) {
+            LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
+        }
         db.writeLock();
         try {
             // TODO: persistent replica version
@@ -159,7 +168,6 @@ public class PublishVersionTask extends AgentTask {
                 TTabletVersionPair tabletVersion = tabletVersions.get(i);
                 Replica replica = replicas.get(i);
                 if (replica == null) {
-                    LOG.warn("replica not found backendid={} tabletid={}", backendId, tabletVersion.tablet_id);
                     continue;
                 }
                 replica.updateVersion(tabletVersion.version);

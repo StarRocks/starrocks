@@ -2,7 +2,7 @@
 
 ## Description
 
-Select the columns that are not involved in the aggregate operation in the aggregation statement and then obtain an arbitrary row from each aggregated group. You can use this function to optimize a query that has a `GROUP BY` clause.
+Selects the columns that are not involved in the aggregate operation in the aggregation statement and then obtain an arbitrary row from each aggregated group. You can use this function to optimize a query that has a `GROUP BY` clause.
 
 ## Syntax
 

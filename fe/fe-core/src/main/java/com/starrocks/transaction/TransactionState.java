@@ -38,12 +38,14 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -246,7 +248,7 @@ public class TransactionState implements Writable {
     // used for PublishDaemon to check whether this txn can be published
     // not persisted, so need to rebuilt if FE restarts
     private volatile TransactionChecker finishChecker = null;
-    private long checkTimes = 0;
+    private long checkerCreationTime = 0;
     private Span txnSpan = null;
     private String traceParent = null;
 
@@ -649,8 +651,9 @@ public class TransactionState implements Writable {
         return publishVersionTasks;
     }
 
-    public void clearPublishVersionTasks() {
+    public void clearAfterPublished() {
         publishVersionTasks.clear();
+        finishChecker = null;
     }
 
     @Override
@@ -670,16 +673,15 @@ public class TransactionState implements Writable {
         out.writeLong(commitTime);
         out.writeLong(finishTime);
         // if txn use new publish mechanism, store state in the space originally used by `reason`
+        // if new publish with TxnFinishState, write json {"normal":[xx],"abnormal":[xxx,xxx]}
+        // else write `reason` field
+        // they are both String, so they are compatible
         if (transactionStatus == TransactionStatus.VISIBLE) {
             if (newFinish) {
                 Preconditions.checkNotNull(finishState);
-                // write 1 as version number
-                byte[] bytes = finishState.toBytes();
-                out.writeInt(bytes.length + 1);
-                out.writeByte(1);
-                out.write(bytes);
+                Text.writeString(out, GsonUtils.GSON.toJson(finishState));
             } else {
-                out.writeInt(0);
+                Text.writeString(out, "");
             }
         } else {
             Text.writeString(out, reason);
@@ -745,14 +747,37 @@ public class TransactionState implements Writable {
             if (len == 0) {
                 newFinish = false;
             } else {
-                in.readByte(); // skip the first byte, which is the version number
-                byte[] bytes = new byte[len - 1];
+                byte[] bytes = new byte[len];
                 in.readFully(bytes);
-                if (finishState == null) {
-                    finishState = new TxnFinishState();
+                try {
+                    // originally, TxnFinishState is serialized using protobuf(baidu jprotobuf),
+                    // but looks like the ser/deser is not compatible with java native serialization
+                    // causing FE error when upgrading, so changed to json serialization, but keep
+                    // the old deserialization code here for compatibility
+                    // see: https://github.com/StarRocks/starrocks/issues/15248
+                    byte version = bytes[0];
+                    if (version == 1) {
+                        if (finishState == null) {
+                            finishState = new TxnFinishState();
+                        }
+                        byte[] pbBytes = new byte[len - 1];
+                        System.arraycopy(bytes, 1, pbBytes, 0, len - 1);
+                        finishState.fromBytes(pbBytes);
+                        newFinish = true;
+                    } else {
+                        String content = Text.decode(bytes);
+                        if (content.length() > 2 && content.charAt(0) == '{') {
+                            finishState = GsonUtils.GSON.fromJson(content, TxnFinishState.class);
+                            newFinish = true;
+                        } else {
+                            // old reason
+                            reason = content;
+                            newFinish = false;
+                        }
+                    }
+                } catch (IOException e) {
+                    LOG.warn("failed to deserialize TxnFinishState data: " + Hex.encodeHexString(bytes));
                 }
-                finishState.fromBytes(bytes);
-                newFinish = true;
             }
         } else {
             reason = Text.readString(in);
@@ -875,18 +900,16 @@ public class TransactionState implements Writable {
 
     // Note: caller should hold db lock
     public void prepareFinishChecker(Database db) {
-        if (finishChecker == null) {
-            synchronized (this) {
-                if (finishChecker == null) {
-                    finishChecker = TransactionChecker.create(this, db);
-                }
-            }
+        synchronized (this) {
+            finishChecker = TransactionChecker.create(this, db);
+            checkerCreationTime = System.nanoTime();
         }
     }
 
     public boolean checkCanFinish() {
-        // this may happen if FE restarts
-        if (finishChecker == null) {
+        // finishChecker may be null if FE restarts
+        // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
+        if (finishChecker == null || System.nanoTime() - checkerCreationTime > 10000000000L) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 // consider txn finished if db is dropped
@@ -902,17 +925,18 @@ public class TransactionState implements Writable {
         if (finishState == null) {
             finishState = new TxnFinishState();
         }
-        checkTimes++;
         boolean ret = finishChecker.finished(finishState);
         if (ret) {
             txnSpan.addEvent("check_ok");
-            txnSpan.setAttribute("check_times", checkTimes);
         }
         return ret;
     }
 
     public String getPublishTimeoutDebugInfo() {
-        if (finishChecker != null) {
+        if (!hasSendTask()) {
+            return "txn has not sent publish tasks yet, maybe waiting previous txns on the same table(s) to finish, tableIds: " +
+                    Joiner.on(",").join(getTableIdList());
+        } else if (finishChecker != null) {
             return finishChecker.debugInfo();
         } else {
             return getErrMsg();

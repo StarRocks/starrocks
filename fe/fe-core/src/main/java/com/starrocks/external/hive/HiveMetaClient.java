@@ -60,6 +60,7 @@ import org.apache.thrift.transport.TTransportException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -414,10 +415,18 @@ public class HiveMetaClient {
                                                                              List<String> columnNames,
                                                                              boolean isHudiTable)
             throws DdlException {
+        List<PartitionKey> filteredPartitionKeys = new ArrayList<>(partitionKeys);
+        if (ConnectContext.get() != null) {
+            int partSize = filteredPartitionKeys.size();
+            int sampleSize = ConnectContext.get().getSessionVariable().getHivePartitionStatsSampleSize();
+            if (partSize > sampleSize) {
+                filteredPartitionKeys = filteredPartitionKeys.subList(0, sampleSize);
+            }
+        }
         // calculate partition names
         List<String> partNames = Lists.newArrayList();
         List<String> partColumnNames = partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
-        for (PartitionKey partitionKey : partitionKeys) {
+        for (PartitionKey partitionKey : filteredPartitionKeys) {
             partNames.add(FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable)));
         }
 
@@ -426,13 +435,6 @@ public class HiveMetaClient {
         Map<String, Long> partRowNumbers = Maps.newHashMapWithExpectedSize(partNames.size());
         long tableRowNumber = 0L;
         List<Partition> partitions;
-        if (ConnectContext.get() != null) {
-            int partNameSize = partNames.size();
-            int sampleSize = ConnectContext.get().getSessionVariable().getHivePartitionStatsSampleSize();
-            if (partNameSize > sampleSize) {
-                partNames = partNames.subList(0, sampleSize);
-            }
-        }
 
         try (AutoCloseClient client = getClient()) {
             partitions = client.hiveClient.getPartitionsByNames(dbName, tableName, partNames);
@@ -536,7 +538,7 @@ public class HiveMetaClient {
             Set<String> distinctCnt = Sets.newHashSet();
             long numNulls = 0;
             double vLength = 0.0f;
-            for (PartitionKey partitionKey : partitionKeys) {
+            for (PartitionKey partitionKey : filteredPartitionKeys) {
                 LiteralExpr literalExpr = partitionKey.getKeys().get(colIndex);
                 String partName =
                         FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable));

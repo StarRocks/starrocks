@@ -1,16 +1,22 @@
 # VARIANCE,VAR_POP,VARIANCE_POP
 
-## description
+## Description
 
-### Syntax
+Returns the variance of an expression.
+
+## Syntax
 
 ```Haskell
 VARIANCE(expr)
 ```
 
-It returns the variance of the expr expression.
+## Return value
 
-## example
+Returns a numerical value.
+
+If the type of `expr` is DECIMAL, this function returns a DECIMAL value, or else returns a DOUBLE value.
+
+## Examples
 
 ```plain text
 MySQL > select variance(scan_rows)

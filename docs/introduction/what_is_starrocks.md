@@ -34,7 +34,7 @@ The MPP framework and vectorized execution engine enable users to choose between
 
 ### Real-time analytics
 
-StarRocks uses the Primary Key model to implement real-time updates. Data changes in a TP database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse. 
+StarRocks uses the Primary Key model to implement real-time updates. Data changes in a TP database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse.
 
 Scenarios:
 
@@ -58,7 +58,7 @@ StarRocks leverages performant data distribution, flexible indexing, and intelli
 
 - Advertiser report analysis
 
-- Channel analysis for the retail industry 
+- Channel analysis for the retail industry
 
 - User-facing analysis for SaaS
 
@@ -66,7 +66,7 @@ StarRocks leverages performant data distribution, flexible indexing, and intelli
 
 ### Unified analytics
 
-StarRocks provides a unified data analytics experience. 
+StarRocks provides a unified data analytics experience.
 
 - One system can power various analytical scenarios, reducing system complexity and lowering TCO.
 
