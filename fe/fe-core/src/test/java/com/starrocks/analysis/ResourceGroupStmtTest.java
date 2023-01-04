@@ -318,7 +318,7 @@ public class ResourceGroupStmtTest {
                 .map(row -> getClassifierId(row.get(row.size() - 1))).collect(Collectors.toList());
         rows = rows.stream().peek(row -> {
             if (row.get(0).equals(rgName)) {
-                row.set(9, "(weight=0.0)");
+                row.set(row.size() - 1, "(weight=0.0)");
             }
         }).distinct().collect(Collectors.toList());
         String ids = String.join(",", classifierIds);
@@ -353,7 +353,7 @@ public class ResourceGroupStmtTest {
                 // not last classifier of the rg, remove it
                 it.remove();
             } else {
-                row.set(9, "(weight=0.0)");
+                row.set(row.size() - 1, "(weight=0.0)");
             }
             String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, id);
             starRocksAssert.executeResourceGroupDdlSql(alterSql);
@@ -372,7 +372,7 @@ public class ResourceGroupStmtTest {
         String rgName = "rg2";
         rows = rows.stream().peek(row -> {
             if (row.get(0).equals(rgName)) {
-                row.set(9, "(weight=0.0)");
+                row.set(row.size() - 1, "(weight=0.0)");
             }
         }).distinct().collect(Collectors.toList());
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP ALL", rgName);
