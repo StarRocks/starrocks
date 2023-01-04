@@ -252,7 +252,6 @@
   + Function Reference
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
-    + [Lambda expression](./sql-reference/sql-functions/Lambda_expression.md)
     + Aggregate Functions
       + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
