@@ -435,7 +435,7 @@ MySQL [test_db]> SELECT * FROM table3;
 
 As shown in the preceding query result, the record whose `id` is `101` in `example3.csv` has been deleted from `table3`, the record whose `id` is `102` in `example3.csv` has been updated to `table3`, and the record whose `id` is `103` in `example3.csv` has been inserted into `table3`.
 
-## Partial updates [Preview]
+## Partial updates
 
 Since v2.2, StarRocks supports updating only the specified columns of a table that uses the Primary Key model. This section uses CSV as an example to describe how to perform partial updates.
 
