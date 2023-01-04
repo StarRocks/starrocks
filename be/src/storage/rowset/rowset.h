@@ -280,6 +280,8 @@ public:
         }
     }
 
+    uint64_t refs_by_reader() { return _refs_by_reader; }
+
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;
         for (int i = 0; i < rowsets.size(); i++) {
