@@ -48,6 +48,7 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
     }
     auto casted_map = MapColumn::create(std::move(casted_key_column), std::move(casted_value_column),
                                         map_column->offsets_column());
+    RETURN_IF_ERROR(casted_map->unfold_const_children(_type));
     if (!orig_column->is_nullable()) {
         return casted_map;
     }
@@ -75,6 +76,7 @@ StatusOr<ColumnPtr> CastStructExpr::evaluate_checked(ExprContext* context, Chunk
         }
     }
     auto casted_struct = StructColumn::create(std::move(casted_fields));
+    RETURN_IF_ERROR(casted_struct->unfold_const_children(_type));
     if (!orig_column->is_nullable()) {
         return std::move(casted_struct);
     }
@@ -102,6 +104,7 @@ StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked(ExprContext* context, Chunk*
     }
 
     auto casted_array = ArrayColumn::create(std::move(casted_element_column), array_column->offsets_column());
+    RETURN_IF_ERROR(casted_array->unfold_const_children(_type));
     if (!orig_column->is_nullable()) {
         return std::move(casted_array);
     }

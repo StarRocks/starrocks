@@ -552,4 +552,11 @@ StatusOr<ColumnPtr> MapColumn::downgrade() {
     return downgrade_helper_func(&_values);
 }
 
+Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
+    DCHECK(type.children.size() == 2) << "Map schema does not match data's";
+    _keys = ColumnHelper::unfold_const_column(type.children[0], _keys->size(), _keys);
+    _values = ColumnHelper::unfold_const_column(type.children[1], _values->size(), _values);
+    return Status::OK();
+}
+
 } // namespace starrocks

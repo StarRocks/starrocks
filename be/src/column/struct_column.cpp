@@ -479,4 +479,14 @@ ColumnPtr StructColumn::field_column(const std::string& field_name) {
     return nullptr;
 }
 
+Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
+    DCHECK(type.children.size() == _fields.size()) << "Struct schema does not match data's";
+    auto num_fields = type.children.size();
+    auto num_rows = _fields[0]->size();
+    for (int i = 0; i < num_fields; ++i) {
+        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, _fields[i]);
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks
