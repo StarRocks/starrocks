@@ -112,12 +112,20 @@ def generate_cpp_file(cpp_path, version, commit_hash, build_type, build_time, us
 
 namespace starrocks {{
 
+<<<<<<< HEAD
 #define STARROCKS_VERSION         "{VERSION}"
 #define STARROCKS_COMMIT_HASH     "{COMMIT_HASH}"
 #define STARROCKS_BUILD_TYPE      "{BUILD_TYPE}"
 #define STARROCKS_BUILD_TIME      "{BUILD_TIME}"
 #define STARROCKS_BUILD_USER      "{BUILD_USER}"
 #define STARROCKS_BUILD_HOST      "{BUILD_HOST}"
+=======
+const char* STARROCKS_VERSION = "{VERSION}";
+const char* STARROCKS_COMMIT_HASH = "{COMMIT_HASH}";
+const char* STARROCKS_BUILD_TIME = "{BUILD_TIME}";
+const char* STARROCKS_BUILD_USER = "{BUILD_USER}";
+const char* STARROCKS_BUILD_HOST = "{BUILD_HOST}";
+>>>>>>> 3b7046912 (Get accurate build type on make time (#16214))
 }}
 
 '''
