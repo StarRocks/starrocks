@@ -18,16 +18,29 @@
 
 namespace starrocks::pipeline {
 // Manage the memory usage for local exchange
-// TODO(KKS): Should use the real chunk memory usage, not chunk row number
-// Use row number because it's hard to control very big bitmap column memory usage
 class LocalExchangeMemoryManager {
 public:
-    LocalExchangeMemoryManager(int32_t max_row_count) : _max_row_count(max_row_count) {}
-    void update_row_count(int32_t row_count) { _row_count += row_count; }
-    bool is_full() const { return _row_count >= _max_row_count; }
+    LocalExchangeMemoryManager(size_t max_input_dop) {
+        size_t limit_bytes = 64 * 1024 * 1024; // 64 MB
+        if (config::local_exchange_buffer_mem_limit_per_driver > 0) {
+            limit_bytes = config::local_exchange_buffer_mem_limit_per_driver;
+        } else {
+            LOG(WARNING) << "config::local_exchange_buffer_mem_limit_per_driver <= 0";
+        }
+        auto res = max_input_dop * limit_bytes;
+        constexpr size_t MAX_MEM_LIMIT = 8589934592; // 8G limit
+        _memory_bytes = res > MAX_MEM_LIMIT or res <= 0 ? MAX_MEM_LIMIT : res;
+    }
+
+    void update_memory_usage(size_t memory_bytes) { _memory_bytes += memory_bytes; }
+
+    size_t get_memory_usage() const { return _memory_bytes; }
+
+    bool is_full() const { return _memory_bytes >= _max_memory_bytes; }
 
 private:
-    int32_t _max_row_count;
-    std::atomic<int32_t> _row_count{0};
+    size_t _max_memory_bytes;
+    // an estimated value for partitioned shuffle, as it reconstructs chunks.
+    std::atomic<size_t> _memory_bytes{0};
 };
 } // namespace starrocks::pipeline

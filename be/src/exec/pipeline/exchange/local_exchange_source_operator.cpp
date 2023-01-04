@@ -26,7 +26,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
     if (_is_finished) {
         return Status::OK();
     }
-    _memory_manager->update_row_count(chunk->num_rows());
+    _memory_manager->update_memory_usage(chunk->memory_usage());
     _full_chunk_queue.emplace(std::move(chunk));
 
     return Status::OK();
@@ -40,7 +40,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<st
     if (_is_finished) {
         return Status::OK();
     }
-    _memory_manager->update_row_count(size);
+    _memory_manager->update_memory_usage(chunk->bytes_usage(from, size));
     _partition_chunk_queue.emplace(std::move(chunk), std::move(indexes), from, size);
     _partition_rows_num += size;
 
@@ -75,7 +75,7 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     // clear _partition_chunk_queue
     { [[maybe_unused]] typeof(_partition_chunk_queue) tmp = std::move(_partition_chunk_queue); }
     // Subtract the number of rows of buffered chunks from row_count of _memory_manager and make it unblocked.
-    _memory_manager->update_row_count(-(full_rows_num + _partition_rows_num));
+    _memory_manager->update_memory_usage(-_memory_manager->get_memory_usage());
     _partition_rows_num = 0;
     return Status::OK();
 }
@@ -85,7 +85,7 @@ StatusOr<ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) 
     if (chunk == nullptr) {
         chunk = _pull_shuffle_chunk(state);
     }
-    _memory_manager->update_row_count(-(static_cast<int32_t>(chunk->num_rows())));
+    _memory_manager->update_memory_usage(-(static_cast<size_t>(chunk->memory_usage())));
     return std::move(chunk);
 }
 
