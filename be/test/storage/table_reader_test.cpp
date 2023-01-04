@@ -244,10 +244,7 @@ TEST_F(TableReaderTest, test_basic_read) {
     // 2.1 data version to read
     params.version = 2;
 
-    // 2.2 table schema
-    params.schema = ChunkHelper::convert_schema_to_format_v2(_tablets[0]->tablet_schema());
-
-    // 2.3 build TOlapTablePartitionParam
+    // 2.2 build TOlapTablePartitionParam
     TOlapTableIndexTablets index;
     index.__set_index_id(0);
     std::vector<int64_t> tablet_ids;
