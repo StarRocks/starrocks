@@ -229,7 +229,8 @@ public:
 
     void set_join_mode(int8_t join_mode) { _join_mode = join_mode; }
     // RuntimeFilter version
-    //
+    // if the RuntimeFilter is updated, the version will be updated as well,
+    // (usually used for TopN Filter)
     size_t rf_version() const { return _rf_version; }
 
     virtual size_t max_serialized_size() const;
