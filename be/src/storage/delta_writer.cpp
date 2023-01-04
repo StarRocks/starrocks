@@ -322,7 +322,7 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
                                                  segment_pb.segment_id(), _opt.tablet_id,
                                                  _replica_state_name(_replica_state)));
     }
-    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment id " << segment_pb.segment_id();
+    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment " << segment_pb.DebugString();
 
     return _rowset_writer->flush_segment(segment_pb, data);
 }
