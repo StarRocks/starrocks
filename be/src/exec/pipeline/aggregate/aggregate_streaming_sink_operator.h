@@ -54,8 +54,6 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
     Status _push_chunk_by_auto(ChunkPtr chunk, const size_t chunk_size);
 
-    Status _push_chunk_by_auto_new(ChunkPtr chunk, const size_t chunk_size);
-
     Status _push_chunk_by_selective_preaggregation(ChunkPtr chunk, const size_t chunk_size, bool need_build);
 
     // It is used to perform aggregation algorithms shared by
