@@ -57,7 +57,7 @@ bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
     return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
-           (_is_finished && _partition_rows_num > 0);
+           (_is_finished && _partition_rows_num > 0) || _memory_manager->should_output();
 }
 
 Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {

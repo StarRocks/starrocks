@@ -41,6 +41,9 @@ public:
 
     bool is_full() const { return _memory_bytes >= _max_memory_bytes; }
 
+    // consume the buffered data to avoid the buffer being full for a long time when the chunk's size is too large.
+    bool should_output() const { return _memory_bytes >= _max_memory_bytes * 0.8; };
+
 private:
     size_t _max_memory_bytes;
     // an estimated value for partitioned shuffle, as it reconstructs chunks.
