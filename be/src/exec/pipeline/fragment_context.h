@@ -71,6 +71,7 @@ public:
     size_t total_dop() const;
     Pipelines& pipelines() { return _pipelines; }
     void set_pipelines(Pipelines&& pipelines) { _pipelines = std::move(pipelines); }
+    size_t num_drivers() const;
 
     bool all_pipelines_finished() const { return _num_finished_pipelines == _pipelines.size(); }
     void count_down_pipeline(RuntimeState* state, size_t val = 1);
@@ -125,6 +126,12 @@ public:
     const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
     bool enable_resource_group() const { return _workgroup != nullptr; }
 
+    // STREAM MV
+    Status reset_epoch();
+    void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
+    bool is_stream_pipeline() const { return _is_stream_pipeline; }
+    void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -163,6 +170,10 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
+
+    // STREAM MV
+    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
+    bool _is_stream_pipeline = false;
 };
 
 class FragmentContextManager {

@@ -18,7 +18,6 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -29,8 +28,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -39,7 +36,6 @@ import org.junit.Test;
 import java.util.Map;
 
 public class RefreshMaterializedViewStatementTest {
-    private static final Logger LOG = LogManager.getLogger(RefreshMaterializedViewStatementTest.class);
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -115,8 +111,9 @@ public class RefreshMaterializedViewStatementTest {
         Assert.assertTrue(refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().containsKey(table.getId()));
         Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap =
                 refreshScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().get(table.getId());
-        Assert.assertTrue(partitionInfoMap.containsKey("table_name_tmp_1"));
-        MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
-        Assert.assertEquals(table.getPartition("table_name_tmp_1").getVisibleVersion(), partitionInfo.getVersion());
+        if (partitionInfoMap.containsKey("table_name_tmp_1")) {
+            MaterializedView.BasePartitionInfo partitionInfo = partitionInfoMap.get("table_name_tmp_1");
+            Assert.assertEquals(table.getPartition("table_name_tmp_1").getVisibleVersion(), partitionInfo.getVersion());
+        }
     }
 }

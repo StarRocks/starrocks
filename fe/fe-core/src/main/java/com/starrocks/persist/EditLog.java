@@ -83,6 +83,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -928,6 +929,11 @@ public class EditLog {
                 case OperationType.OP_AUTH_UPGRDE_V2: {
                     AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
                     globalStateMgr.replayAuthUpgrade(info);
+                    break;
+                }
+                case OperationType.OP_MV_JOB_STATE: {
+                    MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
+                    MVManager.getInstance().replay(job);
                     break;
                 }
                 default: {
