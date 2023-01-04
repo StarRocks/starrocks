@@ -257,6 +257,8 @@ public:
     void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
                            std::vector<RowsetMetaPB>& rowset_metas_pb);
 
+    Status check_and_remove_rowset();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -345,7 +347,7 @@ private:
     Status _load_from_pb(const TabletUpdatesPB& updates);
 
     // thread-safe
-    void _remove_unused_rowsets();
+    void _remove_unused_rowsets(bool drop_tablet = false);
 
     // REQUIRE: |_lock| is held.
     void _to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const;
