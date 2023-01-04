@@ -16,6 +16,8 @@
 
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
+#include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 
 namespace starrocks {
 
@@ -24,14 +26,61 @@ using Int8ColumnPtr = Int8Column::Ptr;
 using StreamChunk = Chunk;
 using StreamChunkPtr = std::shared_ptr<StreamChunk>;
 
+class EpochInfo;
+using EpochInfoPtr = std::shared_ptr<EpochInfo>;
+
 /**
  * `StreamRowOp` represents a row's operation kind used in Incremental Materialized View.
  * 
- * `INSERT`: Add a new row.
- * `DELETE`: Delete an existed row.
- * `UPDATE_BEFORE`/`UPDATE_AFTER`: Represents previous and postvious detail of `UPDATE`.
+ * `INSERT`                         : Add a new row.
+ * `DELETE`                         : Delete an existed row.
+ * `UPDATE_BEFORE`/`UPDATE_AFTER`   : Represents previous and postvious detail of `UPDATE`
+ *                                    which always come in pair and next to each other.
  */
-enum StreamRowOp : std::int8_t { INSERT = 0, DELETE = 1, UPDATE_BEFORE = 2, UPDATE_AFTER = 3 };
+enum StreamRowOp : std::int8_t { OP_INSERT = 0, OP_DELETE = 1, OP_UPDATE_BEFORE = 2, OP_UPDATE_AFTER = 3 };
+
+/**
+ * Epoch trigger mode represents a different kind of incremental source consume method:
+ * - `PROCESSTIME_OFFSET`   :  `Source` consumes the max offsets or process time in this epoch 
+ *                              which wins who comes first. This is the method by default.
+ * - `OFFSET`               :  `Source` consumes the max offsets in this epoch.
+ * - `PROCESSTIME`          :  `Source` consumes the max process time in this epoch.
+ * - `MANUAL`               :  `Source` consumes the max offsets in this epoch.
+ */
+enum TriggerMode { PROCESSTIME_OFFSET = 0, OFFSET = 1, PROCESSTIME = 2, MANUAL = 3 };
+
+struct BinlogOffset {
+    int64_t tablet_id;
+    int64_t tablet_version;
+    int64_t lsn;
+};
+
+/**
+ * Epoch is an unit of an incremental compute. At the beginning of each incremental compute,
+ * an `EpochInfo` will be triggered for each source operator, then the source operator will
+ * consume the binlog offsets as the `EpochInfo`'s description. At the end, the source operator
+ * enters into `epoch_finished` state and passes through to the next, until to the last sink
+ * operator, the epoch is computed done at last.
+ */
+struct EpochInfo {
+    // transaction id
+    int64_t txn_id;
+    // epoch marker id
+    int64_t epoch_id;
+    // max binlog duration which this epoch will run
+    int64_t max_exec_millis;
+    // max binlog offset which this epoch will run
+    int64_t max_scan_rows;
+    // Trigger mode
+    TriggerMode trigger_mode;
+
+    std::string debug_string() const {
+        std::stringstream ss;
+        ss << "epoch_id=" << epoch_id << ", max_exec_millis=" << max_exec_millis << ", max_scan_rows=" << max_scan_rows
+           << ", trigger_mode=" << (int)(trigger_mode);
+        return ss.str();
+    }
+};
 
 /**
  * `StreamChunk` is used in Incremental MV which contains a hidden `ops` column, the `ops` column indicates

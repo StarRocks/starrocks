@@ -43,6 +43,8 @@ set(EXEC_FILES
         ./exec/schema_columns_scanner_test.cpp
         ./exec/stream/mem_state_table_test.cpp
         ./exec/stream/stream_aggregator_test.cpp
+        ./exec/stream/stream_operators_test.cpp
+        ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/analytor_test.cpp

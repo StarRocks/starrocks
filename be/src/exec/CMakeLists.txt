@@ -179,6 +179,7 @@ set(EXEC_FILES
     pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
+    pipeline/stream_pipeline_driver.cpp
     pipeline/aggregate/aggregate_blocking_sink_operator.cpp
     pipeline/aggregate/aggregate_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_streaming_sink_operator.cpp
@@ -220,7 +221,9 @@ set(EXEC_FILES
     query_cache/ticket_checker.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
-    stream/aggregate/stream_aggregator.cpp)
+    stream/aggregate/stream_aggregator.cpp
+    stream/aggregate/stream_aggregate_operator.cpp
+    stream/stream_aggregate_node.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

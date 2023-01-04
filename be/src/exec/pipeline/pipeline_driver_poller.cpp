@@ -72,7 +72,7 @@ void PipelineDriverPoller::run_internal() {
             while (driver_it != _local_blocked_drivers.end()) {
                 auto* driver = *driver_it;
 
-                if (driver->query_ctx()->is_query_expired()) {
+                if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                     // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -162,6 +162,34 @@ void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     _blocked_drivers.push_back(driver);
     driver->_pending_timer_sw->reset();
     _cond.notify_one();
+}
+
+void PipelineDriverPoller::park_driver(const DriverRawPtr driver) {
+    std::unique_lock<std::mutex> lock(_global_parked_mutex);
+    VLOG_ROW << "Add to parked driver:" << driver->to_readable_string();
+    _parked_drivers.push_back(driver);
+}
+
+// activate the parked driver from poller
+size_t PipelineDriverPoller::activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) {
+    std::vector<DriverRawPtr> ready_drivers;
+
+    {
+        std::unique_lock<std::mutex> lock(_global_parked_mutex);
+        auto driver_it = _parked_drivers.begin();
+        while (driver_it != _parked_drivers.end()) {
+            auto driver = *driver_it;
+            if (predicate_func(driver)) {
+                VLOG_ROW << "Active parked driver:" << driver->to_readable_string();
+                driver->set_driver_state(DriverState::READY);
+                ready_drivers.push_back(driver);
+                _parked_drivers.erase(driver_it++);
+            }
+        }
+    }
+
+    _driver_queue->put_back(ready_drivers);
+    return ready_drivers.size();
 }
 
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
