@@ -284,7 +284,7 @@ When there is a need to analyze the profile of a query, users can set this varia
 
 * query_timeout
 
-  Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds.
+  Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds. Value range: [1, 259200].
 
 * rewrite_count_distinct_to_bitmap_hll
 

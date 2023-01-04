@@ -37,5 +37,5 @@ public class StatisticsEstimateCoefficient {
     // default shuffle column row count limit
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
     // default or predicate limit
-    public static final int DEFAULT_OR_OPERATOR_LIMIT = 15;
+    public static final int DEFAULT_OR_OPERATOR_LIMIT = 16;
 }
