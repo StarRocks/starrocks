@@ -4667,6 +4667,7 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
     ASSERT_TRUE(dest_column->get(0).get_array().empty());
+
     // array is null
     dest_column = filter.process(nullptr, {src_column2, src_column});
     ASSERT_TRUE(dest_column->only_null());
@@ -4674,6 +4675,16 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     // all null
     dest_column = filter.process(nullptr, {src_column2, src_column2});
     ASSERT_TRUE(dest_column->only_null());
+
+    // src is nullable & bool_array is null
+    auto src_column_nullable = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column_nullable->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column_nullable->append_datum(Datum());
+    dest_column = filter.process(nullptr, {src_column_nullable, src_column2});
+    auto null_data = ColumnHelper::as_raw_column<NullableColumn>(dest_column)->immutable_null_column_data();
+    ASSERT_TRUE(null_data.size() == 2);
+    ASSERT_TRUE(!null_data.data()[0]);
+    ASSERT_TRUE(null_data.data()[1]);
 }
 
 TEST_F(ArrayFunctionsTest, array_distinct_only_null) {

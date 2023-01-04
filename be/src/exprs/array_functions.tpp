@@ -1083,10 +1083,18 @@ private:
         size_t chunk_size = columns[0]->size();
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
         ColumnPtr dest_column = src_column->clone_empty();
-        if (columns[1]->only_null()) { // return empty array for non-null array by design.
+        if (columns[1]->only_null()) { // return empty array for non-null array by design, keep the same null with src.
             auto data_column = dest_column;
             if (dest_column->is_nullable()) {
-                data_column = down_cast<const NullableColumn*>(dest_column.get())->data_column();
+                // set null from src
+                auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+                dest_nullable_column->mutable_null_column()->get_data().assign(
+                        src_nullable_column->null_column()->get_data().begin(),
+                        src_nullable_column->null_column()->get_data().end());
+                dest_nullable_column->set_has_null(src_nullable_column->has_null());
+
+                data_column = dest_nullable_column->data_column();
             }
             data_column->append_default(chunk_size);
             return dest_column;
