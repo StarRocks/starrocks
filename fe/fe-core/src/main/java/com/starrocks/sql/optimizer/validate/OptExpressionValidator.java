@@ -49,7 +49,7 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
-        root.initRowInfo();
+        root.initRowOutputInfo();
         visit(root, null);
     }
 

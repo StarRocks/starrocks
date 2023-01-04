@@ -21,11 +21,11 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowDescriptor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.ColumnEntry;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -68,7 +68,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinType = builder.joinType;
         this.onPredicate = builder.onPredicate;
         this.joinHint = builder.joinHint;
-        this.rowDescriptor = builder.rowDescriptor;
+        this.rowOutputInfo = builder.rowOutputInfo;
 
         this.hasPushDownJoinOnClause = builder.hasPushDownJoinOnClause;
         this.hasDeriveIsNotNullPredicate = builder.hasDeriveIsNotNullPredicate;
@@ -139,7 +139,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         if (predicate != null) {
             result.union(predicate.getUsedColumns());
         }
-        result.union(rowDescriptor.getUsedColumnRefSet());
+        result.union(rowOutputInfo.getUsedColumnRefSet());
 
         return result;
     }
@@ -176,14 +176,14 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
-    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
-        List<ColumnEntry> entryList = Lists.newArrayList();
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
         for (OptExpression input : inputs) {
-            for (ColumnEntry entry : input.getRowDescriptor().getColumnEntries()) {
-                entryList.add(new ColumnEntry(entry.getColumnRef(), entry.getColumnRef()));
+            for (ColumnOutputInfo entry : input.getRowOutputInfo().getColumnEntries()) {
+                entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
             }
         }
-        return new RowDescriptor(entryList);
+        return new RowOutputInfo(entryList);
     }
 
     @Override
@@ -239,7 +239,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         private boolean hasPushDownJoinOnClause = false;
         private boolean hasDeriveIsNotNullPredicate = false;
 
-        private RowDescriptor rowDescriptor;
+        private RowOutputInfo rowOutputInfo;
 
         @Override
         public LogicalJoinOperator build() {
@@ -277,8 +277,8 @@ public class LogicalJoinOperator extends LogicalOperator {
             return this;
         }
 
-        public Builder setRowDescriptor(RowDescriptor rowDescriptor) {
-            this.rowDescriptor = rowDescriptor;
+        public Builder setRowOutputInfo(RowOutputInfo rowOutputInfo) {
+            this.rowOutputInfo = rowOutputInfo;
             return this;
         }
     }

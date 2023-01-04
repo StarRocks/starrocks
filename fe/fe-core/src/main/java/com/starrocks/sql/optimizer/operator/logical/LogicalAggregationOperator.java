@@ -21,7 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowDescriptor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -143,8 +143,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
     }
 
     @Override
-    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
-        return new RowDescriptor(getColumnRefMap());
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(getColumnRefMap());
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {

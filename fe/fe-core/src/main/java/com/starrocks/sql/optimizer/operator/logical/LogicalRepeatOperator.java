@@ -18,7 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowDescriptor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -74,13 +74,13 @@ public class LogicalRepeatOperator extends LogicalOperator {
     }
 
     @Override
-    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         Map<ColumnRefOperator, ScalarOperator> map = Maps.newHashMap();
         outputGrouping.stream().forEach(e -> map.put(e, e));
         for (List<ColumnRefOperator> refSets : repeatColumnRefList) {
             refSets.stream().forEach(e -> map.put(e, e));
         }
-        return new RowDescriptor(map);
+        return new RowOutputInfo(map);
     }
 
     @Override

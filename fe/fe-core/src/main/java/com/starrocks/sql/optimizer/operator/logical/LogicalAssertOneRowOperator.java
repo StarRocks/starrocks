@@ -19,7 +19,7 @@ import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowDescriptor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -81,8 +81,8 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
     }
 
     @Override
-    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
-        return projectInputRowDescriptor(inputs.get(0).getRowDescriptor());
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     @Override

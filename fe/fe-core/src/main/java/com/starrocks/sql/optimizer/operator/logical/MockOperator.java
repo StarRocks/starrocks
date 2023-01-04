@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.RowDescriptor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -59,8 +59,8 @@ public class MockOperator extends LogicalOperator {
     }
 
     @Override
-    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
-        return RowDescriptor.createEmptyDescriptor();
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return RowOutputInfo.createEmptyDescriptor();
     }
 
     @Override

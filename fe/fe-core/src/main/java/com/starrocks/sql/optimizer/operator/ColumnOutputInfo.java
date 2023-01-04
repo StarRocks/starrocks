@@ -21,10 +21,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 /**
- * ColumnEntry is used to describe an output column info in the RowDescriptor.
+ * ColumnOutputInfo is used to describe an output column info in the output row of an operator.
+ * It records the columnRef -> ScalarOperator pair.
  * It's a wrapper of Map.Entry<ColumnRefOperator, ScalarOperator> and provide some handy methods.
  */
-public class ColumnEntry {
+public class ColumnOutputInfo {
 
     private final ColumnRefOperator columnRefOperator;
 
@@ -32,13 +33,13 @@ public class ColumnEntry {
 
     private final int colId;
 
-    public ColumnEntry(ColumnRefOperator columnRefOperator, ScalarOperator scalarOperator) {
+    public ColumnOutputInfo(ColumnRefOperator columnRefOperator, ScalarOperator scalarOperator) {
         this.columnRefOperator = columnRefOperator;
         this.colId = columnRefOperator.getId();
         this.scalarOperator = scalarOperator;
     }
 
-    public ColumnEntry(Map.Entry<ColumnRefOperator, ScalarOperator> entry) {
+    public ColumnOutputInfo(Map.Entry<ColumnRefOperator, ScalarOperator> entry) {
         this.columnRefOperator = entry.getKey();
         this.colId = entry.getKey().getId();
         this.scalarOperator = entry.getValue();
@@ -71,11 +72,11 @@ public class ColumnEntry {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof ColumnEntry)) {
+        if (!(obj instanceof ColumnOutputInfo)) {
             return false;
         }
 
-        ColumnEntry that = (ColumnEntry) obj;
+        ColumnOutputInfo that = (ColumnOutputInfo) obj;
 
         return colId == that.colId;
     }

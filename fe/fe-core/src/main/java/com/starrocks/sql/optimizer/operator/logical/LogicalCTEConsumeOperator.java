@@ -19,9 +19,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.RowDescriptor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.ColumnEntry;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -63,12 +63,12 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
     }
 
     @Override
-    public RowDescriptor deriveRowDescriptor(List<OptExpression> inputs) {
-        List<ColumnEntry> entryList = Lists.newArrayList();
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
         for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : cteOutputColumnRefMap.entrySet()) {
-            entryList.add(new ColumnEntry(entry.getKey(), entry.getValue()));
+            entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
         }
-        return new RowDescriptor(entryList);
+        return new RowOutputInfo(entryList);
     }
 
     public int getCteId() {

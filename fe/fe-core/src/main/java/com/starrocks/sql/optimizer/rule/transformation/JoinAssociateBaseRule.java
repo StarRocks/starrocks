@@ -20,11 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.RowDescriptor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.ColumnEntry;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -95,7 +95,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         ScalarOperator newTopOnCondition = Utils.compoundAnd(top);
         ScalarOperator newBotOnCondition = Utils.compoundAnd(bottom);
 
-        ColumnRefSet newBotJoinColSet = deriveNewBotJoinColSet(input.getRowDescriptor(), newTopOnCondition,
+        ColumnRefSet newBotJoinColSet = deriveNewBotJoinColSet(input.getRowOutputInfo(), newTopOnCondition,
                 newTopPredicate, newTopJoinChildOutCols);
 
         JoinOperator newTopJoinType = deriveJoinType(newTopOnCondition, bottomJoin.getJoinType());
@@ -112,7 +112,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         OptExpression newTopJoinChild = input.inputAt(newTopJoinChildLoc[0]).inputAt(newTopJoinChildLoc[1]);
 
         if (CollectionUtils.isNotEmpty(splitter.getTopJoinChildCols())) {
-            RowDescriptor mergedRow = newTopJoinChild.getRowDescriptor().addColsToRow(
+            RowOutputInfo mergedRow = newTopJoinChild.getRowOutputInfo().addColsToRow(
                     splitter.getTopJoinChildCols(),
                     newTopJoinChild.getOp().getProjection() != null);
             Operator.Builder builder = OperatorBuilderFactory.build(newTopJoinChild.getOp());
@@ -126,7 +126,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         OptExpression newBotJoinRightChild = input.inputAt(newBotJoinRightChildLoc[0]);
 
         if (CollectionUtils.isNotEmpty(splitter.getBotJoinChildCols())) {
-            RowDescriptor mergedRow = newBotJoinLeftChild.getRowDescriptor().addColsToRow(
+            RowOutputInfo mergedRow = newBotJoinLeftChild.getRowOutputInfo().addColsToRow(
                     splitter.getBotJoinChildCols(),
                     newBotJoinLeftChild.getOp().getProjection() != null);
             Operator.Builder builder = OperatorBuilderFactory.build(newBotJoinLeftChild.getOp());
@@ -136,7 +136,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
             newBotJoinLeftChild = OptExpression.create(newBotJoinLeftChildOp, newBotJoinLeftChild.getInputs());
         }
 
-        RowDescriptor newBotJoinRowInfo = deriveBotJoinRowInfo(newBotJoinColSet, newBotJoinLeftChild,
+        RowOutputInfo newBotJoinRowInfo = deriveBotJoinRowInfo(newBotJoinColSet, newBotJoinLeftChild,
                 newBotJoinRightChild, splitter);
 
         Projection newBotJoinProjection = null;
@@ -145,7 +145,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         }
 
         LogicalJoinOperator newBotJoin = newBottomJoinBuilder.setJoinType(newBotJoinType)
-                .setRowDescriptor(newBotJoinRowInfo)
+                .setRowOutputInfo(newBotJoinRowInfo)
                 .setOnPredicate(newBotOnCondition)
                 .setProjection(newBotJoinProjection)
                 .build();
@@ -153,13 +153,13 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
         Projection newTopJoinProjection = null;
 
-        if (needProject(input.getRowDescriptor(), newTopJoinChild, newBotJoinExpr)) {
-            newTopJoinProjection = new Projection(input.getRowDescriptor().getColumnRefMap());
+        if (needProject(input.getRowOutputInfo(), newTopJoinChild, newBotJoinExpr)) {
+            newTopJoinProjection = new Projection(input.getRowOutputInfo().getColumnRefMap());
         }
 
         LogicalJoinOperator newTopJoin = newTopJoinBuilder.withOperator(topJoin)
                 .setJoinType(newTopJoinType)
-                .setRowDescriptor(input.getRowDescriptor())
+                .setRowOutputInfo(input.getRowOutputInfo())
                 .setProjection(newTopJoinProjection)
                 .setOnPredicate(newTopOnCondition)
                 .setPredicate(newTopPredicate)
@@ -172,8 +172,8 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     private boolean invalidPlan(OptExpression newTopJoinExpr) {
         ColumnRefSet requiredCols = ((LogicalJoinOperator) newTopJoinExpr.getOp()).getRequiredCols();
-        ColumnRefSet left = newTopJoinExpr.inputAt(0).getRowDescriptor().getOutputColumnRefSet();
-        ColumnRefSet right = newTopJoinExpr.inputAt(1).getRowDescriptor().getOutputColumnRefSet();
+        ColumnRefSet left = newTopJoinExpr.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
+        ColumnRefSet right = newTopJoinExpr.inputAt(1).getRowOutputInfo().getOutputColumnRefSet();
         requiredCols.except(left);
         requiredCols.except(right);
         return !requiredCols.isEmpty();
@@ -181,9 +181,9 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     protected ColumnRefSet deriveTopJoinChildOutputCols(OptExpression input) {
         OptExpression newTopJoinChildOpt = input.inputAt(newTopJoinChildLoc[0]).inputAt(newTopJoinChildLoc[1]);
-        RowDescriptor oldBotJoinOutput = input.inputAt(0).getRowDescriptor();
-        ColumnRefSet cols = newTopJoinChildOpt.getRowDescriptor().getOutputColumnRefSet();
-        for (ColumnEntry entry : oldBotJoinOutput.getColumnEntries()) {
+        RowOutputInfo oldBotJoinOutput = input.inputAt(0).getRowOutputInfo();
+        ColumnRefSet cols = newTopJoinChildOpt.getRowOutputInfo().getOutputColumnRefSet();
+        for (ColumnOutputInfo entry : oldBotJoinOutput.getColumnEntries()) {
             if (entry.getUsedColumns().isIntersect(cols)) {
                 cols.union(entry.getColumnRef());
             }
@@ -191,7 +191,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         return cols;
     }
 
-    protected ColumnRefSet deriveNewBotJoinColSet(RowDescriptor topRow, ScalarOperator onCondition,
+    protected ColumnRefSet deriveNewBotJoinColSet(RowOutputInfo topRow, ScalarOperator onCondition,
                                                   ScalarOperator predicate, ColumnRefSet columnRefSet) {
         ColumnRefSet requiredCols = topRow.getUsedColumnRefSet();
         if (onCondition != null) {
@@ -206,37 +206,37 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         return result;
     }
 
-    protected RowDescriptor deriveBotJoinRowInfo(ColumnRefSet columnRefSet, OptExpression leftChild,
-                                           OptExpression rightChild, ProjectionSplitter splitter) {
-        List<ColumnEntry> columnEntries = Lists.newArrayList();
+    protected RowOutputInfo deriveBotJoinRowInfo(ColumnRefSet columnRefSet, OptExpression leftChild,
+                                                 OptExpression rightChild, ProjectionSplitter splitter) {
+        List<ColumnOutputInfo> columnEntries = Lists.newArrayList();
 
         if (columnRefSet.isEmpty()) {
-            ColumnEntry anyCol = leftChild.getRowDescriptor().getColumnEntries().get(0);
-            columnEntries.add(new ColumnEntry(anyCol.getColumnRef(), anyCol.getColumnRef()));
+            ColumnOutputInfo anyCol = leftChild.getRowOutputInfo().getColumnEntries().get(0);
+            columnEntries.add(new ColumnOutputInfo(anyCol.getColumnRef(), anyCol.getColumnRef()));
         } else {
-            for (ColumnEntry entry : leftChild.getRowDescriptor().getColumnEntries()) {
+            for (ColumnOutputInfo entry : leftChild.getRowOutputInfo().getColumnEntries()) {
                 if (columnRefSet.contains(entry.getColId())) {
-                    columnEntries.add(new ColumnEntry(entry.getColumnRef(), entry.getColumnRef()));
+                    columnEntries.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
                 }
             }
 
-            for (ColumnEntry entry : rightChild.getRowDescriptor().getColumnEntries()) {
+            for (ColumnOutputInfo entry : rightChild.getRowOutputInfo().getColumnEntries()) {
                 if (columnRefSet.contains(entry.getColId())) {
-                    columnEntries.add(new ColumnEntry(entry.getColumnRef(), entry.getColumnRef()));
+                    columnEntries.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
                 }
             }
 
             columnEntries.addAll(splitter.getBotJoinCols());
             columnEntries.addAll(splitter.getConstCols());
         }
-        return new RowDescriptor(columnEntries);
+        return new RowOutputInfo(columnEntries);
     }
 
-    protected boolean needProject(RowDescriptor row, OptExpression oneChild, OptExpression otherChild) {
+    protected boolean needProject(RowOutputInfo row, OptExpression oneChild, OptExpression otherChild) {
         ColumnRefSet outputRowCols = row.getOutputColumnRefSet();
         ColumnRefSet inputRowCols = new ColumnRefSet();
-        inputRowCols.union(oneChild.getRowDescriptor().getOutputColumnRefSet());
-        inputRowCols.union(otherChild.getRowDescriptor().getOutputColumnRefSet());
+        inputRowCols.union(oneChild.getRowOutputInfo().getOutputColumnRefSet());
+        inputRowCols.union(otherChild.getRowOutputInfo().getOutputColumnRefSet());
         return !outputRowCols.equals(inputRowCols);
     }
 
@@ -275,69 +275,69 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
     }
 
     protected class ProjectionSplitter {
-        // save columnEntry belongs to new topJoin child
-        List<ColumnEntry> topJoinChildCols = Lists.newArrayList();
+        // save columnOutputInfo belongs to new topJoin child
+        List<ColumnOutputInfo> topJoinChildCols = Lists.newArrayList();
 
-        // save columnEntry belongs to the projection of new botJoin
-        List<ColumnEntry> botJoinCols = Lists.newArrayList();
+        // save columnOutputInfo belongs to the projection of new botJoin
+        List<ColumnOutputInfo> botJoinCols = Lists.newArrayList();
 
-        // save columnEntry belongs to the projection of new botJoin's child
-        List<ColumnEntry> botJoinChildCols = Lists.newArrayList();
+        // save columnOutputInfo belongs to the projection of new botJoin's child
+        List<ColumnOutputInfo> botJoinChildCols = Lists.newArrayList();
 
-        // save columnEntry which is constant
-        List<ColumnEntry> constCols = Lists.newArrayList();
+        // save columnOutputInfo which is constant
+        List<ColumnOutputInfo> constCols = Lists.newArrayList();
 
 
 
         public ProjectionSplitter(OptExpression input, ScalarOperator newBotJoinOnCondition) {
-            RowDescriptor rowDescriptor = input.inputAt(0).getRowDescriptor();
+            RowOutputInfo rowOutputInfo = input.inputAt(0).getRowOutputInfo();
             OptExpression newBotJoinLeftChildOpt = input.
                     inputAt(newBotJoinLeftChildLoc[0]).inputAt(newBotJoinLeftChildLoc[1]);
             if (input.inputAt(0).getOp().getProjection() == null) {
                 return;
             }
-            ColumnRefSet leftChildCols = newBotJoinLeftChildOpt.getRowDescriptor().getOutputColumnRefSet();
-            for (ColumnEntry columnEntry : rowDescriptor.getColumnEntries()) {
-                ColumnRefOperator columnRef = columnEntry.getColumnRef();
-                ScalarOperator scalarOp = columnEntry.getScalarOp();
+            ColumnRefSet leftChildCols = newBotJoinLeftChildOpt.getRowOutputInfo().getOutputColumnRefSet();
+            for (ColumnOutputInfo columnOutputInfo : rowOutputInfo.getColumnEntries()) {
+                ColumnRefOperator columnRef = columnOutputInfo.getColumnRef();
+                ScalarOperator scalarOp = columnOutputInfo.getScalarOp();
                 if (!columnRef.equals(scalarOp)) {
                     if (scalarOp.getUsedColumns().isEmpty()) {
-                        constCols.add(columnEntry);
+                        constCols.add(columnOutputInfo);
                     } else if (leftChildCols.containsAll(scalarOp.getUsedColumns())) {
-                        if (needPushToChild(newBotJoinOnCondition, columnEntry)) {
-                            botJoinChildCols.add(columnEntry);
+                        if (needPushToChild(newBotJoinOnCondition, columnOutputInfo)) {
+                            botJoinChildCols.add(columnOutputInfo);
                         } else {
-                            botJoinCols.add(columnEntry);
+                            botJoinCols.add(columnOutputInfo);
                         }
 
                     } else {
-                        topJoinChildCols.add(columnEntry);
+                        topJoinChildCols.add(columnOutputInfo);
                     }
                 }
             }
         }
 
-        private boolean needPushToChild(ScalarOperator newBotJoinOnCondition, ColumnEntry columnEntry) {
+        private boolean needPushToChild(ScalarOperator newBotJoinOnCondition, ColumnOutputInfo columnOutputInfo) {
             if (newBotJoinOnCondition == null) {
                 return false;
             }
 
-            return newBotJoinOnCondition.getUsedColumns().contains(columnEntry.getColumnRef());
+            return newBotJoinOnCondition.getUsedColumns().contains(columnOutputInfo.getColumnRef());
         }
 
-        public List<ColumnEntry> getTopJoinChildCols() {
+        public List<ColumnOutputInfo> getTopJoinChildCols() {
             return topJoinChildCols;
         }
 
-        public List<ColumnEntry> getBotJoinCols() {
+        public List<ColumnOutputInfo> getBotJoinCols() {
             return botJoinCols;
         }
 
-        public List<ColumnEntry> getBotJoinChildCols() {
+        public List<ColumnOutputInfo> getBotJoinChildCols() {
             return botJoinChildCols;
         }
 
-        public List<ColumnEntry> getConstCols() {
+        public List<ColumnOutputInfo> getConstCols() {
             return constCols;
         }
     }

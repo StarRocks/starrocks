@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.ColumnEntry;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -137,10 +137,10 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
             this.newBotJoinOutputCols = newBotJoinOutputCols;
         }
 
-        public List<ColumnEntry> getColumnEntries() {
-            List<ColumnEntry> entryList = Lists.newArrayList();
+        public List<ColumnOutputInfo> getColumnEntries() {
+            List<ColumnOutputInfo> entryList = Lists.newArrayList();
             exprToColumnRefMap.entrySet().stream()
-                    .forEach(e -> entryList.add(new ColumnEntry(e.getValue(), e.getKey())));
+                    .forEach(e -> entryList.add(new ColumnOutputInfo(e.getValue(), e.getKey())));
             return entryList;
         }
 
