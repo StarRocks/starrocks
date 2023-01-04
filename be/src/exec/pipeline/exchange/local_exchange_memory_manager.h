@@ -30,9 +30,9 @@ public:
         } else {
             LOG(WARNING) << "config::local_exchange_buffer_mem_limit_per_driver <= 0";
         }
-        auto res = max_input_dop * limit_bytes;
+        size_t res = max_input_dop * limit_bytes;
         constexpr size_t MAX_MEM_LIMIT = 8589934592; // 8G limit
-        _memory_bytes = res > MAX_MEM_LIMIT or res <= 0 ? MAX_MEM_LIMIT : res;
+        _max_memory_bytes = res > MAX_MEM_LIMIT or res <= 0 ? MAX_MEM_LIMIT : res;
     }
 
     void update_memory_usage(size_t memory_bytes) { _memory_bytes += memory_bytes; }
