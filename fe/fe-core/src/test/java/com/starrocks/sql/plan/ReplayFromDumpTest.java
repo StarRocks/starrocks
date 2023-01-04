@@ -508,4 +508,9 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: 17: c_0_0 = 1: c_0_0\n" +
                 "  |  other join predicates: if(17: c_0_0 != 1: c_0_0, 4: c_0_3, 19: c_0_3) = 18: expr"));
     }
+<<<<<<< HEAD
 }
+=======
+
+}
+>>>>>>> b5e972cf3 ([BugFix] Fix merge memo lose best expression (#16135))
