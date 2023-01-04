@@ -41,7 +41,7 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        int num_rows = columns[0]->size();
+        int num_rows = static_cast<int>(columns[0]->size());
         int num_args = ctx->get_num_args();
         if (UNLIKELY(frame_start > std::numeric_limits<int32_t>::max() ||
                      frame_end > std::numeric_limits<int32_t>::max())) {
@@ -54,8 +54,9 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_args, num_rows, &args);
-        ctx->udaf_ctxs()->_func->window_update_batch(data(state).handle, peer_group_start, peer_group_end, frame_start,
-                                                     frame_end, num_args, args.data());
+        ctx->udaf_ctxs()->_func->window_update_batch(
+                data(state).handle, static_cast<int>(peer_group_start), static_cast<int>(peer_group_end),
+                static_cast<int>(frame_start), static_cast<int>(frame_end), static_cast<int>(num_args), args.data());
         // release input cols
         for (int i = 0; i < num_args; ++i) {
             env->DeleteLocalRef(args[i]);
@@ -69,9 +70,9 @@ public:
         // insert values to column
         JNIEnv* env = helper.getEnv();
         MethodTypeDescriptor desc = {(LogicalType)ctx->get_return_type().type, true};
-        int sz = end - start;
+        int sz = static_cast<int>(end - start);
         for (int i = 0; i < sz; ++i) {
-            assign_jvalue(desc, dst, start + i, val);
+            assign_jvalue(desc, dst, static_cast<int>(start + i), val);
         }
         env->DeleteLocalRef(val.l);
     }

@@ -213,7 +213,7 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
 
         uint32_t perm_index = 0;
         for (uint32_t i = 0; i < segments.size(); ++i) {
-            uint32_t num = segments[i].chunk->num_rows();
+            uint32_t num = static_cast<uint32_t>(segments[i].chunk->num_rows());
             for (uint32_t j = 0; j < num; ++j) {
                 permutation_second[perm_index] = {i, j};
                 ++perm_index;
@@ -538,7 +538,7 @@ void ChunksSorterTopn::_rank_pruning() {
     size_t peer_group_end = size;
     bool found = false;
 
-    for (int i = peer_group_start + 1; !found && i < size; ++i) {
+    for (int i = static_cast<int>(peer_group_start + 1); !found && i < size; ++i) {
         for (auto& column : _merged_segment.order_by_columns) {
             if (column->compare_at(i, i - 1, *column, 1) != 0) {
                 peer_group_end = i;

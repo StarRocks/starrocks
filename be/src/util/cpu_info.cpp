@@ -158,7 +158,7 @@ void CpuInfo::init() {
                 // that when impala is running, the core will not be in a lower power state.
                 // TODO: is there a more robust way to do this, such as
                 // Window's QueryPerformanceFrequency()
-                float mhz = atof(value.c_str());
+                float mhz = static_cast<float>(atof(value.c_str()));
                 max_mhz = max(mhz, max_mhz);
             } else if (name.compare("processor") == 0) {
                 ++num_cores;
@@ -169,7 +169,7 @@ void CpuInfo::init() {
     }
 
     if (max_mhz != 0) {
-        cycles_per_ms_ = max_mhz * 1000;
+        cycles_per_ms_ = static_cast<int64_t>(max_mhz * 1000);
     } else {
         cycles_per_ms_ = 1000000;
     }
@@ -272,11 +272,12 @@ void CpuInfo::_init_num_cores_with_cgroup() {
             std::string& start_str = pair[0];
             std::string& end_str = pair[1];
             StringParser::ParseResult result;
-            auto start = StringParser::string_to_int<int32_t>(start_str.data(), start_str.size(), &result);
+            auto start =
+                    StringParser::string_to_int<int32_t>(start_str.data(), static_cast<int>(start_str.size()), &result);
             if (result != StringParser::PARSE_SUCCESS) {
                 continue;
             }
-            auto end = StringParser::string_to_int<int32_t>(end_str.data(), end_str.size(), &result);
+            auto end = StringParser::string_to_int<int32_t>(end_str.data(), static_cast<int>(end_str.size()), &result);
             if (result != StringParser::PARSE_SUCCESS) {
                 continue;
             }
@@ -316,18 +317,18 @@ void CpuInfo::_init_num_cores_with_cgroup() {
     int32_t cfs_num_cores = num_cores_;
     {
         StringParser::ParseResult result;
-        auto cfs_period_us =
-                StringParser::string_to_int<int64_t>(cfs_period_us_str.data(), cfs_period_us_str.size(), &result);
+        auto cfs_period_us = StringParser::string_to_int<int64_t>(cfs_period_us_str.data(),
+                                                                  static_cast<int>(cfs_period_us_str.size()), &result);
         if (result != StringParser::PARSE_SUCCESS) {
             cfs_period_us = -1;
         }
-        auto cfs_quota_us =
-                StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(), cfs_quota_us_str.size(), &result);
+        auto cfs_quota_us = StringParser::string_to_int<int64_t>(cfs_quota_us_str.data(),
+                                                                 static_cast<int>(cfs_quota_us_str.size()), &result);
         if (result != StringParser::PARSE_SUCCESS) {
             cfs_quota_us = -1;
         }
         if (cfs_quota_us > 0 && cfs_period_us > 0) {
-            cfs_num_cores = cfs_quota_us / cfs_period_us;
+            cfs_num_cores = static_cast<int32_t>(cfs_quota_us / cfs_period_us);
         }
     }
 
@@ -360,7 +361,7 @@ void CpuInfo::_init_numa_node_to_cores() {
     numa_node_core_idx_.resize(max_num_cores_);
     for (int core = 0; core < max_num_cores_; ++core) {
         std::vector<int>* cores_of_node = &numa_node_to_cores_[core_to_numa_node_[core]];
-        numa_node_core_idx_[core] = cores_of_node->size();
+        numa_node_core_idx_[core] = static_cast<int>(cores_of_node->size());
         cores_of_node->push_back(core);
     }
 }

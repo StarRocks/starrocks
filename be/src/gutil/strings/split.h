@@ -595,16 +595,6 @@ string SplitOneStringToken(const char** source, const char* delim);
 vector<char*>* SplitUsing(char* full, const char* delimiters);
 
 // ----------------------------------------------------------------------
-// SplitToVector()
-//    Split a string into substrings based on the nul-terminated list
-//    of bytes at delim (uses strsep) and appends the split
-//    strings to 'vec'.  Modifies "full".  If omit empty strings is
-//    true, empty strings are omitted from the resulting vector.
-// ----------------------------------------------------------------------
-void SplitToVector(char* full, const char* delimiters, vector<char*>* vec, bool omit_empty_strings);
-void SplitToVector(char* full, const char* delimiters, vector<const char*>* vec, bool omit_empty_strings);
-
-// ----------------------------------------------------------------------
 // SplitStringPieceToVector
 //    Split a StringPiece into sub-StringPieces based on the
 //    nul-terminated list of bytes at delim and appends the
@@ -816,8 +806,6 @@ bool SplitRange(const char* rangestr, int* from, int* to);
 // ----------------------------------------------------------------------
 void SplitCSVLine(char* line, vector<char*>* cols);
 void SplitCSVLineWithDelimiter(char* line, char delimiter, vector<char*>* cols);
-// SplitCSVLine string wrapper that internally makes a copy of string line.
-void SplitCSVLineWithDelimiterForStrings(const string& line, char delimiter, vector<string>* cols);
 
 // ----------------------------------------------------------------------
 // SplitStructuredLine()

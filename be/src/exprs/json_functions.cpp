@@ -259,7 +259,7 @@ StatusOr<ColumnPtr> JsonFunctions::get_native_json_string(FunctionContext* conte
 }
 
 StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
-    int num_rows = columns[0]->size();
+    int num_rows = static_cast<int>(columns[0]->size());
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(num_rows);
 
@@ -315,7 +315,7 @@ StatusOr<ColumnPtr> JsonFunctions::_json_int(FunctionContext* context, const Col
             if (!json_int.ok()) {
                 result.append_null();
             } else {
-                result.append(json_int.value());
+                result.append(static_cast<int>(json_int.value()));
             }
         }
     }
@@ -466,7 +466,7 @@ static Status _convert_json_slice(const vpack::Slice& slice, ColumnBuilder<Resul
                 result.append(Slice(str));
             }
         } else if constexpr (ResultType == TYPE_INT) {
-            result.append(slice.getNumber<int64_t>());
+            result.append(static_cast<int>(slice.getNumber<int64_t>()));
         } else if constexpr (ResultType == TYPE_DOUBLE) {
             result.append(slice.getNumber<double>());
         } else {
@@ -686,7 +686,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_length(FunctionContext* context, const C
         }
 
         if (target_slice.isObject() || target_slice.isArray()) {
-            result.append(target_slice.length());
+            result.append(static_cast<int>(target_slice.length()));
         } else if (target_slice.isNone()) {
             result.append(0);
         } else {

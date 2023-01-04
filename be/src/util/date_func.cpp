@@ -58,9 +58,9 @@ std::string time_str_from_double(double time) {
         time_ss << "-";
         time = -time;
     }
-    int64_t hour = time / 60 / 60;
-    int minute = ((int64_t)(time / 60)) % 60;
-    int second = ((int64_t)time) % 60;
+    auto hour = static_cast<int64_t>(time / 60 / 60);
+    int minute = static_cast<int>(((int64_t)(time / 60)) % 60);
+    int second = static_cast<int>(((int64_t)time) % 60);
 
     time_ss << std::setw(2) << std::setfill('0') << hour << ":" << std::setw(2) << std::setfill('0') << minute << ":"
             << std::setw(2) << std::setfill('0') << second;

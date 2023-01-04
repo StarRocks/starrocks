@@ -79,14 +79,17 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
         ChunkPtr chunk = ret.value();
         size_t chunk_size = chunk->num_rows();
         const auto& slot_id_to_idx = chunk->get_slot_id_to_index_map();
-        if (!slot_id_to_idx.contains(k_delete_file_path.id) || !slot_id_to_idx.contains(k_delete_file_pos.id)) {
+        if (!slot_id_to_idx.contains(static_cast<int>(k_delete_file_path.id)) ||
+            !slot_id_to_idx.contains(static_cast<int>(k_delete_file_pos.id))) {
             auto str = strings::Substitute("delete file schema doesn't meet requirement, need: [file_path, pos]");
             LOG(WARNING) << str;
             return Status::InternalError(str);
         }
 
-        auto* file_path_col = static_cast<BinaryColumn*>(chunk->get_column_by_slot_id(k_delete_file_path.id).get());
-        auto* position_col = static_cast<Int64Column*>(chunk->get_column_by_slot_id(k_delete_file_pos.id).get());
+        auto* file_path_col =
+                static_cast<BinaryColumn*>(chunk->get_column_by_slot_id(static_cast<int>(k_delete_file_path.id)).get());
+        auto* position_col =
+                static_cast<Int64Column*>(chunk->get_column_by_slot_id(static_cast<int>(k_delete_file_pos.id)).get());
         for (auto row = 0; row < chunk_size; row++) {
             if (file_path_col->get_slice(row) != _datafile_path) {
                 DLOG(INFO) << "read path not matched, read " << file_path_col->get_slice(row) << " expect "
@@ -101,7 +104,7 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
 
 SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& meta) {
     TSlotDescriptor desc;
-    desc.__set_id(meta.id);
+    desc.__set_id(static_cast<int>(meta.id));
     desc.__set_parent(-1);
     TTypeNode type_node;
     type_node.__set_type(TTypeNodeType::SCALAR);

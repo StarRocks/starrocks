@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/in_const_predicate.hpp"
 
 #include "gutil/strings/substitute.h"
@@ -141,3 +144,5 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

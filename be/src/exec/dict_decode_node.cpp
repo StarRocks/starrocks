@@ -93,7 +93,7 @@ Status DictDecodeNode::open(RuntimeState* state) {
     }
 
     DCHECK_EQ(_encode_column_cids.size(), _decode_column_cids.size());
-    int need_decode_size = _decode_column_cids.size();
+    int need_decode_size = static_cast<int>(_decode_column_cids.size());
     for (int i = 0; i < need_decode_size; ++i) {
         int need_encode_cid = _encode_column_cids[i];
         auto dict_iter = global_dict.find(need_encode_cid);

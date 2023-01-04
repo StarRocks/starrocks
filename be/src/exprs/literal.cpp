@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/literal.h"
 
 #include "column/chunk.h"
@@ -24,12 +27,13 @@
 
 namespace starrocks {
 
-#define CASE_TYPE_COLUMN(NODE_TYPE, CHECK_TYPE, LITERAL_VALUE)                              \
-    case NODE_TYPE: {                                                                       \
-        DCHECK_EQ(node.node_type, TExprNodeType::CHECK_TYPE);                               \
-        DCHECK(node.__isset.LITERAL_VALUE);                                                 \
-        _value = ColumnHelper::create_const_column<NODE_TYPE>(node.LITERAL_VALUE.value, 1); \
-        break;                                                                              \
+#define CASE_TYPE_COLUMN(NODE_TYPE, CHECK_TYPE, LITERAL_VALUE)                        \
+    case NODE_TYPE: {                                                                 \
+        DCHECK_EQ(node.node_type, TExprNodeType::CHECK_TYPE);                         \
+        DCHECK(node.__isset.LITERAL_VALUE);                                           \
+        _value = ColumnHelper::create_const_column<NODE_TYPE>(                        \
+                static_cast<RunTimeCppType<NODE_TYPE>>(node.LITERAL_VALUE.value), 1); \
+        break;                                                                        \
     }
 
 template <LogicalType LT>
@@ -173,3 +177,5 @@ std::string VectorizedLiteral::debug_string() const {
 VectorizedLiteral::~VectorizedLiteral() = default;
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

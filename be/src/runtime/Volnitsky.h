@@ -118,7 +118,7 @@ public:
         /// ssize_t is used here because unsigned can't be used with condition like `i >= 0`, unsigned always >= 0
         /// And also adding from the end guarantees that we will find first occurrence because we will lookup bigger offsets first.
         for (auto i = static_cast<ssize_t>(needle_size - sizeof(VolnitskyTraits::Ngram)); i >= 0; --i)
-            VolnitskyTraits::putNGram(this->needle + i, i + 1, callback);
+            VolnitskyTraits::putNGram(this->needle + i, static_cast<int>(i + 1), callback);
     }
 
     /// If not found, the end of the haystack is returned.
@@ -159,7 +159,7 @@ protected:
             cell_num = (cell_num + 1) % VolnitskyTraits::hash_size; /// Search for the next free cell.
         }
 
-        hash[cell_num] = offset;
+        hash[cell_num] = static_cast<uint8_t>(offset);
     }
 };
 

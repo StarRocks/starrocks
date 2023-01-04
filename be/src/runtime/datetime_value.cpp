@@ -43,6 +43,9 @@
 
 #include "util/timezone_utils.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 namespace starrocks {
 
 const uint64_t log_10_int[] = {1,         10,         100,         1000,         10000UL,       100000UL,
@@ -1636,3 +1639,5 @@ std::size_t hash_value(DateTimeValue const& value) {
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

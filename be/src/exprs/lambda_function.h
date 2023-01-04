@@ -49,12 +49,12 @@ public:
     // or its parent lambda functions, or captured columns, remove the first one.
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
         slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
-        return _captured_slot_ids.size();
+        return static_cast<int>(_captured_slot_ids.size());
     }
 
     int get_lambda_arguments_ids(std::vector<SlotId>* ids) {
         ids->assign(_arguments_ids.begin(), _arguments_ids.end());
-        return _arguments_ids.size();
+        return static_cast<int>(_arguments_ids.size());
     }
 
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;

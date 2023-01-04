@@ -100,7 +100,8 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
                                                             enable_tablet_internal_parallel,
                                                             tablet_internal_parallel_mode, global_scan_ranges.size()));
-        int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
+        int scan_dop = std::min<int>(std::max<int>(1, static_cast<int>(morsel_queue->max_degree_of_parallelism())),
+                                     pipeline_dop);
         int io_parallelism = scan_dop * io_tasks_per_scan_operator();
 
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew

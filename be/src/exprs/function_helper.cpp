@@ -54,8 +54,8 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     if (v1->has_null()) {
         auto* null1 = down_cast<NullableColumn*>(v1.get())->null_column()->get_data().data();
 
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        size_t size = v1->size();
+        for (size_t i = 0; i < size; ++i) {
             result[i] = result[i] | null1[i];
         }
     }
@@ -63,8 +63,8 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     if (v2->has_null()) {
         auto* null2 = down_cast<NullableColumn*>(v2.get())->null_column()->get_data().data();
 
-        int size = v2->size();
-        for (int i = 0; i < size; ++i) {
+        size_t size = v2->size();
+        for (size_t i = 0; i < size; ++i) {
             result[i] = result[i] | null2[i];
         }
     }

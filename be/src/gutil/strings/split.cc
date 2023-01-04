@@ -423,42 +423,6 @@ void SplitStringPieceToVector(const StringPiece& full, const char* delim, vector
 }
 
 // ----------------------------------------------------------------------
-// SplitUsing()
-//    Split a string using a string of delimiters, returning vector
-//    of strings. The original string is modified to insert nulls.
-// ----------------------------------------------------------------------
-
-vector<char*>* SplitUsing(char* full, const char* delim) {
-    auto vec = new vector<char*>;
-    SplitToVector(full, delim, vec, true); // Omit empty strings
-    return vec;
-}
-
-void SplitToVector(char* full, const char* delim, vector<char*>* vec, bool omit_empty_strings) {
-    char* next = full;
-    while ((next = gstrsep(&full, delim)) != nullptr) {
-        if (omit_empty_strings && next[0] == '\0') continue;
-        vec->push_back(next);
-    }
-    // Add last element (or full string if no delimeter found):
-    if (full != nullptr) {
-        vec->push_back(full);
-    }
-}
-
-void SplitToVector(char* full, const char* delim, vector<const char*>* vec, bool omit_empty_strings) {
-    char* next = full;
-    while ((next = gstrsep(&full, delim)) != nullptr) {
-        if (omit_empty_strings && next[0] == '\0') continue;
-        vec->push_back(next);
-    }
-    // Add last element (or full string if no delimeter found):
-    if (full != nullptr) {
-        vec->push_back(full);
-    }
-}
-
-// ----------------------------------------------------------------------
 // SplitOneStringToken()
 //   Mainly a stringified wrapper around strpbrk()
 // ----------------------------------------------------------------------
@@ -723,18 +687,6 @@ void SplitCSVLineWithDelimiter(char* line, char delimiter, vector<char*>* cols) 
 
 void SplitCSVLine(char* line, vector<char*>* cols) {
     SplitCSVLineWithDelimiter(line, ',', cols);
-}
-
-void SplitCSVLineWithDelimiterForStrings(const string& line, char delimiter, vector<string>* cols) {
-    // Unfortunately, the interface requires char* instead of const char*
-    // which requires copying the string.
-    char* cline = strndup_with_new(line.c_str(), line.size());
-    vector<char*> v;
-    SplitCSVLineWithDelimiter(cline, delimiter, &v);
-    for (auto ci : v) {
-        cols->push_back(ci);
-    }
-    delete[] cline;
 }
 
 // ----------------------------------------------------------------------

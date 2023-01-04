@@ -17,6 +17,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 // ---------------------------------------------------------------------------
 // Copyright (c) 2019, Gregory Popovitch - greg7mdp@gmail.com
 //
@@ -348,3 +351,5 @@ private:
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
+#pragma GCC diagnostic pop

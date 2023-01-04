@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <fmt/compile.h>
 #include <fmt/format.h>
 
@@ -48,7 +51,7 @@ public:
         result->resize(v1->size());
         auto* r3 = result->get_data().data();
 
-        int size = v1->size();
+        int size = static_cast<int>(v1->size());
         for (int i = 0; i < size; ++i) {
             r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
         }
@@ -59,13 +62,17 @@ public:
 
         if constexpr (!std::is_same<INPUT_NULL_OP, NopCheck>::value) {
             for (int i = 0; i < size; ++i) {
-                ns[i] = INPUT_NULL_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
+                ns[i] = static_cast<uint8_t>(
+                        INPUT_NULL_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(
+                                static_cast<RunTimeCppType<Type>>(r1[i])));
             }
         }
 
         if constexpr (!std::is_same<OUTPUT_NULL_OP, NopCheck>::value) {
             for (int i = 0; i < size; ++i) {
-                ns[i] = OUTPUT_NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(r3[i]);
+                ns[i] = static_cast<uint8_t>(
+                        OUTPUT_NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(
+                                static_cast<RunTimeCppType<ResultType>>(r3[i])));
             }
         }
 
@@ -98,8 +105,8 @@ public:
         result->resize(v1->size());
         auto* r3 = result->get_data().data();
 
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        size_t size = v1->size();
+        for (size_t i = 0; i < size; ++i) {
             r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
         }
 
@@ -122,8 +129,8 @@ public:
 
         auto& offset = result->get_offset();
         auto& bytes = result->get_bytes();
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        size_t size = v1->size();
+        for (size_t i = 0; i < size; ++i) {
             std::string ret = OP::template apply<RunTimeCppType<Type>, std::string>(r1[i], std::forward<Args>(args)...);
             bytes.reserve(ret.size());
             bytes.insert(bytes.end(), (uint8_t*)ret.data(), (uint8_t*)ret.data() + ret.size());
@@ -269,7 +276,7 @@ using VectorizedOutputCheckUnaryFunction = DealNullableColumnUnaryFunction<
     struct NAME {                                       \
         template <typename Type, typename ResultType>   \
         static inline ResultType apply(const Type& l) { \
-            return FN(l);                               \
+            return static_cast<ResultType>(FN(l));      \
         }                                               \
     };
 
@@ -315,3 +322,5 @@ using VectorizedOutputCheckUnaryFunction = DealNullableColumnUnaryFunction<
     std::string NAME::apply(const Type& VALUE)
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

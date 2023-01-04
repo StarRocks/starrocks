@@ -53,7 +53,7 @@ namespace helper {
 
 template <typename T>
 inline size_t difference(const T& low, const T& high) {
-    return high - low;
+    return static_cast<size_t>(high - low);
 }
 
 template <>
@@ -553,7 +553,7 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t max_sca
         } // 3.1.2 produces the Cartesian product of ScanKey and fixed_value
         else {
             const set<T>& fixed_value_set = range.get_fixed_value_set();
-            int original_key_range_size = _begin_scan_keys.size();
+            int original_key_range_size = static_cast<int>(_begin_scan_keys.size());
 
             for (int i = 0; i < original_key_range_size; ++i) {
                 OlapTuple start_base_key_range = _begin_scan_keys[i];

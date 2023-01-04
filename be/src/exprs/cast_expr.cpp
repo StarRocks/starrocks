@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/cast_expr.h"
 
 #include <ryu/ryu.h>
@@ -131,7 +134,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToBoolean, value) {
     return value.to_timestamp_literal() != 0;
 }
 DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
-    return timestamp::time_to_literal(value);
+    return static_cast<ResultType>(timestamp::time_to_literal(value));
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
@@ -227,7 +230,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 __builtin_unreachable();
             }
             if (ok) {
-                builder.append(cpp_value);
+                builder.append(static_cast<RunTimeCppType<ToType>>(cpp_value));
             } else {
                 if constexpr (AllowThrowException) {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
@@ -392,7 +395,7 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_OBJECT, cast_from_string_to_bitmap_fn);
 
 // all int(tinyint, smallint, int, bigint, largeint) cast implements
 DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
-    return value;
+    return static_cast<ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
@@ -424,7 +427,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
         }
         throw std::runtime_error(ss.str());
     }
-    return result;
+    return static_cast<ResultType>(result);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(DateToNumber, value) {
@@ -700,7 +703,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToDecimal, value) {
     return DecimalV2Value(value.to_timestamp_literal(), 0);
 }
 DEFINE_UNARY_FN_WITH_IMPL(TimeToDecimal, value) {
-    return DecimalV2Value(timestamp::time_to_literal(value), 0);
+    return DecimalV2Value(static_cast<int64_t>(timestamp::time_to_literal(value)), 0);
 }
 
 SELF_CAST(TYPE_DECIMALV2);
@@ -942,10 +945,10 @@ DEFINE_UNARY_FN_WITH_IMPL(DateToTime, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberToTime, value) {
-    uint64_t data = value;
-    uint64_t hour = data / 10000;
-    uint64_t min = (data / 100) % 100;
-    uint64_t sec = data % 100;
+    uint64_t data = static_cast<uint64_t>(value);
+    uint64_t hour = static_cast<uint64_t>(data) / 10000;
+    uint64_t min = (static_cast<uint64_t>(data) / 100) % 100;
+    uint64_t sec = static_cast<uint64_t>(data) % 100;
     return (hour * 60 + min) * 60 + sec;
 }
 
@@ -1117,7 +1120,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDate, date, time) {
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
     TimestampValue v;
-    v.set_timestamp(timestamp::from_julian_and_time(date.julian(), time * USECS_PER_SEC));
+    v.set_timestamp(timestamp::from_julian_and_time(date.julian(), static_cast<Timestamp>(time * USECS_PER_SEC)));
     return v;
 }
 
@@ -1687,3 +1690,5 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

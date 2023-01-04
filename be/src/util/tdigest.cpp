@@ -69,6 +69,9 @@
 #include "common/logging.h"
 #include "util/orlp/pdqsort.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 namespace starrocks {
 
 Centroid::Centroid() : Centroid(0.0, 0.0) {}
@@ -276,19 +279,20 @@ Value TDigest::cdfProcessed(Value x) const {
 
             // note that this is different than mean(0) > _min ... this guarantees interpolation works
             if (mean(0) - _min > 0) {
-                return (x - _min) / (mean(0) - _min) * weight(0) / _processed_weight / 2.0;
+                return static_cast<Value>((x - _min) / (mean(0) - _min) * weight(0) / _processed_weight / 2.0);
             } else {
                 return 0;
             }
         }
 
         // and the right tail
-        if (x >= mean(n - 1)) {
+        if (x >= mean(static_cast<int>(n - 1))) {
             VLOG(1) << "right tail"
-                    << " _max " << _max << " mean(n - 1) " << mean(n - 1) << " x " << x;
+                    << " _max " << _max << " mean(n - 1) " << mean(static_cast<int>(n - 1)) << " x " << x;
 
-            if (_max - mean(n - 1) > 0) {
-                return 1.0 - (_max - x) / (_max - mean(n - 1)) * weight(n - 1) / _processed_weight / 2.0;
+            if (_max - mean(static_cast<int>(n - 1)) > 0) {
+                return static_cast<Value>(1.0 - (_max - x) / (_max - mean(static_cast<int>(n - 1))) *
+                                                        weight(static_cast<int>(n - 1)) / _processed_weight / 2.0);
             } else {
                 return 1;
             }
@@ -338,7 +342,7 @@ Value TDigest::quantileProcessed(Value q) const {
     // at the boundaries, we return _min or _max
     if (index <= weight(0) / 2.0) {
         DCHECK_GT(weight(0), 0);
-        return _min + 2.0 * index / weight(0) * (mean(0) - _min);
+        return static_cast<Value>(_min + 2.0 * index / weight(0) * (mean(0) - _min));
     }
 
     auto iter = std::lower_bound(_cumulative.cbegin(), _cumulative.cend(), index);
@@ -348,15 +352,15 @@ Value TDigest::quantileProcessed(Value q) const {
         auto z1 = index - *(iter - 1);
         auto z2 = *(iter)-index;
         // VLOG(1) << "z2 " << z2 << " index " << index << " z1 " << z1;
-        return weightedAverage(mean(i - 1), z2, mean(i), z1);
+        return weightedAverage(mean(static_cast<int>(i - 1)), z2, mean(static_cast<int>(i)), z1);
     }
 
     DCHECK_LE(index, _processed_weight);
-    DCHECK_GE(index, _processed_weight - weight(n - 1) / 2.0);
+    DCHECK_GE(index, _processed_weight - weight(static_cast<int>(n - 1)) / 2.0);
 
-    auto z1 = index - _processed_weight - weight(n - 1) / 2.0;
-    auto z2 = weight(n - 1) / 2 - z1;
-    return weightedAverage(mean(n - 1), z1, _max, z2);
+    auto z1 = index - _processed_weight - weight(static_cast<int>(n - 1)) / 2.0;
+    auto z2 = weight(static_cast<int>(n - 1)) / 2 - z1;
+    return weightedAverage(mean(static_cast<int>(n - 1)), static_cast<Value>(z1), _max, static_cast<Value>(z2));
 }
 
 Value TDigest::compression() const {
@@ -414,7 +418,7 @@ size_t TDigest::serialize(uint8_t* writer) const {
     memcpy(writer, &_unprocessed_weight, sizeof(Value));
     writer += sizeof(Value);
 
-    uint32_t size = _processed.size();
+    uint32_t size = static_cast<uint32_t>(_processed.size());
     memcpy(writer, &size, sizeof(uint32_t));
     writer += sizeof(uint32_t);
     for (int i = 0; i < size; i++) {
@@ -422,7 +426,7 @@ size_t TDigest::serialize(uint8_t* writer) const {
         writer += sizeof(Centroid);
     }
 
-    size = _unprocessed.size();
+    size = static_cast<uint32_t>(_unprocessed.size());
     memcpy(writer, &size, sizeof(uint32_t));
     writer += sizeof(uint32_t);
     for (int i = 0; i < size; i++) {
@@ -430,7 +434,7 @@ size_t TDigest::serialize(uint8_t* writer) const {
         writer += sizeof(Centroid);
     }
 
-    size = _cumulative.size();
+    size = static_cast<uint32_t>(_cumulative.size());
     memcpy(writer, &size, sizeof(uint32_t));
     writer += sizeof(uint32_t);
     for (int i = 0; i < size; i++) {
@@ -555,12 +559,12 @@ void TDigest::updateCumulative() {
     _cumulative.reserve(n + 1);
     auto previous = 0.0;
     for (Index i = 0; i < n; i++) {
-        auto current = weight(i);
+        auto current = weight(static_cast<int>(i));
         auto halfCurrent = current / 2.0;
-        _cumulative.push_back(previous + halfCurrent);
+        _cumulative.push_back(static_cast<Weight>(previous + halfCurrent));
         previous = previous + current;
     }
-    _cumulative.push_back(previous);
+    _cumulative.push_back(static_cast<Weight>(previous));
 }
 
 void TDigest::process() {
@@ -587,7 +591,7 @@ void TDigest::process() {
             (_processed.end() - 1)->add(centroid);
         } else {
             auto k1 = integratedLocation(wSoFar / _processed_weight);
-            wLimit = _processed_weight * integratedQ(k1 + 1.0);
+            wLimit = _processed_weight * integratedQ(static_cast<Value>(k1 + 1.0));
             wSoFar += centroid.weight();
             _processed.emplace_back(centroid);
         }
@@ -600,41 +604,12 @@ void TDigest::process() {
     updateCumulative();
 }
 
-int TDigest::checkWeights() {
-    return checkWeights(_processed, _processed_weight);
-}
-
-size_t TDigest::checkWeights(const std::vector<Centroid>& sorted, Value total) {
-    size_t badWeight = 0;
-    auto k1 = 0.0;
-    auto q = 0.0;
-    for (auto iter = sorted.cbegin(); iter != sorted.cend(); iter++) {
-        auto w = iter->weight();
-        auto dq = w / total;
-        auto k2 = integratedLocation(q + dq);
-        if (k2 - k1 > 1 && w != 1) {
-            VLOG(1) << "Oversize centroid at " << std::distance(sorted.cbegin(), iter) << " k1 " << k1 << " k2 " << k2
-                    << " dk " << (k2 - k1) << " w " << w << " q " << q;
-            badWeight++;
-        }
-        if (k2 - k1 > 1.5 && w != 1) {
-            VLOG(1) << "Egregiously Oversize centroid at " << std::distance(sorted.cbegin(), iter) << " k1 " << k1
-                    << " k2 " << k2 << " dk " << (k2 - k1) << " w " << w << " q " << q;
-            badWeight++;
-        }
-        q += dq;
-        k1 = k2;
-    }
-
-    return badWeight;
-}
-
 Value TDigest::integratedLocation(Value q) const {
-    return _compression * (std::asin(2.0 * q - 1.0) + M_PI / 2) / M_PI;
+    return static_cast<Value>(_compression * (std::asin(2.0 * q - 1.0) + M_PI / 2) / M_PI);
 }
 
 Value TDigest::integratedQ(Value k) const {
-    return (std::sin(std::min(k, _compression) * M_PI / _compression - M_PI / 2) + 1) / 2;
+    return static_cast<Value>((std::sin(std::min(k, _compression) * M_PI / _compression - M_PI / 2) + 1) / 2);
 }
 
 Value TDigest::weightedAverage(Value x1, Value w1, Value x2, Value w2) {
@@ -659,3 +634,5 @@ Value TDigest::quantile(Value index, Value previousIndex, Value nextIndex, Value
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

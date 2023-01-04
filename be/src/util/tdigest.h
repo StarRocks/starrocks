@@ -200,8 +200,6 @@ private:
     // merges _unprocessed centroids and _processed centroids together and processes them
     // when complete, _unprocessed will be empty and _processed will have at most _max_processed centroids
     void process();
-    int checkWeights();
-    size_t checkWeights(const std::vector<Centroid>& sorted, Value total);
 
     /**
     * Converts a quantile into a centroid scale value.  The centroid scale is nomin_ally

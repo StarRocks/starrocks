@@ -13,6 +13,9 @@
 // limitations under the License.
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <type_traits>
 #include <utility>
 
@@ -359,3 +362,5 @@ struct MoveAssignBase<T, false> {
 
 } // namespace internal_statusor
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

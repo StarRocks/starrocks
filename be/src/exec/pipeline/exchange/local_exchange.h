@@ -76,7 +76,7 @@ public:
     virtual void incr_sinker() { _sink_number++; }
     int32_t decr_sinker() { return _sink_number--; }
 
-    int32_t source_dop() const { return _source->get_sources().size(); }
+    int32_t source_dop() const { return static_cast<int32_t>(_source->get_sources().size()); }
 
     int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
 

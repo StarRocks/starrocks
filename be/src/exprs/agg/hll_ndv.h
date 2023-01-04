@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "column/binary_column.h"
 #include "column/object_column.h"
 #include "column/type_traits.h"
@@ -144,7 +147,7 @@ public:
             bytes.resize(new_size);
             hll.serialize(bytes.data() + old_size);
 
-            result->get_offset()[i + 1] = new_size;
+            result->get_offset()[i + 1] = static_cast<uint32_t>(new_size);
             old_size = new_size;
         }
     }
@@ -174,3 +177,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

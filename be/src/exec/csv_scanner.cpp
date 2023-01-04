@@ -249,7 +249,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
     } while ((src_chunk)->num_rows() == 0);
 
     fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,
-                           src_chunk->num_rows());
+                           static_cast<int>(src_chunk->num_rows()));
     ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
 
     return std::move(chunk);
@@ -260,7 +260,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
 
-    int num_columns = chunk->num_columns();
+    int num_columns = static_cast<int>(chunk->num_columns());
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
         _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
@@ -348,7 +348,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     Status status;
     CSVReader::Record record;
 
-    int num_columns = chunk->num_columns();
+    int num_columns = static_cast<int>(chunk->num_columns());
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
         _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();

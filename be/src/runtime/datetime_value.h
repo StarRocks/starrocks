@@ -48,6 +48,9 @@
 #include "util/hash_util.hpp"
 #include "util/timezone_utils.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 namespace starrocks {
 
 struct TimeInterval {
@@ -510,3 +513,5 @@ struct hash<starrocks::DateTimeValue> {
     size_t operator()(const starrocks::DateTimeValue& v) const { return starrocks::hash_value(v); }
 };
 } // namespace std
+
+#pragma GCC diagnostic pop

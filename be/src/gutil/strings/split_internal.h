@@ -95,8 +95,8 @@ public:
             // found_delimiter is allowed to be empty.
             // Sets curr_piece_ to all text up to but excluding the delimiter itself.
             // Sets text_ to remaining data after the delimiter.
-            curr_piece_.set(text_.begin(), found_delimiter.begin() - text_.begin());
-            text_.remove_prefix(found_delimiter.end() - text_.begin());
+            curr_piece_.set(text_.begin(), static_cast<int>(found_delimiter.begin() - text_.begin()));
+            text_.remove_prefix(static_cast<int>(found_delimiter.end() - text_.begin()));
         } while (!predicate_(curr_piece_));
         return *this;
     }

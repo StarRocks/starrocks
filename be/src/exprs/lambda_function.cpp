@@ -86,7 +86,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
         }
     }
     // remove invalid elements at the tail
-    int removed = _captured_slot_ids.size() - valid_id;
+    int removed = static_cast<int>(_captured_slot_ids.size() - valid_id);
     while (removed--) {
         _captured_slot_ids.pop_back();
     }

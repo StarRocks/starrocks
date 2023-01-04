@@ -148,9 +148,9 @@ public:
     void set_num_thread(int num_thread) {
         size_t num_thread_in_pool = _threads.size();
         if (num_thread > num_thread_in_pool) {
-            increase_thr(num_thread - num_thread_in_pool);
+            increase_thr(static_cast<int>(num_thread - num_thread_in_pool));
         } else if (num_thread < num_thread_in_pool) {
-            decrease_thr(num_thread_in_pool - num_thread);
+            decrease_thr(static_cast<int>(num_thread_in_pool - num_thread));
         }
     }
 

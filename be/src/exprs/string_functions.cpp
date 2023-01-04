@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/string_functions.h"
 
 #include <hs/hs.h>
@@ -3237,3 +3240,5 @@ StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context, const s
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

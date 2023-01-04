@@ -34,6 +34,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <fast_float/fast_float.h>
 
 #include <cmath>
@@ -743,3 +746,5 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

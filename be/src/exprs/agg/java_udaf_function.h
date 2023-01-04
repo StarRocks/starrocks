@@ -111,7 +111,8 @@ public:
         auto* udf_ctxs = ctx->udaf_ctxs();
         // 1 convert input as state
         // 1.1 create state list
-        auto rets = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->create->method.handle(), batch_size);
+        auto rets = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->create->method.handle(),
+                                      static_cast<int>(batch_size));
         RETURN_IF_UNLIKELY_NULL(rets, (void)0);
         // 1.2 convert input as input array
         int num_cols = ctx->get_num_args();
@@ -131,15 +132,15 @@ public:
             raw_input_ptrs[i] = src[i].get();
         }
         auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, raw_input_ptrs.data(), num_cols,
-                                                                batch_size, &args);
+                                                                static_cast<int>(batch_size), &args);
         RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
         // 2 batch call update
         helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->update->method.handle(),
-                                  args.data(), args.size());
+                                  args.data(), static_cast<int>(args.size()));
         // 3 get serialize size
         auto serialize_szs = (jintArray)helper.int_batch_call(
-                ctx, rets, ctx->udaf_ctxs()->serialize_size->method.handle(), batch_size);
+                ctx, rets, ctx->udaf_ctxs()->serialize_size->method.handle(), static_cast<int>(batch_size));
         RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
 
@@ -149,10 +150,10 @@ public:
         int totalLength = std::accumulate(slice_sz.begin(), slice_sz.end(), 0, [](auto l, auto r) { return l + r; });
         // 4 prepare serialize buffer
         udf_ctxs->buffer_data.resize(totalLength);
-        udf_ctxs->buffer =
-                std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(), udf_ctxs->buffer_data.size());
+        udf_ctxs->buffer = std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(),
+                                                              static_cast<int>(udf_ctxs->buffer_data.size()));
         // chunk size
-        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
+        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), static_cast<int>(batch_size));
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {rets, buffer_array};
@@ -202,13 +203,14 @@ public:
         auto defer = DeferOp([&helper]() { helper.getEnv()->PopLocalFrame(nullptr); });
 
         {
-            auto states_arr = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+            auto states_arr =
+                    JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, static_cast<int>(batch_size));
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st =
-                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols,
+                                                                    static_cast<int>(batch_size), &args);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
             helper.batch_update(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->update->method.handle(),
-                                states_arr, args.data(), args.size());
+                                states_arr, args.data(), static_cast<int>(args.size()));
         }
     }
 
@@ -220,15 +222,15 @@ public:
         int num_cols = ctx->get_num_args();
         helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
         {
-            auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
-                                                                                   filter.data(), batch_size);
+            auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(
+                    ctx, states, state_offset, filter.data(), static_cast<int>(batch_size));
             RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
-            auto st =
-                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols,
+                                                                    static_cast<int>(batch_size), &args);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
             helper.batch_update_if_not_null(ctx, ctx->udaf_ctxs()->handle.handle(),
                                             ctx->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
-                                            args.size());
+                                            static_cast<int>(args.size()));
         }
         helper.getEnv()->PopLocalFrame(nullptr);
     }
@@ -242,13 +244,13 @@ public:
         int num_cols = ctx->get_num_args();
         env->PushLocalFrame(num_cols * 3 + 1);
         {
-            auto st =
-                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols,
+                                                                    static_cast<int>(batch_size), &args);
             RETURN_IF_UNLIKELY(!st.ok(), (void)0);
 
             auto* stub = ctx->udaf_ctxs()->update_batch_call_stub.get();
             auto state_handle = this->data(state).handle;
-            helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
+            helper.batch_update_single(stub, state_handle, args.data(), num_cols, static_cast<int>(batch_size));
         }
         env->PopLocalFrame(nullptr);
     }
@@ -274,7 +276,7 @@ public:
 
         auto buffer =
                 std::make_unique<DirectByteBuffer>(serialized_bytes.data() + start_offset, end_offset - start_offset);
-        auto buffer_array = helper.create_object_array(buffer->handle(), size);
+        auto buffer_array = helper.create_object_array(buffer->handle(), static_cast<int>(size));
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
         LOCAL_REF_GUARD_ENV(env, buffer_array);
 
@@ -289,7 +291,8 @@ public:
         auto* env = helper.getEnv();
 
         auto provider = [&]() {
-            auto state_id_list = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+            auto state_id_list =
+                    JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, static_cast<int>(batch_size));
             RETURN_IF_UNLIKELY_NULL(state_id_list, state_id_list);
             LOCAL_REF_GUARD_ENV(env, state_id_list);
             auto state_array = helper.convert_handles_to_jobjects(ctx, state_id_list);
@@ -309,9 +312,8 @@ public:
         auto& helper = JVMFunctionHelper::getInstance();
 
         auto provider = [&]() {
-            auto state_id_list = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
-                                                                                      filter.data(), batch_size);
-            return state_id_list;
+            return JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset, filter.data(),
+                                                                        static_cast<int>(batch_size));
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[] = {buffer_array};
@@ -329,7 +331,7 @@ public:
             auto state_handle = reinterpret_cast<JavaUDAFState*>(state)->handle;
             auto res = helper.convert_handle_to_jobject(ctx, state_handle);
             LOCAL_REF_GUARD_ENV(env, res);
-            return helper.create_object_array(res, size);
+            return helper.create_object_array(res, static_cast<int>(size));
         };
         auto merger = [&](jobject state_array, jobject buffer_array) {
             jobject state_and_buffer[2] = {state_array, buffer_array};
@@ -356,7 +358,8 @@ public:
 
         // step 1 get state lists
         auto states = const_cast<AggDataPtr*>(agg_states.data());
-        auto state_id_list = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+        auto state_id_list =
+                JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, static_cast<int>(batch_size));
         RETURN_IF_UNLIKELY_NULL(state_id_list, (void)0);
         LOCAL_REF_GUARD_ENV(env, state_id_list);
 
@@ -366,7 +369,7 @@ public:
 
         // step 2 serialize size
         auto serialize_szs = (jintArray)helper.int_batch_call(
-                ctx, state_array, ctx->udaf_ctxs()->serialize_size->method.handle(), batch_size);
+                ctx, state_array, ctx->udaf_ctxs()->serialize_size->method.handle(), static_cast<int>(batch_size));
         RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
 
@@ -380,7 +383,7 @@ public:
                 std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(), udf_ctxs->buffer_data.size());
 
         // step 4 call serialize
-        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
+        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), static_cast<int>(batch_size));
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         jobject state_and_buffer[2] = {state_array, buffer_array};
         helper.batch_update_state(ctx, ctx->udaf_ctxs()->handle.handle(), ctx->udaf_ctxs()->serialize->method.handle(),
@@ -412,7 +415,8 @@ public:
 
         // 1. get state list
         auto states = const_cast<AggDataPtr*>(agg_states.data());
-        auto state_id_list = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+        auto state_id_list =
+                JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, static_cast<int>(batch_size));
         RETURN_IF_UNLIKELY_NULL(state_id_list, (void)0);
         LOCAL_REF_GUARD_ENV(env, state_id_list);
 
@@ -423,7 +427,7 @@ public:
         CHECK(to->empty());
         // 3. get result from column
         auto res = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->finalize->method.handle(), &state_array,
-                                     1, batch_size);
+                                     1, static_cast<int>(batch_size));
         RETURN_IF_UNLIKELY_NULL(res, (void)0);
         LOCAL_REF_GUARD_ENV(env, res);
 
@@ -432,9 +436,9 @@ public:
         if (!to->is_nullable()) {
             ColumnPtr wrapper(const_cast<Column*>(to), [](auto p) {});
             auto output = NullableColumn::create(wrapper, NullColumn::create());
-            helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
+            helper.get_result_from_boxed_array(ctx, type, output.get(), res, static_cast<int>(batch_size));
         } else {
-            helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);
+            helper.get_result_from_boxed_array(ctx, type, to, res, static_cast<int>(batch_size));
             down_cast<NullableColumn*>(to)->update_has_null();
         }
     }

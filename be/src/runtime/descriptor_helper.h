@@ -142,7 +142,7 @@ public:
         _tuple_desc.id = _tuple_id;
         _tuple_desc.byteSize = offset;
         _tuple_desc.numNullBytes = null_byetes;
-        _tuple_desc.numNullSlots = _slot_descs.size();
+        _tuple_desc.numNullSlots = static_cast<int32_t>(_slot_descs.size());
 
         tb->add_slots(_slot_descs);
         tb->add_tuple(_tuple_desc);

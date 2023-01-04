@@ -31,7 +31,7 @@ namespace starrocks {
 const int64_t MonoDelta::kUninitialized = kint64min;
 
 MonoDelta MonoDelta::FromSeconds(double seconds) {
-    int64_t delta = seconds * MonoTime::kNanosecondsPerSecond;
+    int64_t delta = static_cast<int64_t>(seconds * MonoTime::kNanosecondsPerSecond);
     return MonoDelta(delta);
 }
 
@@ -81,7 +81,7 @@ MonoDelta::MonoDelta(int64_t delta) : nano_delta_(delta) {}
 
 double MonoDelta::ToSeconds() const {
     DCHECK(Initialized());
-    double d(nano_delta_);
+    auto d = static_cast<double>(nano_delta_);
     d /= MonoTime::kNanosecondsPerSecond;
     return d;
 }
@@ -228,7 +228,7 @@ MonoTime::MonoTime(const struct timespec& ts) {
 MonoTime::MonoTime(int64_t nanos) : nanos_(nanos) {}
 
 double MonoTime::ToSeconds() const {
-    double d(nanos_);
+    auto d = static_cast<double>(nanos_);
     d /= MonoTime::kNanosecondsPerSecond;
     return d;
 }

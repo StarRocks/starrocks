@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <cstdint>
 
 #include "column/column_helper.h"
@@ -54,8 +57,8 @@ public:
         auto* data1 = r1.data();
         auto* data2 = r2.data();
         auto* data3 = r3.data();
-        const int s = std::min(v1->size(), v2->size());
-        for (int i = 0; i < s; ++i) {
+        const size_t s = std::min(v1->size(), v2->size());
+        for (size_t i = 0; i < s; ++i) {
             data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     data1[i], data2[i]);
         }
@@ -76,8 +79,8 @@ public:
         auto* data2 = r2.data();
         auto* data3 = r3.data();
 
-        int size = v2->size();
-        for (int i = 0; i < size; ++i) {
+        size_t size = v2->size();
+        for (size_t i = 0; i < size; ++i) {
             data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     data1, data2[i]);
         }
@@ -98,8 +101,8 @@ public:
         auto data2 = r2[0];
         auto* data3 = r3.data();
 
-        int size = v1->size();
-        for (int i = 0; i < size; ++i) {
+        size_t size = v1->size();
+        for (size_t i = 0; i < size; ++i) {
             data3[i] = OP::template apply<RunTimeCppType<LType>, RunTimeCppType<RType>, RunTimeCppType<ResultType>>(
                     data1[i], data2);
         }
@@ -626,3 +629,5 @@ using VectorizedLogicPredicateBinaryFunction = LogicPredicateBinaryFunction<
     uint8_t NAME::apply(const LType& L_VALUE, const uint8_t L_NULL, const RType& R_VALUE, const uint8_t R_NULL)
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

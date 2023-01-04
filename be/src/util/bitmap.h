@@ -43,4 +43,5 @@ namespace starrocks {
 inline size_t BitmapSize(size_t num_bits) {
     return (num_bits + 7) / 8;
 }
+
 } // namespace starrocks

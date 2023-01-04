@@ -136,7 +136,6 @@ char* FastInt64ToBuffer(int64 i, char* buffer);
 char* FastUInt32ToBuffer(uint32 i, char* buffer);
 char* FastUInt64ToBuffer(uint64 i, char* buffer);
 char* FastHexToBuffer(int i, char* buffer) MUST_USE_RESULT;
-char* FastTimeToBuffer(time_t t, char* buffer);
 char* FastHex64ToBuffer(uint64 i, char* buffer);
 char* FastHex32ToBuffer(uint32 i, char* buffer);
 
@@ -300,59 +299,6 @@ bool ParseLeadingBoolValue(const char* str, bool deflt);
 inline bool ParseLeadingBoolValue(const string& str, bool deflt) {
     return ParseLeadingBoolValue(str.c_str(), deflt);
 }
-
-// ----------------------------------------------------------------------
-// AutoDigitStrCmp
-// AutoDigitLessThan
-// StrictAutoDigitLessThan
-// autodigit_less
-// autodigit_greater
-// strict_autodigit_less
-// strict_autodigit_greater
-//    These are like less<string> and greater<string>, except when a
-//    run of digits is encountered at corresponding points in the two
-//    arguments.  Such digit strings are compared numerically instead
-//    of lexicographically.  Therefore if you sort by
-//    "autodigit_less", some machine names might get sorted as:
-//        exaf1
-//        exaf2
-//        exaf10
-//    When using "strict" comparison (AutoDigitStrCmp with the strict flag
-//    set to true, or the strict version of the other functions),
-//    strings that represent equal numbers will not be considered equal if
-//    the string representations are not identical.  That is, "01" < "1" in
-//    strict mode, but "01" == "1" otherwise.
-// ----------------------------------------------------------------------
-
-int AutoDigitStrCmp(const char* a, int alen, const char* b, int blen, bool strict);
-
-bool AutoDigitLessThan(const char* a, int alen, const char* b, int blen);
-
-bool StrictAutoDigitLessThan(const char* a, int alen, const char* b, int blen);
-
-struct autodigit_less : public binary_function<const string&, const string&, bool> {
-    bool operator()(const string& a, const string& b) const {
-        return AutoDigitLessThan(a.data(), a.size(), b.data(), b.size());
-    }
-};
-
-struct autodigit_greater : public binary_function<const string&, const string&, bool> {
-    bool operator()(const string& a, const string& b) const {
-        return AutoDigitLessThan(b.data(), b.size(), a.data(), a.size());
-    }
-};
-
-struct strict_autodigit_less : public binary_function<const string&, const string&, bool> {
-    bool operator()(const string& a, const string& b) const {
-        return StrictAutoDigitLessThan(a.data(), a.size(), b.data(), b.size());
-    }
-};
-
-struct strict_autodigit_greater : public binary_function<const string&, const string&, bool> {
-    bool operator()(const string& a, const string& b) const {
-        return StrictAutoDigitLessThan(b.data(), b.size(), a.data(), a.size());
-    }
-};
 
 // ----------------------------------------------------------------------
 // SimpleItoa()

@@ -46,7 +46,7 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t
     }
 
     // Assume last character indicates unit or percent.
-    int32_t number_str_len = mem_spec_str.size() - 1;
+    auto number_str_len = static_cast<int32_t>(mem_spec_str.size() - 1);
     int64_t multiplier = -1;
 
     // Look for accepted suffix character.
@@ -79,7 +79,7 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t
         break;
     default:
         // No unit was given. Default to bytes.
-        number_str_len = mem_spec_str.size();
+        number_str_len = static_cast<int32_t>(mem_spec_str.size());
         break;
     }
 
@@ -94,7 +94,7 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t
             return -1;
         }
 
-        bytes = multiplier * limit_val;
+        bytes = static_cast<int64_t>(static_cast<double>(multiplier) * limit_val);
     } else {
         // Parse int - bytes or percent
         auto limit_val = StringParser::string_to_int<int64_t>(mem_spec_str.data(), number_str_len, &result);
@@ -104,7 +104,7 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t
         }
 
         if (is_percent) {
-            bytes = (static_cast<double>(limit_val) / 100.0) * memory_limit;
+            bytes = static_cast<int64_t>((static_cast<double>(limit_val) / 100.0) * static_cast<double>(memory_limit));
         } else {
             bytes = limit_val;
         }

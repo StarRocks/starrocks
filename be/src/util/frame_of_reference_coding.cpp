@@ -40,12 +40,15 @@
 #include "util/bit_util.h"
 #include "util/coding.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 namespace starrocks {
 
 template <typename T>
 const T* ForEncoder<T>::copy_value(const T* p_data, size_t count) {
     memcpy(&_buffered_values[_buffered_values_num], p_data, count * sizeof(T));
-    _buffered_values_num += count;
+    _buffered_values_num += static_cast<uint8_t>(count);
     p_data += count;
     return p_data;
 }
@@ -54,7 +57,7 @@ template <typename T>
 void ForEncoder<T>::put_batch(const T* in_data, size_t count) {
     if (_buffered_values_num + count < FRAME_VALUE_NUM) {
         copy_value(in_data, count);
-        _values_num += count;
+        _values_num += static_cast<uint32_t>(count);
         return;
     }
 
@@ -78,7 +81,7 @@ void ForEncoder<T>::put_batch(const T* in_data, size_t count) {
         copy_value(in_data, remaining_num);
     }
 
-    _values_num += count;
+    _values_num += static_cast<uint32_t>(count);
 }
 
 // todo(kks): improve this method by SIMD instructions
@@ -109,7 +112,7 @@ void ForEncoder<T>::bit_pack(const T* input, uint8_t in_num, int bit_width, uint
                 output++;
                 *output = 0;
             }
-            *output |= (((input[i] & in_mask) >> (bit_width - k - 1)) << (7 - bit_index));
+            *output |= static_cast<uint8_t>((((input[i] & in_mask) >> (bit_width - k - 1)) << (7 - bit_index)));
             in_mask >>= 1;
             bit_index++;
         }
@@ -225,7 +228,7 @@ uint32_t ForEncoder<T>::flush() {
     _buffer->append(&frame_value_num, 1);
     put_fixed32_le(_buffer, _values_num);
 
-    return _buffer->size();
+    return static_cast<uint32_t>(_buffer->size());
 }
 
 template <typename T>
@@ -507,3 +510,5 @@ template class ForDecoder<uint64_t>;
 template class ForDecoder<uint24_t>;
 template class ForDecoder<uint128_t>;
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

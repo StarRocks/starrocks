@@ -372,7 +372,7 @@ Status BooleanQueryBuilder::check_es_query(const ExtFunction& extFunction) {
 }
 
 void BooleanQueryBuilder::validate(const std::vector<EsPredicate*>& espredicates, std::vector<bool>* result) {
-    int conjunct_size = espredicates.size();
+    int conjunct_size = static_cast<int>(espredicates.size());
     result->reserve(conjunct_size);
     for (auto espredicate : espredicates) {
         bool flag = true;
@@ -392,7 +392,7 @@ void BooleanQueryBuilder::validate(const std::vector<EsPredicate*>& espredicates
                 if (compound_predicates->op == TExprOpcode::COMPOUND_AND) {
                     std::vector<bool> list;
                     validate(compound_predicates->conjuncts, &list);
-                    for (int i = list.size() - 1; i >= 0; i--) {
+                    for (int i = static_cast<int>(list.size() - 1); i >= 0; i--) {
                         if (!list[i]) {
                             flag = false;
                             break;

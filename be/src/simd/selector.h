@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
@@ -334,3 +337,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

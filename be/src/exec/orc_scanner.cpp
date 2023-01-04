@@ -62,13 +62,12 @@ Status ORCScanner::open() {
     }
 
     auto range = _scan_range.ranges[0];
-    int num_columns_from_orc = range.__isset.num_of_columns_from_file
-                                       ? implicit_cast<int>(range.num_of_columns_from_file)
-                                       : implicit_cast<int>(_src_slot_descriptors.size());
+    int num_columns_from_orc = range.__isset.num_of_columns_from_file ? static_cast<int>(range.num_of_columns_from_file)
+                                                                      : static_cast<int>(_src_slot_descriptors.size());
 
     // column from path
     if (range.__isset.num_of_columns_from_file) {
-        int nums = range.columns_from_path.size();
+        int nums = static_cast<int>(range.columns_from_path.size());
         for (const auto& rng : _scan_range.ranges) {
             if (nums != rng.columns_from_path.size()) {
                 return Status::InternalError("Different range different columns.");
@@ -121,7 +120,8 @@ StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
         // fill path column
         const TBrokerRangeDesc& range = _scan_range.ranges.at(_next_range - 1);
         if (range.__isset.num_of_columns_from_file) {
-            fill_columns_from_path(chunk, range.num_of_columns_from_file, range.columns_from_path, chunk->num_rows());
+            fill_columns_from_path(chunk, range.num_of_columns_from_file, range.columns_from_path,
+                                   static_cast<int>(chunk->num_rows()));
         }
         return std::move(chunk);
     } catch (orc::ParseError& e) {

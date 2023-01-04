@@ -45,7 +45,7 @@ public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedAndCompoundPredicate);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
-        int l_falses = ColumnHelper::count_false_with_notnull(l);
+        int l_falses = static_cast<int>(ColumnHelper::count_false_with_notnull(l));
 
         // left all false and not null
         if (l_falses == l->size()) {
@@ -78,7 +78,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
 
-        int l_trues = ColumnHelper::count_true_with_notnull(l);
+        int l_trues = static_cast<int>(ColumnHelper::count_true_with_notnull(l));
         // left all true and not null
         if (l_trues == l->size()) {
             return l->clone();

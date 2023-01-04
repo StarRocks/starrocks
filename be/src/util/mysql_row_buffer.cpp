@@ -79,7 +79,7 @@ static uint8_t* pack_vlen(uint8_t* packet, uint64_t length) {
 
 void MysqlRowBuffer::push_null() {
     if (_array_level == 0) {
-        _data.push_back(0xfb);
+        _data.push_back(static_cast<char>(0xfb));
     } else {
         // lowercase 'null' is more convenient for JSON parsing
         _data.append("null");
@@ -104,23 +104,23 @@ void MysqlRowBuffer::push_number(T data) {
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, int8_t>) {
         pos = _resize_extra(2 + MAX_TINYINT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
-        length = end - pos - length_prefix_bytes;
+        length = static_cast<int>(end - pos - length_prefix_bytes);
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, int16_t>) {
         pos = _resize_extra(2 + MAX_SMALLINT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
-        length = end - pos - length_prefix_bytes;
+        length = static_cast<int>(end - pos - length_prefix_bytes);
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, int32_t>) {
         pos = _resize_extra(2 + MAX_INT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
-        length = end - pos - length_prefix_bytes;
+        length = static_cast<int>(end - pos - length_prefix_bytes);
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, int64_t>) {
         pos = _resize_extra(2 + MAX_BIGINT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
-        length = end - pos - length_prefix_bytes;
+        length = static_cast<int>(end - pos - length_prefix_bytes);
     } else if constexpr (std::is_same_v<std::make_signed_t<T>, __int128>) {
         pos = _resize_extra(2 + 40);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
-        length = end - pos - length_prefix_bytes;
+        length = static_cast<int>(end - pos - length_prefix_bytes);
     } else {
         CHECK(false) << "unhandled data type";
     }
@@ -170,7 +170,7 @@ void MysqlRowBuffer::_enter_scope(char c) {
     if (++_array_level == 1) {
         // Leave one space for storing the string length.
         _data.push_back(0x00);
-        _array_offset = _data.size();
+        _array_offset = static_cast<uint32_t>(_data.size());
     }
     _data.push_back(c);
 }

@@ -44,6 +44,9 @@
 #include "util/bit_stream_utils.inline.h"
 #include "util/faststring.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 namespace starrocks {
 
 static inline uint8_t bits_less_than_64(const uint64_t v) {
@@ -52,11 +55,11 @@ static inline uint8_t bits_less_than_64(const uint64_t v) {
 
 // See https://stackoverflow.com/questions/28423405/counting-the-number-of-leading-zeros-in-a-128-bit-integer
 static inline uint8_t __attribute__((no_sanitize("undefined"))) bits_may_more_than_64(const uint128_t v) {
-    uint64_t hi = v >> 64;
-    uint64_t lo = v;
+    auto hi = static_cast<uint64_t>(v >> 64);
+    auto lo = static_cast<uint64_t>(v);
     int z[3] = {__builtin_clzll(hi), __builtin_clzll(lo) + 64, 128};
     int idx = !hi + ((!lo) & (!hi));
-    return 128 - z[idx];
+    return static_cast<uint8_t>(128 - z[idx]);
 }
 
 template <typename T>
@@ -112,7 +115,7 @@ public:
 
     // underlying buffer size + footer meta size.
     // Note: should call this method before flush.
-    uint32_t len() { return _buffer->size() + _storage_formats.size() + _bit_widths.size() + 5; }
+    uint32_t len() { return static_cast<uint32_t>(_buffer->size() + _storage_formats.size() + _bit_widths.size() + 5); }
 
     // Resets all the state in the encoder.
     void clear() {
@@ -203,3 +206,5 @@ private:
     std::vector<T> _out_buffer; // store values of decoded frame
 };
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

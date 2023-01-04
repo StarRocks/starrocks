@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #pragma once
 
 #include <limits>
@@ -252,3 +255,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

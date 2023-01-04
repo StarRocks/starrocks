@@ -42,7 +42,7 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     auto* chunk_holder = new detail::ChunkHolder(std::make_shared<DataSegment>(_sort_exprs, chunk));
     chunk_holder->ref();
     DeferOp defer([&] { chunk_holder->unref(); });
-    int row_sz = chunk_holder->value()->chunk->num_rows();
+    int row_sz = static_cast<int>(chunk_holder->value()->chunk->num_rows());
     if (_sort_heap == nullptr) {
         _sort_heap = std::make_unique<CommonCursorSortHeap>(detail::ChunkCursorComparator(_sort_desc));
         // avoid exaggerated limit + offset, for an example select * from t order by col limit 9223372036854775800,1
@@ -53,13 +53,13 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
 
         // push data to heap if heap was not full
         for (; i < direct_push; ++i) {
-            detail::ChunkRowCursor cursor(i, chunk_holder);
+            detail::ChunkRowCursor cursor(static_cast<int>(i), chunk_holder);
             _sort_heap->push(std::move(cursor));
         }
 
         // compare to heap top and replace top
         for (; i < row_sz; ++i) {
-            detail::ChunkRowCursor cursor(i, chunk_holder);
+            detail::ChunkRowCursor cursor(static_cast<int>(i), chunk_holder);
             _sort_heap->replace_top_if_less(std::move(cursor));
         }
 
@@ -267,7 +267,7 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     // Filter greater or equal top_cursor columns
     const auto& top_cursor = _sort_heap->top();
     const int cursor_rid = top_cursor.row_id();
-    const int column_sz = top_cursor.data_segment()->order_by_columns.size();
+    const int column_sz = static_cast<int>(top_cursor.data_segment()->order_by_columns.size());
 
     Filter filter(row_sz);
 
@@ -287,7 +287,7 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
             }
         }
     }
-    return chunk_holder->value()->chunk->filter(filter);
+    return static_cast<int>(chunk_holder->value()->chunk->filter(filter));
 }
 
 void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {

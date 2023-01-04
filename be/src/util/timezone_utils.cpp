@@ -147,7 +147,7 @@ bool TimezoneUtils::find_cctz_time_zone(const TimezoneHsScan& timezone_hsscan, s
 
     bool v = false;
     hs_scan(
-            timezone_hsscan.database, timezone.data(), timezone.size(), 0, timezone_hsscan.scratch,
+            timezone_hsscan.database, timezone.data(), static_cast<int>(timezone.size()), 0, timezone_hsscan.scratch,
             [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void* ctx) -> int {
                 *((bool*)ctx) = true;
                 return 1;

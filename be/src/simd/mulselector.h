@@ -39,7 +39,7 @@ public:
         DCHECK_GT(select_list_size, 0);
         DCHECK_EQ(select_vec_size + 1, select_list_size);
 
-        int row_sz = select_list[0]->size();
+        int row_sz = static_cast<int>(select_list[0]->size());
         int processed_rows = 0;
 
 #ifdef __AVX2__
@@ -70,7 +70,7 @@ public:
             }
 
             __m256i loaded_masks[select_vec_size + 1];
-            loaded_masks[select_vec_size] = _mm256_set1_epi8(0xff);
+            loaded_masks[select_vec_size] = _mm256_set1_epi8(static_cast<char>(0xff));
 
             __m256i loaded_datas[select_list_size];
 

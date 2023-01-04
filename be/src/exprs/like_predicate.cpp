@@ -423,7 +423,7 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
         [[maybe_unused]] auto status = hs_scan(
                 // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
                 state->database, (value_size) ? value_viewer.value(row).data : &_DUMMY_STRING_FOR_EMPTY_PATTERN,
-                value_size, 0, scratch,
+                static_cast<unsigned int>(value_size), 0, scratch,
                 [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                    void* ctx) -> int {
                     *((bool*)ctx) = true;
@@ -584,7 +584,7 @@ std::string LikePredicate::convert_like_pattern(FunctionContext* context, const 
 void LikePredicate::remove_escape_character(std::string* search_string) {
     std::string tmp_search_string;
     tmp_search_string.swap(*search_string);
-    int len = tmp_search_string.length();
+    int len = static_cast<int>(tmp_search_string.length());
     for (int i = 0; i < len;) {
         if (tmp_search_string[i] == '\\' && i + 1 < len &&
             (tmp_search_string[i + 1] == '%' || tmp_search_string[i + 1] == '_')) {

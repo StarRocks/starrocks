@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/condition_expr.h"
 
 #include "column/chunk.h"
@@ -427,3 +430,5 @@ Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node
 #undef CASE_ALL_TYPE
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

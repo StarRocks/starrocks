@@ -101,9 +101,9 @@ Status GzipStreamCompression::decompress(uint8_t* input, size_t input_len, size_
                                          size_t output_len, size_t* output_bytes_written, bool* stream_end) {
     // 1. set input and output
     _z_strm.next_in = input;
-    _z_strm.avail_in = input_len;
+    _z_strm.avail_in = static_cast<uInt>(input_len);
     _z_strm.next_out = output;
-    _z_strm.avail_out = output_len;
+    _z_strm.avail_out = static_cast<uInt>(output_len);
 
     while (_z_strm.avail_out > 0 && _z_strm.avail_in > 0) {
         *stream_end = false;
@@ -191,9 +191,9 @@ Status Bzip2StreamCompression::decompress(uint8_t* input, size_t input_len, size
                                           size_t output_len, size_t* output_bytes_written, bool* stream_end) {
     // 1. set input and output
     _bz_strm.next_in = const_cast<char*>(reinterpret_cast<const char*>(input));
-    _bz_strm.avail_in = input_len;
+    _bz_strm.avail_in = static_cast<unsigned int>(input_len);
     _bz_strm.next_out = reinterpret_cast<char*>(output);
-    _bz_strm.avail_out = output_len;
+    _bz_strm.avail_out = static_cast<unsigned int>(output_len);
 
     while (_bz_strm.avail_out > 0 && _bz_strm.avail_in > 0) {
         *stream_end = false;

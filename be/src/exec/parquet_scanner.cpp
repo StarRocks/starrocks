@@ -51,15 +51,15 @@ Status ParquetScanner::open() {
     }
     auto range = _scan_range.ranges[0];
     _num_of_columns_from_file = range.__isset.num_of_columns_from_file
-                                        ? implicit_cast<int>(range.num_of_columns_from_file)
-                                        : implicit_cast<int>(_src_slot_descriptors.size());
+                                        ? static_cast<int>(range.num_of_columns_from_file)
+                                        : static_cast<int>(_src_slot_descriptors.size());
 
     _conv_funcs.resize(_num_of_columns_from_file, nullptr);
     _cast_exprs.resize(_num_of_columns_from_file, nullptr);
 
     // column from path
     if (range.__isset.num_of_columns_from_file) {
-        int nums = range.columns_from_path.size();
+        int nums = static_cast<int>(range.columns_from_path.size());
         for (const auto& rng : _scan_range.ranges) {
             if (nums != rng.columns_from_path.size()) {
                 return Status::InternalError("Different range different columns.");
@@ -80,7 +80,7 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
         if (slot_desc == nullptr) {
             continue;
         }
-        auto* array = _batch->column(column_pos++).get();
+        auto* array = _batch->column(static_cast<int>(column_pos++)).get();
         ColumnPtr column;
         RETURN_IF_ERROR(new_column(array->type().get(), slot_desc, &column, &_conv_funcs[i], &_cast_exprs[i]));
         column->reserve(_max_chunk_size);
@@ -101,7 +101,7 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
             continue;
         }
         _conv_ctx.current_slot = slot_desc;
-        auto* array = _batch->column(column_pos++).get();
+        auto* array = _batch->column(static_cast<int>(column_pos++)).get();
         auto& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
         // for timestamp type, _state->timezone which is specified by user. convert function
         // obtains timezone from array. thus timezone in array should be rectified to
@@ -141,7 +141,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
         auto range = _scan_range.ranges.at(_next_file - 1);
         if (range.__isset.num_of_columns_from_file) {
             fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
-                                   cast_chunk->num_rows());
+                                   static_cast<int>(cast_chunk->num_rows()));
         }
         if (VLOG_ROW_IS_ON) {
             VLOG_ROW << "after finalize chunk: " << cast_chunk->debug_columns();

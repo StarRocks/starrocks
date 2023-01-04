@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <cmath>
 
 #include "column/column_helper.h"
@@ -179,7 +182,7 @@ public:
 
     size_t serialize_sep_and_value(Bytes& bytes, size_t old_size, uint32_t size_value, uint32_t size_sep,
                                    const char* sep, const char* data) const {
-        uint32_t size_total = sizeof(uint32_t) + size_value + size_sep;
+        uint32_t size_total = static_cast<uint32_t>(sizeof(uint32_t) + size_value + size_sep);
         memcpy(bytes.data() + old_size, &size_total, sizeof(uint32_t));
         old_size += sizeof(uint32_t);
 
@@ -290,3 +293,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

@@ -24,3 +24,5 @@ add_library(Connector STATIC
     file_connector.cpp
     binlog_connector.cpp
 )
+
+set_target_properties(Connector PROPERTIES COMPILE_FLAGS "-Wconversion")

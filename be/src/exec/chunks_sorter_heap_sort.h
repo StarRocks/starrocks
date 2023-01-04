@@ -94,7 +94,7 @@ public:
             _holder->unref();
         }
     }
-    int row_id() const { return _row_id; }
+    int row_id() const { return static_cast<int>(_row_id); }
 
     int ref_count() const { return _holder->ref_count(); }
 
@@ -206,7 +206,7 @@ struct ChunkCursorComparator {
     bool operator()(const ChunkRowCursor& lhs, const ChunkRowCursor& rhs) const {
         size_t l_row_id = lhs.row_id();
         size_t r_row_id = rhs.row_id();
-        int order_by_columns_sz = lhs.data_segment()->order_by_columns.size();
+        int order_by_columns_sz = static_cast<int>(lhs.data_segment()->order_by_columns.size());
         for (int i = 0; i < order_by_columns_sz; ++i) {
             int null_first = _sort_desc.get_column_desc(i).null_first;
             int sort_order = _sort_desc.get_column_desc(i).sort_order;
@@ -243,7 +243,7 @@ public:
         if (_sort_heap == nullptr || _sort_heap->empty()) {
             return 0;
         }
-        int first_rows = _sort_heap->top().data_segment()->chunk->num_rows();
+        int first_rows = static_cast<int>(_sort_heap->top().data_segment()->chunk->num_rows());
         return _sort_heap->size() * _sort_heap->top().data_segment()->mem_usage() / first_rows;
     }
 

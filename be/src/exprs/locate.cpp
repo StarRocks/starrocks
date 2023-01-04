@@ -135,7 +135,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
                 pos = skip_leading_utf8(pos, begin + offsets[i + 1], start - res_pos);
                 continue;
             }
-            res->get_data()[i] = res_pos;
+            res->get_data()[i] = static_cast<int>(res_pos);
         }
         pos = begin + offsets[i + 1];
         ++i;

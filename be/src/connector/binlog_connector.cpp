@@ -172,8 +172,9 @@ BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_ci
     return fields;
 }
 
-StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
-    BinlogMetaFieldMap binlog_meta_map = _build_binlog_meta_fields(_tablet->tablet_schema().num_columns());
+StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
+    BinlogMetaFieldMap binlog_meta_map =
+            _build_binlog_meta_fields(static_cast<ColumnId>(_tablet->tablet_schema().num_columns()));
     std::vector<uint32_t> data_column_cids;
     std::vector<uint32_t> meta_column_slot_index;
     Fields meta_fields;
@@ -181,7 +182,7 @@ StatusOr<Schema> BinlogDataSource::_build_binlog_schema() {
     for (auto slot : _tuple_desc->slots()) {
         DCHECK(slot->is_materialized());
         slot_index += 1;
-        int32_t index = _tablet->field_index(slot->col_name());
+        int32_t index = static_cast<int32_t>(_tablet->field_index(slot->col_name()));
         if (index >= 0) {
             data_column_cids.push_back(index);
         } else if (slot->col_name() == _column_name_constants.BINLOG_OP_COLUMN_NAME) {
@@ -228,12 +229,12 @@ Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
             Datum datum;
             switch (type) {
             case TYPE_TINYINT: {
-                int8_t val = row + col;
+                int8_t val = static_cast<int8_t>(row + col);
                 datum = Datum(val);
                 break;
             }
             case TYPE_SMALLINT: {
-                int16_t val = row + col;
+                int16_t val = static_cast<int16_t>(row + col);
                 datum = Datum(val);
                 break;
             }

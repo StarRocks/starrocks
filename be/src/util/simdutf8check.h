@@ -45,6 +45,9 @@
  *
  */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 // all byte values must be no larger than 0xF4
 static inline void checkSmallerThan0xF4(__m128i current_bytes, __m128i* has_error) {
     // unsigned, saturates to 0 below max
@@ -407,3 +410,5 @@ static struct avx_processed_utf_bytes avxcheckUTF8Bytes_asciipath(__m256i curren
 }
 
 #endif // __AVX2__
+
+#pragma GCC diagnostic pop

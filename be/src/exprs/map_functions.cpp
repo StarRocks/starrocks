@@ -91,7 +91,7 @@ StatusOr<ColumnPtr> MapFunctions::map_from_arrays(FunctionContext* context, cons
                 if (num_elements != values_data->get_element_size(i)) {
                     return Status::InvalidArgument("Key and value arrays must be the same length");
                 }
-                offset += num_elements;
+                offset += static_cast<uint32_t>(num_elements);
             }
         }
         map_offsets_column->append(offset);

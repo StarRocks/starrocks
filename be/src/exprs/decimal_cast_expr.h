@@ -230,10 +230,10 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
             } else if constexpr (lt_is_time<NonDecimalType>) {
                 double datumf;
                 DecimalV3Cast::to_float<DecimalCppType, NonDecimalCppType>(data[i], scale_factor, &datumf);
-                uint64_t datum = datumf;
-                uint64_t hour = datum / 10000;
-                uint64_t min = (datum / 100) % 100;
-                uint64_t sec = datum % 100;
+                uint64_t datum = static_cast<uint64_t>(datumf);
+                uint64_t hour = static_cast<uint64_t>(datum) / 10000;
+                uint64_t min = (static_cast<uint64_t>(datum) / 100) % 100;
+                uint64_t sec = static_cast<uint64_t>(datum) % 100;
                 result_data[i] = (hour * 60 + min) * 60 + sec;
                 if constexpr (check_overflow) {
                     overflow = overflow || (min > 59 || sec > 59);

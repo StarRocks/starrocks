@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <cstring>
 #include <vector>
 
@@ -177,3 +180,5 @@ static inline Slice utf8_char_start(const char* end) {
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

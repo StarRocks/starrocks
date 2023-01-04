@@ -166,7 +166,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
     ChunkPtr dest_chunk = std::make_shared<Chunk>();
 
     int ctx_index = 0;
-    int before_rows = cast->num_rows();
+    int before_rows = static_cast<int>(cast->num_rows());
     Filter filter(cast->num_rows(), 1);
 
     // CREATE ROUTINE LOAD routine_load_job_1

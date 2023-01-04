@@ -76,7 +76,7 @@ struct NullIndicatorOffset {
     NullIndicatorOffset(int byte_offset, int bit_offset_)
             : byte_offset(byte_offset),
               bit_mask(bit_offset_ == -1 ? 0 : 1 << (7 - bit_offset_)),
-              bit_offset(bit_offset_) {}
+              bit_offset(static_cast<uint8_t>(bit_offset_)) {}
 
     bool equals(const NullIndicatorOffset& o) const {
         return this->byte_offset == o.byte_offset && this->bit_mask == o.bit_mask;

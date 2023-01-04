@@ -91,7 +91,8 @@ public:
     }
 
     Status decompress(const Slice& input, Slice* output) const override {
-        auto decompressed_len = LZ4_decompress_safe(input.data, output->data, input.size, output->size);
+        auto decompressed_len = LZ4_decompress_safe(input.data, output->data, static_cast<int>(input.size),
+                                                    static_cast<int>(output->size));
         if (decompressed_len < 0) {
             return Status::InvalidArgument(
                     strings::Substitute("fail to do LZ4 decompress, error=$0", decompressed_len));
@@ -100,7 +101,7 @@ public:
         return Status::OK();
     }
 
-    size_t max_compressed_len(size_t len) const override { return LZ4_compressBound(len); }
+    size_t max_compressed_len(size_t len) const override { return LZ4_compressBound(static_cast<int>(len)); }
 
     bool exceed_max_input_size(size_t len) const override { return len > LZ4_MAX_INPUT_SIZE; }
 
@@ -142,8 +143,8 @@ private:
         }
 
         int32_t acceleration = 1;
-        size_t compressed_size =
-                LZ4_compress_fast_continue(ctx, input.data, output->data, input.size, output->size, acceleration);
+        size_t compressed_size = LZ4_compress_fast_continue(ctx, input.data, output->data, static_cast<int>(input.size),
+                                                            static_cast<int>(output->size), acceleration);
 
         if (compressed_size <= 0) {
             context->compression_fail = true;
@@ -249,7 +250,7 @@ public:
 
             output_ptr += raw_output.size + kHadoopLz4InnerBlockPrefixLength;
             remaining_output_size -= raw_output.size + kHadoopLz4InnerBlockPrefixLength;
-            decompressed_block_len += input.size;
+            decompressed_block_len += static_cast<uint32_t>(input.size);
         }
 
         // Prepend decompressed size in bytes to be compatible with Hadoop
@@ -351,8 +352,8 @@ private:
                 out_ptr += output_block.size;
                 input_ptr += compressed_len;
                 input_len -= compressed_len;
-                decompressed_block_len -= output_block.size;
-                decompressed_total_len += output_block.size;
+                decompressed_block_len -= static_cast<uint32_t>(output_block.size);
+                decompressed_total_len += static_cast<uint32_t>(output_block.size);
             } while (decompressed_block_len > 0);
         }
         return Status::OK();
@@ -667,14 +668,14 @@ public:
         RETURN_IF_ERROR(init_compress_stream(zstrm));
         // we assume that output is e
         zstrm.next_out = (Bytef*)output->data;
-        zstrm.avail_out = output->size;
+        zstrm.avail_out = static_cast<uInt>(output->size);
         auto zres = Z_OK;
         for (int i = 0; i < inputs.size(); ++i) {
             if (inputs[i].size == 0) {
                 continue;
             }
             zstrm.next_in = (Bytef*)inputs[i].data;
-            zstrm.avail_in = inputs[i].size;
+            zstrm.avail_in = static_cast<uInt>(inputs[i].size);
             int flush = (i == (inputs.size() - 1)) ? Z_FINISH : Z_NO_FLUSH;
 
             zres = deflate(&zstrm, flush);
@@ -907,9 +908,9 @@ public:
 
         // 1. set input and output
         z_strm.next_in = reinterpret_cast<Bytef*>(input.data);
-        z_strm.avail_in = input.size;
+        z_strm.avail_in = static_cast<uInt>(input.size);
         z_strm.next_out = reinterpret_cast<Bytef*>(output->data);
-        z_strm.avail_out = output->size;
+        z_strm.avail_out = static_cast<uInt>(output->size);
 
         if (z_strm.avail_out > 0) {
             // We only support non-streaming use case  for block decompressor
@@ -953,7 +954,7 @@ public:
             // http://compgroups.net/comp.unix.programmer/gzip-compressing-an-in-memory-string-usi/54854
             // To have a safe upper bound for "wrapper variations", we add 32 to
             // estimate
-            int upper_bound = deflateBound(&zstrm, len) + 32;
+            int upper_bound = static_cast<int>(deflateBound(&zstrm, len) + 32);
             return upper_bound;
         }
     }

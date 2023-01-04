@@ -78,7 +78,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decomp
     bool shared_morsel_queue = morsel_queue_factory->is_shared();
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    int64_t mem_limit = static_cast<int64_t>(static_cast<double>(runtime_state()->query_mem_tracker_ptr()->limit()) *
+                                             config::scan_use_query_mem_ratio);
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
 

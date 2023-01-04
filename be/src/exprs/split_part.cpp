@@ -80,10 +80,10 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                 size_t n = haystack.size - offset - 1;
                 char* pos = reinterpret_cast<char*>(memchr(haystack.data + offset + 1, delimiter.data[0], n));
                 if (pos != nullptr) {
-                    offset = pos - haystack.data;
+                    offset = static_cast<int32_t>(pos - haystack.data);
                     num++;
                 } else {
-                    offset = haystack.size;
+                    offset = static_cast<int32_t>(haystack.size);
                     num = (num == 0) ? 0 : num + 1;
                     break;
                 }
@@ -105,10 +105,10 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                 char* pos = reinterpret_cast<char*>(
                         memmem(haystack.data + offset + delimiter.size, n, delimiter.data, delimiter.size));
                 if (pos != nullptr) {
-                    offset = pos - haystack.data;
+                    offset = static_cast<int32_t>(pos - haystack.data);
                     num++;
                 } else {
-                    offset = haystack.size;
+                    offset = static_cast<int32_t>(haystack.size);
                     num = (num == 0) ? 0 : num + 1;
                     break;
                 }

@@ -176,7 +176,7 @@ public:
         if (!is_segments_overlapping()) {
             score = 1;
         } else {
-            score = num_segments();
+            score = static_cast<uint32_t>(num_segments());
             CHECK(score > 0);
         }
         return score;
@@ -194,7 +194,7 @@ public:
 
 private:
     bool _deserialize_from_pb(std::string_view value) {
-        return _rowset_meta_pb->ParseFromArray(value.data(), value.size());
+        return _rowset_meta_pb->ParseFromArray(value.data(), static_cast<int>(value.size()));
     }
 
     void _init() {

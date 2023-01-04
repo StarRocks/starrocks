@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <limits>
 #include <type_traits>
 
@@ -103,7 +106,7 @@ struct MaxByElement<LT, State, StringLTGuard<LT>> {
             col->serialize(row_num, state.buffer_result.data());
             state.buffer_max.resize(right.size);
             memcpy(state.buffer_max.data(), right.data, right.size);
-            state.size = right.size;
+            state.size = static_cast<decltype(state.size)>(right.size);
         }
     }
 
@@ -113,7 +116,7 @@ struct MaxByElement<LT, State, StringLTGuard<LT>> {
             memcpy(state.buffer_result.data(), buffer, size);
             state.buffer_max.resize(right.size);
             memcpy(state.buffer_max.data(), right.data, right.size);
-            state.size = right.size;
+            state.size = static_cast<decltype(state.size)>(right.size);
         }
     }
 };
@@ -424,3 +427,4 @@ public:
 };
 
 } // namespace starrocks
+#pragma GCC diagnostic pop

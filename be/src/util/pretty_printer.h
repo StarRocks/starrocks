@@ -27,7 +27,7 @@
 #include "util/template_util.h"
 
 /// Truncate a double to offset decimal places.
-#define DOUBLE_TRUNCATE(val, offset) floor(val* pow(10, offset)) / pow(10, offset)
+#define DOUBLE_TRUNCATE(val, offset) floor(static_cast<double>(val) * pow(10, offset)) / pow(10, offset)
 
 namespace starrocks {
 
@@ -80,7 +80,7 @@ public:
 
         case TUnit::CPU_TICKS: {
             if (value < CpuInfo::cycles_per_ms()) {
-                ss << std::setprecision(PRECISION) << (value / 1000.) << "K clock cycles";
+                ss << std::setprecision(PRECISION) << (static_cast<double>(value) / 1000.) << "K clock cycles";
             } else {
                 value /= CpuInfo::cycles_per_ms();
                 print_timems(value, &ss);
@@ -202,19 +202,19 @@ private:
     static double get_byte_unit(T value, std::string* unit) {
         if (value == 0) {
             *unit = "";
-            return value;
+            return static_cast<double>(value);
         } else if (value >= GIGABYTE) {
             *unit = "GB";
-            return value / (double)GIGABYTE;
+            return static_cast<double>(value) / (double)GIGABYTE;
         } else if (value >= MEGABYTE) {
             *unit = "MB";
-            return value / (double)MEGABYTE;
+            return static_cast<double>(value) / (double)MEGABYTE;
         } else if (value >= KILOBYTE) {
             *unit = "KB";
-            return value / (double)KILOBYTE;
+            return static_cast<double>(value) / (double)KILOBYTE;
         } else {
             *unit = "B";
-            return value;
+            return static_cast<double>(value);
         }
     }
 
@@ -222,16 +222,16 @@ private:
     static double get_unit(T value, std::string* unit) {
         if (value >= BILLION) {
             *unit = "B";
-            return value / (1. * BILLION);
+            return static_cast<double>(value) / (1. * BILLION);
         } else if (value >= MILLION) {
             *unit = "M";
-            return value / (1. * MILLION);
+            return static_cast<double>(value) / (1. * MILLION);
         } else if (value >= THOUSAND) {
             *unit = "K";
-            return value / (1. * THOUSAND);
+            return static_cast<double>(value) / (1. * THOUSAND);
         } else {
             *unit = "";
-            return value;
+            return static_cast<double>(value);
         }
     }
 

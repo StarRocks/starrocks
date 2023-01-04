@@ -77,7 +77,7 @@ public:
         }
 
         // Build compressed lookup table
-        int mlast = _pattern->len - 1;
+        int mlast = static_cast<int>(_pattern->len - 1);
         _skip = mlast - 1;
 
         for (int i = 0; i < mlast; ++i) {
@@ -100,10 +100,10 @@ public:
             return -1;
         }
 
-        int mlast = _pattern->len - 1;
-        int w = str->len - _pattern->len;
-        int n = str->len;
-        int m = _pattern->len;
+        int mlast = static_cast<int>(_pattern->len - 1);
+        int w = static_cast<int>(str->len - _pattern->len);
+        int n = static_cast<int>(str->len);
+        int m = static_cast<int>(_pattern->len);
         const char* s = str->ptr;
         const char* p = _pattern->ptr;
 
@@ -112,7 +112,7 @@ public:
             const char* result = reinterpret_cast<const char*>(memchr(s, p[0], n));
 
             if (result != nullptr) {
-                return result - s;
+                return static_cast<int>(result - s);
             }
 
             return -1;
@@ -140,7 +140,7 @@ public:
                 if (i + m < n && !bloom_query(s[i + m])) {
                     i = i + m;
                 } else {
-                    i = i + _skip;
+                    i = static_cast<int>(i + _skip);
                 }
             } else {
                 // skip: check if next character is part of pattern

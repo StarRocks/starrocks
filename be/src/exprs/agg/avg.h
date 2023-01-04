@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
@@ -89,7 +92,7 @@ public:
             } else if constexpr (lt_is_decimalv2<LT>) {
                 this->data(state).sum += column->get_data()[row_num];
             } else if constexpr (lt_is_arithmetic<LT>) {
-                this->data(state).sum += column->get_data()[row_num];
+                this->data(state).sum += static_cast<decltype(this->data(state).sum)>(column->get_data()[row_num]);
             } else if constexpr (lt_is_decimal<LT>) {
                 this->data(state).sum += column->get_data()[row_num];
             } else {
@@ -98,13 +101,14 @@ public:
             this->data(state).count++;
         } else {
             if constexpr (lt_is_datetime<LT>) {
-                this->data(state).sum -= column->get_data()[row_num].to_unix_second();
+                this->data(state).sum -=
+                        static_cast<decltype(this->data(state).sum)>(column->get_data()[row_num].to_unix_second());
             } else if constexpr (lt_is_date<LT>) {
                 this->data(state).sum -= column->get_data()[row_num].julian();
             } else if constexpr (lt_is_decimalv2<LT>) {
                 this->data(state).sum -= column->get_data()[row_num];
             } else if constexpr (lt_is_arithmetic<LT>) {
-                this->data(state).sum -= column->get_data()[row_num];
+                this->data(state).sum -= static_cast<decltype(this->data(state).sum)>(column->get_data()[row_num]);
             } else if constexpr (lt_is_decimal<LT>) {
                 this->data(state).sum -= column->get_data()[row_num];
             } else {
@@ -222,9 +226,9 @@ public:
         if constexpr (lt_is_decimalv2<LT>) {
             result = this->data(state).sum / DecimalV2Value(this->data(state).count, 0);
         } else if constexpr (lt_is_datetime<LT>) {
-            result.from_unix_second(this->data(state).sum / this->data(state).count);
+            result.from_unix_second(static_cast<int64_t>(this->data(state).sum / this->data(state).count));
         } else if constexpr (lt_is_date<LT>) {
-            result._julian = this->data(state).sum / this->data(state).count;
+            result._julian = static_cast<JulianDate>(this->data(state).sum / this->data(state).count);
         } else if constexpr (lt_is_arithmetic<LT>) {
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
@@ -248,9 +252,9 @@ public:
         if constexpr (lt_is_decimalv2<LT>) {
             result = this->data(state).sum / DecimalV2Value(this->data(state).count, 0);
         } else if constexpr (lt_is_datetime<LT>) {
-            result.from_unix_second(this->data(state).sum / this->data(state).count);
+            result.from_unix_second(static_cast<int64_t>(this->data(state).sum / this->data(state).count));
         } else if constexpr (lt_is_date<LT>) {
-            result._julian = this->data(state).sum / this->data(state).count;
+            result._julian = static_cast<JulianDate>(this->data(state).sum / this->data(state).count);
         } else if constexpr (lt_is_arithmetic<LT>) {
             result = this->data(state).sum / this->data(state).count;
         } else if constexpr (lt_is_decimal<LT>) {
@@ -273,3 +277,5 @@ using DecimalAvgAggregateFunction =
         AvgAggregateFunction<LT, RunTimeCppType<LT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

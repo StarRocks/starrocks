@@ -294,13 +294,13 @@ int QEncodingUnescape(const char* src, int slen, char* dest, int szdest);
 int Base64Unescape(const char* src, int slen, char* dest, int szdest);
 bool Base64Unescape(const char* src, int slen, string* dest);
 inline bool Base64Unescape(const string& src, string* dest) {
-    return Base64Unescape(src.data(), src.size(), dest);
+    return Base64Unescape(src.data(), static_cast<int>(src.size()), dest);
 }
 
 int WebSafeBase64Unescape(const char* src, int slen, char* dest, int szdest);
 bool WebSafeBase64Unescape(const char* src, int slen, string* dest);
 inline bool WebSafeBase64Unescape(const string& src, string* dest) {
-    return WebSafeBase64Unescape(src.data(), src.size(), dest);
+    return WebSafeBase64Unescape(src.data(), static_cast<int>(src.size()), dest);
 }
 
 // Return the length to use for the output buffer given to the base64 escape
@@ -344,7 +344,7 @@ void WebSafeBase64Escape(const unsigned char* src, int szsrc, string* dest, bool
 int Base32Unescape(const char* src, int slen, char* dest, int szdest);
 bool Base32Unescape(const char* src, int slen, string* dest);
 inline bool Base32Unescape(const string& src, string* dest) {
-    return Base32Unescape(src.data(), src.size(), dest);
+    return Base32Unescape(src.data(), static_cast<int>(src.size()), dest);
 }
 
 // ----------------------------------------------------------------------

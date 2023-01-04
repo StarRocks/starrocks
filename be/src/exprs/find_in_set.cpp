@@ -43,9 +43,9 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(findInSetImpl, str, strlist) {
         size_t n = strlist.size - offset - 1;
         char* pos = reinterpret_cast<char*>(memchr(strlist.data + offset + 1, ',', n));
         if (pos != nullptr) {
-            offset = pos - strlist.data;
+            offset = static_cast<int32_t>(pos - strlist.data);
         } else {
-            offset = strlist.size;
+            offset = static_cast<int32_t>(strlist.size);
         }
         num++;
         bool is_equal = memequal(str.data, str.size, strlist.data + pre_offset + 1, offset - pre_offset - 1);

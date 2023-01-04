@@ -19,14 +19,13 @@
 #include <cstdio>
 #include <thread>
 
-#include "util/cpu_info.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 
 namespace starrocks {
 
 const int CpuUsageRecorder::NUM_HARDWARE_CORES = std::thread::hardware_concurrency();
-const int CpuUsageRecorder::SECOND_CLOCK_TICK = sysconf(_SC_CLK_TCK);
+const int CpuUsageRecorder::SECOND_CLOCK_TICK = static_cast<int>(sysconf(_SC_CLK_TCK));
 
 CpuUsageRecorder::CpuUsageRecorder() : _timestamp{0, MonotonicNanos()}, _proc_time{0, _get_proc_time()} {}
 
@@ -48,8 +47,8 @@ int CpuUsageRecorder::cpu_used_permille() const {
         return 0;
     }
     int prev_idx = (_curr_idx + 1) % 2;
-    return (_proc_time[_curr_idx] - _proc_time[prev_idx]) * 1000'000'000L / SECOND_CLOCK_TICK * 1000 /
-           NUM_HARDWARE_CORES / (_timestamp[_curr_idx] - _timestamp[prev_idx]);
+    return static_cast<int>((_proc_time[_curr_idx] - _proc_time[prev_idx]) * 1000'000'000L / SECOND_CLOCK_TICK * 1000 /
+                            NUM_HARDWARE_CORES / (_timestamp[_curr_idx] - _timestamp[prev_idx]));
 }
 
 uint64_t CpuUsageRecorder::_get_proc_time() {

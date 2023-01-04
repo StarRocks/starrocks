@@ -257,3 +257,5 @@ set(EXEC_FILES
 add_library(Exec STATIC
     ${EXEC_FILES}
 )
+
+set_target_properties(Exec PROPERTIES COMPILE_FLAGS "-Wconversion")

@@ -427,7 +427,7 @@ private:
     bool _null_in_set;
     bool _is_not_in;
     bool _is_join_runtime_filter;
-    int _array_size;
+    size_t _array_size;
     ExprContext* _in_pred_ctx;
     Status _st;
 };

@@ -36,7 +36,7 @@ int32_t serialize_size(const T& v) {
 
 template <>
 inline int32_t serialize_size(const std::string& v) {
-    return v.size() + sizeof(uint32_t);
+    return static_cast<int32_t>(v.size() + sizeof(uint32_t));
 }
 
 template <>
@@ -51,7 +51,7 @@ inline int32_t serialize_size(const DecimalV2Value& v) {
 
 template <>
 inline int32_t serialize_size(const StringValue& v) {
-    return v.len + 4;
+    return static_cast<int32_t>(v.len + 4);
 }
 // serialize_size end
 
@@ -66,7 +66,7 @@ char* write_to(const T& v, char* dest) {
 
 template <>
 inline char* write_to(const std::string& v, char* dest) {
-    *(uint32_t*)dest = v.size();
+    *(uint32_t*)dest = static_cast<uint32_t>(v.size());
     dest += sizeof(uint32_t);
     memcpy(dest, v.c_str(), v.size());
     dest += v.size();
@@ -156,7 +156,7 @@ public:
     //must call size() first
     void serialize(char* dest) {
         char* writer = dest;
-        *(int32_t*)writer = _bitmaps.size();
+        *(int32_t*)writer = static_cast<int32_t>(_bitmaps.size());
         writer += 4;
         for (auto& kv : _bitmaps) {
             writer = detail::write_to(kv.first, writer);

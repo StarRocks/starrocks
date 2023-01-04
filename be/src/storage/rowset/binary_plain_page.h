@@ -95,7 +95,7 @@ public:
             return false;
         }
         DCHECK_EQ(_buffer.size(), _reserved_head_size + _next_offset);
-        _offsets.push_back(_next_offset);
+        _offsets.push_back(static_cast<uint32_t>(_next_offset));
         _buffer.append(s.data, s.size);
 
         _next_offset += s.size;
@@ -112,7 +112,7 @@ public:
         for (uint32_t _offset : _offsets) {
             put_fixed32_le(&_buffer, _offset);
         }
-        put_fixed32_le(&_buffer, _offsets.size());
+        put_fixed32_le(&_buffer, static_cast<uint32_t>(_offsets.size()));
         if (!_offsets.empty()) {
             _copy_value_at(0, &_first_value);
             _copy_value_at(_offsets.size() - 1, &_last_value);
@@ -130,7 +130,7 @@ public:
         _finished = false;
     }
 
-    uint32_t count() const override { return _offsets.size(); }
+    uint32_t count() const override { return static_cast<uint32_t>(_offsets.size()); }
 
     uint64_t size() const override { return _size_estimate; }
 

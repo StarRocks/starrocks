@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "common/logging.h"
 #include "types/logical_type.h"
 
@@ -178,3 +181,5 @@ auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Arg
 #undef _TYPE_DISPATCH_CASE
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

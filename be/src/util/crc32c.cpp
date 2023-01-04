@@ -191,10 +191,10 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 // Align n to (1 << m) byte boundary
 #define ALIGN(n, m) ((n + ((1 << m) - 1)) & ~((1 << m) - 1))
 
-#define STEP1                      \
-    do {                           \
-        int c = (l & 0xff) ^ *p++; \
-        l = table0_[c] ^ (l >> 8); \
+#define STEP1                                        \
+    do {                                             \
+        int c = static_cast<int>((l & 0xff) ^ *p++); \
+        l = table0_[c] ^ (l >> 8);                   \
     } while (0)
 
     // Point x at first 16-byte aligned byte in string.  This might be

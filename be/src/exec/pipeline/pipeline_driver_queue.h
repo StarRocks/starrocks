@@ -74,7 +74,7 @@ public:
         _accu_consume_time.fetch_add(driver->driver_acct().get_last_time_spent());
     }
 
-    double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
+    double accu_time_after_divisor() { return static_cast<double>(_accu_consume_time.load()) / factor_for_normal; }
 
     void put(const DriverRawPtr driver);
     void cancel(const DriverRawPtr driver);

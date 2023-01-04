@@ -72,7 +72,7 @@ bool UrlParser::parse_url(const StringValue& url, UrlPart part, StringValue* res
     }
 
     // Positioned to first char after '://'.
-    StringValue protocol_end = trimmed_url.substring(protocol_pos + _s_protocol.len);
+    StringValue protocol_end = trimmed_url.substring(static_cast<int>(protocol_pos + _s_protocol.len));
 
     switch (part) {
     case AUTHORITY: {
@@ -121,7 +121,7 @@ bool UrlParser::parse_url(const StringValue& url, UrlPart part, StringValue* res
             start_pos = 0;
         } else {
             // Skip '@'.
-            start_pos += _s_at.len;
+            start_pos += static_cast<int32_t>(_s_at.len);
         }
 
         StringValue host_start = protocol_end.substring(start_pos);
@@ -151,7 +151,7 @@ bool UrlParser::parse_url(const StringValue& url, UrlPart part, StringValue* res
             return false;
         }
 
-        StringValue query_start = protocol_end.substring(start_pos + _s_question.len);
+        StringValue query_start = protocol_end.substring(static_cast<int>(start_pos + _s_question.len));
         // End string _s_at next '#'.
         int32_t end_pos = _s_hash_search.search(&query_start);
         *result = query_start.substring(0, end_pos);
@@ -167,7 +167,7 @@ bool UrlParser::parse_url(const StringValue& url, UrlPart part, StringValue* res
             return false;
         }
 
-        *result = protocol_end.substring(start_pos + _s_hash.len);
+        *result = protocol_end.substring(static_cast<int>(start_pos + _s_hash.len));
         break;
     }
 

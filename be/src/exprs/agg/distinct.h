@@ -418,7 +418,7 @@ public:
                 old_size += sizeof(uint32_t);
                 memcpy(bytes.data() + old_size, key.data, key.size);
                 old_size += key.size;
-                dst_column->get_offset()[i + 1] = new_size;
+                dst_column->get_offset()[i + 1] = static_cast<uint32_t>(new_size);
             } else {
                 T key = src_column->get_data()[i];
 
@@ -426,7 +426,7 @@ public:
                 bytes.resize(new_size);
                 memcpy(bytes.data() + old_size, &key, sizeof(T));
 
-                dst_column->get_offset()[i + 1] = new_size;
+                dst_column->get_offset()[i + 1] = static_cast<uint32_t>(new_size);
                 old_size = new_size;
             }
         }

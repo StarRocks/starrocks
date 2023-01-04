@@ -88,7 +88,8 @@ private:
     ChunkPtr _pull_shuffle_chunk(RuntimeState* state);
 
     bool _local_buffer_almost_full() const {
-        return _local_memory_usage >= _memory_manager->get_memory_limit_per_driver() * 0.8;
+        return static_cast<double>(_local_memory_usage) >=
+               static_cast<double>(_memory_manager->get_memory_limit_per_driver()) * 0.8;
     }
 
     bool _is_finished = false;

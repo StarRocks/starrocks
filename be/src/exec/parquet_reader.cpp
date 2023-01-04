@@ -98,7 +98,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
         }
         RETURN_IF_ERROR(next_selected_row_group());
 
-        _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows();
+        _rows_of_group = static_cast<int>(_file_metadata->RowGroup(_current_group)->num_rows());
 
         {
             // Initialize _map_column, map column name to it's index
@@ -202,7 +202,8 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
             return Status::OK();
         }
         _current_line_of_group = 0;
-        _rows_of_group = _file_metadata->RowGroup(_current_group)->num_rows(); //get rows of the current row group
+        _rows_of_group = static_cast<int>(
+                _file_metadata->RowGroup(_current_group)->num_rows()); //get rows of the current row group
         // read batch
         arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
         if (!status.ok()) {
@@ -245,8 +246,8 @@ Status ParquetReaderWrap::read_record_batch(const std::vector<SlotDescriptor*>& 
 }
 
 const std::shared_ptr<arrow::RecordBatch>& ParquetReaderWrap::get_batch() {
-    _current_line_of_batch += _batch->num_rows();
-    _current_line_of_group += _batch->num_rows();
+    _current_line_of_batch += static_cast<int>(_batch->num_rows());
+    _current_line_of_group += static_cast<int>(_batch->num_rows());
     return _batch;
 }
 

@@ -109,7 +109,7 @@ private:
             return else_column->clone();
         }
 
-        int loop_end = _children.size() - 1;
+        size_t loop_end = _children.size() - 1;
 
         Columns when_columns;
         when_columns.reserve(loop_end);
@@ -172,7 +172,7 @@ private:
             }
         } else {
             for (int row = 0; row < size; ++row) {
-                int i = view_size;
+                size_t i = view_size;
                 if (!case_viewer.is_null(row)) {
                     i = 0;
                     while ((i < view_size) &&
@@ -215,7 +215,7 @@ private:
             ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
         }
 
-        int loop_end = _children.size() - 1;
+        size_t loop_end = _children.size() - 1;
 
         Columns when_columns;
         when_columns.reserve(loop_end);
@@ -281,8 +281,8 @@ private:
                     !when_columns_has_null && when_columns.size() <= max_simd_case_when_size && !then_columns_has_null;
 
             if (check_could_use_multi_simd_selector) {
-                int then_column_size = then_columns.size();
-                int when_column_size = when_columns.size();
+                int then_column_size = static_cast<int>(then_columns.size());
+                int when_column_size = static_cast<int>(when_columns.size());
                 // TODO: avoid unpack const column
                 for (int i = 0; i < then_column_size; ++i) {
                     then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);

@@ -256,7 +256,9 @@ struct JoinKeyHash<int32_t> {
 template <>
 struct JoinKeyHash<Slice> {
     static const uint32_t CRC_SEED = 0x811C9DC5;
-    std::size_t operator()(const Slice& slice) const { return crc_hash_32(slice.data, slice.size, CRC_SEED); }
+    std::size_t operator()(const Slice& slice) const {
+        return crc_hash_32(slice.data, static_cast<int32_t>(slice.size), CRC_SEED);
+    }
 };
 
 class JoinHashMapHelper {
@@ -270,7 +272,7 @@ public:
         if (expect_bucket_size >= MAX_BUCKET_SIZE) {
             return MAX_BUCKET_SIZE;
         }
-        return phmap::priv::NormalizeCapacity(expect_bucket_size) + 1;
+        return static_cast<uint32_t>(phmap::priv::NormalizeCapacity(expect_bucket_size) + 1);
     }
 
     template <typename CppType>
@@ -469,7 +471,7 @@ public:
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
         case TJoinOp::LEFT_OUTER_JOIN: {
-            _probe_state->count = (*probe_chunk)->num_rows();
+            _probe_state->count = static_cast<uint32_t>((*probe_chunk)->num_rows());
             _probe_output(probe_chunk, chunk);
             _build_output(chunk);
             _probe_state->count = 0;

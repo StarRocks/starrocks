@@ -118,7 +118,7 @@ struct StringValue {
 
 // This function must be called 'hash_value' to be picked up by boost.
 inline std::size_t hash_value(const StringValue& v) {
-    return HashUtil::hash(v.ptr, v.len, 0);
+    return HashUtil::hash(v.ptr, static_cast<int32_t>(v.len), 0);
 }
 
 std::ostream& operator<<(std::ostream& os, const StringValue& string_value);

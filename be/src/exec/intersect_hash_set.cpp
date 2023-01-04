@@ -76,7 +76,7 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
         IntersectSliceFlag key(_buffer + i * _max_one_row_size, _slice_sizes[i]);
         auto iter = _hash_set->find(key);
         if (iter != _hash_set->end() && iter->hit_times == hit_times - 1) {
-            iter->hit_times = hit_times;
+            iter->hit_times = static_cast<uint16_t>(hit_times);
         }
     }
     return Status::OK();
@@ -133,10 +133,10 @@ void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, con
 
         // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {
-            key_column->serialize_batch(_buffer, _slice_sizes, chunk_size, _max_one_row_size);
+            key_column->serialize_batch(_buffer, _slice_sizes, chunk_size, static_cast<uint32_t>(_max_one_row_size));
         } else {
-            key_column->serialize_batch_with_null_masks(_buffer, _slice_sizes, chunk_size, _max_one_row_size, nullptr,
-                                                        false);
+            key_column->serialize_batch_with_null_masks(_buffer, _slice_sizes, chunk_size,
+                                                        static_cast<uint32_t>(_max_one_row_size), nullptr, false);
         }
     }
 }

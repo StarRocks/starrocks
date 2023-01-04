@@ -48,7 +48,7 @@ public:
 
         auto compacted_offset_column = UInt32Column::create();
         long offset = 0;
-        compacted_offset_column->append(offset);
+        compacted_offset_column->append(static_cast<uint32_t>(offset));
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
             long max_length_array_size = 0;
             for (auto& col_idx : state->get_columns()) {
@@ -62,7 +62,7 @@ public:
                     max_length_array_size = array_element_length;
                 }
             }
-            compacted_offset_column->append(offset + max_length_array_size);
+            compacted_offset_column->append(static_cast<uint32_t>(offset + max_length_array_size));
             offset += max_length_array_size;
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {

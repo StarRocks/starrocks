@@ -226,7 +226,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     CSVReader::Record record;
     CSVReader::Fields fields;
 
-    int num_columns = chunk->get()->num_columns();
+    int num_columns = static_cast<int>(chunk->get()->num_columns());
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
         _column_raw_ptrs[i] = chunk->get()->get_column_by_index(i).get();
@@ -266,8 +266,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
         bool has_error = false;
         std::string error_msg;
-        int num_materialize_columns = _scanner_params.materialize_slots.size();
-        int field_size = fields.size();
+        int num_materialize_columns = static_cast<int>(_scanner_params.materialize_slots.size());
+        int field_size = static_cast<int>(fields.size());
         if (_scanner_params.hive_column_names->size() != field_size) {
             VLOG(7) << strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
                                            _scanner_params.hive_column_names->size(), fields.size());
@@ -309,7 +309,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         if (!has_error) {
             // Partition column not stored in text file, we should append these columns
             // when we select partition column.
-            int num_part_columns = _scanner_ctx.partition_columns.size();
+            int num_part_columns = static_cast<int>(_scanner_ctx.partition_columns.size());
             for (int p = 0; p < num_part_columns; ++p) {
                 int index = _scanner_params.partition_index_in_chunk[p];
                 Column* column = _column_raw_ptrs[index];

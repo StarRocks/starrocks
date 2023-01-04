@@ -70,12 +70,12 @@ public:
             for (size_t j = offsets[i]; j < offsets[i + 1]; j++) {
                 if (!map_keys->is_null(j) && (map_keys->get(j).convert2DatumKey() == arg1->get(i).convert2DatumKey())) {
                     matched = true;
-                    selection[i] = j;
-                    idx = j;
+                    selection[i] = static_cast<uint32_t>(j);
+                    idx = static_cast<uint32_t>(j);
                     break;
                 }
             }
-            null_flags[i] = null_flags[i] | (!matched);
+            null_flags[i] = static_cast<uint8_t>(null_flags[i] | (!matched));
         }
 
         if (map_values->has_null()) {
@@ -93,7 +93,7 @@ public:
         result_null->get_data().swap(null_flags);
 
         if (!map_values_data->empty()) {
-            result->append_selective(*map_values_data, selection.data(), 0, num_rows);
+            result->append_selective(*map_values_data, selection.data(), 0, static_cast<uint32_t>(num_rows));
         } else {
             result->append_default(num_rows);
         }

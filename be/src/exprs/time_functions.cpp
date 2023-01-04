@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/time_functions.h"
 
 #include <string_view>
@@ -2057,3 +2060,5 @@ std::string TimeFunctions::info_reported_by_time_slice = "time used with time_sl
 #undef DEFINE_TIME_UNARY_FN_EXTEND
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

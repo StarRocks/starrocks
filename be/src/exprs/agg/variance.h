@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #pragma once
 
 #include <cmath>
@@ -134,7 +137,7 @@ public:
             this->data(state).mean = mean + delta * (this->data(state).count / sum_count);
             this->data(state).m2 =
                     m2 + this->data(state).m2 + (delta * delta) * (count * this->data(state).count / sum_count);
-            this->data(state).count = sum_count;
+            this->data(state).count = static_cast<decltype(this->data(state).count)>(sum_count);
         }
     }
 
@@ -182,7 +185,7 @@ public:
             memcpy(bytes.data() + old_size + sizeof(TResult), &m2, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult) * 2, &count, sizeof(int64_t));
             old_size += one_element_size;
-            dst_column->get_offset()[i + 1] = old_size;
+            dst_column->get_offset()[i + 1] = static_cast<uint32_t>(old_size);
         }
     }
 
@@ -233,13 +236,13 @@ public:
         } else {
             if constexpr (is_sample) {
                 if (count > 1) {
-                    down_cast<ResultColumnType*>(to)->append(this->data(state).m2 / (count - 1));
+                    down_cast<ResultColumnType*>(to)->append(this->data(state).m2 / static_cast<T>(count - 1));
                 } else {
                     down_cast<ResultColumnType*>(to)->append(0);
                 }
             } else {
                 if (count > 0) {
-                    down_cast<ResultColumnType*>(to)->append(this->data(state).m2 / count);
+                    down_cast<ResultColumnType*>(to)->append(this->data(state).m2 / static_cast<T>(count));
                 } else {
                     down_cast<ResultColumnType*>(to)->append(0);
                 }
@@ -284,13 +287,13 @@ public:
         } else {
             if constexpr (is_sample) {
                 if (count > 1) {
-                    result = this->data(state).m2 / (count - 1);
+                    result = this->data(state).m2 / static_cast<T>(count - 1);
                 } else {
                     result = 0;
                 }
             } else {
                 if (count > 0) {
-                    result = this->data(state).m2 / count;
+                    result = this->data(state).m2 / static_cast<T>(count);
                 } else {
                     result = 0;
                 }
@@ -360,13 +363,15 @@ public:
         } else {
             if constexpr (is_sample) {
                 if (count > 1) {
-                    down_cast<ResultColumnType*>(to)->append(sqrt(this->data(state).m2 / (count - 1)));
+                    down_cast<ResultColumnType*>(to)->append(
+                            static_cast<TResult>(sqrt(this->data(state).m2 / (count - 1))));
                 } else {
                     down_cast<ResultColumnType*>(to)->append(0);
                 }
             } else {
                 if (count > 0) {
-                    down_cast<ResultColumnType*>(to)->append(sqrt(this->data(state).m2 / count));
+                    down_cast<ResultColumnType*>(to)->append(static_cast<TResult>(
+                            sqrt(this->data(state).m2 / static_cast<decltype(this->data(state).m2)>(count))));
                 } else {
                     down_cast<ResultColumnType*>(to)->append(0);
                 }
@@ -418,13 +423,13 @@ public:
         } else {
             if constexpr (is_sample) {
                 if (count > 1) {
-                    result = sqrt(this->data(state).m2 / (count - 1));
+                    result = static_cast<TResult>(sqrt(this->data(state).m2 / (count - 1)));
                 } else {
                     result = 0;
                 }
             } else {
                 if (count > 0) {
-                    result = sqrt(this->data(state).m2 / count);
+                    result = static_cast<TResult>(sqrt(this->data(state).m2 / static_cast<T>(count)));
                 } else {
                     result = 0;
                 }
@@ -441,3 +446,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

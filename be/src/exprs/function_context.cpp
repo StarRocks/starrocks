@@ -62,11 +62,11 @@ FunctionContext* FunctionContext::clone(MemPool* pool) {
 }
 
 int FunctionContext::get_num_args() const {
-    return _arg_types.size();
+    return static_cast<int>(_arg_types.size());
 }
 
 int FunctionContext::get_num_constant_columns() const {
-    return _constant_columns.size();
+    return static_cast<int>(_constant_columns.size());
 }
 
 bool FunctionContext::is_constant_column(int i) const {

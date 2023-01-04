@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/math_functions.h"
 
 #include <runtime/decimalv3.h>
@@ -747,3 +750,5 @@ StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Col
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

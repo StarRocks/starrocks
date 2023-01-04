@@ -382,10 +382,10 @@ int MapColumn::compare_at(size_t left, size_t right, const Column& right_column,
 bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) const {
     const auto& rhs_map = down_cast<const MapColumn&>(rhs);
 
-    size_t lhs_offset = _offsets->get_data()[left];
-    size_t lhs_end = _offsets->get_data()[left + 1];
-    size_t rhs_offset = rhs_map._offsets->get_data()[right];
-    size_t rhs_end = rhs_map._offsets->get_data()[right + 1];
+    uint32_t lhs_offset = _offsets->get_data()[left];
+    uint32_t lhs_end = _offsets->get_data()[left + 1];
+    uint32_t rhs_offset = rhs_map._offsets->get_data()[right];
+    uint32_t rhs_end = rhs_map._offsets->get_data()[right + 1];
     // If size is not equal return false
     if (lhs_end - lhs_offset != rhs_end - rhs_offset) {
         return false;
@@ -457,7 +457,7 @@ void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
 
     *hash = HashUtil::zlib_crc_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
     for (size_t i = 0; i < map_size; ++i) {
-        uint32_t ele_offset = offset + i;
+        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
         _keys->crc32_hash_at(hash, ele_offset);
         _values->crc32_hash_at(hash, ele_offset);
     }

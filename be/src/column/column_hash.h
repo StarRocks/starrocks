@@ -123,7 +123,7 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
     return static_cast<uint32_t>(crc32(hash, (const unsigned char*)data, bytes));
 #else
-    uint32_t words = bytes / sizeof(uint32_t);
+    uint32_t words = static_cast<uint32_t>(bytes / sizeof(uint32_t));
     bytes = bytes % 4 /*sizeof(uint32_t)*/;
 
     auto* p = reinterpret_cast<const uint8_t*>(data);

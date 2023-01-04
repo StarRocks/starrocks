@@ -111,9 +111,10 @@ protected:
 
     void flush(PartitionChunks& value, const ChunkPtr& chunk) {
         if (!value.chunks.empty() && !value.select_indexes.empty()) {
-            value.chunks.back()->append_selective(*chunk, value.select_indexes.data(), 0, value.select_indexes.size());
+            value.chunks.back()->append_selective(*chunk, value.select_indexes.data(), 0,
+                                                  static_cast<uint32_t>(value.select_indexes.size()));
             value.select_indexes.clear();
-            value.remain_size = chunk_size - value.chunks.back()->num_rows();
+            value.remain_size = static_cast<int32_t>(chunk_size - value.chunks.back()->num_rows());
         }
     }
 
@@ -266,7 +267,7 @@ protected:
             if (null_key_value.chunks.empty() || null_key_value.remain_size <= 0) {
                 if (!null_key_value.chunks.empty() && !null_key_value.select_indexes.empty()) {
                     null_key_value.chunks.back()->append_selective(*chunk, null_key_value.select_indexes.data(), 0,
-                                                                   null_key_value.select_indexes.size());
+                                                                   static_cast<uint32_t>(null_key_value.select_indexes.size()));
                 }
 
                 alloc_new_buffer(null_key_value, chunk);
@@ -281,7 +282,7 @@ protected:
                 alloc_new_buffer(null_key_value, chunk);
             }
             null_key_value.chunks.back()->append(*chunk, offset, cur_remain_size);
-            null_key_value.remain_size = chunk_size - null_key_value.chunks.back()->num_rows();
+            null_key_value.remain_size = static_cast<int32_t>(chunk_size - null_key_value.chunks.back()->num_rows());
             total_num_rows += size;
 
             if constexpr (!std::is_same_v<std::nullptr_t, std::decay_t<decltype(partition_chunk_consumer)>>) {
@@ -324,7 +325,7 @@ protected:
                 if (value.chunks.empty() || value.remain_size <= 0) {
                     if (!value.chunks.empty() && !value.select_indexes.empty()) {
                         value.chunks.back()->append_selective(*chunk, value.select_indexes.data(), 0,
-                                                              value.select_indexes.size());
+                                                              static_cast<uint32_t>(value.select_indexes.size()));
                     }
 
                     alloc_new_buffer(value, chunk);

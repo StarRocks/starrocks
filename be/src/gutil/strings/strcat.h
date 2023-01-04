@@ -42,13 +42,13 @@ struct AlphaNum {
     // A bool ctor would also convert incoming pointers (bletch).
 
     AlphaNum(int32 i32) // NOLINT(runtime/explicit)
-            : piece(digits, FastInt32ToBufferLeft(i32, digits) - &digits[0]) {}
+            : piece(digits, static_cast<int>(FastInt32ToBufferLeft(i32, digits) - &digits[0])) {}
     AlphaNum(uint32 u32) // NOLINT(runtime/explicit)
-            : piece(digits, FastUInt32ToBufferLeft(u32, digits) - &digits[0]) {}
+            : piece(digits, static_cast<int>(FastUInt32ToBufferLeft(u32, digits) - &digits[0])) {}
     AlphaNum(int64 i64) // NOLINT(runtime/explicit)
-            : piece(digits, FastInt64ToBufferLeft(i64, digits) - &digits[0]) {}
+            : piece(digits, static_cast<int>(FastInt64ToBufferLeft(i64, digits) - &digits[0])) {}
     AlphaNum(uint64 u64) // NOLINT(runtime/explicit)
-            : piece(digits, FastUInt64ToBufferLeft(u64, digits) - &digits[0]) {}
+            : piece(digits, static_cast<int>(FastUInt64ToBufferLeft(u64, digits) - &digits[0])) {}
 
 #if defined(__APPLE__)
     AlphaNum(size_t size) // NOLINT(runtime/explicit)
@@ -56,9 +56,9 @@ struct AlphaNum {
 #endif
 
     AlphaNum(float f) // NOLINT(runtime/explicit)
-            : piece(digits, strlen(FloatToBuffer(f, digits))) {}
+            : piece(digits, static_cast<int>(strlen(FloatToBuffer(f, digits)))) {}
     AlphaNum(double f) // NOLINT(runtime/explicit)
-            : piece(digits, strlen(DoubleToBuffer(f, digits))) {}
+            : piece(digits, static_cast<int>(strlen(DoubleToBuffer(f, digits)))) {}
 
     AlphaNum(const char* c_str) : piece(c_str) {} // NOLINT(runtime/explicit)
     AlphaNum(StringPiece pc) : piece(pc) {}       // NOLINT(runtime/explicit)

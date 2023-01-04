@@ -31,22 +31,9 @@ public:
 #if defined(__x86_64__)
         n -= (n >> 1) & 0x5555555555555555ULL;
         n = ((n >> 2) & 0x3333333333333333ULL) + (n & 0x3333333333333333ULL);
-        return (((n + (n >> 4)) & 0xF0F0F0F0F0F0F0FULL) * 0x101010101010101ULL) >> 56;
+        return static_cast<int>((((n + (n >> 4)) & 0xF0F0F0F0F0F0F0FULL) * 0x101010101010101ULL) >> 56);
 #else
         return CountOnes(n >> 32) + CountOnes(n & 0xffffffff);
-#endif
-    }
-
-    // Count bits using popcnt instruction (available on argo machines).
-    // Doesn't check if the instruction exists.
-    // Please use TestCPUFeature(POPCNT) from base/cpuid/cpuid.h before using this.
-    static inline int CountOnes64withPopcount(uint64 n) {
-#if defined(__x86_64__) && defined __GNUC__
-        int64 count = 0;
-        asm("popcnt %1,%0" : "=r"(count) : "rm"(n) : "cc");
-        return count;
-#else
-        return CountOnes64(n);
 #endif
     }
 
@@ -167,12 +154,6 @@ inline int Bits::FindLSBSetNonZero64(uint64 n) {
 
 inline int Bits::CountOnesInByte(unsigned char n) {
     return num_bits[n];
-}
-
-inline uint8 Bits::ReverseBits8(unsigned char n) {
-    n = ((n >> 1) & 0x55) | ((n & 0x55) << 1);
-    n = ((n >> 2) & 0x33) | ((n & 0x33) << 2);
-    return ((n >> 4) & 0x0f) | ((n & 0x0f) << 4);
 }
 
 inline uint32 Bits::ReverseBits32(uint32 n) {

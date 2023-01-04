@@ -256,7 +256,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk_ptr->num_rows();
             _selection.resize(nrows);
-            _not_push_down_predicates.evaluate(chunk_ptr, _selection.data(), 0, nrows);
+            _not_push_down_predicates.evaluate(chunk_ptr, _selection.data(), 0, static_cast<uint16_t>(nrows));
             chunk_ptr->filter(_selection);
             DCHECK_CHUNK(chunk_ptr);
         }
@@ -292,7 +292,7 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
         auto iter = global_dict_map.find(slot->id());
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
-            int32_t index = _tablet_schema->field_index(slot->col_name());
+            int32_t index = static_cast<int32_t>(_tablet_schema->field_index(slot->col_name()));
             DCHECK(index >= 0);
             global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
         }
@@ -303,7 +303,7 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
 
 Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
-        int32_t index = _tablet_schema->field_index(col_name);
+        int32_t index = static_cast<int32_t>(_tablet_schema->field_index(col_name));
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
@@ -319,7 +319,7 @@ Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>
 Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
-        int32_t index = _tablet_schema->field_index(slot->col_name());
+        int32_t index = static_cast<int32_t>(_tablet_schema->field_index(slot->col_name()));
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -343,7 +343,7 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
 void LakeDataSource::decide_chunk_size(bool has_predicate) {
     if (!has_predicate && _read_limit != -1 && _read_limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
-        _params.chunk_size = _read_limit;
+        _params.chunk_size = static_cast<int>(_read_limit);
     } else {
         _params.chunk_size = _runtime_state->chunk_size();
     }
@@ -402,7 +402,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         reader_columns = scanner_columns;
     } else {
         for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
-            reader_columns.push_back(i);
+            reader_columns.push_back(static_cast<uint32_t>(i));
         }
         for (auto index : scanner_columns) {
             if (!_tablet_schema->column(index).is_key()) {
@@ -459,7 +459,7 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state));
 
     int scanners_per_tablet = 64;
-    int num_ranges = _key_ranges.size();
+    int num_ranges = static_cast<int>(_key_ranges.size());
     int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
     for (int i = 0; i < num_ranges;) {
         _scanner_ranges.push_back(_key_ranges[i].get());

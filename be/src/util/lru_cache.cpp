@@ -23,7 +23,7 @@ uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
     const uint32_t m = 0xc6a4a793;
     const uint32_t r = 24;
     const char* limit = data + n;
-    uint32_t h = seed ^ (n * m);
+    uint32_t h = static_cast<uint32_t>(seed ^ (n * m));
 
     // Pick up four bytes at a time
     while (data + 4 <= limit) {
@@ -384,7 +384,7 @@ int LRUCache::prune() {
     for (auto entry : last_ref_list) {
         entry->free();
     }
-    return last_ref_list.size();
+    return static_cast<int>(last_ref_list.size());
 }
 
 inline uint32_t ShardedLRUCache::_hash_slice(const CacheKey& s) {

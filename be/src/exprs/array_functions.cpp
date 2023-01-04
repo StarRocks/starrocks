@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/array_functions.h"
 
 #include "column/array_column.h"
@@ -1200,3 +1203,5 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

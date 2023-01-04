@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "column/type_traits.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
@@ -177,7 +180,7 @@ struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatLTGuard<Type>> {
         if (UNLIKELY(result == -0)) {
             return 0;
         }
-        return result;
+        return static_cast<ReturnType<Type, ResultType>>(result);
     }
 };
 
@@ -426,3 +429,5 @@ struct ArithmeticRightZeroCheck<TYPE_DECIMALV2, guard::Guard> {
     }
 };
 } //namespace starrocks
+
+#pragma GCC diagnostic pop

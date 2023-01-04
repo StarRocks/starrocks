@@ -14,6 +14,8 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
 #include <fmt/format.h>
 
 #include <cmath>
@@ -172,7 +174,7 @@ public:
         T frac_part = abs_value % scale_factor;
 
         auto end = fmt::format_to(str_decimal + len, "{}", int_part);
-        len = end - str_decimal;
+        len = static_cast<int>(end - str_decimal);
 
         int low_scale = 0;
         int high_scale = scale;
@@ -197,7 +199,7 @@ public:
             }
             if (frac_part) {
                 end = fmt::format_to(str_decimal + len, "{}", frac_part);
-                len = end - str_decimal;
+                len = static_cast<int>(end - str_decimal);
             }
         }
 
@@ -213,7 +215,7 @@ public:
     template <typename From, typename To>
     static inline bool from_float(FloatType<From> value, DecimalType<To> const& scale_factor,
                                   DecimalType<To>* dec_value) {
-        *dec_value = static_cast<To>(scale_factor * static_cast<double>(value));
+        *dec_value = static_cast<To>(static_cast<double>(scale_factor) * static_cast<double>(value));
         if constexpr (is_decimal32<To> || is_decimal64<To>) {
             // Depending on the compiler implement, std::numeric_limits<T>::max() or std::numeric_limits<T>::max() both could be returned,
             // when overflow is happenning in casting.
@@ -396,3 +398,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

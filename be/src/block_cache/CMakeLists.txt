@@ -20,3 +20,5 @@ link_directories(${CACHELIB_DIR}/deps/lib64)
 
 include_directories(AFTER ${CACHELIB_DIR}/include)
 include_directories(AFTER ${CACHELIB_DIR}/deps/include)
+
+set_target_properties(BlockCache PROPERTIES COMPILE_FLAGS "-Wconversion")

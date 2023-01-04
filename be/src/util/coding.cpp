@@ -15,25 +15,25 @@ uint8_t* encode_varint32(uint8_t* dst, uint32_t v) {
     // Operate on characters as unsigneds
     static const int B = 128;
     if (v < (1 << 7)) {
-        *(dst++) = v;
+        *(dst++) = static_cast<uint8_t>(v);
     } else if (v < (1 << 14)) {
-        *(dst++) = v | B;
-        *(dst++) = v >> 7;
+        *(dst++) = static_cast<uint8_t>(v | B);
+        *(dst++) = static_cast<uint8_t>(v >> 7);
     } else if (v < (1 << 21)) {
-        *(dst++) = v | B;
-        *(dst++) = (v >> 7) | B;
-        *(dst++) = v >> 14;
+        *(dst++) = static_cast<uint8_t>(v | B);
+        *(dst++) = static_cast<uint8_t>((v >> 7) | B);
+        *(dst++) = static_cast<uint8_t>(v >> 14);
     } else if (v < (1 << 28)) {
-        *(dst++) = v | B;
-        *(dst++) = (v >> 7) | B;
-        *(dst++) = (v >> 14) | B;
-        *(dst++) = v >> 21;
+        *(dst++) = static_cast<uint8_t>(v | B);
+        *(dst++) = static_cast<uint8_t>((v >> 7) | B);
+        *(dst++) = static_cast<uint8_t>((v >> 14) | B);
+        *(dst++) = static_cast<uint8_t>(v >> 21);
     } else {
-        *(dst++) = v | B;
-        *(dst++) = (v >> 7) | B;
-        *(dst++) = (v >> 14) | B;
-        *(dst++) = (v >> 21) | B;
-        *(dst++) = v >> 28;
+        *(dst++) = static_cast<uint8_t>(v | B);
+        *(dst++) = static_cast<uint8_t>((v >> 7) | B);
+        *(dst++) = static_cast<uint8_t>((v >> 14) | B);
+        *(dst++) = static_cast<uint8_t>((v >> 21) | B);
+        *(dst++) = static_cast<uint8_t>(v >> 28);
     }
     return dst;
 }

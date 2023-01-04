@@ -276,7 +276,7 @@ void RuntimeProfile::compute_time_in_profile(int64_t total) {
     int64_t local_time = total_time_counter()->value() - total_child_time;
     // Counters have some margin, set to 0 if it was negative.
     local_time = std::max<int64_t>(0, local_time);
-    _local_time_percent = static_cast<double>(local_time) / total;
+    _local_time_percent = static_cast<double>(local_time) / static_cast<double>(total);
     _local_time_percent = std::min(1.0, _local_time_percent) * 100;
 
     // Recurse on children
@@ -716,11 +716,11 @@ void RuntimeProfile::to_thrift(TRuntimeProfileTree* tree) {
 void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
     nodes->reserve(nodes->size() + _children.size());
 
-    int index = nodes->size();
+    int index = static_cast<int>(nodes->size());
     nodes->push_back(TRuntimeProfileNode());
     TRuntimeProfileNode& node = (*nodes)[index];
     node.name = _name;
-    node.num_children = _children.size();
+    node.num_children = static_cast<int32_t>(_children.size());
     node.metadata = _metadata;
     node.indent = true;
 
@@ -753,7 +753,7 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
     }
 
     for (auto& i : children) {
-        int child_idx = nodes->size();
+        int child_idx = static_cast<int>(nodes->size());
         i.first->to_thrift(nodes);
         // fix up indentation flag
         (*nodes)[child_idx].indent = i.second;
@@ -770,7 +770,7 @@ int64_t RuntimeProfile::units_per_second(const RuntimeProfile::Counter* total_co
     }
 
     double secs = static_cast<double>(timer->value()) / 1000.0 / 1000.0 / 1000.0;
-    return total_counter->value() / secs;
+    return static_cast<int64_t>(static_cast<double>(total_counter->value()) / secs);
 }
 
 [[maybe_unused]] int64_t RuntimeProfile::counter_sum(const std::vector<Counter*>* counters) {

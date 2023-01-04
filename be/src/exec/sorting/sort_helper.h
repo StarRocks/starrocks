@@ -68,7 +68,7 @@ struct SorterComparator<TimestampValue> {
     static int compare(TimestampValue lhs, TimestampValue rhs) {
         auto x = lhs.timestamp() - rhs.timestamp();
         if (x == 0) {
-            return x;
+            return 0;
         } else {
             return x > 0 ? 1 : -1;
         }
@@ -257,7 +257,7 @@ static inline int compare_chunk_row(const SortDescs& desc, const Columns& lhs, c
     DCHECK_LE(desc.num_columns(), lhs.size());
     DCHECK_LE(desc.num_columns(), rhs.size());
 
-    int num_columns = desc.num_columns();
+    auto num_columns = static_cast<int>(desc.num_columns());
     for (int i = 0; i < num_columns; i++) {
         auto& lhs_column = lhs[i];
         auto& rhs_column = rhs[i];

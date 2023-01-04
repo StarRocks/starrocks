@@ -72,8 +72,3 @@ HASH_TO((uint64 c), static_cast<uint32>(Hash64NumWithSeed(c, MIX64) >> 32))
 HASH_TO((int64 c), static_cast<uint32>(Hash64NumWithSeed(c, MIX64) >> 32))
 
 #undef HASH_TO // clean up the macro space
-
-inline uint16 HashTo16(const char* s, uint32 slen) {
-    uint16 retval = Hash32StringWithSeed(s, slen, MIX32) >> 16;
-    return retval == kIllegalHash16 ? static_cast<uint16>(retval - 1) : retval;
-}

@@ -56,10 +56,11 @@
 namespace starrocks {
 
 // Utility class to compute hash values.
+// For unity and compatibility, length uses int32_t
 class HashUtil {
 public:
     static uint32_t zlib_crc_hash(const void* data, int32_t bytes, uint32_t hash) {
-        return crc32(hash, (const unsigned char*)data, bytes);
+        return static_cast<uint32_t>(crc32(hash, (const unsigned char*)data, bytes));
     }
 #ifdef __SSE4_2__
     // Compute the Crc32 hash for data using SSE4 instructions.  The input hash parameter is
@@ -75,7 +76,7 @@ public:
         if (!CpuInfo::is_supported(CpuInfo::SSE4_2)) {
             return zlib_crc_hash(data, bytes, hash);
         }
-        uint32_t words = bytes / sizeof(uint32_t);
+        uint32_t words = static_cast<uint32_t>(bytes / sizeof(uint32_t));
         bytes = bytes % sizeof(uint32_t);
 
         const uint32_t* p = reinterpret_cast<const uint32_t*>(data);
@@ -99,10 +100,10 @@ public:
     }
 
     static uint64_t crc_hash64(const void* data, int32_t bytes, uint64_t hash) {
-        uint32_t words = bytes / sizeof(uint32_t);
+        uint32_t words = static_cast<uint32_t>(bytes / sizeof(uint32_t));
         bytes = bytes % sizeof(uint32_t);
 
-        uint32_t h1 = hash >> 32;
+        uint32_t h1 = static_cast<uint32_t>(hash >> 32);
         uint32_t h2 = (hash << 32) >> 32;
 
         const uint32_t* p = reinterpret_cast<const uint32_t*>(data);
@@ -132,7 +133,9 @@ public:
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
     static const uint32_t MURMUR3_32_SEED = 104729;
 
-    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) { return (x << r) | (x >> (32 - r)); }
+    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) {
+        return (x << r) | (x >> (32 - r));
+    }
 
     ALWAYS_INLINE static uint32_t fmix32(uint32_t h) {
         h ^= h >> 16;
@@ -145,14 +148,14 @@ public:
 
     // modify from https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.cpp
     static uint32_t murmur_hash3_32(const void* key, int32_t len, uint32_t seed) {
-        const uint8_t* data = (const uint8_t*)key;
+        const auto* data = (const uint8_t*)key;
         const int nblocks = len / 4;
 
         uint32_t h1 = seed;
 
         const uint32_t c1 = 0xcc9e2d51;
         const uint32_t c2 = 0x1b873593;
-        const uint32_t* blocks = (const uint32_t*)(data + nblocks * 4);
+        const auto* blocks = (const uint32_t*)(data + nblocks * 4);
 
         for (int i = -nblocks; i; i++) {
             uint32_t k1 = blocks[i];
@@ -166,7 +169,7 @@ public:
             h1 = h1 * 5 + 0xe6546b64;
         }
 
-        const uint8_t* tail = (const uint8_t*)(data + nblocks * 4);
+        const auto* tail = (const uint8_t*)(data + nblocks * 4);
         uint32_t k1 = 0;
         switch (len & 3) {
         case 3:
@@ -179,7 +182,7 @@ public:
             k1 = rotl32(k1, 15);
             k1 *= c2;
             h1 ^= k1;
-        };
+        }
 
         h1 ^= len;
         h1 = fmix32(h1);
@@ -198,7 +201,7 @@ public:
     // is taken on the hash, all values will collide to the same bucket.
     // For string values, Fnv is slightly faster than boost.
     static uint32_t fnv_hash(const void* data, int32_t bytes, uint32_t hash) {
-        const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
+        const auto* ptr = reinterpret_cast<const uint8_t*>(data);
 
         while (bytes--) {
             hash = (*ptr ^ hash) * FNV_PRIME;
@@ -215,7 +218,7 @@ public:
         const uint64_t m = MURMUR_PRIME;
         const int r = 47;
         uint64_t h = seed ^ (len * m);
-        const uint8_t* data = (const uint8_t*)key;
+        const auto* data = (const uint8_t*)key;
         const uint8_t* end = data + (len - (len & 7));
 
         while (data != end) {
@@ -257,7 +260,7 @@ public:
         case 1:
             h ^= (uint64_t)data[0];
             h *= m;
-        };
+        }
 
         h ^= h >> r;
         h *= m;
@@ -335,7 +338,7 @@ struct ModuloOp {
 // mapping l to the range [0, r]
 // we weed to ensure that l is randomly and uniformly distributed in [0, 2^32]
 struct ReduceOp {
-    uint32_t operator()(uint32_t l, uint32_t r) { return ((uint64_t)l * (uint64_t)r) >> 32; }
+    uint32_t operator()(uint32_t l, uint32_t r) { return static_cast<uint32_t>(((uint64_t)l * (uint64_t)r) >> 32); }
 };
 
 } // namespace starrocks
@@ -344,7 +347,7 @@ namespace std {
 template <>
 struct hash<starrocks::TUniqueId> {
     std::size_t operator()(const starrocks::TUniqueId& id) const {
-        std::size_t seed = 0;
+        uint32_t seed = 0;
         seed = starrocks::HashUtil::hash(&id.lo, sizeof(id.lo), seed);
         seed = starrocks::HashUtil::hash(&id.hi, sizeof(id.hi), seed);
         return seed;
@@ -354,8 +357,8 @@ struct hash<starrocks::TUniqueId> {
 template <>
 struct hash<starrocks::TNetworkAddress> {
     size_t operator()(const starrocks::TNetworkAddress& address) const {
-        std::size_t seed = 0;
-        seed = starrocks::HashUtil::hash(address.hostname.data(), address.hostname.size(), seed);
+        uint32_t seed = 0;
+        seed = starrocks::HashUtil::hash(address.hostname.data(), static_cast<int32_t>(address.hostname.size()), seed);
         seed = starrocks::HashUtil::hash(&address.port, 4, seed);
         return seed;
     }
@@ -389,7 +392,7 @@ struct hash<starrocks::decimal12_t> {
 template <>
 struct hash<std::pair<starrocks::TUniqueId, int64_t>> {
     size_t operator()(const std::pair<starrocks::TUniqueId, int64_t>& pair) const {
-        size_t seed = 0;
+        uint32_t seed = 0;
         seed = starrocks::HashUtil::hash(&pair.first.lo, sizeof(pair.first.lo), seed);
         seed = starrocks::HashUtil::hash(&pair.first.hi, sizeof(pair.first.hi), seed);
         seed = starrocks::HashUtil::hash(&pair.second, sizeof(pair.second), seed);

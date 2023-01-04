@@ -387,7 +387,7 @@ int SortedRun::compare_row(const SortDescs& desc, const SortedRun& rhs, size_t l
 }
 
 int SortedRun::debug_dump() const {
-    for (int i = start_index(); i < end_index(); i++) {
+    for (size_t i = start_index(); i < end_index(); i++) {
         LOG(INFO) << fmt::format("row {}: {}", i, chunk->debug_row(i));
     }
     return 0;

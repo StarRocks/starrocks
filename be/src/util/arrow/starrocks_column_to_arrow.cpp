@@ -97,8 +97,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
         } else {
             static_assert(lt_is_decimalv2<LT> || lt_is_decimal<LT>, "Illegal LogicalType");
         }
-        int64_t high = value >> 64;
-        uint64_t low = value;
+        int64_t high = static_cast<int64_t>(value >> 64);
+        uint64_t low = static_cast<int64_t>(value);
         return {high, low};
     }
 
@@ -304,7 +304,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
         return Status::InvalidArgument("number fields not match");
     }
 
-    int result_num_column = _output_expr_ctxs.size();
+    int result_num_column = static_cast<int>(_output_expr_ctxs.size());
     std::vector<std::shared_ptr<arrow::Array>> arrays(result_num_column);
 
     for (auto i = 0; i < result_num_column; ++i) {

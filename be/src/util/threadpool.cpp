@@ -120,7 +120,7 @@ void ThreadPoolToken::shutdown() {
     // the ThreadPool. The task's destructors may acquire locks, etc, so this
     // also prevents lock inversions.
     PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> to_release = std::move(_entries);
-    _pool->_total_queued_tasks -= to_release.size();
+    _pool->_total_queued_tasks -= static_cast<int>(to_release.size());
 
     switch (state()) {
     case State::IDLE:

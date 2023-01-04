@@ -106,7 +106,7 @@ static bool inline is_physical_signed(Type::type type) {
 
 static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output, size_t array_start_idx,
                                        size_t num_elements) {
-    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
+    for (int i = static_cast<int>(array_start_idx); i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_list(array, i, &builder));
         JsonValue json(builder.slice());
@@ -117,7 +117,7 @@ static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* outpu
 
 static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* output, size_t array_start_idx,
                                          size_t num_elements) {
-    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
+    for (int i = static_cast<int>(array_start_idx); i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_struct(array, i, &builder));
         JsonValue json(builder.slice());
@@ -128,7 +128,7 @@ static Status convert_multi_arrow_struct(const StructArray* array, JsonColumn* o
 
 static Status convert_multi_arrow_map(const MapArray* array, JsonColumn* output, size_t array_start_idx,
                                       size_t num_elements) {
-    for (int i = array_start_idx; i < array_start_idx + num_elements; i++) {
+    for (int i = static_cast<int>(array_start_idx); i < array_start_idx + num_elements; i++) {
         vpack::Builder builder;
         RETURN_IF_ERROR(convert_single_arrow_map(array, i, &builder));
         JsonValue json(builder.slice());
@@ -141,25 +141,25 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
                                             size_t num_elements) {
     auto type_id = array->type_id();
 
-#define M(type)                                                                  \
-    case type: {                                                                 \
-        using TypeClass = TypeIdTraits<type>::Type;                              \
-        using ArrayType = TypeTraits<TypeClass>::ArrayType;                      \
-        auto real_array = down_cast<const ArrayType*>(array);                    \
-        for (int i = array_start_idx; i < array_start_idx + num_elements; i++) { \
-            vpack::Builder builder;                                              \
-            if (is_physical_signed(type)) {                                      \
-                JsonValue json = JsonValue::from_int(real_array->Value(i));      \
-                output->append(std::move(json));                                 \
-            } else if (arrow::is_unsigned_integer(type)) {                       \
-                JsonValue json = JsonValue::from_uint(real_array->Value(i));     \
-                output->append(std::move(json));                                 \
-            } else if (is_floating(type)) {                                      \
-                JsonValue json = JsonValue::from_double(real_array->Value(i));   \
-                output->append(std::move(json));                                 \
-            }                                                                    \
-        }                                                                        \
-        break;                                                                   \
+#define M(type)                                                                                     \
+    case type: {                                                                                    \
+        using TypeClass = TypeIdTraits<type>::Type;                                                 \
+        using ArrayType = TypeTraits<TypeClass>::ArrayType;                                         \
+        auto real_array = down_cast<const ArrayType*>(array);                                       \
+        for (int i = static_cast<int>(array_start_idx); i < array_start_idx + num_elements; i++) {  \
+            vpack::Builder builder;                                                                 \
+            if (is_physical_signed(type)) {                                                         \
+                JsonValue json = JsonValue::from_int(static_cast<int64_t>(real_array->Value(i)));   \
+                output->append(std::move(json));                                                    \
+            } else if (arrow::is_unsigned_integer(type)) {                                          \
+                JsonValue json = JsonValue::from_uint(static_cast<uint64_t>(real_array->Value(i))); \
+                output->append(std::move(json));                                                    \
+            } else if (is_floating(type)) {                                                         \
+                JsonValue json = JsonValue::from_double(static_cast<double>(real_array->Value(i))); \
+                output->append(std::move(json));                                                    \
+            }                                                                                       \
+        }                                                                                           \
+        break;                                                                                      \
     }
 
     switch (type_id) {

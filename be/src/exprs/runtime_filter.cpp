@@ -19,9 +19,9 @@ namespace starrocks {
 
 void SimdBlockFilter::init(size_t nums) {
     nums = std::max(1UL, nums);
-    int log_heap_space = std::ceil(std::log2(nums));
+    int log_heap_space = static_cast<int>(std::ceil(std::log2(nums)));
     _log_num_buckets = std::max(1, log_heap_space - LOG_BUCKET_BYTE_SIZE);
-    _directory_mask = (1ull << std::min(63, _log_num_buckets)) - 1;
+    _directory_mask = static_cast<uint32_t>((1ull << std::min(63, _log_num_buckets)) - 1);
     const size_t alloc_size = get_alloc_size();
     const int malloc_failed = posix_memalign(reinterpret_cast<void**>(&_directory), 64, alloc_size);
     if (malloc_failed) throw ::std::bad_alloc();
@@ -50,7 +50,7 @@ size_t SimdBlockFilter::serialize(uint8_t* data) const {
     SIMD_BF_COPY_FIELD(_directory_mask);
 
     const size_t alloc_size = get_alloc_size();
-    int32_t data_size = alloc_size;
+    int32_t data_size = static_cast<int32_t>(alloc_size);
     SIMD_BF_COPY_FIELD(data_size);
     memcpy(data + offset, _directory, data_size);
     offset += data_size;

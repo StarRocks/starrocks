@@ -596,7 +596,7 @@ void SystemMetrics::_update_snmp_metrics() {
 
     // We only care about Tcp lines, so skip other lines in front of Tcp line
     int res;
-    while ((res = getline(&_line_ptr, &_line_buf_size, fp)) > 0) {
+    while ((res = static_cast<int>(getline(&_line_ptr, &_line_buf_size, fp))) > 0) {
         if (strstr(_line_ptr, "Tcp") != nullptr) {
             break;
         }

@@ -193,7 +193,7 @@ public:
     ShardByLengthMutableIndex() = default;
 
     ShardByLengthMutableIndex(const size_t key_size, const std::string& path) // NOLINT
-            : _fixed_key_size(key_size), _path(path) {}
+            : _fixed_key_size(static_cast<uint32_t>(key_size)), _path(path) {}
 
     ~ShardByLengthMutableIndex() {
         if (_index_file) {

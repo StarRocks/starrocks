@@ -24,6 +24,8 @@ add_library(Common STATIC
   tracer.cpp
 )
 
+set_target_properties(Common PROPERTIES COMPILE_FLAGS "-Wconversion")
+
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     target_sources(Common PRIVATE minidump.cpp)
 endif()

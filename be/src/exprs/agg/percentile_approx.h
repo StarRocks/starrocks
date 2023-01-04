@@ -51,7 +51,7 @@ public:
         DCHECK(!columns[1]->only_null());
         DCHECK(!columns[1]->is_null(0));
 
-        data(state).percentile->add(implicit_cast<float>(column_value));
+        data(state).percentile->add(static_cast<float>(column_value));
         data(state).targetQuantile = columns[1]->get(0).get_double();
         data(state).is_null = false;
     }
@@ -139,17 +139,17 @@ public:
             if (src[0]->is_null(i)) {
                 auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
                 dst_nullable_column->set_has_null(true);
-                result->get_offset()[i + 1] = old_size;
+                result->get_offset()[i + 1] = static_cast<uint32_t>(old_size);
             } else {
                 PercentileValue percentile;
-                percentile.add(input->get_data()[i]);
+                percentile.add(static_cast<float>(input->get_data()[i]));
 
                 size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
                 bytes.resize(new_size);
                 memcpy(bytes.data() + old_size, &quantile, sizeof(double));
                 percentile.serialize(bytes.data() + old_size + sizeof(double));
 
-                result->get_offset()[i + 1] = new_size;
+                result->get_offset()[i + 1] = static_cast<uint32_t>(new_size);
                 old_size = new_size;
             }
         }
@@ -163,7 +163,7 @@ public:
                 return;
             }
 
-            double result = data(state).percentile->quantile(data(state).targetQuantile);
+            double result = data(state).percentile->quantile(static_cast<float>(data(state).targetQuantile));
             (void)nullable_column->data_column()->append_numbers(&result, sizeof(result));
             nullable_column->null_column_data().push_back(0);
         } else {
@@ -172,7 +172,7 @@ public:
                 return;
             }
 
-            double result = data(state).percentile->quantile(data(state).targetQuantile);
+            double result = data(state).percentile->quantile(static_cast<float>(data(state).targetQuantile));
             data_column->append_numbers(&result, sizeof(result));
         }
     }

@@ -118,7 +118,7 @@ struct TieIterator {
     int range_first;
     int range_last;
 
-    TieIterator(const Tie& tie) : TieIterator(tie, 0, tie.size()) {}
+    TieIterator(const Tie& tie) : TieIterator(tie, 0, static_cast<int>(tie.size())) {}
 
     TieIterator(const Tie& tie, int begin, int end) : tie(tie), begin(begin), end(end) {
         range_first = begin;

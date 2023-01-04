@@ -78,7 +78,7 @@ void DiskInfo::get_device_names() {
 
         if (it == _s_disk_name_to_disk_id.end()) {
             // First time seeing this disk
-            disk_id = _s_disks.size();
+            disk_id = static_cast<int>(_s_disks.size());
             _s_disks.emplace_back(name, disk_id);
             _s_disk_name_to_disk_id[name] = disk_id;
         } else {

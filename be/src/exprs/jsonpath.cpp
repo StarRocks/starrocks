@@ -88,7 +88,7 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
         return Status::OK();
     } else if (ArraySelectorSingle::match(index)) {
         StringParser::ParseResult result;
-        int index_int = StringParser::string_to_int<int>(index.c_str(), index.length(), &result);
+        int index_int = StringParser::string_to_int<int>(index.c_str(), static_cast<int>(index.length()), &result);
         if (result != StringParser::PARSE_SUCCESS) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
         }
@@ -104,11 +104,11 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
         }
 
         StringParser::ParseResult result;
-        int left = StringParser::string_to_int<int>(slices[0].c_str(), slices[0].length(), &result);
+        int left = StringParser::string_to_int<int>(slices[0].c_str(), static_cast<int>(slices[0].length()), &result);
         if (result != StringParser::PARSE_SUCCESS) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
         }
-        int right = StringParser::string_to_int<int>(slices[1].c_str(), slices[1].length(), &result);
+        int right = StringParser::string_to_int<int>(slices[1].c_str(), static_cast<int>(slices[1].length()), &result);
         if (result != StringParser::PARSE_SUCCESS) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
         }

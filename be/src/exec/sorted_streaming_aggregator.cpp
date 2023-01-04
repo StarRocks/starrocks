@@ -97,7 +97,7 @@ public:
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         size_t num_rows = column.size();
         if (!_first_column->empty()) {
-            _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
+            _cmp_vector[0] |= static_cast<uint8_t>(_first_column->compare_at(0, 0, column, 1) != 0);
         } else {
             _cmp_vector[0] |= 1;
         }

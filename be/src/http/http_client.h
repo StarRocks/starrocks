@@ -93,7 +93,7 @@ public:
     int64_t get_content_length() const {
         double cl = 0.0f;
         curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-        return cl;
+        return static_cast<int64_t>(cl);
     }
 
     long get_http_status() const {

@@ -60,7 +60,7 @@ inline unsigned __int128 gbswap_128(unsigned __int128 host_int) {
 
 // Swap bytes of a 24-bit value.
 inline uint32_t bswap_24(uint32_t x) {
-    return ((x & 0x0000ffULL) << 16) | ((x & 0x00ff00ULL)) | ((x & 0xff0000ULL) >> 16);
+    return static_cast<uint32_t>(((x & 0x0000ffULL) << 16) | ((x & 0x00ff00ULL)) | ((x & 0xff0000ULL) >> 16));
 }
 
 #ifdef IS_LITTLE_ENDIAN
@@ -100,17 +100,6 @@ inline uint64 ghtonll(uint64 x) {
 #error "Unsupported bytesex: Either IS_BIG_ENDIAN or IS_LITTLE_ENDIAN must be defined"  // NOLINT
 #endif // bytesex
 
-// ntoh* and hton* are the same thing for any size and bytesex,
-// since the function is an involution, i.e., its own inverse.
-inline uint16 gntohl(uint16 x) {
-    return ghtonl(x);
-}
-inline uint32 gntohs(uint32 x) {
-    return ghtons(x);
-}
-inline uint64 gntohll(uint64 x) {
-    return ghtonll(x);
-}
 #if !defined(__APPLE__)
 // This one is safe to take as it's an extension
 inline uint64 htonll(uint64 x) {
@@ -223,21 +212,6 @@ public:
             return uint128(Load64VariableLength(static_cast<const char*>(p) + 8, len - 8), Load64(p));
         }
     }
-
-    // Load & Store in machine's word size.
-    static uword_t LoadUnsignedWord(const void* p) {
-        if (sizeof(uword_t) == 8)
-            return Load64(p);
-        else
-            return Load32(p);
-    }
-
-    static void StoreUnsignedWord(void* p, uword_t v) {
-        if (sizeof(v) == 8)
-            Store64(p, v);
-        else
-            Store32(p, v);
-    }
 };
 
 // Utilities to convert numbers between the current hosts's native byte
@@ -346,21 +320,6 @@ public:
         } else {
             return uint128(Load64VariableLength(p, len - 8), Load64(static_cast<const char*>(p) + 8));
         }
-    }
-
-    // Load & Store in machine's word size.
-    static uword_t LoadUnsignedWord(const void* p) {
-        if (sizeof(uword_t) == 8)
-            return Load64(p);
-        else
-            return Load32(p);
-    }
-
-    static void StoreUnsignedWord(void* p, uword_t v) {
-        if (sizeof(uword_t) == 8)
-            Store64(p, v);
-        else
-            Store32(p, v);
     }
 }; // BigEndian
 

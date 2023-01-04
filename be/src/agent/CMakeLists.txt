@@ -30,3 +30,5 @@ add_library(Agent STATIC
         agent_task.cpp
         task_singatures_manager.cpp
         )
+
+set_target_properties(Agent PROPERTIES COMPILE_FLAGS "-Wconversion")

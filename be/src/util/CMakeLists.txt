@@ -101,3 +101,4 @@ add_library(Util STATIC
     ${UTIL_FILES}
 )
 
+set_target_properties(Util PROPERTIES COMPILE_FLAGS "-Wconversion")

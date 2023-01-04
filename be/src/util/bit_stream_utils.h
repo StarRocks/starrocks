@@ -204,7 +204,7 @@ public:
 
 private:
     /// Returns the number of bytes left in the stream.
-    int _bytes_left() { return _buffer_end - _buffer_pos; }
+    int _bytes_left() { return static_cast<int>(_buffer_end - _buffer_pos); }
 
     /// Maximum byte length of a vlq encoded integer of type T.
     template <typename T>

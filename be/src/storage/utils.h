@@ -68,7 +68,7 @@ public:
         return (uint64_t)((now.tv_sec - _begin_time.tv_sec) * 1000000 + (now.tv_usec - _begin_time.tv_usec));
     }
 
-    double get_elapse_second() { return get_elapse_time_us() / 1000000.0; }
+    double get_elapse_second() { return static_cast<double>(get_elapse_time_us()) / 1000000.0; }
 
     void reset() { gettimeofday(&_begin_time, nullptr); }
 

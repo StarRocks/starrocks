@@ -37,7 +37,7 @@ public:
     Status fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line_eos);
 
     const std::string& get_scroll_id() { return _scroll_id; }
-    int get_size() { return _size; }
+    int get_size() { return static_cast<int>(_size); }
     bool current_eos() { return _cur_line == _size; }
 
     void set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context);

@@ -93,7 +93,7 @@ public:
     void set_unique_id(ColumnUID unique_id) { _unique_id = unique_id; }
 
     std::string_view name() const { return {_col_name.data(), _col_name.size()}; }
-    void set_name(std::string_view name) { _col_name.assign(name.data(), name.size()); }
+    void set_name(std::string_view name) { _col_name.assign(name.data(), static_cast<uint16_t>(name.size())); }
 
     LogicalType type() const { return _type; }
     void set_type(LogicalType type) { _type = type; }
@@ -145,7 +145,9 @@ public:
 
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
-    uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
+    uint32_t subcolumn_count() const {
+        return static_cast<uint32_t>(_extra_fields ? _extra_fields->sub_columns.size() : 0);
+    }
     const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
 
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
@@ -183,9 +185,9 @@ private:
     void _set_flag(uint8_t pos, bool value) {
         assert(pos < sizeof(_flags) * 8);
         if (value) {
-            _flags |= (1 << pos);
+            _flags |= static_cast<uint8_t>(1 << pos);
         } else {
-            _flags &= ~(1 << pos);
+            _flags &= static_cast<uint8_t>(~(1 << pos));
         }
     }
 

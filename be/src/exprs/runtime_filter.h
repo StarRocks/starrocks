@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #pragma once
 
 #include "column/chunk.h"
@@ -44,9 +47,9 @@ public:
     void init(size_t nums);
 
     void insert_hash(const uint64_t hash) noexcept {
-        const uint32_t bucket_idx = hash & _directory_mask;
+        const uint32_t bucket_idx = static_cast<const uint32_t>(hash & _directory_mask);
 #ifdef __AVX2__
-        const __m256i mask = make_mask(hash >> _log_num_buckets);
+        const __m256i mask = make_mask(static_cast<uint32_t>(hash >> _log_num_buckets));
         __m256i* const bucket = &reinterpret_cast<__m256i*>(_directory)[bucket_idx];
         _mm256_store_si256(bucket, _mm256_or_si256(*bucket, mask));
 #else
@@ -59,9 +62,9 @@ public:
     }
 
     bool test_hash(const uint64_t hash) const noexcept {
-        const uint32_t bucket_idx = hash & _directory_mask;
+        const uint32_t bucket_idx = static_cast<const uint32_t>(hash & _directory_mask);
 #ifdef __AVX2__
-        const __m256i mask = make_mask(hash >> _log_num_buckets);
+        const __m256i mask = make_mask(static_cast<uint32_t>(hash >> _log_num_buckets));
         const __m256i bucket = reinterpret_cast<__m256i*>(_directory)[bucket_idx];
         // We should return true if 'bucket' has a one wherever 'mask' does. _mm256_testc_si256
         // takes the negation of its first argument and ands that with its second argument. In
@@ -756,3 +759,5 @@ private:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

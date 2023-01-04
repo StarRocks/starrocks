@@ -69,12 +69,13 @@ struct UDFFunctionCallHelper {
         auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
         // convert input columns to object columns
         std::vector<jobject> input_col_objs;
-        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
-                                                                &input_col_objs);
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols,
+                                                                static_cast<int>(size), &input_col_objs);
         RETURN_IF_UNLIKELY(!st.ok(), ColumnHelper::create_const_null_column(size));
 
         // call UDF method
-        jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
+        jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(),
+                                        static_cast<int>(input_col_objs.size()), static_cast<int>(size));
         RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
@@ -89,7 +90,7 @@ struct UDFFunctionCallHelper {
         DCHECK(call_desc->method_desc[0].is_box);
         TypeDescriptor type_desc(call_desc->method_desc[0].type);
         auto res = ColumnHelper::create_column(type_desc, true);
-        helper.get_result_from_boxed_array(ctx, type_desc.type, res.get(), result, num_rows);
+        helper.get_result_from_boxed_array(ctx, type_desc.type, res.get(), result, static_cast<int>(num_rows));
         down_cast<NullableColumn*>(res.get())->update_has_null();
         return res;
     }

@@ -181,7 +181,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
     auto slots = _tuple_desc->slots();
     // TODO: we could fill chunk by column rather than row
     for (size_t i = 0; i < fill_sz; ++i) {
-        const rapidjson::Value& obj = _inner_hits_node[_cur_line + i];
+        const rapidjson::Value& obj = _inner_hits_node[static_cast<int>(_cur_line + i)];
         bool pure_doc_value = _is_pure_doc_value(obj);
         bool has_source = obj.HasMember(FIELD_SOURCE);
         bool has_fields = obj.HasMember(FIELD_FIELDS);
@@ -263,7 +263,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
             }
         }
     }
-    _cur_line += fill_sz;
+    _cur_line += static_cast<rapidjson::SizeType>(fill_sz);
     return Status::OK();
 }
 
@@ -424,7 +424,7 @@ Status ScrollParser::_append_int_val(const rapidjson::Value& col, Column* column
     StringParser::ParseResult result;
     const char* raw_str = col.GetString();
     size_t len = col.GetStringLength();
-    value = StringParser::string_to_int<T>(raw_str, len, &result);
+    value = StringParser::string_to_int<T>(raw_str, static_cast<int>(len), &result);
     RETURN_ERROR_IF_PARSING_FAILED(result, col, type);
 
     _append_data<type>(column, value);
@@ -464,7 +464,7 @@ Status ScrollParser::_append_float_val(const rapidjson::Value& col, Column* colu
     StringParser::ParseResult result;
     const char* raw_str = col.GetString();
     size_t len = col.GetStringLength();
-    value = StringParser::string_to_float<T>(raw_str, len, &result);
+    value = StringParser::string_to_float<T>(raw_str, static_cast<int>(len), &result);
     RETURN_ERROR_IF_PARSING_FAILED(result, col, type);
     _append_data<type>(column, value);
 
@@ -510,7 +510,7 @@ Status ScrollParser::_append_bool_val(const rapidjson::Value& col, Column* colum
     const char* raw_string = col.GetString();
     size_t val_size = col.GetStringLength();
     StringParser::ParseResult result;
-    value = StringParser::string_to_bool(raw_string, val_size, &result);
+    value = StringParser::string_to_bool(raw_string, static_cast<int>(val_size), &result);
     RETURN_ERROR_IF_PARSING_FAILED(result, col, type);
     _append_data<TYPE_BOOLEAN>(column, value);
 
@@ -554,7 +554,7 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
     }
 
     size_t new_size = elements->size();
-    offsets->append(new_size);
+    offsets->append(static_cast<uint32_t>(new_size));
     return Status::OK();
 }
 

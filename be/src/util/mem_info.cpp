@@ -81,7 +81,8 @@ void MemInfo::init() {
         }
 
         StringParser::ParseResult result;
-        auto mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
+        auto mem_total_kb =
+                StringParser::string_to_int<int64_t>(fields[1].data(), static_cast<int>(fields[1].size()), &result);
 
         if (result == StringParser::PARSE_SUCCESS) {
             // Entries in /proc/meminfo are in KB.
@@ -133,8 +134,8 @@ void MemInfo::set_memlimit_if_container() {
         if (!FileUtil::read_whole_content("/sys/fs/cgroup/memory/memory.limit_in_bytes", limit_in_bytes_str)) {
             return;
         }
-        _s_physical_mem =
-                StringParser::string_to_int<int64_t>(limit_in_bytes_str.data(), limit_in_bytes_str.size(), &result);
+        _s_physical_mem = StringParser::string_to_int<int64_t>(limit_in_bytes_str.data(),
+                                                               static_cast<int>(limit_in_bytes_str.size()), &result);
     } else if (fs.f_type == CGROUP2_SUPER_MAGIC) {
         // cgroup v2
         // Read from /sys/fs/cgroup/memory/memory.max
@@ -142,7 +143,8 @@ void MemInfo::set_memlimit_if_container() {
         if (!FileUtil::read_whole_content("/sys/fs/cgroup/memory.max", memory_max)) {
             return;
         }
-        _s_physical_mem = StringParser::string_to_int<int64_t>(memory_max.data(), memory_max.size(), &result);
+        _s_physical_mem =
+                StringParser::string_to_int<int64_t>(memory_max.data(), static_cast<int>(memory_max.size()), &result);
     }
 
     if (result != StringParser::PARSE_SUCCESS) {

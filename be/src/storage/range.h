@@ -259,7 +259,7 @@ inline uint32_t SparseRange::span_size() const {
     for (const auto& r : _ranges) {
         n += r.span_size();
     }
-    return n;
+    return static_cast<uint32_t>(n);
 }
 
 inline SparseRangeIterator SparseRange::new_iterator() const {
@@ -321,8 +321,8 @@ inline Range SparseRangeIterator::next(size_t size) {
     const std::vector<Range>& ranges = _range->_ranges;
     const Range& range = ranges[_index];
     size = std::min<size_t>(size, range.end() - _next_rowid);
-    Range ret(_next_rowid, _next_rowid + size);
-    _next_rowid += size;
+    Range ret(_next_rowid, static_cast<rowid_t>(_next_rowid + size));
+    _next_rowid += static_cast<rowid_t>(size);
     if (_next_rowid == range.end()) {
         ++_index;
         if (_index < ranges.size()) {
@@ -377,7 +377,7 @@ inline size_t SparseRangeIterator::covered_ranges(size_t size) const {
         return 0;
     }
     const std::vector<Range>& ranges = _range->_ranges;
-    rowid_t end = std::min<rowid_t>(_next_rowid + size, ranges.back().end());
+    rowid_t end = std::min<rowid_t>(static_cast<rowid_t>(_next_rowid + size), ranges.back().end());
     size_t i = _index;
     for (; ranges[i].end() < end; i++) {
     }
@@ -386,7 +386,7 @@ inline size_t SparseRangeIterator::covered_ranges(size_t size) const {
 }
 
 inline void SparseRangeIterator::skip(size_t size) {
-    _next_rowid += size;
+    _next_rowid += static_cast<rowid_t>(size);
     const std::vector<Range>& ranges = _range->_ranges;
     while (_index < ranges.size() && ranges[_index].end() <= _next_rowid) {
         _index++;

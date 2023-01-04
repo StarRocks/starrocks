@@ -887,13 +887,13 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE; \
     }
 
-#define RETURN_IF_CHUNK_FULL()                                   \
-    if (match_count > state->chunk_size()) {                     \
-        _probe_state->next[i] = _table_items->next[build_index]; \
-        _probe_state->cur_probe_index = i;                       \
-        _probe_state->has_remain = true;                         \
-        _probe_state->count = state->chunk_size();               \
-        return;                                                  \
+#define RETURN_IF_CHUNK_FULL()                                    \
+    if (match_count > state->chunk_size()) {                      \
+        _probe_state->next[i] = _table_items->next[build_index];  \
+        _probe_state->cur_probe_index = static_cast<uint32_t>(i); \
+        _probe_state->has_remain = true;                          \
+        _probe_state->count = state->chunk_size();                \
+        return;                                                   \
     }
 
 // When a probe row corresponds to multiple Build rows,
@@ -910,10 +910,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
         }                                                                              \
     }
 
-#define PROBE_OVER()                   \
-    _probe_state->has_remain = false;  \
-    _probe_state->cur_probe_index = 0; \
-    _probe_state->count = match_count; \
+#define PROBE_OVER()                                          \
+    _probe_state->has_remain = false;                         \
+    _probe_state->cur_probe_index = 0;                        \
+    _probe_state->count = static_cast<uint32_t>(match_count); \
     _probe_state->cur_row_match_count = 0;
 
 #define MATCH_RIGHT_TABLE_ROWS()                \

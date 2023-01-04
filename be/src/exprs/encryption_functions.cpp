@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "exprs/encryption_functions.h"
 
 #include "column/column_helper.h"
@@ -419,3 +422,5 @@ Status EncryptionFunctions::sha2_close(FunctionContext* context, FunctionContext
 }
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

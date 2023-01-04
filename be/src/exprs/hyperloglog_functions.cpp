@@ -55,7 +55,7 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_hash(FunctionContext* context, con
         HyperLogLog hll;
         if (!str_viewer.is_null(row)) {
             Slice s = str_viewer.value(row);
-            uint64_t hash = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
+            uint64_t hash = HashUtil::murmur_hash64A(s.data, static_cast<int32_t>(s.size), HashUtil::MURMUR_SEED);
             hll.update(hash);
         }
 

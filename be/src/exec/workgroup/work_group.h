@@ -134,7 +134,7 @@ public:
     int64_t version() const { return _version; }
     const std::string& name() const { return _name; }
     size_t cpu_limit() const { return _cpu_limit; }
-    size_t mem_limit() const { return _memory_limit; }
+    size_t mem_limit() const { return static_cast<size_t>(_memory_limit); }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
     bool is_sq_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
@@ -148,7 +148,7 @@ public:
 
     void incr_num_running_drivers();
     void decr_num_running_drivers();
-    int num_running_drivers() const { return _num_running_drivers; }
+    int num_running_drivers() const { return static_cast<int>(_num_running_drivers); }
 
     // mark the workgroup is deleted, but at the present, it can not be removed from WorkGroupManager, because
     // 1. there exists pending drivers

@@ -51,8 +51,8 @@ Status StringFunctions::split_prepare(FunctionContext* context, FunctionContext:
         Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(0));
         Slice delimiter = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
         std::vector<std::string> const_split_strings =
-                strings::Split(StringPiece(haystack.get_data(), haystack.get_size()),
-                               StringPiece(delimiter.get_data(), delimiter.get_size()));
+                strings::Split(StringPiece(haystack.get_data(), static_cast<int>(haystack.get_size())),
+                               StringPiece(delimiter.get_data(), static_cast<int>(delimiter.get_size())));
 
         state->const_split_strings = const_split_strings;
     } else if (context->is_notnull_constant_column(1)) {
@@ -109,7 +109,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             for (auto& i : split_string) {
                 array_binary_column->append(Slice(i.c_str()));
             }
-            offset += split_string.size();
+            offset += static_cast<int>(split_string.size());
         }
         array_offsets->append(offset);
 
@@ -131,7 +131,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
                     v.emplace_back(Slice(haystack.data + h, 1));
                 }
 
-                offset += haystack.size;
+                offset += static_cast<int>(haystack.size);
             }
             array_offsets->append(offset);
 
@@ -153,7 +153,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
                     if (pos != nullptr) {
                         array_binary_column->append(
                                 Slice(haystack.data + haystack_offset, pos - (haystack.data + haystack_offset)));
-                        haystack_offset = pos - haystack.data + delimiter.size;
+                        haystack_offset = static_cast<int32_t>(pos - haystack.data + delimiter.size);
                     } else {
                         array_binary_column->append(
                                 Slice(haystack.data + haystack_offset, haystack.size - haystack_offset));
@@ -192,12 +192,12 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             Slice str = string_viewer.value(row);
             Slice delimiter = delimiter_viewer.value(row);
             std::vector<std::string> split_string =
-                    strings::Split(StringPiece(str.get_data(), str.get_size()),
-                                   StringPiece(delimiter.get_data(), delimiter.get_size()));
+                    strings::Split(StringPiece(str.get_data(), static_cast<int>(str.get_size())),
+                                   StringPiece(delimiter.get_data(), static_cast<int>(delimiter.get_size())));
             for (auto& i : split_string) {
                 array_binary_column->append(Slice(i.c_str()));
             }
-            offset += split_string.size();
+            offset += static_cast<int>(split_string.size());
         }
         array_offsets->append(offset);
         result_array = ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),

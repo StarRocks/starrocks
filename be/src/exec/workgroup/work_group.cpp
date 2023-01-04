@@ -127,7 +127,7 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     twg.__set_workgroup_type(_type);
     std::string state = is_marked_del() ? "dead" : "alive";
     twg.__set_state(state);
-    twg.__set_cpu_core_limit(_cpu_limit);
+    twg.__set_cpu_core_limit(static_cast<int32_t>(_cpu_limit));
     twg.__set_mem_limit(_memory_limit);
     twg.__set_concurrency_limit(_concurrency_limit);
     twg.__set_num_drivers(_acc_num_drivers);
@@ -138,9 +138,10 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
 }
 
 void WorkGroup::init() {
-    _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT
-                                  ? ExecEnv::GetInstance()->query_pool_mem_tracker()->limit()
-                                  : ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
+    _memory_limit_bytes =
+            _memory_limit == ABSENT_MEMORY_LIMIT
+                    ? ExecEnv::GetInstance()->query_pool_mem_tracker()->limit()
+                    : ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * static_cast<int64_t>(_memory_limit);
     _mem_tracker = std::make_shared<starrocks::MemTracker>(_memory_limit_bytes, _name,
                                                            ExecEnv::GetInstance()->query_pool_mem_tracker());
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
@@ -328,7 +329,7 @@ double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
     if (sum_value <= 0) {
         return 0;
     }
-    return double(curr_value) / sum_value;
+    return double(curr_value) / double(sum_value);
 }
 
 void WorkGroupManager::update_metrics_unlocked() {

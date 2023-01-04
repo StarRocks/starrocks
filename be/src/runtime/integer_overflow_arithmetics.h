@@ -106,9 +106,9 @@ inline int clz128(unsigned __int128 v) {
     if (v == 0) return sizeof(__int128);
     unsigned __int128 shifted = v >> 64;
     if (shifted != 0) {
-        return __builtin_clzll(shifted);
+        return __builtin_clzll(static_cast<long long>(shifted));
     } else {
-        return __builtin_clzll(v) + 64;
+        return __builtin_clzll(static_cast<long long>(v)) + 64;
     }
 }
 

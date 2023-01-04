@@ -184,7 +184,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
                 }
             }
 
-            offset += splited_slice.size();
+            offset += static_cast<uint32_t>(splited_slice.size());
         }
     }
     offsets->append(offset);

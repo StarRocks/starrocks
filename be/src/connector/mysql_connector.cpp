@@ -299,7 +299,8 @@ Status MySQLDataSource::fill_chunk(ChunkPtr* chunk, char** data, size_t* length)
                 return Status::InternalError(ss.str());
             }
         } else {
-            RETURN_IF_ERROR(append_text_to_column(data[materialized_col_idx], length[materialized_col_idx], slot_desc,
+            RETURN_IF_ERROR(append_text_to_column(data[materialized_col_idx],
+                                                  static_cast<int>(length[materialized_col_idx]), slot_desc,
                                                   column.get()));
         }
     }

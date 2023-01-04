@@ -172,10 +172,10 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return 1;
             }
         }
-        return left.length() - right.length();
+        return static_cast<int>(left.length() - right.length());
     } else if (left.isArray() && right.isArray()) {
         if (left.length() != right.length()) {
-            return left.length() - right.length();
+            return static_cast<int>(left.length() - right.length());
         }
         for (size_t i = 0; i < left.length(); i++) {
             auto left_item = left.at(i);
@@ -196,7 +196,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
             case vpack::ValueType::SmallInt:
             case vpack::ValueType::Int:
             case vpack::ValueType::UInt:
-                return left.getInt() - right.getInt();
+                return static_cast<int>(left.getInt() - right.getInt());
             case vpack::ValueType::Double: {
                 return cmpDouble(left.getDouble(), right.getDouble());
             }
@@ -207,7 +207,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return 0;
             }
         } else if (left.isInteger() && right.isInteger()) {
-            return left.getInt() - right.getInt();
+            return static_cast<int>(left.getInt() - right.getInt());
         } else {
             return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
         }

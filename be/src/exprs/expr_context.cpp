@@ -114,7 +114,7 @@ void ExprContext::close(RuntimeState* state) {
 int ExprContext::register_func(RuntimeState* state, const FunctionContext::TypeDesc& return_type,
                                const std::vector<FunctionContext::TypeDesc>& arg_types) {
     _fn_contexts.push_back(FunctionContext::create_context(state, _pool.get(), return_type, arg_types));
-    return _fn_contexts.size() - 1;
+    return static_cast<int>(_fn_contexts.size() - 1);
 }
 
 Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx) {

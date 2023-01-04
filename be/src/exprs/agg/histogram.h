@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include "column/column_helper.h"
 #include "column/object_column.h"
 #include "column/type_traits.h"
@@ -95,8 +98,9 @@ public:
 
     std::string toBucketJson(std::string lower, std::string upper, size_t count, size_t upper_repeats,
                              double sample_ratio) const {
-        return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, std::to_string((int64_t)(count * sample_ratio)),
-                           std::to_string((int64_t)(upper_repeats * sample_ratio)));
+        return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper,
+                           std::to_string((int64_t)(static_cast<double>(count) * sample_ratio)),
+                           std::to_string((int64_t)(static_cast<double>(upper_repeats) * sample_ratio)));
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
@@ -185,3 +189,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

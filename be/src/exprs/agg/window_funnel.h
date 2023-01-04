@@ -14,6 +14,9 @@
 
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -549,3 +552,5 @@ public:
 };
 
 } // namespace starrocks
+
+#pragma GCC diagnostic pop

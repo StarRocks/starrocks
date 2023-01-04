@@ -100,18 +100,18 @@ static inline int64_t base64_decode(const char* data, size_t length, char* decod
 
         switch (i % 4) {
         case 0:
-            decoded_data[j] = ch << 2;
+            decoded_data[j] = static_cast<char>(ch << 2);
             break;
         case 1:
-            decoded_data[j++] |= ch >> 4;
-            decoded_data[j] = (ch & 0x0f) << 4;
+            decoded_data[j++] |= static_cast<char>(ch >> 4);
+            decoded_data[j] = static_cast<char>((ch & 0x0f) << 4);
             break;
         case 2:
-            decoded_data[j++] |= ch >> 2;
-            decoded_data[j] = (ch & 0x03) << 6;
+            decoded_data[j++] |= static_cast<char>(ch >> 2);
+            decoded_data[j] = static_cast<char>((ch & 0x03) << 6);
             break;
         case 3:
-            decoded_data[j++] |= ch;
+            decoded_data[j++] |= static_cast<char>(ch);
             break;
         default:
             break;

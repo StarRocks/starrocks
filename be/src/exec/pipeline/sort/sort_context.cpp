@@ -158,7 +158,7 @@ SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::typ
 
 SortContextPtr SortContextFactory::create(int32_t idx) {
     size_t actual_idx = _is_merging ? 0 : idx;
-    if (auto it = _sort_contexts.find(actual_idx); it != _sort_contexts.end()) {
+    if (auto it = _sort_contexts.find(static_cast<int32_t>(actual_idx)); it != _sort_contexts.end()) {
         return it->second;
     }
 

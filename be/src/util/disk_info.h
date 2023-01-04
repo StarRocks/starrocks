@@ -58,7 +58,7 @@ public:
     // Returns the number of (logical) disks on the system
     static int num_disks() {
         DCHECK(_s_initialized);
-        return _s_disks.size();
+        return static_cast<int>(_s_disks.size());
     }
 
 #if 0
