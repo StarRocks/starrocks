@@ -33,18 +33,18 @@ namespace starrocks {
 
 std::string AggrAutoContext::get_auto_state_string(const AggrAutoState& state) {
     switch (state) {
-    case INIT_BUILD:
-        return "INIT_BUILD";
+    case INIT_PREAGG:
+        return "INIT_PREAGG";
     case ADJUST:
         return "ADJUST";
     case PASS_THROUGH:
         return "PASS_THROUGH";
-    case FORCE_BUILD:
-        return "FORCE_BUILD";
-    case BUILD:
-        return "BUILD";
-    case SELECTIVE_BUILD:
-        return "SELECTIVE_BUILD";
+    case FORCE_PREAGG:
+        return "FORCE_PREAGG";
+    case PREAGG:
+        return "PREAGG";
+    case SELECTIVE_PREAGG:
+        return "SELECTIVE_PREAGG";
     }
     return "UNKNOWN";
 }

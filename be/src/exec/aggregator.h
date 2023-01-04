@@ -136,7 +136,7 @@ enum AggrMode {
     AM_STREAMING_POST_CACHE
 };
 
-enum AggrAutoState { INIT_BUILD = 0, ADJUST, PASS_THROUGH, FORCE_BUILD, BUILD, SELECTIVE_BUILD };
+enum AggrAutoState { INIT_PREAGG = 0, ADJUST, PASS_THROUGH, FORCE_PREAGG, PREAGG, SELECTIVE_PREAGG };
 
 struct AggrAutoContext {
     constexpr static size_t ContinuousUpperLimit = 100000;
@@ -150,12 +150,12 @@ struct AggrAutoContext {
     void update_continuous_limit();
     bool high_reduction(const size_t agg_count, const size_t chunk_size);
     bool low_reduction(const size_t agg_count, const size_t chunk_size);
-    size_t init_build_count = 0;
+    size_t init_preagg_count = 0;
     size_t adjust_count = 0;
     size_t pass_through_count = 0;
-    size_t force_build_count = 0;
-    size_t build_count = 0;
-    size_t selective_build_count = 0;
+    size_t force_preagg_count = 0;
+    size_t preagg_count = 0;
+    size_t selective_preagg_count = 0;
     size_t continuous_limit = 1000;
 };
 
