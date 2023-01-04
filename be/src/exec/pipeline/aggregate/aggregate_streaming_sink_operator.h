@@ -26,7 +26,7 @@ public:
                                    AggregatorPtr aggregator)
             : Operator(factory, id, "aggregate_streaming_sink", plan_node_id, driver_sequence),
               _aggregator(std::move(aggregator)),
-              _auto_state(AggrAutoState::INIT_BUILD) {
+              _auto_state(AggrAutoState::INIT_PREAGG) {
         _aggregator->set_aggr_phase(AggrPhase1);
         _aggregator->ref();
     }
