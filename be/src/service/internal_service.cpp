@@ -38,10 +38,12 @@
 
 #include <atomic>
 #include <shared_mutex>
+#include <sstream>
 
 #include "brpc/errno.pb.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
+#include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/BackendService.h"
@@ -681,17 +683,31 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
               << ", task_id=" << t_request.task_id << ", signature=" << t_request.signature;
 
     auto mv_task_type = t_request.task_type;
+    const TUniqueId& query_id = t_request.query_id;
+
+    // Check the existence of job
+    auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
+    if (mv_task_type != MVTaskType::START_MAINTENANCE && !query_ctx) {
+        std::string msg = fmt::format("start_epoch maintenance failed, query id not found:", print_id(query_id));
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+
     switch (mv_task_type) {
     case MVTaskType::START_MAINTENANCE: {
+        if (query_ctx) {
+            std::string msg = fmt::format("MV Job already existed: {}", print_id(query_id));
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         auto start_maintenance = t_request.start_maintenance;
         auto fragments = start_maintenance.fragments;
-        TUniqueId query_id = t_request.query_id;
         std::vector<PromiseStatusSharedPtr> promise_statuses;
-        for (int i = 0; i < fragments.size(); ++i) {
+        for (const auto& fragment : fragments) {
             PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-            _exec_env->pipeline_prepare_pool()->offer([ms, fragments, i, this] {
+            _exec_env->pipeline_prepare_pool()->offer([ms, fragments, &fragment, this] {
                 pipeline::FragmentExecutor fragment_executor;
-                auto status = fragment_executor.prepare(_exec_env, fragments[i], fragments[i]);
+                auto status = fragment_executor.prepare(_exec_env, fragment, fragment);
                 if (status.ok()) {
                     ms->set_value(fragment_executor.execute(_exec_env));
                 } else {
@@ -709,17 +725,34 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
         break;
     }
     case MVTaskType::START_EPOCH: {
-        const TUniqueId& query_id = t_request.query_id;
-        auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
-        if (!existing_query_ctx) {
-            LOG(WARNING) << "start_epoch maintenance failed, query id not found:" << print_id(query_id);
-            return Status::InternalError(fmt::format("MV Job has been cancelled: {}.", print_id(query_id)));
+        if (t_request.__isset.start_epoch) {
+            return Status::InternalError("should be start_epoch task");
         }
+        auto& start_epoch = t_request.start_epoch;
+        LOG(WARNING) << "MV start_epoch is not implemented: epoch=" << start_epoch.epoch;
         break;
     }
     case MVTaskType::COMMIT_EPOCH: {
+        if (t_request.__isset.commit_epoch) {
+            return Status::InternalError("should be commit_epoch task");
+        }
+        auto& commit_epoch = t_request.commit_epoch;
+        auto& version_info = commit_epoch.partition_version_infos;
+        std::stringstream version_str;
+        version_str << " version_info=[";
+        for (auto& part : version_info) {
+            version_str << part;
+        }
+        version_str << "]";
+        VLOG(2) << "MV commit_epoch: epoch=" << commit_epoch.epoch << version_str.str();
+
+        // TODO(muprhy) commit the epoch
         break;
     }
+    // TODO(murphy)
+    // case MVTaskType::ABORT_EPOCH: {
+    //     break;
+    // }
     case MVTaskType::STOP_MAINTENANCE: {
         break;
     }
