@@ -1022,7 +1022,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     ASSERT_TRUE(idx->insert(key_slices.data(), values.data(), idxes).ok());
 
     auto writer = std::make_unique<ImmutableIndexWriter>();
-    ASSERT_TRUE(writer->init("./index.l1.1.1", EditVersion(1, 1)).ok());
+    ASSERT_TRUE(writer->init("./index.l1.1.1", EditVersion(1, 1), false).ok());
 
     auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage((sizeof(Key) + 8) * N);
     auto nbucket = MutableIndex::estimate_nbucket(sizeof(Key), N, nshard, npage_hint);

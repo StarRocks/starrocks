@@ -354,6 +354,29 @@ public:
         }
     }
 
+    void destroy() {
+        if (_file != nullptr) {
+            FileSystem::Default()->delete_file(_file->filename());
+            _file.reset();
+        }
+    }
+
+    size_t total_usage() {
+        size_t usage = 0;
+        for (const auto& shard : _shards) {
+            usage += shard.data_size;
+        }
+        return usage;
+    }
+
+    size_t total_size() {
+        size_t size = 0;
+        for (const auto& shard : _shards) {
+            size += shard.size;
+        }
+        return size;
+    }
+
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& rb);
 
 private:
@@ -414,7 +437,7 @@ class ImmutableIndexWriter {
 public:
     ~ImmutableIndexWriter();
 
-    Status init(const string& idx_file_path, const EditVersion& version);
+    Status init(const string& idx_file_path, const EditVersion& version, bool sync_on_close);
 
     // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
     Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
@@ -554,6 +577,7 @@ private:
     // check _l0 should dump as snapshot or not
     bool _can_dump_directly();
     bool _need_flush_advance();
+    bool _need_merge_advance();
     Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
@@ -561,6 +585,9 @@ private:
 
     Status _flush_l0();
 
+    Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
+                                      size_t total_usage, size_t total_size);
+    Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
 
@@ -588,6 +615,7 @@ private:
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
     // add all l1 into vector
     std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
+    std::vector<int> _l1_merged_num;
     bool _has_l1 = false;
     std::shared_ptr<FileSystem> _fs;
 
