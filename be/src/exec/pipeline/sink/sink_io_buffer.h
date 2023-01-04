@@ -56,9 +56,6 @@ public:
     virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) = 0;
 
     virtual Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-        if (_is_cancelled) {
-            return Status::OK();
-        }
         if (Status status = get_io_status(); !status.ok()) {
             return status;
         }
