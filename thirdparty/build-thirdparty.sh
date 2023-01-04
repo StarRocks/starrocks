@@ -1050,7 +1050,7 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
-build_simdutf
+#build_simdutf
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

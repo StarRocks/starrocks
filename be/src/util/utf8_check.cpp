@@ -9,6 +9,8 @@
 
 #include "util/utf8_check.h"
 
+#include "simdutf/simdutf.cpp"
+
 #if defined(__x86_64__) && defined(__SSE4_2__)
 #include "util/simdutf8check.h"
 #elif defined(__aarch64__)

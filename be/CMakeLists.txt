@@ -307,8 +307,8 @@ set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(simdjson STATIC IMPORTED)
 set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdjson.a)
 
-add_library(simdutf STATIC IMPORTED)
-set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdutf.a)
+#add_library(simdutf STATIC IMPORTED)
+#set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdutf.a)
 
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
@@ -683,7 +683,6 @@ set(STARROCKS_DEPENDENCIES
     ryu
     hyperscan
     simdjson
-    simdutf
     librdkafka_cpp
     librdkafka
     libpulsar

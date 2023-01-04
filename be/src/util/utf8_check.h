@@ -36,7 +36,7 @@
 
 #include <cstddef>
 
-#include "simdutf.h"
+#include "simdutf/simdutf.h"
 
 namespace starrocks {
 
