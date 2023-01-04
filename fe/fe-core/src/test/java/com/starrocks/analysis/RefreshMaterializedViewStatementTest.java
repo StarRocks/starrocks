@@ -5,12 +5,10 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -22,8 +20,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.sql.SQLException;
-import java.util.List;
 import java.util.Map;
 
 public class RefreshMaterializedViewStatementTest {
