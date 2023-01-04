@@ -40,13 +40,19 @@
 #include <shared_mutex>
 #include <sstream>
 
+#include "agent/agent_server.h"
+#include "agent/publish_version.h"
+#include "agent/task_worker_pool.h"
 #include "brpc/errno.pb.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/data_stream_mgr.h"
@@ -57,6 +63,8 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/brpc.h"
+#include "storage/storage_engine.h"
+#include "storage/txn_manager.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
@@ -746,7 +754,7 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
         version_str << "]";
         VLOG(2) << "MV commit_epoch: epoch=" << commit_epoch.epoch << version_str.str();
 
-        // TODO(muprhy) commit the epoch
+        RETURN_IF_ERROR(_mv_commit_epoch(query_ctx, commit_epoch));
         break;
     }
     // TODO(murphy)
@@ -759,6 +767,26 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
     default:
         return Status::NotSupported(fmt::format("Unsupported MVTaskType: {}", mv_task_type));
     }
+    return Status::OK();
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx,
+                                                     const TMVCommitEpochTask& commit_epoch_task) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto token =
+            agent_server->get_thread_pool(TTaskType::PUBLISH_VERSION)->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_report_version(curr_report_version());
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.partition_version_infos = commit_epoch_task.partition_version_infos;
+    publish_version_req.transaction_id = commit_epoch_task.transaction_id;
+
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs);
+    StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
     return Status::OK();
 }
 
