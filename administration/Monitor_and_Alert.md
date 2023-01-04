@@ -107,7 +107,7 @@ scrape_configs:
 
 #### 启动 Prometheus
 
-通过一下命令启动 Prometheus。
+通过以下命令启动 Prometheus。
 
 ```bash
 nohup ./prometheus \
