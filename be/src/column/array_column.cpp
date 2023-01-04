@@ -597,4 +597,10 @@ bool ArrayColumn::empty_null_array(const NullColumnPtr& null_map) {
     return need_empty;
 }
 
+Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
+    DCHECK(type.children.size() == 1) << "Array schema does not match data's";
+    _elements = ColumnHelper::unfold_const_column(type.children[0], _elements->size(), _elements);
+    return Status::OK();
+}
+
 } // namespace starrocks

@@ -168,6 +168,8 @@ public:
 
     const std::vector<std::string>& field_names() const { return _field_names; }
 
+    Status unfold_const_children(const TypeDescriptor& type) override;
+
 private:
     // A collection that contains StructType's subfield column.
     Columns _fields;
