@@ -35,6 +35,7 @@
 package com.starrocks.system;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FsBroker;
@@ -127,14 +128,15 @@ public class HeartbeatMgr extends LeaderDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        if (nodeMgr.getIdToBackend() == null) {
+        ImmutableMap<Long, Backend> idToBackendRef = nodeMgr.getIdToBackend();
+        if (idToBackendRef == null) {
             return;
         }
 
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
         // send backend heartbeat
-        for (Backend backend : nodeMgr.getIdToBackend().values()) {
+        for (Backend backend : idToBackendRef.values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend);
             hbResponses.add(executor.submit(handler));
         }
@@ -170,13 +172,13 @@ public class HeartbeatMgr extends LeaderDaemon {
         }
 
         // collect all heartbeat responses and handle them.
-        // and also we find which node's info is changed, if is changed, we need collect them and write
-        // an edit log to synchronize the info to other Frontends
+        // and we also find the node whose info has been changed, if changed, we need to collect them and write
+        // an edit log to synchronize the info to fe followers.
         HbPackage hbPackage = new HbPackage();
         for (Future<HeartbeatResponse> future : hbResponses) {
             boolean isChanged = false;
             try {
-                // the heartbeat rpc's timeout is 5 seconds, so we will not be blocked here very long.
+                // the heartbeat rpc's timeout is 5 seconds, so we will not be blocked here too long.
                 HeartbeatResponse response = future.get();
                 if (response.getStatus() != HbStatus.OK) {
                     LOG.warn("get bad heartbeat response: {}", response);
@@ -193,7 +195,7 @@ public class HeartbeatMgr extends LeaderDaemon {
 
         // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
         Map<Long, Integer> backendId2cpuCores = Maps.newHashMap();
-        nodeMgr.getIdToBackend().values().forEach(
+        idToBackendRef.values().forEach(
                 backend -> backendId2cpuCores.put(backend.getId(), BackendCoreStat.getCoresOfBe(backend.getId())));
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getMaxJournalId(),
