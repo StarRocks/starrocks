@@ -1680,7 +1680,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         if (table.isLakeTable() ||
-                partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
+                (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500)) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
             buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else if (numAliveBackends > 0) {
@@ -1805,6 +1805,9 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition,
                                                             MaterializedIndex index) throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
+        // for debug
+        LOG.info("index.getReplicaCount() is {}", index.getReplicaCount());
+
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isLakeTable()) {

@@ -385,8 +385,11 @@ public class CoordinatorPreprocessor {
 
         coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
-        this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-        this.idToComputeNode = buildComputeNodeInfo();
+        // lake table
+        if (Config.use_staros == true) {
+            this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+            this.idToComputeNode = buildComputeNodeInfo();
+        }
 
         //if it has compute node and contains hdfsScanNode,will use compute node,even though preferComputeNode is false
         boolean preferComputeNode = connectContext.getSessionVariable().isPreferComputeNode();
@@ -990,6 +993,8 @@ public class CoordinatorPreprocessor {
         for (ScanNode scanNode : scanNodes) {
             // the parameters of getScanRangeLocations may ignore, It dosn't take effect
             List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
+            // for debug
+            LOG.info("locations in computeScanRangeAssignment is {}", locations);
             if (locations == null) {
                 // only analysis olap scan node
                 continue;

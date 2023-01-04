@@ -199,29 +199,38 @@ public class Warehouse implements Writable {
 
     public void suspendSelf(boolean isReplay) {
         writeLock();
-        this.state = WarehouseState.SUSPENDED;
-        if (!isReplay) {
-            releaseComputeNodes();
+        try {
+            this.state = WarehouseState.SUSPENDED;
+            if (!isReplay) {
+                releaseComputeNodes();
+            }
+            clusters.clear();
+        } finally {
+            writeUnLock();
         }
-        clusters.clear();
-        writeUnLock();
     }
 
     public void resumeSelf(boolean isReplay) {
         writeLock();
-        Map<Long, Cluster> clusterMap = new HashMap<>();
-        if (!isReplay) {
-            clusterMap = applyComputeNodes();
+        try {
+            Map<Long, Cluster> clusterMap = new HashMap<>();
+            if (!isReplay) {
+                clusterMap = applyComputeNodes();
+            }
+            this.state = WarehouseState.RUNNING;
+            clusters = clusterMap;
+        } finally {
+            writeUnLock();
         }
-        this.state = WarehouseState.RUNNING;
-        clusters = clusterMap;
-        writeUnLock();
     }
 
     public void dropSelf() {
         readLock();
-        releaseComputeNodes();
-        readUnlock();
+        try {
+            releaseComputeNodes();
+        } finally {
+            readUnlock();
+        }
     }
 
     private void releaseComputeNodes() {

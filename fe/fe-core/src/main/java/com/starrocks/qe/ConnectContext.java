@@ -123,7 +123,7 @@ public class ConnectContext {
     // Db
     protected String currentDb = "";
     // warehouse
-    protected String currentWarehouse = "";
+    protected String currentWarehouse;
 
     // username@host of current login user
     protected String qualifiedUser;

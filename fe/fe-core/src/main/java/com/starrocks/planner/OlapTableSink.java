@@ -72,6 +72,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
@@ -196,7 +197,7 @@ public class OlapTableSink extends DataSink {
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
-        tSink.setNodes_info(createStarrocksNodesInfo());
+        tSink.setNodes_info(createStarrocksNodesInfo(dstTable));
     }
 
     @Override
@@ -493,13 +494,19 @@ public class OlapTableSink extends DataSink {
         return locationParam;
     }
 
-    private TNodesInfo createStarrocksNodesInfo() {
+    private TNodesInfo createStarrocksNodesInfo(OlapTable table) {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
-        for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
-            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        if (table.isLakeTable()) {
+            // TODO: need to figure out what this func for
+            WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        } else {
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
+            for (Long id : systemInfoService.getBackendIds(false)) {
+                Backend backend = systemInfoService.getBackend(id);
+                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+            }
         }
+
         return nodesInfo;
     }
 

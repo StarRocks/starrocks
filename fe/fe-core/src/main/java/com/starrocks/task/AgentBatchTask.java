@@ -167,7 +167,7 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                List<AgentTask> tasks = this.backendIdToTasks.get(backendAddr);
+                List<AgentTask> tasks = this.backendAddrToTasks.get(backendAddr);
                 // create AgentClient
                 client = ClientPool.backendPool.borrowObject(backendAddr);
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();

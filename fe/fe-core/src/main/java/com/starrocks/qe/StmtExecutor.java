@@ -1321,6 +1321,8 @@ public class StmtExecutor {
         boolean insertError = false;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
+                // for debug
+                LOG.info("execPlan getSink is OlapTableSink");
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 context.getSessionVariable().setPreferComputeNode(false);
                 context.getSessionVariable().setUseComputeNodes(0);

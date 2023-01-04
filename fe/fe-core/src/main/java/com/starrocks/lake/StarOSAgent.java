@@ -398,7 +398,12 @@ public class StarOSAgent {
 
     // Mocked
     public TNetworkAddress getPrimaryBackendAddrByShard(long shardId) throws UserException {
+        // for debug
+        LOG.info("enter getPrimaryBackendAddrByShard");
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
+
+        // for debug
+        LOG.info("replicas size is {}", replicas);
 
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             for (ReplicaInfo replicaInfo : replicas) {
