@@ -94,7 +94,7 @@ protected:
         SegmentWriter writer(std::move(wfile), 0, &build_schema, opts);
         ASSERT_OK(writer.init());
 
-        auto schema = ChunkHelper::convert_schema_to_format_v2(build_schema);
+        auto schema = ChunkHelper::convert_schema(build_schema);
         auto chunk = ChunkHelper::new_chunk(schema, nrows);
         for (size_t rid = 0; rid < nrows; ++rid) {
             auto& cols = chunk->columns();
@@ -141,7 +141,7 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     // 10, 11, 12, 13
     // 20, 21, 22, 23
     size_t nrows = 1048576;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, nrows);
     for (size_t rid = 0; rid < nrows; ++rid) {
         auto& cols = chunk->columns();
@@ -198,7 +198,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         chunk->reset();
@@ -269,7 +269,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -287,7 +287,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col3
         std::vector<uint32_t> column_indexes{2};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -304,7 +304,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
         // col4
         std::vector<uint32_t> column_indexes{3};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -326,7 +326,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
@@ -386,7 +386,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -404,7 +404,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
         // col3
         std::vector<uint32_t> column_indexes{2};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -425,7 +425,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();

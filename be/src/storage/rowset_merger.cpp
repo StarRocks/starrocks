@@ -418,10 +418,9 @@ private:
             rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
         }
         {
-            VectorizedSchema schema =
-                    tablet.tablet_schema().sort_key_idxes().empty()
-                            ? ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0])
-                            : ChunkHelper::get_sort_key_schema_with_format_v2(tablet.tablet_schema());
+            VectorizedSchema schema = tablet.tablet_schema().sort_key_idxes().empty()
+                                              ? ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[0])
+                                              : ChunkHelper::get_sort_key_schema(tablet.tablet_schema());
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
@@ -438,8 +437,7 @@ private:
             vector<ChunkIteratorPtr> iterators;
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
-            VectorizedSchema schema =
-                    ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
+            VectorizedSchema schema = ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[i]);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
                 rowsets_mask_buffer[j]->flip_to_read();
@@ -530,9 +528,9 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg) {
     VectorizedSchema schema = [&tablet]() {
         if (tablet.tablet_schema().sort_key_idxes().empty()) {
-            return ChunkHelper::get_sort_key_schema_by_primary_key_format_v2(tablet.tablet_schema());
+            return ChunkHelper::get_sort_key_schema_by_primary_key(tablet.tablet_schema());
         } else {
-            return ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
+            return ChunkHelper::convert_schema(tablet.tablet_schema());
         }
     }();
     std::unique_ptr<RowsetMerger> merger;

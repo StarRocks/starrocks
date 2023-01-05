@@ -41,7 +41,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, TabletMetadata* metadata,
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
     OlapReaderStatistics stats;

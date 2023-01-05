@@ -104,26 +104,7 @@ struct CppColumnTraits<TYPE_VARBINARY> {
 };
 
 VectorizedField ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
-    TypeInfoPtr type_info = get_type_info(c);
-    starrocks::VectorizedField f(id, std::string(c.name()), type_info, c.is_nullable());
-    f.set_is_key(c.is_key());
-    f.set_short_key_length(c.index_length());
-    f.set_aggregate_method(c.aggregation());
-    f.set_length(c.length());
-    return f;
-}
-
-VectorizedSchema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema) {
-    starrocks::VectorizedFields fields;
-    for (ColumnId cid = 0; cid < schema.num_columns(); ++cid) {
-        auto f = convert_field(cid, schema.column(cid));
-        fields.emplace_back(std::make_shared<starrocks::VectorizedField>(std::move(f)));
-    }
-    return starrocks::VectorizedSchema(std::move(fields), schema.keys_type(), schema.sort_key_idxes());
-}
-
-starrocks::VectorizedField ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
-    LogicalType type = TypeUtils::to_storage_format_v2(c.type());
+    LogicalType type = c.type();
 
     TypeInfoPtr type_info = nullptr;
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_DECIMAL32 ||
@@ -141,45 +122,37 @@ starrocks::VectorizedField ChunkHelper::convert_field_to_format_v2(ColumnId id, 
 
     if (type == TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);
-        auto sub_field = convert_field_to_format_v2(id, sub_column);
+        auto sub_field = convert_field(id, sub_column);
         f.add_sub_field(sub_field);
     } else if (type == TYPE_MAP) {
         for (int i = 0; i < 2; ++i) {
             const TabletColumn& sub_column = c.subcolumn(i);
-            auto sub_field = convert_field_to_format_v2(id, sub_column);
+            auto sub_field = convert_field(id, sub_column);
             f.add_sub_field(sub_field);
         }
     } else if (type == TYPE_STRUCT) {
         for (int i = 0; i < c.subcolumn_count(); ++i) {
             const TabletColumn& sub_column = c.subcolumn(i);
-            auto sub_field = convert_field_to_format_v2(id, sub_column);
+            auto sub_field = convert_field(id, sub_column);
             f.add_sub_field(sub_field);
         }
     }
 
-    // If origin type needs to be converted format v2, we should change its short key length
-    if (TypeUtils::specific_type_of_format_v1(c.type())) {
-        // Get TypeInfo with new type
-        TypeInfoPtr type_info = get_type_info(type);
-        f.set_short_key_length(type_info->size());
-    } else {
-        f.set_short_key_length(c.index_length());
-    }
-
+    f.set_short_key_length(c.index_length());
     f.set_aggregate_method(c.aggregation());
     return f;
 }
 
-starrocks::VectorizedSchema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema) {
+starrocks::VectorizedSchema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema) {
     return starrocks::VectorizedSchema(schema.schema());
 }
 
-starrocks::VectorizedSchema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
-                                                                     const std::vector<ColumnId>& cids) {
+starrocks::VectorizedSchema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema,
+                                                        const std::vector<ColumnId>& cids) {
     return starrocks::VectorizedSchema(schema.schema(), cids);
 }
 
-starrocks::VectorizedSchema ChunkHelper::get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
+starrocks::VectorizedSchema ChunkHelper::get_short_key_schema(const starrocks::TabletSchema& schema) {
     std::vector<ColumnId> short_key_cids;
     const auto& sort_key_idxes = schema.sort_key_idxes();
     short_key_cids.reserve(schema.num_short_key_columns());
@@ -189,13 +162,13 @@ starrocks::VectorizedSchema ChunkHelper::get_short_key_schema_with_format_v2(con
     return starrocks::VectorizedSchema(schema.schema(), short_key_cids);
 }
 
-starrocks::VectorizedSchema ChunkHelper::get_sort_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
+starrocks::VectorizedSchema ChunkHelper::get_sort_key_schema(const starrocks::TabletSchema& schema) {
     std::vector<ColumnId> sort_key_iota_idxes(schema.sort_key_idxes().size());
     std::iota(sort_key_iota_idxes.begin(), sort_key_iota_idxes.end(), 0);
     return starrocks::VectorizedSchema(schema.schema(), schema.sort_key_idxes(), sort_key_iota_idxes);
 }
 
-starrocks::VectorizedSchema ChunkHelper::get_sort_key_schema_by_primary_key_format_v2(
+starrocks::VectorizedSchema ChunkHelper::get_sort_key_schema_by_primary_key(
         const starrocks::TabletSchema& tablet_schema) {
     std::vector<ColumnId> primary_key_iota_idxes(tablet_schema.num_key_columns());
     std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
