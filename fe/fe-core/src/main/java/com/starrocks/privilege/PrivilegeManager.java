@@ -155,7 +155,8 @@ public class PrivilegeManager {
                         x -> !x.equals("GRANT") && !x.equals("NODE")).collect(Collectors.toList());
                 initPrivilegeCollections(rolePrivilegeCollection, systemTypes.name(), actionWithoutNodeGrant, null,
                         false);
-                for (PrivilegeType t : Arrays.asList(PrivilegeType.DATABASE, PrivilegeType.TABLE, PrivilegeType.VIEW)) {
+                for (PrivilegeType t : Arrays.asList(PrivilegeType.DATABASE, PrivilegeType.TABLE,
+                        PrivilegeType.VIEW, PrivilegeType.MATERIALIZED_VIEW)) {
                     initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t,
                             new ArrayList<>(t.getActionMap().keySet()));
                 }
@@ -926,6 +927,17 @@ public class PrivilegeManager {
         }
     }
 
+    public static Set<Long> getOwnedRolesByUser(UserIdentity userIdentity) throws PrivilegeException {
+        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+        try {
+            manager.userReadLock();
+            UserPrivilegeCollection userCollection = manager.getUserPrivilegeCollectionUnlocked(userIdentity);
+            return userCollection.getAllRoles();
+        } finally {
+            manager.userReadUnlock();
+        }
+    }
+
     protected boolean checkAction(
             PrivilegeCollection collection, PrivilegeType type, String actionName, List<String> objectNames)
             throws PrivilegeException {
@@ -1119,6 +1131,7 @@ public class PrivilegeManager {
                 if (roleIds == null) {
                     roleIds = userCollection.getAllRoles();
                 }
+
                 // 2. get all predecessors base on step 1
                 roleIds = getAllPredecessorsUnlocked(roleIds);
 

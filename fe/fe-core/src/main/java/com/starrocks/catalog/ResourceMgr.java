@@ -321,13 +321,13 @@ public class ResourceMgr implements Writable {
                 if (resource == null) {
                     continue;
                 }
-                if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(
-                            ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    if (!PrivilegeManager.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
                         continue;
                     }
                 } else {
-                    if (!PrivilegeManager.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(
+                            ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
                         continue;
                     }
                 }

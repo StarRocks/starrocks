@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
@@ -37,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -152,7 +154,7 @@ public class AuthenticationManager {
     }
 
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
-        // quickly filter unmatched entries by user name
+        // quickly filter unmatched entries by username
         if (!info.matchUser(remoteUser)) {
             return false;
         }
@@ -192,6 +194,20 @@ public class AuthenticationManager {
         }
         LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
         return null; // cannot find user
+    }
+
+    public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
+        return checkPassword(remoteUser, remoteHost,
+                remotePasswd.getBytes(StandardCharsets.UTF_8), null);
+    }
+
+    public void checkPasswordReuse(UserIdentity user, String plainPassword) throws DdlException {
+        if (Config.enable_password_reuse) {
+            return;
+        }
+        if (checkPlainPassword(user.getQualifiedUser(), user.getHost(), plainPassword) != null) {
+            throw new DdlException("password should not be the same as the previous one!");
+        }
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {

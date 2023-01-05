@@ -921,19 +921,36 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private void checkPasswordAndPrivs(String cluster, String user, String passwd, String db, String tbl,
-                                       String clientIp, PrivPredicate predicate) throws AuthenticationException {
+    private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
+                                          String clientIp) throws AuthenticationException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (globalStateMgr.isUsingNewPrivilege()) {
+            UserIdentity currentUser =
+                    globalStateMgr.getAuthenticationManager().checkPlainPassword(user, clientIp, passwd);
+            if (currentUser == null) {
+                throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
+            }
+            // check INSERT action on table
+            ConnectContext tmpContext = new ConnectContext();
+            tmpContext.setGlobalStateMgr(globalStateMgr);
+            tmpContext.setCurrentUserIdentity(currentUser);
+            if (!PrivilegeManager.checkTableAction(tmpContext, db, tbl, PrivilegeType.TableAction.INSERT)) {
+                throw new AuthenticationException(
+                        "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
+            }
+        } else {
+            List<UserIdentity> currentUser = Lists.newArrayList();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkPlainPassword(user, clientIp, passwd, currentUser)) {
+                throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
+            }
 
-        List<UserIdentity> currentUser = Lists.newArrayList();
-        if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkPlainPassword(user, clientIp, passwd, currentUser)) {
-            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
-        }
-
-        Preconditions.checkState(currentUser.size() == 1);
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), db, tbl, predicate)) {
-            throw new AuthenticationException(
-                    "Access denied; you need (at least one of) the LOAD privilege(s) for this operation");
+            Preconditions.checkState(currentUser.size() == 1);
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), db, tbl,
+                    PrivPredicate.LOAD)) {
+                throw new AuthenticationException(
+                        "Access denied; you need (at least one of) the LOAD privilege(s) for this operation");
+            }
         }
     }
 
@@ -980,13 +997,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
-        checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+        checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                request.getTbl(), request.getUser_ip());
 
         // check label
         if (Strings.isNullOrEmpty(request.getLabel())) {
@@ -1048,16 +1060,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // return true if commit success and publish success, return false if publish timeout
     private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
         }
 
         // get database
@@ -1070,8 +1077,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         // Make publish timeout is less than thrift_rpc_timeout_ms
-        // Otherwise, the publish will be successful but commit timeout in BE
-        // It will results as error like "call frontend service failed"
+        // Otherwise, the publish process will be successful but commit timeout in BE
+        // It will result in error like "call frontend service failed"
         timeoutMs = timeoutMs * 3 / 4;
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
@@ -1162,16 +1169,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private void loadTxnPrepareImpl(TLoadTxnCommitRequest request) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
         }
 
         // get database
@@ -1228,16 +1230,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private void loadTxnRollbackImpl(TLoadTxnRollbackRequest request) throws UserException {
-        String cluster = request.getCluster();
-        if (Strings.isNullOrEmpty(cluster)) {
-            cluster = SystemInfoService.DEFAULT_CLUSTER;
-        }
-
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
-            checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
-                    request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
         }
         String dbName = request.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
