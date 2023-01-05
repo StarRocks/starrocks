@@ -87,7 +87,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -103,7 +103,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -207,7 +207,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -223,7 +223,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
