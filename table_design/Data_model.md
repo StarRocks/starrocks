@@ -66,7 +66,10 @@ CREATE TABLE IF NOT EXISTS detail (
     channel INT COMMENT ""
 )
 DUPLICATE KEY(event_time, event_type)
-DISTRIBUTED BY HASH(user_id) BUCKETS 8;
+DISTRIBUTED BY HASH(user_id) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+);
 ```
 
 > 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键，否则建表失败。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
@@ -75,8 +78,8 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 - 排序键的相关说明：
   - 在建表语句中，排序键必须定义在其他列之前。
-  - 排序键可以通过 `DUPLICATE KEY` 显式定义。本示例中排序键为`event_time`和`event_type`。
-    > 如果未指定，则默认选择表的**前三列**作为排序键。
+  - 排序键可以通过 `DUPLICATE KEY` 显式定义。本示例中排序键为 `event_time` 和 `event_type`。
+    > 如果未指定，则默认选择表的前三列作为排序键。
 
   - 明细模型中的排序键可以为部分或全部维度列。
 
@@ -123,7 +126,7 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 因此，聚合模型中数据多次聚合，能够减少查询时所需要的处理的数据量，进而提升查询的效率。
 
-例如，导入如下数据至聚合模型中：
+例如，导入如下数据至聚合模型中，排序键为 Date、Country：
 
 | Date       | Country | PV   |
 | ---------- | ------- | ---- |
@@ -152,8 +155,10 @@ CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
     city_code VARCHAR(20) COMMENT "city_code of user",
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
 )
-AGGREGATE KEY(site_id, date, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 8;
+DISTRIBUTED BY HASH(site_id) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+);
 ```
 
 > 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
@@ -228,7 +233,10 @@ CREATE TABLE IF NOT EXISTS orders (
     total_price BIGINT COMMENT "price of an order"
 )
 UNIQUE KEY(create_time, order_id)
-DISTRIBUTED BY HASH(order_id) BUCKETS 8;
+DISTRIBUTED BY HASH(order_id) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+); 
 ```
 
 > 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
@@ -251,7 +259,7 @@ DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 
 > - 导入数据时，仅支持全部更新，即导入任务需要指明所有列，例如示例中的 `create_time`、`order_id`、`order_state` 和 `total_price` 四个列。
 >
-> - 在设计导入频率时，建议以满足业务对实时性的要求为准。查询更新模型的数据时，需要聚合多版本的数据，当版本过多时会导致查询性能降低。所以导入数据至更新模型时，应该适当降低导入频率，从而提升查询性能。建议在设计导入频率时以满足业务对实时性的要求为准。如果业务对实时性的要求是分钟级别，那么每分钟导入一次更新数据即可，不需要秒级导入。
+> - 在设计导入频率时，建议以满足业务对实时性的要求为准。查询更新模型的数据时，需要聚合多版本的数据，当版本过多时会导致查询性能降低。所以导入数据至更新模型时，应该适当降低导入频率，从而提升查询性能。如果业务对实时性的要求是分钟级别，那么每分钟导入一次更新数据即可，不需要秒级导入。
 
 ## 主键模型
 
@@ -308,11 +316,10 @@ create table orders (
 PARTITION BY RANGE(`dt`) (
     PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),
     PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),
-    ...
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
-PROPERTIES("replication_num" = "3",
+PROPERTIES("replication_num" = "1",
 "enable_persistent_index" = "true");
 ```
 
@@ -335,7 +342,7 @@ create table users (
     property3 tinyint NOT NULL
 ) PRIMARY KEY (user_id)
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
-PROPERTIES("replication_num" = "3",
+PROPERTIES("replication_num" = "1",
 "enable_persistent_index" = "true");
 ```
 
