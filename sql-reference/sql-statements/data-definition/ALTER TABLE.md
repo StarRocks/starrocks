@@ -133,7 +133,7 @@ MODIFY PARTITION p1|(p1[, p2, ...]) SET ("key" = "value", ...);
 
 2. 对于单分区表，partition_name 同表名。
 
-### **操作 rollup 相关语法**
+### 操作 rollup 相关语法
 
 #### 创建 rollup index
 
@@ -215,7 +215,7 @@ ALTER TABLE [database.]table DROP ROLLUP r1, r2;
 
 1. 不能删除 base index
 
-### **schema change**
+### schema change
 
 此处下文中的 index 为物化索引。建表成功后表为 base 表(base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index) 。base index 和 rollup index 都是物化索引。下方语句在编写时如果没有指定 `rollup_index_name`，默认操作基表。
 
@@ -287,7 +287,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 1. 聚合模型如果修改 value 列，需要指定 agg_type。
 2. 非聚合类型如果修改 key 列，需要指定 KEY 关键字。
-3. 只能修改列的类型，列的其他属性维持原样（即其他属性需在语句中按照原属性显式的写出，参见样例中 [SchemaChange](#schemachange) 部分第 8 个例子）。
+3. 只能修改列的类型，列的其他属性维持原样（即其他属性需在语句中按照原属性显式的写出，参见样例中 [Schema Change](#schema-change-1) 部分第 8 个例子）。
 4. 分区列不能做任何修改。
 5. 目前支持以下类型的转换（精度损失由用户保证）：
 
@@ -332,7 +332,7 @@ PROPERTIES ("key"="value")
 注意：
 也可以合并到上面的 schema change 操作中来修改，见下面例子。
 
-### **rename 对名称进行修改**
+### rename 对名称进行修改
 
 #### 修改表名
 
@@ -360,7 +360,7 @@ ALTER TABLE [database.]table
 RENAME PARTITION old_partition_name new_partition_name;
 ```
 
-### **bitmap index 修改**
+### bitmap index 修改
 
 #### 创建 bitmap 索引
 
@@ -387,7 +387,7 @@ ALTER TABLE [database.]table
 DROP INDEX index_name;
 ```
 
-### **swap 将两个表原子替换**
+### swap 将两个表原子替换
 
 语法：
 
@@ -507,7 +507,7 @@ SWAP WITH table_name;
     DROP ROLLUP example_rollup_index2;
     ```
 
-### SchemaChange
+### Schema Change
 
 1. 向 example_rollup_index 的 col1 后添加一个 key 列 new_col(非聚合模型)。
 
