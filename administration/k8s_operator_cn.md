@@ -101,7 +101,7 @@ FE 按照数据分布情况和算子类型将执行计划中的计算任务分�
 1. 下载 StarRocks 的 Github 仓库代码。
 
     ```Bash
-    git clone https://github.com/StarRocks/starrocks
+    git clone https://github.com/StarRocks/starrocks.git
     ```
 
 2. 进入 **docker** 目录。
