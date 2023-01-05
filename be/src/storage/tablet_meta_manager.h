@@ -105,8 +105,6 @@ public:
     static Status build_primary_meta(DataDir* store, rapidjson::Document& doc, rocksdb::ColumnFamilyHandle* cf,
                                      rocksdb::WriteBatch& batch);
 
-    static Status save(DataDir* store, const TabletMetaSharedPtr& tablet_meta);
-
     static Status save(DataDir* store, const TabletMetaPB& meta_pb);
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
@@ -128,10 +126,6 @@ public:
     // commit a rowset into tablet
     static Status rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                 const RowsetMetaPB& rowset, const string& rowset_meta_key);
-    // write rowset_meta into rocksdb
-    // this function is used for partial update so far
-    static Status write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
-                                    const string& rowset_meta_key);
 
     static Status write_persistent_index_meta(DataDir* store, TTabletId tablet_id, const PersistentIndexMetaPB& meta);
 
