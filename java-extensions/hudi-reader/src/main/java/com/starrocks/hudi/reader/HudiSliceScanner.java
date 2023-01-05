@@ -49,23 +49,23 @@ import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
 
-    private final String basePath;
-    private final String hiveColumnNames;
-    private final String[] hiveColumnTypes;
-    private final String[] requiredFields;
-    private final String instantTime;
-    private final String[] deltaFilePaths;
-    private final String dataFilePath;
-    private final long dataFileLenth;
-    private final String serde;
-    private final String inputFormat;
-    private RecordReader<NullWritable, ArrayWritable> reader;
-    private StructObjectInspector rowInspector;
-    private ObjectInspector[] fieldInspectors;
-    private StructField[] structFields;
-    private Deserializer deserializer;
-    private final int fetchSize;
-    private final ClassLoader classLoader;
+    protected final String basePath;
+    protected final String hiveColumnNames;
+    protected final String[] hiveColumnTypes;
+    protected final String[] requiredFields;
+    protected final String instantTime;
+    protected final String[] deltaFilePaths;
+    protected final String dataFilePath;
+    protected final long dataFileLenth;
+    protected final String serde;
+    protected final String inputFormat;
+    protected RecordReader<NullWritable, ArrayWritable> reader;
+    protected StructObjectInspector rowInspector;
+    protected ObjectInspector[] fieldInspectors;
+    protected StructField[] structFields;
+    protected Deserializer deserializer;
+    protected final int fetchSize;
+    protected final ClassLoader classLoader;
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -82,7 +82,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.dataFilePath = params.get("data_file_path");
         this.dataFileLenth = Long.parseLong(params.get("data_file_length"));
         this.serde = params.get("serde");
-        this.inputFormat = params.get("input_format");;
+        this.inputFormat = params.get("input_format");
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
@@ -135,7 +135,8 @@ public class HudiSliceScanner extends ConnectorScanner {
             Path path = new Path(realtimePath);
             FileSplit fileSplit = new FileSplit(path, 0, realtimeLength, new String[] {""});
             List<HoodieLogFile> logFiles = Arrays.stream(deltaFilePaths).map(HoodieLogFile::new).collect(toList());
-            FileSplit hudiSplit = new HoodieRealtimeFileSplit(fileSplit, basePath, logFiles, instantTime, false, Option.empty());
+            FileSplit hudiSplit =
+                    new HoodieRealtimeFileSplit(fileSplit, basePath, logFiles, instantTime, false, Option.empty());
 
             InputFormat<?, ?> inputFormatClass = createInputFormat(jobConf, inputFormat);
             reader = (RecordReader<NullWritable, ArrayWritable>) inputFormatClass
@@ -184,7 +185,8 @@ public class HudiSliceScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         scanData(i, null);
                     } else {
-                        Object fieldValue = ((PrimitiveObjectInspector) fieldInspectors[i]).getPrimitiveJavaObject(fieldData);
+                        Object fieldValue =
+                                ((PrimitiveObjectInspector) fieldInspectors[i]).getPrimitiveJavaObject(fieldData);
                         scanData(i, fieldValue);
                     }
                 }
@@ -197,13 +199,15 @@ public class HudiSliceScanner extends ConnectorScanner {
         }
     }
 
-    private InputFormat<?, ?> createInputFormat(Configuration conf, String inputFormat) throws Exception {
+    protected InputFormat<?, ?> createInputFormat(Configuration conf, String inputFormat) throws Exception {
         Class<?> clazz = conf.getClassByName(inputFormat);
-        Class<? extends InputFormat<?, ?>> cls = (Class<? extends InputFormat<?, ?>>) clazz.asSubclass(InputFormat.class);
+        Class<? extends InputFormat<?, ?>> cls =
+                (Class<? extends InputFormat<?, ?>>) clazz.asSubclass(InputFormat.class);
         return ReflectionUtils.newInstance(cls, conf);
     }
 
-    private Deserializer getDeserializer(Configuration configuration, Properties properties, String name) throws Exception {
+    protected Deserializer getDeserializer(Configuration configuration, Properties properties, String name)
+            throws Exception {
         Class<? extends Deserializer> deserializerClass = Class.forName(name, true, JavaUtils.getClassLoader())
                 .asSubclass(Deserializer.class);
         Deserializer deserializer = deserializerClass.getConstructor().newInstance();
@@ -211,7 +215,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         return deserializer;
     }
 
-    private StructObjectInspector getTableObjectInspector(Deserializer deserializer) throws Exception {
+    protected StructObjectInspector getTableObjectInspector(Deserializer deserializer) throws Exception {
         ObjectInspector inspector = deserializer.getObjectInspector();
         checkArgument(inspector.getCategory() == ObjectInspector.Category.STRUCT,
                 "expected STRUCT: %s", inspector.getCategory());
