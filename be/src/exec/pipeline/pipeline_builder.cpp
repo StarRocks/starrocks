@@ -141,6 +141,7 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
     local_shuffle_source->set_runtime_state(state);
     inherit_upstream_source_properties(local_shuffle_source.get(), pred_source_op);
+    local_shuffle_source->set_could_local_shuffle(pred_source_op->partition_exprs().empty());
     local_shuffle_source->set_degree_of_parallelism(shuffle_partitions_num);
 
     auto local_shuffle =
