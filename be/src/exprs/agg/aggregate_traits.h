@@ -34,6 +34,7 @@ struct AggDataTypeTraits<lt, FixedLengthPTGuard<lt>> {
     using RefType = RunTimeCppType<lt>;
 
     static void assign_value(ValueType& value, const RefType& ref) { value = ref; }
+    static void assign_value(ColumnType* column, size_t row, const RefType& ref) { column->get_data()[row] = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(value); }
 
@@ -48,6 +49,8 @@ struct AggDataTypeTraits<lt, ObjectFamilyPTGuard<lt>> {
     using RefType = RunTimeCppType<lt>;
 
     static void assign_value(ValueType& value, RefType ref) { value = *ref; }
+    static void assign_value(ColumnType* column, size_t row, const RefType& ref) { *column->get_object(row) = *ref; }
+    static void assign_value(ColumnType* column, size_t row, const ValueType& ref) { *column->get_object(row) = ref; }
 
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
 
