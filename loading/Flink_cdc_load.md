@@ -43,9 +43,9 @@
       java -version
       
       # 如下显示已经安装 java 8
-      java version "1.8.0_301"
-      Java(TM) SE Runtime Environment (build 1.8.0_301-b09)
-      Java HotSpot(TM) 64-Bit Server VM (build 25.301-b09, mixed mode)
+      openjdk version "1.8.0_322"
+      OpenJDK Runtime Environment (Temurin)(build 1.8.0_322-b06)
+      OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
       ```
 
    2. 下载并解压 [Flink](https://flink.apache.org/downloads.html)。本示例使用 Flink 1.14.5。
