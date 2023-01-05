@@ -44,6 +44,8 @@ public:
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
     ActiveInputSet& get_active_inputs() { return _active_inputs; }
 
+    TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
+
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
