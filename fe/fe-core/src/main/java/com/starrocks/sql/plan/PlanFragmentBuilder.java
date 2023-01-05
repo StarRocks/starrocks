@@ -575,9 +575,8 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                for (Map.Entry<Long, List<Long>> entry : scanNode.getPartitionToScanTabletMap().entrySet()) {
-                    long partitionId = entry.getKey();
-                    List<Long> selectTabletIds = entry.getValue();
+                for (Long partitionId : node.getSelectedPartitionId()) {
+                    List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
                     final Partition partition = referenceTable.getPartition(partitionId);
                     final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
                     List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
