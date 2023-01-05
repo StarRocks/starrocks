@@ -146,11 +146,11 @@ timezone:         指定某些受时区影响的函数的时区，如 strftime/a
 ```plain text
 1.整型类（TINYINT/SMALLINT/INT/BIGINT/LARGEINT）：1, 1000, 1234。
 
-2.浮点类（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356
+2.浮点类（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356。
 
 3.日期类（DATE/DATETIME）：2017-10-03, 2017-06-13 12: 34: 03。（注：如果是其他日期格式，可以在导入命令中，使用 strftime 或者 time_format 函数进行转换）
 
-4.字符串类（CHAR/VARCHAR）："I am a student", "a"
+4.字符串类（CHAR/VARCHAR）："I am a student", "a"。
 NULL 值：\N
 ```
 
@@ -174,7 +174,7 @@ PROPERTIES
 );
 ```
 
-其中 hdfs_host 为 namenode 的 host，hdfs_port 为 fs.defaultFS 端口（默认 9000）
+其中 hdfs_host 为 namenode 的 host，hdfs_port 为 fs.defaultFS 端口（默认 9000）。
 
 ### 从HDFS导入"负"数据
 
@@ -233,7 +233,7 @@ WITH RESOURCE 'my_spark';
 
 ### 提取文件路径中的分区字段
 
-如果需要，则会根据表中定义的字段类型解析文件路径中的分区字段（partitioned fields），类似 Spark 中 Partition Discovery 的功能
+如果需要，则会根据表中定义的字段类型解析文件路径中的分区字段（partitioned fields），类似 Spark 中 Partition Discovery 的功能。
 
 ```sql
 LOAD LABEL example_db.label10
