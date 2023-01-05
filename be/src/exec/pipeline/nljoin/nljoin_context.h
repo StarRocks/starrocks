@@ -32,8 +32,6 @@ namespace starrocks::pipeline {
 class RuntimeFilterHub;
 
 struct NLJoinContextParams {
-    int32_t num_left_probers;
-    int32_t num_right_sinkers;
     int32_t plan_node_id;
     std::vector<ExprContext*> filters;
     RuntimeFilterHub* rf_hub;
@@ -43,16 +41,17 @@ struct NLJoinContextParams {
 class NLJoinContext final : public ContextWithDependency {
 public:
     explicit NLJoinContext(NLJoinContextParams params)
-            : _num_left_probers(params.num_left_probers),
-              _num_right_sinkers(params.num_right_sinkers),
-              _plan_node_id(params.plan_node_id),
-              _input_chunks(_num_right_sinkers),
+            : _plan_node_id(params.plan_node_id),
               _rf_conjuncts_ctx(std::move(params.filters)),
               _rf_hub(params.rf_hub),
               _rf_descs(std::move(params.rf_descs)) {}
     ~NLJoinContext() override = default;
 
     void close(RuntimeState* state) override;
+
+    void incr_builder();
+    void incr_prober();
+    void decr_prober(RuntimeState* state);
 
     int32_t get_num_builders() const { return _num_right_sinkers; }
     bool is_build_chunk_empty() const { return _build_chunks.empty(); }
@@ -77,11 +76,12 @@ public:
 private:
     Status _init_runtime_filter(RuntimeState* state);
 
-    const int32_t _num_left_probers;
-    const int32_t _num_right_sinkers;
+    int32_t _num_left_probers = 0;
+    int32_t _num_right_sinkers = 0;
     const int32_t _plan_node_id;
 
     std::atomic<int32_t> _num_finished_right_sinkers = 0;
+    std::atomic<int32_t> _num_closed_left_probers = 0;
     std::atomic_bool _all_right_finished = false;
     std::atomic_int64_t _num_build_rows = 0;
 

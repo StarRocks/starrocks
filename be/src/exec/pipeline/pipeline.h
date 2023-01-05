@@ -97,6 +97,8 @@ public:
         return ss.str();
     }
 
+    size_t output_amplification() const;
+
 private:
     uint32_t _id = 0;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;

@@ -66,7 +66,6 @@ public class HashJoinNode extends JoinNode {
         super("HASH JOIN", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
     }
 
-
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HASH_JOIN_NODE;
@@ -139,5 +138,14 @@ public class HashJoinNode extends JoinNode {
         planNode.setHash_join_node(hashJoinNode);
         planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    @Override
+    public boolean canUseAdaptiveDop() {
+        if (joinOp.isRightJoin() || joinOp.isFullOuterJoin()) {
+            return false;
+        }
+
+        return getChildren().stream().allMatch(PlanNode::canUseAdaptiveDop);
     }
 }
