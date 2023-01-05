@@ -32,6 +32,7 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -167,6 +168,10 @@ struct AggregatorParams {
     std::vector<TExpr> intermediate_aggr_exprs;
 
     // Incremental MV
+    const TIMTDescriptor* agg_result_imt;
+    const TIMTDescriptor* agg_intermediate_imt;
+    const TIMTDescriptor* agg_detail_imt;
+
     // Whether it's testing, use MemStateTable in testing, instead use IMTStateTable.
     bool is_testing;
     // Whether input is only append-only or with retract messages.
@@ -176,6 +181,7 @@ struct AggregatorParams {
     // The agg index of count agg function.
     int32_t count_agg_idx;
 };
+
 using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 

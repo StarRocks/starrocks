@@ -17,16 +17,10 @@
 
 #pragma once
 
-#include <algorithm>
-#include <utility>
-
 #include "exec/aggregator.h"
-#include "exec/stream/aggregate/agg_state_data.h"
-#include "exec/stream/state/mem_state_table.h"
-#include "exec/stream/state/state_table.h"
+#include "exec/stream/aggregate/agg_group_state.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 
 namespace starrocks::stream {
 
@@ -91,8 +85,6 @@ public:
 private:
     Status _prepare_state_tables(RuntimeState* state);
 
-    DatumRow _convert_to_datum_row(const Columns& columns, size_t row_idx);
-
     template <typename HashMapWithKey>
     Status _output_changes(HashMapWithKey& hash_map_with_key, int32_t chunk_size, StreamChunkPtr* result_chunk,
                            ChunkPtr* intermediate_chunk, std::vector<ChunkPtr>* detail_chunks);
@@ -121,26 +113,10 @@ private:
 private:
     // Store buffers which can be reused in the incremental compute.
     std::unique_ptr<MemPool> _mem_pool;
-
     // Store group by keys to agg state map.
-    std::unique_ptr<StateTable> _result_state_table;
-    std::unique_ptr<StateTable> _intermediate_state_table;
-    // TODO: support merge into one detail table later.
-    std::vector<std::unique_ptr<StateTable>> _detail_state_tables;
     int32_t _count_agg_idx{0};
-
-    // store all agg states
-    std::vector<std::unique_ptr<AggStateData>> _agg_func_states;
-    // output intermediate columns.
-    std::vector<int32_t> _intermediate_agg_func_ids;
-
-    std::unique_ptr<IntermediateAggGroupState> _result_agg_group;
-    std::unique_ptr<IntermediateAggGroupState> _intermediate_agg_group;
-    std::unique_ptr<DetailAggGroupState> _detail_agg_group;
-
-    std::vector<DatumRow> _non_found_keys;
-    // Changed group by keys to generate outputs
-    SliceHashSet _changed_keys;
+    // Store AggState group.
+    std::unique_ptr<AggGroupState> _agg_group_state;
 };
 
 } // namespace starrocks::stream

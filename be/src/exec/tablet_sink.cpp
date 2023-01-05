@@ -798,38 +798,76 @@ OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs,
     }
 }
 
-Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
-    DCHECK(t_sink.__isset.olap_table_sink);
-    const auto& table_sink = t_sink.olap_table_sink;
-    _merge_condition = table_sink.merge_condition;
-    _load_id.set_hi(table_sink.load_id.hi);
-    _load_id.set_lo(table_sink.load_id.lo);
-    _txn_id = table_sink.txn_id;
-    _txn_trace_parent = table_sink.txn_trace_parent;
-    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
-    _num_repicas = table_sink.num_replicas;
-    _need_gen_rollup = table_sink.need_gen_rollup;
-    _tuple_desc_id = table_sink.tuple_id;
-    _is_lake_table = table_sink.is_lake_table;
-    _keys_type = table_sink.keys_type;
-    if (table_sink.__isset.write_quorum_type) {
-        _write_quorum_type = table_sink.write_quorum_type;
-    }
-    if (table_sink.__isset.enable_replicated_storage) {
-        _enable_replicated_storage = table_sink.enable_replicated_storage;
-    }
-    _schema = std::make_shared<OlapTableSchemaParam>();
-    RETURN_IF_ERROR(_schema->init(table_sink.schema));
-    _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
-    RETURN_IF_ERROR(_vectorized_partition->init(state));
-    _location = _pool->add(new OlapTableLocationParam(table_sink.location));
-    _nodes_info = _pool->add(new StarRocksNodesInfo(table_sink.nodes_info));
+OlapTableSinkParams OlapTableSink::_convert_to_sink_params(const TDataSink& data_sink) {
+    DCHECK(data_sink.__isset.olap_table_sink);
+    const auto& table_sink = data_sink.olap_table_sink;
 
+    int64_t load_channel_timeout_s;
     if (table_sink.__isset.load_channel_timeout_s) {
-        _load_channel_timeout_s = table_sink.load_channel_timeout_s;
+        load_channel_timeout_s = table_sink.load_channel_timeout_s;
     } else {
-        _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
+        load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
     }
+
+    TWriteQuorumType::type write_quorum_type = TWriteQuorumType::MAJORITY;
+    if (table_sink.__isset.write_quorum_type) {
+        write_quorum_type = table_sink.write_quorum_type;
+    }
+
+    bool enable_replicated_storage = false;
+    if (table_sink.__isset.enable_replicated_storage) {
+        enable_replicated_storage = table_sink.enable_replicated_storage;
+    }
+
+    return OlapTableSinkParams{
+            .load_id = table_sink.load_id,
+
+            .txn_id = table_sink.txn_id,
+            .load_channel_timeout_s = load_channel_timeout_s,
+            .num_replicas = table_sink.num_replicas,
+            .tuple_id = table_sink.tuple_id,
+
+            .keys_type = table_sink.keys_type,
+            .schema = table_sink.schema,
+            .partition = table_sink.partition,
+            .location = table_sink.location,
+            .nodes_info = table_sink.nodes_info,
+
+            .write_quorum_type = write_quorum_type,
+            .merge_condition = table_sink.merge_condition,
+            .txn_trace_parent = table_sink.txn_trace_parent,
+
+            .is_lake_table = table_sink.is_lake_table,
+            .need_gen_rollup = table_sink.need_gen_rollup,
+            .enable_replicated_storage = enable_replicated_storage,
+    };
+}
+
+Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
+    return init(_convert_to_sink_params(t_sink), state);
+}
+
+Status OlapTableSink::init(const OlapTableSinkParams& params, RuntimeState* state) {
+    _load_id.set_hi(params.load_id.hi);
+    _load_id.set_lo(params.load_id.lo);
+    _txn_id = params.txn_id;
+    _txn_trace_parent = params.txn_trace_parent;
+    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
+    _num_repicas = params.num_replicas;
+    _need_gen_rollup = params.need_gen_rollup;
+    _tuple_desc_id = params.tuple_id;
+    _is_lake_table = params.is_lake_table;
+    _keys_type = params.keys_type;
+    _write_quorum_type = params.write_quorum_type;
+    _enable_replicated_storage = params.enable_replicated_storage;
+
+    _schema = std::make_shared<OlapTableSchemaParam>();
+    RETURN_IF_ERROR(_schema->init(params.schema));
+    _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, params.partition));
+    RETURN_IF_ERROR(_vectorized_partition->init(state));
+    _location = _pool->add(new OlapTableLocationParam(params.location));
+    _nodes_info = _pool->add(new StarRocksNodesInfo(params.nodes_info));
+    _load_channel_timeout_s = params.load_channel_timeout_s;
 
     return Status::OK();
 }

@@ -29,7 +29,7 @@ struct TableReaderParams {
     // table schema
     TOlapTableSchemaParam schema;
     // Version of data to read
-    uint64_t version;
+    int64_t version;
     // table and partition info, used to find the tablet that a key belongs to
     TOlapTablePartitionParam partition_param;
     // tablet id -> { node id list }, used to find BE nodes that a tablet locates on
@@ -45,6 +45,8 @@ public:
     TableReader(const TableReaderParams& params);
 
     ~TableReader();
+
+    VectorizedSchema tablet_schema() const { return _tablet_schema; }
 
     /**
      * Batch get of multi-rows by multiple keys
@@ -74,9 +76,15 @@ public:
      *         3  | 3
      *         5  | 5
      */
-    Status multi_get(const Chunk& keys, const std::vector<std::string>& value_columns, std::vector<bool>& found,
-                     Chunk& values);
+    Status multi_get(const Columns& keys, const std::vector<std::string>& value_columns, std::vector<bool>& found,
+                     ChunkPtr* values);
 
+    /**
+     *  Get multi rows with selection, selection's size should be equal to each key column's size.
+     *  NOTE: Only get keys when selections[i] is 1.
+     */
+    Status multi_get(const Columns& keys, const std::vector<uint8_t>& selection,
+                     const std::vector<std::string>& value_columns, std::vector<bool>& found, ChunkPtr* values);
     /**
      * Scan the table, return the rows that match the predicates
      * @param value_columns the columns to read
@@ -90,12 +98,21 @@ public:
     StatusOr<ChunkIteratorPtr> scan(const std::vector<std::string>& value_columns,
                                     const std::vector<const ColumnPredicate*>& predicates);
 
+    /**
+     * Build new eq predicates using `tuple`, each datum in tuple will build a equal expr.
+     * eg. tuple is [a, 1] and keys columns are [a, b, c], so the build predicates is:
+     * a = 'a' & b = 1.
+     */
+    void build_eq_predicates(DatumTuple& tuple, std::vector<const ColumnPredicate*>* predicates,
+                             ObjectPool& obj_pool) const;
+
 private:
+    Status _multi_get(const Columns& keys, const std::vector<uint8_t>& selection,
+                      const std::vector<std::string>& value_columns, std::vector<bool>& found, ChunkPtr* values);
     StatusOr<ChunkIteratorPtr> _base_scan(VectorizedSchema& value_schema,
                                           const std::vector<const ColumnPredicate*>& predicates);
-    void _build_get_predicates(DatumTuple& tuple, std::vector<const ColumnPredicate*>* predicates,
-                               ObjectPool& obj_pool);
     Status _build_value_schema(const std::vector<std::string>& value_columns, VectorizedSchema* schema);
+    DatumTuple _convert_columns_to_tuple(const Columns& keys, size_t row_idx) const;
 
     TableReaderParams _params;
     std::vector<TabletSharedPtr> _local_tablets;

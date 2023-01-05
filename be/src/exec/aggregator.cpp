@@ -57,6 +57,22 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
         params->intermediate_aggr_exprs = tnode.agg_node.intermediate_aggr_exprs;
         break;
     }
+    case TPlanNodeType::STREAM_AGG_NODE: {
+        params->sql_grouping_keys =
+                tnode.stream_agg_node.__isset.sql_grouping_keys ? tnode.stream_agg_node.sql_grouping_keys : "";
+        params->sql_aggregate_functions =
+                tnode.stream_agg_node.__isset.sql_aggregate_functions ? tnode.stream_agg_node.sql_grouping_keys : "";
+        params->grouping_exprs = tnode.stream_agg_node.grouping_exprs;
+        params->aggregate_functions = tnode.stream_agg_node.aggregate_functions;
+        params->agg_result_imt =
+                tnode.stream_agg_node.__isset.agg_result_imt ? &tnode.stream_agg_node.agg_result_imt : nullptr;
+        params->agg_intermediate_imt = tnode.stream_agg_node.__isset.agg_intermediate_imt
+                                               ? &tnode.stream_agg_node.agg_intermediate_imt
+                                               : nullptr;
+        params->agg_detail_imt =
+                tnode.stream_agg_node.__isset.agg_detail_imt ? &tnode.stream_agg_node.agg_detail_imt : nullptr;
+        break;
+    }
     default:
         __builtin_unreachable();
     }

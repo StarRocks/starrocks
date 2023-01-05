@@ -44,10 +44,29 @@ TableReader::TableReader(const TableReaderParams& params) : _params(params) {
 
 TableReader::~TableReader() {}
 
-Status TableReader::multi_get(const Chunk& keys, const std::vector<std::string>& value_columns,
-                              std::vector<bool>& found, Chunk& values) {
+Status TableReader::multi_get(const Columns& keys, const std::vector<uint8_t>& selection,
+                              const std::vector<std::string>& value_columns, std::vector<bool>& found,
+                              ChunkPtr* values) {
+    return _multi_get(keys, selection, value_columns, found, values);
+}
+
+Status TableReader::multi_get(const Columns& keys, const std::vector<std::string>& value_columns,
+                              std::vector<bool>& found, ChunkPtr* values) {
+    return _multi_get(keys, {}, value_columns, found, values);
+}
+
+Status TableReader::_multi_get(const Columns& keys, const std::vector<uint8_t>& selection,
+                               const std::vector<std::string>& value_columns, std::vector<bool>& found,
+                               ChunkPtr* values) {
+    // empty input
+    if (keys.size() == 0 || keys[0]->size() == 0) {
+        return Status::OK();
+    }
+
+    auto num_rows = keys[0]->size();
+    auto num_columns = keys.size();
     if (_local_tablets.empty()) {
-        found.resize(keys.num_rows());
+        found.resize(num_rows);
         std::fill(found.begin(), found.end(), false);
         return Status::OK();
     }
@@ -59,13 +78,22 @@ Status TableReader::multi_get(const Chunk& keys, const std::vector<std::string>&
     ObjectPool obj_pool;
     DeferOp defer([&] { obj_pool.clear(); });
     std::vector<const ColumnPredicate*> predicates;
-    predicates.reserve(keys.num_columns());
-    found.resize(keys.num_rows());
-    values.reset();
-    for (int i = 0; i < keys.num_rows(); i++) {
-        DatumTuple tuple = keys.get(i);
+    predicates.reserve(num_columns);
+
+    found.resize(num_rows);
+    auto result_chunk = ChunkHelper::new_chunk(value_schema, num_rows);
+    if (!selection.empty()) {
+        DCHECK_EQ(selection.size(), num_rows);
+    }
+
+    for (int i = 0; i < num_rows; i++) {
+        if (!selection.empty() && !selection[i]) {
+            continue;
+        }
+
+        DatumTuple tuple = _convert_columns_to_tuple(keys, i);
         predicates.clear();
-        _build_get_predicates(tuple, &predicates, obj_pool);
+        build_eq_predicates(tuple, &predicates, obj_pool);
         StatusOr<ChunkIteratorPtr> status_or = _base_scan(value_schema, predicates);
         RETURN_IF(!status_or.ok(), status_or.status());
         ChunkIteratorPtr iterator = status_or.value();
@@ -82,8 +110,9 @@ Status TableReader::multi_get(const Chunk& keys, const std::vector<std::string>&
 
         found[i] = true;
         CHECK_EQ(read_chunk->num_rows(), 1);
-        values.append(*read_chunk);
+        result_chunk->append(*read_chunk);
     }
+    *values = result_chunk;
     return Status::OK();
 }
 
@@ -122,8 +151,8 @@ StatusOr<ChunkIteratorPtr> TableReader::_base_scan(VectorizedSchema& value_schem
     return new_projection_iterator(value_schema, new_union_iterator(std::move(tablet_readers)));
 }
 
-void TableReader::_build_get_predicates(DatumTuple& tuple, std::vector<const ColumnPredicate*>* predicates,
-                                        ObjectPool& obj_pool) {
+void TableReader::build_eq_predicates(DatumTuple& tuple, std::vector<const ColumnPredicate*>* predicates,
+                                      ObjectPool& obj_pool) const {
     for (size_t i = 0; i < tuple.size(); i++) {
         const Datum& datum = tuple.get(i);
         const VectorizedFieldPtr& field = _tablet_schema.field(i);
@@ -144,6 +173,15 @@ Status TableReader::_build_value_schema(const std::vector<std::string>& value_co
     }
 
     return Status::OK();
+}
+
+DatumTuple TableReader::_convert_columns_to_tuple(const Columns& keys, size_t row_idx) const {
+    DatumTuple res;
+    res.reserve(keys.size());
+    for (const auto& column : keys) {
+        res.append(column->get(row_idx));
+    }
+    return res;
 }
 
 } // namespace starrocks

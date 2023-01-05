@@ -253,6 +253,30 @@ private:
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 };
 
+struct OlapTableSinkParams {
+    // unique load id
+    const TUniqueId& load_id;
+
+    int64_t txn_id;
+    int64_t load_channel_timeout_s;
+    int num_replicas;
+    int tuple_id;
+
+    const TKeysType::type& keys_type;
+    const TOlapTableSchemaParam& schema;
+    const TOlapTablePartitionParam& partition;
+    const TOlapTableLocationParam& location;
+    const TNodesInfo& nodes_info;
+    TWriteQuorumType::type write_quorum_type;
+
+    const std::string& merge_condition;
+    const std::string& txn_trace_parent;
+
+    bool is_lake_table;
+    bool need_gen_rollup;
+    bool enable_replicated_storage{false};
+};
+
 // Write data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.
 // When you call OlapTableSink::send(), you will be the productor who products pending batches.
@@ -264,6 +288,9 @@ public:
     ~OlapTableSink() override = default;
 
     Status init(const TDataSink& sink, RuntimeState* state) override;
+
+    // TODO: Merge init TDataSink into one method.
+    Status init(const OlapTableSinkParams& params, RuntimeState* state);
 
     Status prepare(RuntimeState* state) override;
 
@@ -307,6 +334,8 @@ public:
     Status reset_epoch(RuntimeState* state);
 
 private:
+    OlapTableSinkParams _convert_to_sink_params(const TDataSink& data_sink);
+
     template <LogicalType PT>
     void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);

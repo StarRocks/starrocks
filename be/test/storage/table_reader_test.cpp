@@ -294,7 +294,7 @@ TEST_F(TableReaderTest, test_basic_read) {
 
     std::vector<bool> found;
     ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_schema, 10);
-    Status status = table_reader->multi_get(*key_chunk, {"v1", "v2"}, found, *value_chunk);
+    Status status = table_reader->multi_get(key_chunk->columns(), {"v1", "v2"}, found, &value_chunk);
     ASSERT_OK(status);
     ASSERT_EQ(expected_found.size(), found.size());
     for (int i = 0; i < expected_found.size(); i++) {
