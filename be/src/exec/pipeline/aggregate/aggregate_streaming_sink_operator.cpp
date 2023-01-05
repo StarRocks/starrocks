@@ -153,7 +153,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
         if (!ht_needs_expansion ||
             _aggregator->should_expand_preagg_hash_tables(_aggregator->num_input_rows(), chunk_size, allocated_bytes,
                                                           _aggregator->hash_map_variant().size())) {
-            // hash table is not full or allow expand the hash table according reduction rate
+            // hash table is not full or allow to expand the hash table according reduction rate
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size));
             if (_aggregator->is_none_group_by_exprs()) {
@@ -198,7 +198,6 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
         } else if (_auto_context.adjust_count < continuous_limit &&
                    _auto_context.high_reduction(agg_count, chunk_size) &&
                    allocated_bytes < AggrAutoContext::MaxHtSize) {
-            //TODO rebuilding is OK?
             RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk_size));
 
             _auto_context.preagg_count++;
@@ -206,6 +205,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
             _auto_context.selective_preagg_count = 0;
             if (_auto_context.preagg_count == AggrAutoContext::AdjustLimit) {
                 _auto_state = AggrAutoState::PREAGG;
+                _auto_context.preagg_count = 0;
                 LOG(INFO) << "auto agg: continuous " << AggrAutoContext::AdjustLimit << " high reduction "
                           << agg_count * 1.0 / chunk_size << " "
                           << _auto_context.get_auto_state_string(AggrAutoState::ADJUST) << " -> "
@@ -246,24 +246,15 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
     case AggrAutoState::PREAGG: {
         RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk_size));
         _auto_context.preagg_count++;
-        if (_auto_state == AggrAutoState::FORCE_PREAGG) {
-            if (_auto_context.preagg_count > AggrAutoContext::PreaggLimit) {
-                _auto_state = AggrAutoState::ADJUST;
-                _auto_context.preagg_count = 0;
-                _auto_context.adjust_count = 0;
-                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::PreaggLimit << " "
-                          << _auto_context.get_auto_state_string(AggrAutoState::FORCE_PREAGG) << " -> "
-                          << _auto_context.get_auto_state_string(_auto_state);
-            }
-        } else {
-            if (_auto_context.preagg_count > AggrAutoContext::AdjustLimit + AggrAutoContext::PreaggLimit) {
-                _auto_state = AggrAutoState::ADJUST;
-                _auto_context.preagg_count = 0;
-                _auto_context.adjust_count = 0;
-                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::AdjustLimit + AggrAutoContext::PreaggLimit
-                          << " " << _auto_context.get_auto_state_string(AggrAutoState::PREAGG) << " -> "
-                          << _auto_context.get_auto_state_string(_auto_state);
-            }
+        auto limit = _auto_state == AggrAutoState::FORCE_PREAGG ? AggrAutoContext::ForcePreaggLimit
+                                                                : AggrAutoContext::PreaggLimit;
+        if (_auto_context.preagg_count > limit) {
+            auto current_state = _auto_context.get_auto_state_string(_auto_state);
+            _auto_state = AggrAutoState::ADJUST;
+            _auto_context.preagg_count = 0;
+            _auto_context.adjust_count = 0;
+            LOG(INFO) << "auto agg: continuous " << AggrAutoContext::PreaggLimit << " " << current_state << " -> "
+                      << _auto_context.get_auto_state_string(_auto_state);
         }
         break;
     }
