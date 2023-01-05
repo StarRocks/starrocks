@@ -35,12 +35,7 @@ PERCENTILE_APPROX_RAW(x, y);
   AGGREGATE KEY(`site_id`, `date`, `city_code`)
   COMMENT "OLAP"
   DISTRIBUTED BY HASH(`site_id`) BUCKETS 8
-  PROPERTIES (
-  "replication_num" = "1",
-  "in_memory" = "false",
-  "storage_format" = "DEFAULT",
-  "enable_persistent_index" = "false"
-  );
+  PROPERTIES ("replication_num" = "1");
   ```
 
 向表中插入数据。

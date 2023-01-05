@@ -2,7 +2,7 @@
 
 ## 功能
 
-构造一个 `percentile` 类型的数值，主要用于 `insert` 或 `stream load` 时填充默认值。
+构造一个 `percentile` 类型的数值，主要用于 INSERT 或 Stream Load 导入时填充默认值。
 
 ## 语法
 
@@ -33,12 +33,7 @@ CREATE TABLE `aggregate_tbl` (
 AGGREGATE KEY(`site_id`, `date`, `city_code`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`site_id`) BUCKETS 8
-PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"storage_format" = "DEFAULT",
-"enable_persistent_index" = "false"
-);
+PROPERTIES ("replication_num" = "1");
 ```
 
 插入数据。
