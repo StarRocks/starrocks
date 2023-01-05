@@ -59,7 +59,7 @@ PROPERTIES (
 );
 ```
 
-查询PERCENTILE类型列。
+查询 PERCENTILE 类型列。
 
 ```sql
 select percentile_approx_raw(percentile_union(sale_amt_per), 0.99) from sales_records;

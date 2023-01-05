@@ -760,6 +760,8 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 
 如要查询 Iceberg 数据，需要在 StarRocks 中创建 Iceberg 外部表，并将外部表与需要查询的 Iceberg 表建立映射。
 
+自 2.1.0 版本起，StarRocks 支持通过外部表的方式查询 Iceberg 数据。
+
 ### 前提条件
 
 确保 StarRocks 有权限访问 Iceberg 依赖的元数据服务（如 Hive metastore）、文件系统（如 HDFS ）和对象存储系统（如 Amazon S3 和阿里云对象存储 OSS）。
@@ -927,7 +929,7 @@ select count(*) from iceberg_tbl;
 
 ## Apache Hudi 外表
 
-StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在 StarRock 创建外表，查询 Hudi 中的数据。
+从 2.2.0 版本开始，StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在 StarRock 创建外表，查询 Hudi 中的数据。
 
 ### 前提条件
 

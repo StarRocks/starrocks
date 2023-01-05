@@ -17,7 +17,7 @@
 
 ## 使用 INSERT INTO SELECT 语句导入大量数据时会执行失败 “execute timeout”。如何解决？
 
-该错误因 query 超时导致。您可以通过调节 Session 变量 `query_timeout`解决。该参数默认为 600，单位为秒。
+该错误因 query 超时导致。您可以通过调节 Session 变量 `query_timeout`解决。该参数默认为 300，单位为秒。
 
 ```sql
 set query_timeout =xx;
