@@ -274,7 +274,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
 
     {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
@@ -433,7 +433,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
 
     {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
@@ -616,7 +616,7 @@ static ssize_t read_and_compare(const ChunkIteratorPtr& iter, int64_t nkeys) {
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet,
                                        const std::shared_ptr<TabletSchema>& partial_schema, int64_t version,
                                        int64_t nkeys) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema(*partial_schema);
     TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -639,7 +639,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
+    auto schema = ChunkHelper::convert_schema(*partial_schema);
 
     {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
@@ -708,7 +708,7 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     {
         // k1 k2
         std::vector<uint32_t> column_indexes{0, 1};
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -725,7 +725,7 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     {
         // v1
         std::vector<uint32_t> column_indexes{2};
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -749,7 +749,7 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     rs_opts.sorted = true;
     rs_opts.version = 0;
     rs_opts.stats = &_stats;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto res = rowset->new_iterator(schema, rs_opts);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
@@ -790,7 +790,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
     {
         // k1 k2 v
         std::vector<uint32_t> column_indexes{0, 1, 2};
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows / chunk_size + 1; ++i) {
             chunk->reset();
@@ -815,7 +815,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
     rs_opts.sorted = true;
     rs_opts.version = 0;
     rs_opts.stats = &_stats;
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema(*tablet_schema);
     auto res = rowset->new_iterator(schema, rs_opts);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
@@ -870,7 +870,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
         rs_opts.sorted = true;
         rs_opts.version = 0;
         rs_opts.stats = &_stats;
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+        auto schema = ChunkHelper::convert_schema(*tablet_schema);
         auto res = rowset->new_iterator(schema, rs_opts);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
@@ -904,7 +904,7 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
 
     Int64Column deletes;
     std::unique_ptr<SegmentPB> seg_info = std::make_unique<SegmentPB>();

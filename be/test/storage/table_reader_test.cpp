@@ -70,7 +70,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, data.size());
         auto& cols = chunk->columns();
         for (int pos = start_pos; pos < end_pos; pos++) {
@@ -172,8 +172,8 @@ public:
             TabletSharedPtr tablet = create_tablet(rand(), rand());
             _tablets.push_back(tablet);
         }
-        _key_schema = ChunkHelper::convert_schema_to_format_v2(_tablets[0]->tablet_schema(), {0, 1, 2});
-        _value_schema = ChunkHelper::convert_schema_to_format_v2(_tablets[0]->tablet_schema(), {3, 4});
+        _key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0, 1, 2});
+        _value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {3, 4});
     }
 
     void TearDown() override {
@@ -303,9 +303,8 @@ TEST_F(TableReaderTest, test_basic_read) {
     verify_chunk_eq(_value_schema, expected_value_chunk.get(), value_chunk.get());
 
     // 4. verify scan
-    VectorizedSchema scan_key_schema = ChunkHelper::convert_schema_to_format_v2(_tablets[0]->tablet_schema(), {0, 1});
-    VectorizedSchema scan_value_schema =
-            ChunkHelper::convert_schema_to_format_v2(_tablets[0]->tablet_schema(), {2, 3, 4});
+    VectorizedSchema scan_key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0, 1});
+    VectorizedSchema scan_value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {2, 3, 4});
 
     ChunkPtr expect_scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
     ChunkPtr scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);

@@ -217,9 +217,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
         if (ref_column >= 0) {
-            LogicalType ref_type =
-                    TypeUtils::to_storage_format_v2(base_tablet_meta->tablet_schema().column(ref_column).type());
-            LogicalType new_type = TypeUtils::to_storage_format_v2(new_tablet_meta->tablet_schema().column(i).type());
+            LogicalType ref_type = base_tablet_meta->tablet_schema().column(ref_column).type();
+            LogicalType new_type = new_tablet_meta->tablet_schema().column(i).type();
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const auto& materialized_function = _schema_mapping[i].materialized_function;
                 const MaterializeTypeConverter* converter =
@@ -231,8 +230,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 }
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-                VectorizedField ref_field = ChunkHelper::convert_field_to_format_v2(
-                        ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                VectorizedField ref_field =
+                        ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
                 Status st = converter->convert_materialized(base_col, new_col, ref_field.type().get());
                 if (!st.ok()) {
                     return false;
@@ -285,10 +284,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
 
-                VectorizedField ref_field = ChunkHelper::convert_field_to_format_v2(
-                        ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                VectorizedField new_field =
-                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
+                VectorizedField ref_field =
+                        ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                VectorizedField new_field = ChunkHelper::convert_field(i, new_tablet_meta->tablet_schema().column(i));
 
                 Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
                                                       new_col.get(), mem_pool);

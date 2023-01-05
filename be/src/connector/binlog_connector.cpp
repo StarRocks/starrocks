@@ -122,7 +122,7 @@ StatusOr<VectorizedSchema> BinlogDataSource::_build_binlog_schema() {
     }
 
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, data_column_cids);
+    VectorizedSchema schema = ChunkHelper::convert_schema(tablet_schema, data_column_cids);
     for (int32_t i = 0; i < meta_column_slot_index.size(); i++) {
         uint32_t index = meta_column_slot_index[i];
         if (index >= schema.num_fields()) {

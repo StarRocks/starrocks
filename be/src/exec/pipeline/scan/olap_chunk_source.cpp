@@ -269,15 +269,14 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    starrocks::VectorizedSchema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
+    starrocks::VectorizedSchema child_schema = ChunkHelper::convert_schema(tablet_schema, reader_columns);
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), _morsel->rowsets());
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::VectorizedSchema output_schema =
-                ChunkHelper::convert_schema_to_format_v2(tablet_schema, scanner_columns);
+        starrocks::VectorizedSchema output_schema = ChunkHelper::convert_schema(tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 

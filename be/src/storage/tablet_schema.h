@@ -154,9 +154,6 @@ public:
 
     std::string debug_string() const;
 
-    bool is_format_v1_column() const;
-    bool is_format_v2_column() const;
-
     int64_t mem_usage() const {
         int64_t mem_usage = sizeof(TabletColumn) + _col_name.size() + default_value().capacity();
         for (int i = 0; i < subcolumn_count(); i++) {
@@ -238,7 +235,6 @@ public:
 
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
-    size_t row_size() const;
     size_t estimate_row_size(size_t variable_len) const;
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
@@ -257,11 +253,6 @@ public:
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
     static bool is_in_memory() { return false; }
-
-    bool contains_format_v1_column() const;
-    bool contains_format_v2_column() const;
-
-    std::unique_ptr<TabletSchema> convert_to_format(DataFormatVersion format) const;
 
     std::string debug_string() const;
 

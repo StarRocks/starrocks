@@ -581,7 +581,7 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
 
     _short_key_schema = std::make_shared<VectorizedSchema>(
-            ChunkHelper::get_short_key_schema_with_format_v2(_tablets[_tablet_idx]->tablet_schema()));
+            ChunkHelper::get_short_key_schema(_tablets[_tablet_idx]->tablet_schema()));
     _sample_splitted_scan_blocks =
             _splitted_scan_rows * _segment_group->num_blocks() / _tablets[_tablet_idx]->num_rows();
     _sample_splitted_scan_blocks = std::max<int64_t>(_sample_splitted_scan_blocks, 1);

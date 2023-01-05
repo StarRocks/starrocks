@@ -39,7 +39,7 @@ TEST(TabletSchemaTest, test_estimate_row_size) {
     auto c3 = schema_pb.add_column();
     c3->set_unique_id(3);
     c3->set_name("c3");
-    c3->set_type("DATE");
+    c3->set_type("DATE_V2");
     c3->set_is_key(false);
 
     auto c4 = schema_pb.add_column();
@@ -68,6 +68,6 @@ TEST(TabletSchemaTest, test_estimate_row_size) {
 
     TabletSchema tablet_schema(schema_pb);
     size_t row_size = tablet_schema.estimate_row_size(100);
-    ASSERT_EQ(row_size, 134);
+    ASSERT_EQ(row_size, 135);
 }
 } // namespace starrocks

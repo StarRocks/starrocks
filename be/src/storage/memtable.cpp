@@ -38,7 +38,7 @@ static const size_t kPrimaryKeyLimitSize = 128;
 
 VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
                                           const std::vector<SlotDescriptor*>* slot_descs) {
-    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema(*tablet_schema);
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema

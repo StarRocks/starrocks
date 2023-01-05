@@ -31,28 +31,24 @@ class TupleDescriptor;
 
 class ChunkHelper {
 public:
-    static VectorizedField convert_field(ColumnId id, const TabletColumn& c);
-
-    static VectorizedSchema convert_schema(const TabletSchema& schema);
-
     // Convert TabletColumn to VectorizedField. This function will generate format
     // V2 type: DATE_V2, TIMESTAMP, DECIMAL_V2
-    static VectorizedField convert_field_to_format_v2(ColumnId id, const TabletColumn& c);
+    static VectorizedField convert_field(ColumnId id, const TabletColumn& c);
 
     // Convert TabletSchema to VectorizedSchema with changing format v1 type to format v2 type.
-    static VectorizedSchema convert_schema_to_format_v2(const TabletSchema& schema);
+    static VectorizedSchema convert_schema(const TabletSchema& schema);
 
     // Convert TabletSchema to VectorizedSchema with changing format v1 type to format v2 type.
-    static VectorizedSchema convert_schema_to_format_v2(const TabletSchema& schema, const std::vector<ColumnId>& cids);
+    static VectorizedSchema convert_schema(const TabletSchema& schema, const std::vector<ColumnId>& cids);
 
     // Get schema with format v2 type containing short key columns from TabletSchema.
-    static VectorizedSchema get_short_key_schema_with_format_v2(const TabletSchema& tablet_schema);
+    static VectorizedSchema get_short_key_schema(const TabletSchema& schema);
 
     // Get schema with format v2 type containing sort key columns from TabletSchema.
-    static VectorizedSchema get_sort_key_schema_with_format_v2(const TabletSchema& tablet_schema);
+    static VectorizedSchema get_sort_key_schema(const TabletSchema& schema);
 
     // Get schema with format v2 type containing sort key columns filled by primary key columns from TabletSchema.
-    static VectorizedSchema get_sort_key_schema_by_primary_key_format_v2(const starrocks::TabletSchema& tablet_schema);
+    static VectorizedSchema get_sort_key_schema_by_primary_key(const starrocks::TabletSchema& tablet_schema);
 
     static ColumnId max_column_id(const VectorizedSchema& schema);
 

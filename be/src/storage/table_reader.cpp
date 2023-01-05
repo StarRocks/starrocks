@@ -38,7 +38,7 @@ TableReader::TableReader(const TableReaderParams& params) : _params(params) {
     }
 
     if (!_local_tablets.empty()) {
-        _tablet_schema = ChunkHelper::convert_schema_to_format_v2(_local_tablets[0]->tablet_schema());
+        _tablet_schema = ChunkHelper::convert_schema(_local_tablets[0]->tablet_schema());
     }
 }
 

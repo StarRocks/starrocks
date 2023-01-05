@@ -47,7 +47,7 @@ ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition)
     const TabletColumn& col = _schema.column(index);
     auto precision = col.precision();
     auto scale = col.scale();
-    auto type = TypeUtils::to_storage_format_v2(col.type());
+    auto type = col.type();
     auto&& type_info = get_type_info(type, precision, scale);
 
     ColumnPredicate* pred = nullptr;
@@ -91,7 +91,7 @@ StatusOr<ColumnPredicate*> PredicateParser::parse_expr_ctx(const SlotDescriptor&
     const TabletColumn& col = _schema.column(column_id);
     auto precision = col.precision();
     auto scale = col.scale();
-    auto type = TypeUtils::to_storage_format_v2(col.type());
+    auto type = col.type();
     auto&& type_info = get_type_info(type, precision, scale);
     return ColumnExprPredicate::make_column_expr_predicate(type_info, column_id, state, expr_ctx, &slot_desc);
 }

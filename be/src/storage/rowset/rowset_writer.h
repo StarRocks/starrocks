@@ -164,7 +164,6 @@ protected:
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
-    std::unique_ptr<TabletSchema> _rowset_schema;
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta_pb;
     SegmentWriterOptions _writer_options;
 
