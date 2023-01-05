@@ -60,7 +60,7 @@ FE 按照数据分布情况和算子类型将执行计划中的计算任务分�
 
 ### 制作 StarRocks  Operator 镜像
 
-1. 下载 StarRocks Operator 代码，并保存至目录 `$your_code_path/``starrocks-kubernetes-operator`。
+1. 下载 StarRocks Operator 代码，并保存至目录 `$your_code_path/starrocks-kubernetes-operator`。
 
     ```Bash
     cd $your_code_path
