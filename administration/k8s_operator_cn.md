@@ -64,7 +64,7 @@ FE 按照数据分布情况和算子类型将执行计划中的计算任务分�
 
     ```Bash
     cd $your_code_path
-    git clone https://github.com/StarRocks/starrocks-kubernetes-operator
+    git clone https://github.com/StarRocks/starrocks-kubernetes-operator.git
     ```
 
 2. 进入 StarRocks Operator 代码目录。
