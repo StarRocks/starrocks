@@ -40,9 +40,13 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.http.UnauthorizedException;
 import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
 // Get load information of one load job
@@ -74,11 +78,22 @@ public class GetLoadInfoAction extends RestBaseAction {
         }
 
         if (info.tblNames.isEmpty()) {
-            checkDbAuth(ConnectContext.get().getCurrentUserIdentity(), info.dbName, PrivPredicate.LOAD);
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (!PrivilegeManager.checkActionInDb(ConnectContext.get(), info.dbName, "INSERT")) {
+                    throw new UnauthorizedException(
+                            "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
+                }
+            } else {
+                checkDbAuth(ConnectContext.get().getCurrentUserIdentity(), info.dbName, PrivPredicate.LOAD);
+            }
         } else {
             for (String tblName : info.tblNames) {
-                checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), info.dbName, tblName,
-                        PrivPredicate.LOAD);
+                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.TableAction.INSERT);
+                } else {
+                    checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), info.dbName, tblName,
+                            PrivPredicate.LOAD);
+                }
             }
         }
         globalStateMgr.getLoadManager().getLoadJobInfo(info);

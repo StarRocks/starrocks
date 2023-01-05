@@ -189,7 +189,7 @@ public class RoutineLoadManager implements Writable {
 
     public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt)
             throws UserException {
-        // check load auth
+        // check load auth, in new RBAC framework, create routine load will be checked in PrivilegeCheckerV2
         if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                                                                          createRoutineLoadStmt.getDBName(),

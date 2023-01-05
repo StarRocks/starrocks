@@ -37,6 +37,7 @@ package com.starrocks.http.meta;
 import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -108,7 +109,12 @@ public class ColocateMetaService {
             if (redirectToLeader(request, response)) {
                 return;
             }
-            checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
+            UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                checkUserOwnsAdminRole(currentUser);
+            } else {
+                checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
+            }
             executeInLeaderWithAdmin(request, response);
         }
 

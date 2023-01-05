@@ -41,6 +41,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -87,7 +88,11 @@ public class LoadAction extends RestBaseAction {
         String label = request.getRequest().headers().get(LABEL_KEY);
 
         // check auth
-        checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.LOAD);
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.TableAction.INSERT);
+        } else {
+            checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.LOAD);
+        }
 
         // Choose a backend sequentially.
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);

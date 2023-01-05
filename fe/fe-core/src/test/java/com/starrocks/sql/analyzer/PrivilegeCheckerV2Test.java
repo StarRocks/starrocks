@@ -255,6 +255,7 @@ public class PrivilegeCheckerV2Test {
     private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql,
                                           String expectError) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
         // 1. before grant: access denied
@@ -1694,6 +1695,7 @@ public class PrivilegeCheckerV2Test {
                 "WITH RESOURCE 'my_spark'" +
                 "('username' = 'test_name','password' = 'pwd') " +
                 "PROPERTIES ('timeout' = '3600');";
+        ctxToRoot();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createSql, starRocksAssert.getCtx());
         ctxToTestUser();
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -1726,7 +1728,9 @@ public class PrivilegeCheckerV2Test {
                 "WITH RESOURCE 'my_spark'" +
                 "('username' = 'test_name','password' = 'pwd') " +
                 "PROPERTIES ('timeout' = '3600');";
+        ctxToRoot();
         starRocksAssert.withLoad(createSql);
+        ctxToTestUser();
 
         // ALTER LOAD STMT
         String alterLoadSql = "ALTER LOAD FOR db1.job_name1 PROPERTIES ('priority' = 'LOW');";

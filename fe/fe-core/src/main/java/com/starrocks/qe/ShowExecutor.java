@@ -1066,7 +1066,7 @@ public class ShowExecutor {
             LOG.warn(e.getMessage(), e);
             throw new AnalysisException(e.getMessage());
         }
-        // In new privilege framework(RBAC), user needs any action on the table to show routione load job on it.
+        // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
             Iterator<RoutineLoadJob> iterator = routineLoadJobList.iterator();
             while (iterator.hasNext()) {
@@ -1131,9 +1131,10 @@ public class ShowExecutor {
             throw new AnalysisException(
                     "The table metadata of job has been changed. The job will be cancelled automatically", e);
         }
-        // In new privilege framework(RBAC), user needs any action on the table to show routione load job on it.
+        // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
             if (!PrivilegeManager.checkAnyActionOnTable(ctx, dbFullName, tableName)) {
+                // if we have no privilege, return an empty result set
                 resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
                 return;
             }

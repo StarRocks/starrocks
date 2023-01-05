@@ -21,6 +21,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -247,8 +249,16 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
     protected boolean delegatePostRowFilter(ConnectContext cxt, RoutineLoadJob job) {
         try {
             // validate table privilege at the end of a predicateChain in the `stream().filter()`
-            return GlobalStateMgr.getCurrentState().getAuth()
-                    .checkTblPriv(cxt, job.getDbFullName(), job.getName(), PrivPredicate.LOAD);
+            if (cxt.getGlobalStateMgr().isUsingNewPrivilege()) {
+                return PrivilegeManager.checkTableAction(
+                        cxt,
+                        job.getDbFullName(),
+                        job.getName(),
+                        PrivilegeType.TableAction.INSERT);
+            } else {
+                return GlobalStateMgr.getCurrentState().getAuth()
+                        .checkTblPriv(cxt, job.getDbFullName(), job.getName(), PrivPredicate.LOAD);
+            }
         } catch (MetaNotFoundException e) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, job.getId())
                     .add("error_msg", "The metadata of this job has been changed. "

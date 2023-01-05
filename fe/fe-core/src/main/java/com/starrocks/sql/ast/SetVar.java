@@ -108,13 +108,13 @@ public class SetVar implements ParseNode {
 
         if (type == SetType.GLOBAL) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            if (!globalStateMgr.isUsingNewPrivilege()) {
-                if (!globalStateMgr.getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-                }
-            } else {
+            if (globalStateMgr.isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkSystemAction(ConnectContext.get(), PrivilegeType.SystemAction.OPERATE)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
+                }
+            } else {
+                if (!globalStateMgr.getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
                 }
             }
         }
