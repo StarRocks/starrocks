@@ -31,7 +31,7 @@ public:
             LOG(WARNING) << "config::local_exchange_buffer_mem_limit_per_driver <= 0";
         }
         size_t res = max_input_dop * limit_bytes;
-        size_t MAX_MEM_LIMIT = 8 * 1024 * 1024 * 1024; // 8G limit
+        const size_t MAX_MEM_LIMIT = 8 * 1024 * 1024 * 1024UL; // 8G limit
         _max_memory_bytes = res > MAX_MEM_LIMIT or res <= 0 ? MAX_MEM_LIMIT : res;
     }
 
