@@ -52,19 +52,18 @@ public class MVMaintenanceTask {
 
     // Task specific information
     private long taskId;
-    private TNetworkAddress beHost;
+    private TNetworkAddress beRpcAddr;
     private List<TExecPlanFragmentParams> fragmentInstances = new ArrayList<>();
     private Map<TUniqueId, Map<Integer, List<TScanRange>>> binlogConsumeState = new HashMap<>();
 
-    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beHost,
+    public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beRpcAddr,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
         MVMaintenanceTask task = new MVMaintenanceTask();
         task.dbName = GlobalStateMgr.getCurrentState().getDb(job.getView().getDbId()).getFullName();
         task.job = job;
-        task.beHost = beHost;
+        task.beRpcAddr = beRpcAddr;
         task.taskId = taskId;
         task.fragmentInstances = fragmentInstances;
-
         return task;
     }
 
@@ -107,8 +106,8 @@ public class MVMaintenanceTask {
         this.taskId = taskId;
     }
 
-    public TNetworkAddress getBeHost() {
-        return beHost;
+    public TNetworkAddress getBeRpcAddr() {
+        return beRpcAddr;
     }
 
     public void addFragmentInstance(TExecPlanFragmentParams instance) {
@@ -182,7 +181,7 @@ public class MVMaintenanceTask {
         return "MVMaintenanceTask{" +
                 "job=" + job +
                 ", dbName='" + dbName + '\'' +
-                ", host=" + beHost +
+                ", host=" + beRpcAddr +
                 ", taskId=" + taskId +
                 '}';
     }

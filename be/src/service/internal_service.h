@@ -163,9 +163,10 @@ private:
 
     // MV Maintenance task
     Status _submit_mv_maintenance_task(brpc::Controller* cntl);
-    Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVStartEpochTask& start_epoch_task);
-    Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVCommitEpochTask& commit_epoch_task);
-    Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVAbortEpochTask& abort_epoch_task);
+    Status _mv_start_maintenance(const TMVMaintenanceTasks& task);
+    Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+    Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
+    Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
 
 protected:
     ExecEnv* _exec_env;

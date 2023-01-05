@@ -685,9 +685,8 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
-    LOG(INFO) << "submit mv maintenance task, query_id=" << t_request.query_id
-              << ", mv_task_type:" << t_request.task_type << "db_name=" << t_request.db_name
-              << ", mv_name=" << t_request.mv_name << ", job_id=" << t_request.job_id
+    LOG(INFO) << "[MV] mv maintenance task, query_id=" << t_request.query_id << ", mv_task_type:" << t_request.task_type
+              << "db_name=" << t_request.db_name << ", mv_name=" << t_request.mv_name << ", job_id=" << t_request.job_id
               << ", task_id=" << t_request.task_id << ", signature=" << t_request.signature;
 
     auto mv_task_type = t_request.task_type;
@@ -696,7 +695,7 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
     // Check the existence of job
     auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
     if (mv_task_type != MVTaskType::START_MAINTENANCE && !query_ctx) {
-        std::string msg = fmt::format("start_epoch maintenance failed, query id not found:", print_id(query_id));
+        std::string msg = fmt::format("execute maintenance task failed, query id not found:", print_id(query_id));
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -708,42 +707,16 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
-        auto start_maintenance = t_request.start_maintenance;
-        auto fragments = start_maintenance.fragments;
-        std::vector<PromiseStatusSharedPtr> promise_statuses;
-        for (const auto& fragment : fragments) {
-            PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-            _exec_env->pipeline_prepare_pool()->offer([ms, fragments, &fragment, this] {
-                pipeline::FragmentExecutor fragment_executor;
-                auto status = fragment_executor.prepare(_exec_env, fragment, fragment);
-                if (status.ok()) {
-                    ms->set_value(fragment_executor.execute(_exec_env));
-                } else {
-                    auto final_status = status.is_duplicate_rpc_invocation() ? Status::OK() : status;
-                    ms->set_value(final_status);
-                }
-            });
-            promise_statuses.emplace_back(std::move(ms));
-        }
-        for (auto& promise : promise_statuses) {
-            // When a preparation fails, return error immediately. The other unfinished preparation is safe,
-            // since they can use the shared pointer of promise and t_batch_requests.
-            RETURN_IF_ERROR(promise->get_future().get());
-        }
+        RETURN_IF_ERROR(_mv_start_maintenance(t_request));
         break;
     }
     case MVTaskType::START_EPOCH: {
-        if (t_request.__isset.start_epoch) {
-            return Status::InternalError("should be start_epoch task");
-        }
-        auto& start_epoch = t_request.start_epoch;
-        VLOG(2) << "MV start_epoch start_epoch=" << start_epoch.epoch;
+        RETURN_IF_ERROR(_mv_start_epoch(query_ctx, t_request));
         break;
     }
     case MVTaskType::COMMIT_EPOCH: {
-        if (t_request.__isset.commit_epoch) {
-            return Status::InternalError("should be commit_epoch task");
-        }
+        RETURN_IF_ERROR(_mv_commit_epoch(query_ctx, t_request));
+
         auto& commit_epoch = t_request.commit_epoch;
         auto& version_info = commit_epoch.partition_version_infos;
         std::stringstream version_str;
@@ -754,7 +727,6 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
         version_str << "]";
         VLOG(2) << "MV commit_epoch: epoch=" << commit_epoch.epoch << version_str.str();
 
-        RETURN_IF_ERROR(_mv_commit_epoch(query_ctx, commit_epoch));
         break;
     }
     // TODO(murphy)
@@ -771,8 +743,24 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
 }
 
 template <typename T>
+Status PInternalServiceImplBase<T>::_mv_start_maintenance(const TMVMaintenanceTasks& task) {
+    RETURN_IF(!task.__isset.start_maintenance, Status::InternalError("must be start_maintenance task"));
+    auto& start_maintenance = task.start_maintenance;
+    auto& fragments = start_maintenance.fragments;
+    for (const auto& fragment : fragments) {
+        pipeline::FragmentExecutor fragment_executor;
+        RETURN_IF_ERROR(fragment_executor.prepare(_exec_env, fragment, fragment));
+        RETURN_IF_ERROR(fragment_executor.execute(_exec_env));
+    }
+
+    return Status::OK();
+}
+
+template <typename T>
 Status PInternalServiceImplBase<T>::_mv_start_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                    const TMVStartEpochTask& start_epoch_task) {
+                                                    const TMVMaintenanceTasks& task) {
+    RETURN_IF(!task.__isset.start_epoch, Status::InternalError("must be start_epoch task"));
+    auto& start_epoch_task = task.start_epoch;
     auto epoch_manager = query_ctx->stream_epoch_manager();
     EpochInfo epoch_info = EpochInfo::from_start_epoch_task(start_epoch_task);
     ScanRangeInfo scan_info = ScanRangeInfo::from_start_epoch_start(start_epoch_task);
@@ -782,14 +770,16 @@ Status PInternalServiceImplBase<T>::_mv_start_epoch(const pipeline::QueryContext
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                    const TMVAbortEpochTask& commit_epoch_task) {
+                                                    const TMVMaintenanceTasks& task) {
     // auto epoch_manager = query_ctx->stream_epoch_manager();
     return Status::NotSupported("TODO");
 }
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                     const TMVCommitEpochTask& commit_epoch_task) {
+                                                     const TMVMaintenanceTasks& task) {
+    RETURN_IF(!task.__isset.commit_epoch, Status::InternalError("must be commit_epoch task"));
+    auto& commit_epoch_task = task.commit_epoch;
     auto* agent_server = ExecEnv::GetInstance()->agent_server();
     auto token =
             agent_server->get_thread_pool(TTaskType::PUBLISH_VERSION)->new_token(ThreadPool::ExecutionMode::CONCURRENT);

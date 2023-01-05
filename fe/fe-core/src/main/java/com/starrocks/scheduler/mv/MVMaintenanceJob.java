@@ -260,14 +260,15 @@ public class MVMaintenanceJob implements Writable {
                             tabletSinkDop);
             for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
                 CoordinatorPreprocessor.FInstanceExecParam instanceParam = execParams.instanceExecParams.get(i);
-                TNetworkAddress beHost = instanceParam.getHost();
-                Long taskId = addr2TaskId.get(beHost);
+                // Get brpc address instead of the default address
+                TNetworkAddress beRpcAddr = queryCoordinator.getBrpcAddress(instanceParam.getHost());
+                Long taskId = addr2TaskId.get(beRpcAddr);
                 MVMaintenanceTask task;
                 if (taskId == null) {
                     taskId = taskIdGen++;
-                    task = MVMaintenanceTask.build(this, taskId, beHost, new ArrayList<>());
+                    task = MVMaintenanceTask.build(this, taskId, beRpcAddr, new ArrayList<>());
                     tasksByBe.put(taskId, task);
-                    addr2TaskId.put(beHost, taskId);
+                    addr2TaskId.put(beRpcAddr, taskId);
                 } else {
                     task = tasksByBe.get(taskId);
                 }
@@ -290,7 +291,7 @@ public class MVMaintenanceJob implements Writable {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
             long taskId = task.getTaskId();
-            TNetworkAddress address = task.getBeHost();
+            TNetworkAddress address = task.getBeRpcAddr();
             // Request information
             String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
 
@@ -303,9 +304,11 @@ public class MVMaintenanceJob implements Writable {
             request.setStart_maintenance(new TMVMaintenanceStartTask());
             request.setDb_name(dbName);
             request.setMv_name(view.getName());
+            request.setStart_maintenance(new TMVMaintenanceStartTask());
             request.start_maintenance.setFragments(task.getFragmentInstances());
 
             try {
+                LOG.debug("[MV] try deploy task at {}: {}", address, task);
                 Future<PMVMaintenanceTaskResult> resultFuture =
                         BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request);
                 results.add(resultFuture);
@@ -344,7 +347,7 @@ public class MVMaintenanceJob implements Writable {
             request.setJob_id(getJobId());
             request.setTask_id(task.getTaskId());
             request.setStop_maintenance(new TMVMaintenanceStopTask());
-            TNetworkAddress address = task.getBeHost();
+            TNetworkAddress address = task.getBeRpcAddr();
 
             try {
                 results.add(BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));

@@ -323,6 +323,14 @@ public class CoordinatorPreprocessor {
         return idToComputeNode;
     }
 
+    public TNetworkAddress getBrpcAddress(TNetworkAddress beAddress) {
+        long beId = Preconditions.checkNotNull(addressToBackendID.get(beAddress),
+                "backend not found: " + beAddress);
+        Backend be = Preconditions.checkNotNull(idToBackend.get(beId),
+                "backend not found: " + beId);
+        return be.getBrpcAddress();
+    }
+
     public boolean isHasComputeNode() {
         return hasComputeNode;
     }
