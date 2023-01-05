@@ -22,26 +22,25 @@ import java.util.Map;
  * 1. {@link ConnectorScanner#open()}
  * 2. {@link ConnectorScanner#close()}
  * 3. {@link ConnectorScanner#getNext()}
- *
+ * <p>
  * The constructor of inherited subclasses need to accept the following parameters in order:
  * 1. int: the chunk size
  * 2. Map<String, String>: the custom parameters
- *
+ * <p>
  * {@link ConnectorScanner#initOffHeapTableWriter(String[], int, Map)} need be called to initialize
  * {@link ConnectorScanner#tableSize} and {@link ConnectorScanner#types}
  * before calling {@link ConnectorScanner#getNext()} (maybe in constructor or {@link ConnectorScanner#open()})
- *
+ * <p>
  * BE will call these methods as follows (described in pseudocode):
  * open();
  * do {
- *     int rows = getNext();
- *     // do something...
- *     if (rows == 0) {
- *         break;
- *     }
+ * int rows = getNext();
+ * // do something...
+ * if (rows == 0) {
+ * break;
+ * }
  * } while (true);
  * close();
- *
  */
 public abstract class ConnectorScanner {
     private OffHeapTable offHeapTable;
@@ -62,6 +61,7 @@ public abstract class ConnectorScanner {
 
     /**
      * Scan original data and save it to off-heap table.
+     *
      * @return The number of rows scanned.
      * The specific implementation needs to call the {@link ConnectorScanner#scanData(int, Object)} method
      * to save data to off-heap table.
@@ -71,10 +71,11 @@ public abstract class ConnectorScanner {
 
     /**
      * This method need be called before {@link ConnectorScanner#getNext()}
+     *
      * @param requiredTypes column types
-     * @param fetchSize number of rows
-     * @param typeMappings mappings of requiredTypes from {@link String}
-     *                     to {@link com.starrocks.jni.connector.OffHeapColumnVector.OffHeapColumnType}
+     * @param fetchSize     number of rows
+     * @param typeMappings  mappings of requiredTypes from {@link String}
+     *                      to {@link com.starrocks.jni.connector.OffHeapColumnVector.OffHeapColumnType}
      */
     protected void initOffHeapTableWriter(String[] requiredTypes, int fetchSize,
                                           Map<String, OffHeapColumnVector.OffHeapColumnType> typeMappings) {
@@ -93,7 +94,11 @@ public abstract class ConnectorScanner {
         return tableSize;
     }
 
-    protected long getNextOffHeapChunk() throws IOException {
+    public OffHeapTable getOffHeapTable() {
+        return offHeapTable;
+    }
+
+    public long getNextOffHeapChunk() throws IOException {
         initOffHeapTable();
         int numRows = 0;
         try {

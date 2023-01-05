@@ -1,0 +1,44 @@
+{
+  "partitionToWriteStats" : {
+    "" : [ {
+      "fileId" : "64798197-be6a-4eca-9898-0c2ed75b9d65-0",
+      "path" : ".64798197-be6a-4eca-9898-0c2ed75b9d65-0_20230105142938081.log.1_0-95-78",
+      "prevCommit" : "20230105142938081",
+      "numWrites" : 1,
+      "numDeletes" : 0,
+      "numUpdateWrites" : 1,
+      "numInserts" : 0,
+      "totalWriteBytes" : 1172,
+      "totalWriteErrors" : 0,
+      "tempPath" : null,
+      "partitionPath" : "",
+      "totalLogRecords" : 0,
+      "totalLogFilesCompacted" : 0,
+      "totalLogSizeCompacted" : 0,
+      "totalUpdatedRecordsCompacted" : 0,
+      "totalLogBlocks" : 0,
+      "totalCorruptLogBlock" : 0,
+      "totalRollbackBlocks" : 0,
+      "fileSizeInBytes" : 3514,
+      "minEventTime" : null,
+      "maxEventTime" : null,
+      "runtimeStats" : {
+        "totalScanTime" : 0,
+        "totalUpsertTime" : 209,
+        "totalCreateTime" : 0
+      },
+      "logVersion" : 1,
+      "logOffset" : 2342,
+      "baseFile" : "64798197-be6a-4eca-9898-0c2ed75b9d65-0_0-54-41_20230105142938081.parquet",
+      "logFiles" : [ ".64798197-be6a-4eca-9898-0c2ed75b9d65-0_20230105142938081.log.1_0-95-78" ],
+      "recordsStats" : {
+        "val" : null
+      }
+    } ]
+  },
+  "compacted" : false,
+  "extraMetadata" : {
+    "schema" : "{\"type\":\"record\",\"name\":\"test_hudi_mor_record\",\"namespace\":\"hoodie.test_hudi_mor\",\"fields\":[{\"name\":\"uuid\",\"type\":\"string\"},{\"name\":\"ts\",\"type\":\"int\"},{\"name\":\"a\",\"type\":\"int\"},{\"name\":\"b\",\"type\":\"string\"},{\"name\":\"c\",\"type\":{\"type\":\"array\",\"items\":[\"int\",\"null\"]}},{\"name\":\"d\",\"type\":{\"type\":\"map\",\"values\":[\"int\",\"null\"]}},{\"name\":\"e\",\"type\":{\"type\":\"record\",\"name\":\"e\",\"namespace\":\"hoodie.test_hudi_mor.test_hudi_mor_record\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",\"int\"],\"default\":null},{\"name\":\"b\",\"type\":[\"null\",\"string\"],\"default\":null}]}}]}"
+  },
+  "operationType" : "UPSERT"
+}
