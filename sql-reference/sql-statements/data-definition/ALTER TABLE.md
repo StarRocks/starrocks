@@ -82,7 +82,7 @@ partition_desc ["key"="value"]
 
 注意：
 
-1. 详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)
+详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)。
 
 #### 使用临时分区替换原分区
 
@@ -99,7 +99,7 @@ partition_desc ["key"="value"]
 
 注意：
 
-1. 详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)
+详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)。
 
 #### 删除临时分区
 
@@ -112,7 +112,7 @@ DROP TEMPORARY PARTITION partition_name;
 
 注意：
 
-1. 详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)
+详细使用信息请查阅[临时分区](../../../table_design/Temporary_partition.md)。
 
 #### 修改分区属性
 
