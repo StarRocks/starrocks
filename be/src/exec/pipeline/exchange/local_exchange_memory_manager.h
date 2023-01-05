@@ -24,14 +24,15 @@ namespace starrocks::pipeline {
 class LocalExchangeMemoryManager {
 public:
     LocalExchangeMemoryManager(size_t max_input_dop) {
-        size_t limit_bytes = 64 * 1024 * 1024; // 64 MB
+        size_t limit_bytes = 128 * 1024 * 1024UL; // 128 MB
         if (config::local_exchange_buffer_mem_limit_per_driver > 0) {
             limit_bytes = config::local_exchange_buffer_mem_limit_per_driver;
         } else {
-            LOG(WARNING) << "config::local_exchange_buffer_mem_limit_per_driver <= 0";
+            LOG(WARNING) << "invalid config::local_exchange_buffer_mem_limit_per_driver "
+                         << config::local_exchange_buffer_mem_limit_per_driver;
         }
         size_t res = max_input_dop * limit_bytes;
-        const size_t MAX_MEM_LIMIT = 8 * 1024 * 1024 * 1024UL; // 8G limit
+        const size_t MAX_MEM_LIMIT = 128 * 1024 * 1024 * 1024UL; // 128GB limit
         _max_memory_bytes = res > MAX_MEM_LIMIT or res <= 0 ? MAX_MEM_LIMIT : res;
     }
 
