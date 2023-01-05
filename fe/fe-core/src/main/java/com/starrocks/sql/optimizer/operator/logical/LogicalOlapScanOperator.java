@@ -22,7 +22,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -124,9 +123,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return hintsTabletIds;
     }
 
-    public boolean canDoReplicatedJoin() {
-        return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
-    }
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {

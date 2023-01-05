@@ -279,14 +279,7 @@ public class PlanFragmentBuilder {
         }
 
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
-            PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
-            Projection projection = (optExpression.getOp()).getProjection();
-
-            if (projection == null) {
-                return fragment;
-            } else {
-                return buildProjectNode(optExpression, projection, fragment, context);
-            }
+            return visit(optExpression, context);
         }
 
         @Override
@@ -576,31 +569,26 @@ public class PlanFragmentBuilder {
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
                 // we can remove code when refactor tablet select
-                for (Long partitionId : node.getSelectedPartitionId()) {
+                long localBeId = -1;
+                if (Config.enable_local_replica_selection) {
+                    localBeId = GlobalStateMgr.getCurrentSystemInfo()
+                            .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+                }
+
+                for (Map.Entry<Long, List<Long>> entry : scanNode.getPartitionToScanTabletMap().entrySet()) {
+                    long partitionId = entry.getKey();
+                    List<Long> selectTabletIds = entry.getValue();
                     final Partition partition = referenceTable.getPartition(partitionId);
                     final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
-
-                    final List<Tablet> tablets = Lists.newArrayList();
-                    for (Long id : node.getSelectedTabletId()) {
-                        if (selectedTable.getTablet(id) != null) {
-                            tablets.add(selectedTable.getTablet(id));
-                        }
-                    }
-
-                    long localBeId = -1;
-                    if (Config.enable_local_replica_selection) {
-                        localBeId = GlobalStateMgr.getCurrentSystemInfo()
-                                .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
-                    }
-
                     List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
                     Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                     for (int i = 0; i < allTabletIds.size(); i++) {
                         tabletId2BucketSeq.put(allTabletIds.get(i), i);
                     }
-
                     totalTabletsNum += selectedTable.getTablets().size();
                     scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+                    List<Tablet> tablets = selectTabletIds.stream().map(e -> selectedTable.getTablet(e))
+                            .collect(Collectors.toList());
                     scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);
@@ -2806,13 +2794,10 @@ public class PlanFragmentBuilder {
                     !(rightFragmentPlanRoot instanceof ExchangeNode)) {
                 if (isColocateJoin(optExpr)) {
                     distributionMode = HashJoinNode.DistributionMode.COLOCATE;
-                } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
-                        rightFragmentPlanRoot.canDoReplicatedJoin()) {
-                    distributionMode = JoinNode.DistributionMode.REPLICATED;
                 } else if (isShuffleJoin(optExpr)) {
                     distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
-                    Preconditions.checkState(false, "Must be replicate join or colocate join");
+                    Preconditions.checkState(false, "Must be bucket join or colocate join");
                     distributionMode = JoinNode.DistributionMode.COLOCATE;
                 }
             } else if (isShuffleJoin(optExpr)) {
