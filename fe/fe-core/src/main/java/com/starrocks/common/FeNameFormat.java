@@ -38,14 +38,16 @@ import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.mysql.privilege.Role;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.SystemInfoService;
 
 public class FeNameFormat {
     private FeNameFormat() {}
 
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
-    public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,1023}$|^_[a-zA-Z0-9]\\w{0,1023}$";
-
+    public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
+    // The mysql protocol does not limit the length of the db, but the buffer of the mysql-client is 512+1,
+    // minus the use and spaces, a total of 4 bytes, and finally can only limit the length of 509,
+    // in order to be compatible with the mysql-client, the limit length is 509.
+    public static final String DB_NAME_REGEX = "^[a-zA-Z]\\w{0,508}$|^_[a-zA-Z0-9]\\w{0,507}$";
     public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
     // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
@@ -57,17 +59,8 @@ public class FeNameFormat {
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
-    public static void checkClusterName(String clusterName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(clusterName) || !clusterName.matches(COMMON_NAME_REGEX)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_CLUSTER_NAME, clusterName);
-        }
-        if (clusterName.equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_CLUSTER_NAME, clusterName);
-        }
-    }
-
     public static void checkDbName(String dbName) throws AnalysisException {
-        if (Strings.isNullOrEmpty(dbName) || !dbName.matches(COMMON_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(dbName) || !dbName.matches(DB_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
     }
@@ -75,12 +68,6 @@ public class FeNameFormat {
     public static void checkTableName(String tableName) throws AnalysisException {
         if (Strings.isNullOrEmpty(tableName) || !tableName.matches(TABLE_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
-    }
-
-    public static void verifyTableName(String tableName) {
-        if (Strings.isNullOrEmpty(tableName) || !tableName.matches(TABLE_NAME_REGEX)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
     }
 

@@ -118,7 +118,7 @@ public class CreateTableAutoTabletTest {
 
     @Test
     public void createBadDbName() {
-        String longDbName = new String(new char[1026]).replace('\0', 'a');
+        String longDbName = new String(new char[510]).replace('\0', 'a');
         String sql = "create database " + longDbName;
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, UtFrameUtils.createDefaultCtx());
@@ -126,5 +126,12 @@ public class CreateTableAutoTabletTest {
         } catch (Exception e) {
             Assert.assertEquals("Incorrect database name '" + longDbName + "'", e.getMessage());
         }
+    }
+
+    @Test
+    public void createLongDbName() throws Exception {
+        String longDbName = new String(new char[509]).replace('\0', 'a');
+        String sql = "create database " + longDbName;
+        UtFrameUtils.parseStmtWithNewParser(sql, UtFrameUtils.createDefaultCtx());
     }
 }
