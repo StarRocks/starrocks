@@ -266,10 +266,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   用于兼容 8.0.16及以上版本的MySQL JDBC。无实际作用。
 
-* prefer_compute_node
-
-  将部分执行计划调度到 CN 节点执行。默认为 false。
-
 * query_cache_size
 
   用于兼容 MySQL 客户端。无实际作用。
@@ -323,11 +319,6 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * tx_isolation
 
   用于兼容 MySQL 客户端。无实际作用。
-
-* use_compute_nodes
-
-  用于设置使用 CN 节点的数量上限。该设置只会在 `prefer_compute_node=true` 时才会生效。
-  -1 表示使用所有 CN 节点，0 表示不使用 CN 节点。
 
 * use_v2_rollup
 
