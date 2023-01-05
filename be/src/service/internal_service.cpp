@@ -737,7 +737,7 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
             return Status::InternalError("should be start_epoch task");
         }
         auto& start_epoch = t_request.start_epoch;
-        LOG(WARNING) << "MV start_epoch is not implemented: epoch=" << start_epoch.epoch;
+        VLOG(2) << "MV start_epoch start_epoch=" << start_epoch.epoch;
         break;
     }
     case MVTaskType::COMMIT_EPOCH: {
@@ -758,7 +758,7 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
         break;
     }
     // TODO(murphy)
-    // case MVTaskType::ABORT_EPOCH: {
+    // case MVTaskType: {
     //     break;
     // }
     case MVTaskType::STOP_MAINTENANCE: {
@@ -768,6 +768,23 @@ Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller
         return Status::NotSupported(fmt::format("Unsupported MVTaskType: {}", mv_task_type));
     }
     return Status::OK();
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_mv_start_epoch(const pipeline::QueryContextPtr& query_ctx,
+                                                    const TMVStartEpochTask& start_epoch_task) {
+    auto epoch_manager = query_ctx->stream_epoch_manager();
+    EpochInfo epoch_info = EpochInfo::from_start_epoch_task(start_epoch_task);
+    ScanRangeInfo scan_info = ScanRangeInfo::from_start_epoch_start(start_epoch_task);
+
+    return epoch_manager->update_epoch(epoch_info, scan_info);
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx,
+                                                    const TMVAbortEpochTask& commit_epoch_task) {
+    // auto epoch_manager = query_ctx->stream_epoch_manager();
+    return Status::NotSupported("TODO");
 }
 
 template <typename T>
