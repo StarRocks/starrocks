@@ -199,14 +199,14 @@ public class HudiSliceScanner extends ConnectorScanner {
         }
     }
 
-    protected InputFormat<?, ?> createInputFormat(Configuration conf, String inputFormat) throws Exception {
+    private InputFormat<?, ?> createInputFormat(Configuration conf, String inputFormat) throws Exception {
         Class<?> clazz = conf.getClassByName(inputFormat);
         Class<? extends InputFormat<?, ?>> cls =
                 (Class<? extends InputFormat<?, ?>>) clazz.asSubclass(InputFormat.class);
         return ReflectionUtils.newInstance(cls, conf);
     }
 
-    protected Deserializer getDeserializer(Configuration configuration, Properties properties, String name)
+    private Deserializer getDeserializer(Configuration configuration, Properties properties, String name)
             throws Exception {
         Class<? extends Deserializer> deserializerClass = Class.forName(name, true, JavaUtils.getClassLoader())
                 .asSubclass(Deserializer.class);
@@ -215,7 +215,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         return deserializer;
     }
 
-    protected StructObjectInspector getTableObjectInspector(Deserializer deserializer) throws Exception {
+    private StructObjectInspector getTableObjectInspector(Deserializer deserializer) throws Exception {
         ObjectInspector inspector = deserializer.getObjectInspector();
         checkArgument(inspector.getCategory() == ObjectInspector.Category.STRUCT,
                 "expected STRUCT: %s", inspector.getCategory());
