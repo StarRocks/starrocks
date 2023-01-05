@@ -55,6 +55,7 @@ struct BinlogOffset {
     int64_t lsn;
 };
 
+class TMVStartEpochTask;
 /**
  * Epoch is an unit of an incremental compute. At the beginning of each incremental compute,
  * an `EpochInfo` will be triggered for each source operator, then the source operator will
@@ -73,6 +74,8 @@ struct EpochInfo {
     int64_t max_scan_rows;
     // Trigger mode
     TriggerMode trigger_mode;
+
+    static EpochInfo from_start_epoch_task(const TMVStartEpochTask& start_epoch);
 
     std::string debug_string() const {
         std::stringstream ss;
