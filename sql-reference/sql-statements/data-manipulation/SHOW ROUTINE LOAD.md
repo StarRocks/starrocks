@@ -12,7 +12,7 @@
     SHOW ALL ROUTINE LOAD FOR test1;
     ```
 
-2. 展示名称为 test1 的当前正在运行的例行导入作业
+2. 展示名称为 test1 的当前正在运行的例行导入作业。
 
     ```sql
     SHOW ROUTINE LOAD FOR test1;
@@ -25,14 +25,14 @@
     SHOW ALL ROUTINE LOAD;
     ```
 
-4. 显示 example_db 下，所有正在运行的例行导入作业
+4. 显示 example_db 下，所有正在运行的例行导入作业。
 
     ```sql
     use example_db;
     SHOW ROUTINE LOAD;
     ```
 
-5. 显示 example_db 下，名称为 test1 的当前正在运行的例行导入作业
+5. 显示 example_db 下，名称为 test1 的当前正在运行的例行导入作业。
 
     ```sql
     SHOW ROUTINE LOAD FOR example_db.test1;
