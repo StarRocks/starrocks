@@ -21,7 +21,6 @@ import java.util.List;
 
 public class ValuesRelation extends QueryRelation {
     private final List<List<Expr>> rows;
-    private final List<String> columnOutputNames;
 
     /*
         isNullValues means a statement without from or from dual, add a single row of null values here,
@@ -33,7 +32,7 @@ public class ValuesRelation extends QueryRelation {
 
     public ValuesRelation(List<ArrayList<Expr>> rows, List<String> columnOutputNames) {
         this.rows = new ArrayList<>(rows);
-        this.columnOutputNames = columnOutputNames;
+        this.setColumnOutputNames(columnOutputNames);
     }
 
     public void addRow(ArrayList<Expr> row) {
@@ -46,11 +45,6 @@ public class ValuesRelation extends QueryRelation {
 
     public List<List<Expr>> getRows() {
         return rows;
-    }
-
-    @Override
-    public List<String> getColumnOutputNames() {
-        return columnOutputNames;
     }
 
     @Override

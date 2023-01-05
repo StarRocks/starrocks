@@ -22,14 +22,13 @@ import java.util.List;
 public class CTERelation extends Relation {
     private final int cteMouldId;
     private final String name;
-    private List<String> columnOutputNames;
     private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
 
     public CTERelation(int cteMouldId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement) {
         this.cteMouldId = cteMouldId;
         this.name = name;
-        this.columnOutputNames = columnOutputNames;
+        this.explicitColumnNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
     }
 
@@ -45,13 +44,6 @@ public class CTERelation extends Relation {
         return name;
     }
 
-    public List<String> getColumnOutputNames() {
-        return columnOutputNames;
-    }
-
-    public void setColumnOutputNames(List<String> columnOutputNames) {
-        this.columnOutputNames = columnOutputNames;
-    }
 
     public void setResolvedInFromClause(boolean resolvedInFromClause) {
         this.resolvedInFromClause = resolvedInFromClause;

@@ -3662,6 +3662,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Identifier identifier = (Identifier) visit(context.alias);
             valuesRelation.setAlias(new TableName(null, identifier.getValue()));
         }
+
+        if (context.columnAliases() != null) {
+            List<String> targetColumnNames = null;
+            if (context.columnAliases() != null) {
+                // StarRocks tables are not case-sensitive, so targetColumnNames are converted
+                // to lowercase characters to facilitate subsequent matching.
+                List<Identifier> targetColumnNamesIdentifiers =
+                        visitIfPresent(context.columnAliases().identifier(), Identifier.class);
+                if (targetColumnNamesIdentifiers != null) {
+                    targetColumnNames = targetColumnNamesIdentifiers.stream()
+                            .map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+                }
+            }
+
+            valuesRelation.setColumnOutputNames(targetColumnNames);
+        }
+
         return valuesRelation;
     }
 
@@ -3686,7 +3703,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             columnNames = columns.stream().map(Identifier::getValue).collect(toList());
         }
 
-        tableFunctionRelation.setColumnNames(columnNames);
+        tableFunctionRelation.setColumnOutputNames(columnNames);
 
         return tableFunctionRelation;
     }
@@ -3726,6 +3743,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             subqueryRelation.setAlias(new TableName(null, null));
         }
+
+        if (context.columnAliases() != null) {
+            List<String> targetColumnNames = null;
+            if (context.columnAliases() != null) {
+                // StarRocks tables are not case-sensitive, so targetColumnNames are converted
+                // to lowercase characters to facilitate subsequent matching.
+                List<Identifier> targetColumnNamesIdentifiers =
+                        visitIfPresent(context.columnAliases().identifier(), Identifier.class);
+                if (targetColumnNamesIdentifiers != null) {
+                    targetColumnNames = targetColumnNamesIdentifiers.stream()
+                            .map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+                }
+            }
+
+            subqueryRelation.setColumnOutputNames(targetColumnNames);
+        }
+
         return subqueryRelation;
     }
 
@@ -4604,7 +4638,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (context.expression().size() < 1) {
                 throw new ParsingException("Arithmetic expression least one parameter");
             }
-            
+
             Expr e1 = (Expr) visit(context.expression(0));
             Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2);

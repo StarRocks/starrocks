@@ -313,6 +313,7 @@ public class QueryAnalyzer {
                             new SlotRef(tableName, column.getName(), column.getName()), true);
                 } else {
                     field = new Field(column.getName(), column.getType(), tableName,
+
                             new SlotRef(tableName, column.getName(), column.getName()), false);
                 }
                 columns.put(field, column);
@@ -491,9 +492,28 @@ public class QueryAnalyzer {
             Scope queryOutputScope = process(subquery.getQueryStatement(), context);
 
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+
+            if (subquery.getExplicitColumnNames() != null) {
+                if (queryOutputScope.getRelationFields().getAllVisibleFields().size()
+                        != subquery.getExplicitColumnNames().size()) {
+                    throw new SemanticException("In definition of view, derived table or common table expression, " +
+                            "SELECT list and column names list have different column counts");
+                }
+            }
+
+            int explicitColumnNameIdx = 0;
             for (Field field : queryOutputScope.getRelationFields().getAllFields()) {
-                outputFields.add(new Field(field.getName(), field.getType(), subquery.getResolveTableName(),
+                String fieldResolveName;
+                if (subquery.getExplicitColumnNames() != null && field.isVisible()) {
+                    fieldResolveName = subquery.getExplicitColumnNames().get(explicitColumnNameIdx);
+                    explicitColumnNameIdx++;
+                } else {
+                    fieldResolveName = field.getName();
+                }
+
+                outputFields.add(new Field(fieldResolveName, field.getType(), subquery.getResolveTableName(),
                         field.getOriginExpression()));
+
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
 
@@ -714,7 +734,7 @@ public class QueryAnalyzer {
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
-            if (node.getColumnNames() == null) {
+            if (node.getColumnOutputNames() == null) {
                 if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
                     // If the unnest variadic function does not explicitly specify column name,
                     // all column names are `unnest`. This refers to the return column name of postgresql.
@@ -722,21 +742,21 @@ public class QueryAnalyzer {
                     for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
                         columnNames.add("unnest");
                     }
-                    node.setColumnNames(columnNames);
+                    node.setColumnOutputNames(columnNames);
                 } else {
-                    node.setColumnNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
+                    node.setColumnOutputNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
                 }
             } else {
-                if (node.getColumnNames().size() != tableFunction.getTableFnReturnTypes().size()) {
+                if (node.getColumnOutputNames().size() != tableFunction.getTableFnReturnTypes().size()) {
                     throw new SemanticException("table %s has %s columns available but %s columns specified",
-                            node.getAlias().getTbl(), node.getColumnNames().size(),
+                            node.getAlias().getTbl(), node.getColumnOutputNames().size(),
                             tableFunction.getTableFnReturnTypes().size());
                 }
             }
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
-                String colName = node.getColumnNames().get(i);
+                String colName = node.getColumnOutputNames().get(i);
 
                 Field field = new Field(colName,
                         tableFunction.getTableFnReturnTypes().get(i),
@@ -788,7 +808,7 @@ public class QueryAnalyzer {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
     }
 
-    public static void checkJoinEqual(Expr expr)  {
+    public static void checkJoinEqual(Expr expr) {
         if (expr instanceof BinaryPredicate) {
             for (Expr child : expr.getChildren()) {
                 if (!child.getType().canJoinOn()) {

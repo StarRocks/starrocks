@@ -1568,7 +1568,7 @@ relation
 
 relationPrimary
     : qualifiedName temporalClause? partitionNames? tabletList? (
-        AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
+        AS? alias=identifier)? bracketHint?                                             #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
