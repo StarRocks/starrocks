@@ -180,7 +180,7 @@ python datax/bin/datax.py --jvm="-Xms6G -Xmx6G" --loglevel=debug datax/job/job.j
 
 > 注意
 >
-> 使用 DataX 导入时，如果有数据不符合目标表格式的数据，系统将过滤不符合目标表格式的数据，并继续导入正确的数据。
+> 使用 DataX 导入时，当存在不符合目标表格式的数据，若 StarRocks 中该字段允许 NULL 值，不合法的数据将转为 NULL 后正常导入。若字段不允许 NULL 值，且任务中未配置容错率（max_filter_ratio），则任务报错，导入作业中断。
 
 ## 取消或停止导入任务
 
