@@ -388,18 +388,6 @@ Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, std
     }
     return get_primary_meta(meta, tablet_id, tablet_meta_pb, json_meta);
 }
-// TODO(ygl):
-// 1. if term > 0 then save to remote meta store first using term
-// 2. save to local meta store
-Status TabletMetaManager::save(DataDir* store, const TabletMetaSharedPtr& tablet_meta) {
-    TabletMetaPB tablet_meta_pb;
-    tablet_meta->to_meta_pb(&tablet_meta_pb);
-    if (tablet_meta_pb.schema().keys_type() == KeysType::PRIMARY_KEYS) {
-        LOG(WARNING) << "do not support save TabletMetaSharedPtr for PRIMARY_KEYS";
-        return Status::NotSupported("do not support save TabletMetaSharedPtr for PRIMARY_KEYS");
-    }
-    return save(store, tablet_meta_pb);
-}
 
 Status TabletMetaManager::save(DataDir* store, const TabletMetaPB& meta_pb) {
     if (meta_pb.schema().keys_type() != KeysType::PRIMARY_KEYS && meta_pb.has_updates()) {
@@ -739,28 +727,6 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
     }
     // pending rowset may exists or not, but delete it anyway
     RETURN_IF_ERROR(delete_pending_rowset(store, &batch, tablet_id, edit->version().major()));
-    return store->get_meta()->write_batch(&batch);
-}
-
-Status TabletMetaManager::write_rowset_meta(DataDir* store, TTabletId tablet_id, const RowsetMetaPB& rowset,
-                                            const string& rowset_meta_key) {
-    WriteBatch batch;
-    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
-    string rowsetkey = encode_meta_rowset_key(tablet_id, rowset.rowset_seg_id());
-    auto rowsetvalue = rowset.SerializeAsString();
-    rocksdb::Status st = batch.Put(handle, rowsetkey, rowsetvalue);
-    if (!st.ok()) {
-        LOG(WARNING) << "put rowset meta failed, rocksdb.batch.put failed";
-        return to_status(st);
-    }
-    if (!rowset_meta_key.empty()) {
-        // delete rowset meta in txn
-        st = batch.Delete(handle, rowset_meta_key);
-        if (!st.ok()) {
-            LOG(WARNING) << "put rowset meta failed, rocksdb.batch.delete failed";
-            return to_status(st);
-        }
-    }
     return store->get_meta()->write_batch(&batch);
 }
 
