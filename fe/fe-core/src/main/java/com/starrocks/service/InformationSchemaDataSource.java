@@ -267,11 +267,6 @@ public class InformationSchemaDataSource {
         return tableConfigInfo;
     }
 
-
-    private static TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
-        return tableConfigInfo;
-    }
-
     // tables
     public static TGetTablesInfoResponse generateTablesInfoResponse(TGetTablesInfoRequest request) throws TException {
         
