@@ -245,9 +245,9 @@ EXPLAIN SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
 +----------------------------------------------------+
 ~~~
 
-以上示例中 Hash Join 节点显示 `colocate: true`，表示 Colocation Join 生效。
+以上示例中 Hash Join 节点显示 `colocate: true`，表示 Colocate Join 生效。
 
-以下示例中 Colocation Join 没有生效：
+以下示例中 Colocate Join 没有生效：
 
 ~~~Plain Text
 +----------------------------------------------------+
@@ -301,7 +301,7 @@ EXPLAIN SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
 +----------------------------------------------------+
 ~~~
 
-以上示例中，HASH JOIN 节点显示了 Colocation Join 没有生效以及对应原因：`colocate: false, reason: group is not stable`。同时 StarRocks 生成一个 EXCHANGE 节点。
+以上示例中，HASH JOIN 节点显示了 Colocate Join 没有生效以及对应原因：`colocate: false, reason: group is not stable`。同时 StarRocks 生成一个 EXCHANGE 节点。
 
 ## 高级操作
 
@@ -327,7 +327,7 @@ SET disable_colocate_join = TRUE;
 
 ### HTTP Restful API
 
-StarRocks 提供了多个与 Colocation Join 有关的 HTTP Restful API，用于查看和修改 Colocation Group。
+StarRocks 提供了多个与 Colocate Join 有关的 HTTP Restful API，用于查看和修改 Colocation Group。
 
 该 API 在 FE 端实现，您可以使用 `fe_host:fe_http_port` 进行访问。访问需要 ADMIN 权限。
 
