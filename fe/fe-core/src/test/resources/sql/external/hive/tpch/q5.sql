@@ -31,7 +31,7 @@ RESULT SINK
 
 29:MERGING-EXCHANGE
 distribution type: GATHER
-cardinality: 5
+cardinality: 25
 column statistics:
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 16.0, 25.0] ESTIMATE
@@ -61,7 +61,8 @@ OutPut Exchange Id: 29
 26:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [42: n_name, VARCHAR, true]
-cardinality: 5
+cardinality: 25
+
 PLAN FRAGMENT 2(F14)
 
 Input Partition: HASH_PARTITIONED: 18: l_orderkey

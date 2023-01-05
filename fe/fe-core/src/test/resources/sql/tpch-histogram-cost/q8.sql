@@ -42,7 +42,7 @@ Output Exprs:69: year | 74: expr
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-38:MERGING-EXCHANGE
+37:MERGING-EXCHANGE
 distribution type: GATHER
 cardinality: 2
 column statistics:
@@ -86,7 +86,7 @@ OutPut Exchange Id: 37
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 2.0] ESTIMATE
 |  * expr-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
 |
-34:EXCHANGE
+33:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [69: year, SMALLINT, false]
 cardinality: 2
@@ -139,7 +139,7 @@ OutPut Exchange Id: 33
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 390833.1128124515] ESTIMATE
 |  * case-->[-Infinity, Infinity, 0.0, 8.0, 390834.1128124515] ESTIMATE
 |
-|----30:EXCHANGE
+|----29:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 25
 |
@@ -164,24 +164,30 @@ OutPut Exchange Id: 33
 |  output columns: 14, 24, 25, 40
 |  cardinality: 390833
 |  column statistics:
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 390833.1128124515] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 214168.16112058214] ESTIMATE
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 390833.1128124515] ESTIMATE
+|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 214168.16112058214] ESTIMATE
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 390833.1128124515] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * O_ORDERDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2406.0] ESTIMATE
 |
-|----26:EXCHANGE
+|----25:EXCHANGE
 |       distribution type: SHUFFLE
-|       partition exprs: [11: S_SUPPKEY, INT, false]
-|       cardinality: 1000000
-|       probe runtime filters:
-|       - filter_id = 6, probe_expr = (14: S_NATIONKEY)
+|       partition exprs: [21: L_SUPPKEY, INT, false]
+|       cardinality: 390833
 |
-24:EXCHANGE
-distribution type: SHUFFLE
-partition exprs: [21: L_SUPPKEY, INT, false]
-cardinality: 3000000
+0:OlapScanNode
+table: supplier, rollup: supplier
+preAggregation: on
+partitionsRatio=1/1, tabletsRatio=1/1
+actualRows=0, avgRowSize=8.0
+cardinality: 1000000
+probe runtime filters:
+- filter_id = 5, probe_expr = (11: S_SUPPKEY)
+- filter_id = 6, probe_expr = (14: S_NATIONKEY)
+column statistics:
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 
 PLAN FRAGMENT 3(F15)
 
@@ -230,18 +236,18 @@ OutPut Exchange Id: 25
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 390833.11281245155] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * O_ORDERDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2406.0] ESTIMATE
-|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
-|----21:EXCHANGE
+|----22:EXCHANGE
 |       distribution type: SHUFFLE
 |       partition exprs: [46: C_CUSTKEY, INT, false]
 |       cardinality: 3000000
 |
-10:EXCHANGE
+11:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [37: O_CUSTKEY, INT, false]
-cardinality: 6425045
+cardinality: 1954166
 
 PLAN FRAGMENT 5(F07)
 
@@ -268,7 +274,7 @@ OutPut Exchange Id: 22
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |
-|----18:EXCHANGE
+|----19:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 5
 |
@@ -309,7 +315,7 @@ OutPut Exchange Id: 19
 |  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
-|----15:EXCHANGE
+|----16:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 1
 |
@@ -386,7 +392,7 @@ OutPut Exchange Id: 11
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 1954165.5640622578] ESTIMATE
 |  * O_ORDERDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2406.0] ESTIMATE
 |
-|----7:EXCHANGE
+|----8:EXCHANGE
 |       distribution type: SHUFFLE
 |       partition exprs: [19: L_ORDERKEY, INT, false]
 |       cardinality: 6425045
@@ -440,7 +446,7 @@ OutPut Exchange Id: 08
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
-|----4:EXCHANGE
+|----5:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 214168
 |

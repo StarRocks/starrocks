@@ -173,14 +173,20 @@ OutPut Exchange Id: 27
 |    |    |       cardinality: 12000758
 |    |    |
 |    |    7:EXCHANGE
+|    |       distribution type: SHUFFLE
+|    |       partition exprs: [24: o_orderkey, INT, true]
 |    |       cardinality: 50000000
 |    |
 |    4:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [54: l_orderkey, INT, true]
 |       cardinality: 300018951
 |       probe runtime filters:
 |       - filter_id = 3, probe_expr = (54: l_orderkey)
 |
 1:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [37: l_orderkey, INT, true]
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 4, probe_expr = (37: l_orderkey)

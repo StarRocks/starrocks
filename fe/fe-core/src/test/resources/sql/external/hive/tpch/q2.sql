@@ -167,7 +167,7 @@ OutPut Exchange Id: 26
 20:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [1: p_partkey, INT, true]
-cardinality: 200000
+cardinality: 80000
 
 PLAN FRAGMENT 2(F10)
 

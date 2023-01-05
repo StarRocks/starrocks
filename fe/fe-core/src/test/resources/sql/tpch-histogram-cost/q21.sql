@@ -44,7 +44,7 @@ Output Exprs:2: S_NAME | 77: count
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-27:MERGING-EXCHANGE
+28:MERGING-EXCHANGE
 distribution type: GATHER
 limit: 100
 cardinality: 100
@@ -75,7 +75,7 @@ OutPut Exchange Id: 28
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * count-->[0.0, 2334116.9317591335, 0.0, 8.0, 40000.0] ESTIMATE
 |
-24:EXCHANGE
+25:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [2: S_NAME, VARCHAR, false]
 cardinality: 40000
@@ -116,6 +116,8 @@ OutPut Exchange Id: 25
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |
 |----21:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [9: L_ORDERKEY, INT, false]
 |       cardinality: 2334119
 |
 0:OlapScanNode
@@ -161,10 +163,10 @@ OutPut Exchange Id: 21
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2334119.2658784] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
-|----20:EXCHANGE
+|----18:EXCHANGE
 |       distribution type: SHUFFLE
 |       partition exprs: [9: L_ORDERKEY, INT, false]
-|       cardinality: 4799990
+|       cardinality: 4799995
 |
 2:Project
 |  output columns:
@@ -245,6 +247,7 @@ OutPut Exchange Id: 18
 |    |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |    |
 |    |----13:EXCHANGE
+|    |       distribution type: BROADCAST
 |    |       cardinality: 40000
 |    |
 |    6:Project
