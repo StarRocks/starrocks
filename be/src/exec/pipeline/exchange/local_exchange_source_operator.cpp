@@ -56,6 +56,12 @@ bool LocalExchangeSourceOperator::is_finished() const {
 bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
+    if (_memory_manager->should_output()) {
+        if (_partition_rows_num > 0 && _partition_rows_num < _factory->runtime_state()->chunk_size()) {
+            LOG(WARNING) << "local exchange should output although row size is small = " << _partition_rows_num;
+        }
+    }
+
     return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
            (_is_finished && _partition_rows_num > 0) || _memory_manager->should_output();
 }
