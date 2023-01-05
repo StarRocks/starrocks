@@ -28,15 +28,17 @@ public:
                             const int32_t dependency_index)
             : Operator(factory, id, "except_probe_sink", plan_node_id, driver_sequence),
               _except_ctx(std::move(except_ctx)),
+              _buffer_state(std::make_unique<ExceptBufferState>()),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {
         _except_ctx->ref();
     }
 
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     bool need_input() const override {
-        return _except_ctx->is_dependency_finished(_dependency_index) && !(_is_finished || _except_ctx->is_ht_empty());
+        return _except_ctx->is_build_finished() && !(_is_finished || _except_ctx->is_ht_empty());
     }
 
     bool has_output() const override { return false; }
@@ -45,12 +47,12 @@ public:
         if (_except_ctx->is_finished()) {
             return true;
         }
-        return _except_ctx->is_dependency_finished(_dependency_index) && (_is_finished || _except_ctx->is_ht_empty());
+        return _except_ctx->is_build_finished() && (_is_finished || _except_ctx->is_ht_empty());
     }
 
     Status set_finishing(RuntimeState* state) override {
         _is_finished = true;
-        _except_ctx->finish_probe_ht();
+        _except_ctx->finish_probe_ht(_dependency_index);
         return Status::OK();
     }
 
@@ -60,6 +62,7 @@ public:
 
 private:
     ExceptContextPtr _except_ctx;
+    std::unique_ptr<ExceptBufferState> _buffer_state;
 
     const std::vector<ExprContext*>& _dst_exprs;
 
@@ -78,7 +81,7 @@ public:
               _dependency_index(dependency_index) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        ExceptContextPtr except_ctx = _except_partition_ctx_factory->get_or_create(driver_sequence);
+        ExceptContextPtr except_ctx = _except_partition_ctx_factory->get(driver_sequence);
         return std::make_shared<ExceptProbeSinkOperator>(this, _id, _plan_node_id, driver_sequence,
                                                          std::move(except_ctx), _dst_exprs, _dependency_index);
     }

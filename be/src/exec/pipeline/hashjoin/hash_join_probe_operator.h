@@ -50,6 +50,9 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    Status _reference_join_builder_once();
+
+private:
     const HashJoinerPtr _join_prober;
     // For non-broadcast join, _join_builder is identical to _join_prober.
     // For broadcast join, _join_prober references the hash table owned by _join_builder,

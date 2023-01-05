@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer;
 
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -328,5 +329,29 @@ public class UtilsTest {
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 1));
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
+    }
+
+    @Test
+    public void testComputeMaxLEPower2() {
+        Assert.assertEquals(0, Utils.computeMaxLEPower2(0));
+
+        for (int i = 1; i < 10000; i++) {
+            int out = Utils.computeMaxLEPower2(i);
+            // The number i belongs to the range [out, out*2).
+            Assert.assertTrue(out <= i);
+            Assert.assertTrue(out * 2 > i);
+        }
+    }
+
+    @Test
+    public void testComputeMinGEPower2() {
+        Assert.assertEquals(1, Utils.computeMinGEPower2(0));
+
+        for (int i = 1; i < 10000; i++) {
+            int out = Utils.computeMinGEPower2(i);
+            // The number i belongs to the range (out/2, out].
+            Assert.assertTrue(out >= i);
+            Assert.assertTrue(out / 2 < i);
+        }
     }
 }

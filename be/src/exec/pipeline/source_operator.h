@@ -40,6 +40,7 @@ public:
     virtual bool with_morsels() const { return false; }
     // Set the DOP(degree of parallelism) of the SourceOperator, SourceOperator's DOP determine the Pipeline's DOP.
     void set_degree_of_parallelism(size_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
+    void set_max_dop(size_t max_dop) { _degree_of_parallelism = std::min(max_dop, _degree_of_parallelism); }
     virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
     MorselQueueFactory* morsel_queue_factory() { return _morsel_queue_factory; }
@@ -59,6 +60,48 @@ public:
     void set_partition_type(TPartitionType::type partition_type) { _partition_type = partition_type; };
     virtual const std::vector<ExprContext*>& partition_exprs() const { return _empty_partition_exprs; }
 
+    /// The pipelines of a fragment instance are organized by groups.
+    /// - The operator tree is broken into several groups by CollectStatsSourceOperator (CsSource)
+    ///   and the operators with multiple children, such as HashJoin, NLJoin, Except, and Intersect.
+    /// - The group leader is the source operator of the most downstream pipeline in the group,
+    ///   including CsSource, Scan, and Exchange.
+    /// - The adaptive_state of group leader is READY or NOT_READY,
+    ///   and that of the other pipelines is INHERIT.
+    ///
+    /// Dependent relations between groups.
+    /// - As for the operator who depends on other operators, e.g. HashJoinProbe depends on HashJoinBuild,
+    ///   the group of this operator also depends on the group of the dependent operators.
+    ///
+    /// A group cannot instantiate drivers until three conditions satisfy:
+    /// 1. The adaptive_state of leader source operator is READY.
+    /// 2. The adaptive_state of dependent pipelines is READY.
+    /// 3. All the drivers of dependent pipelines are finished.
+    ///
+    /// For example, the following fragment contains three pipeline groups: [pipe#1], [pipe#2, pipe#3], [pipe#4],
+    /// and [pipe#2, pipe#3] depends on [pipe#4].
+    ///          ExchangeSink
+    ///               |
+    ///          HashJoinProbe                       HashJoinBuild
+    ///  pipe#3       |                                    |                  pipe#4
+    ///          BlockingAggSource(INHERIT)          ExchangeSource(READY)
+    ///
+    ///          BlockingAggSink
+    ///  pipe#2       |
+    ///          CsSource(NOT_READY)
+    ///
+    ///          CsSink
+    ///  pipe#1     |
+    ///          ScanNode(READY)
+    enum class AdaptiveState { NOT_READY, READY, INHERIT };
+    virtual AdaptiveState adaptive_state() const { return AdaptiveState::INHERIT; }
+    bool is_adaptive_group_ready() const;
+
+    void add_group_dependent_pipeline(const Pipeline* dependent_op);
+    const std::vector<const Pipeline*>& group_dependent_pipelines() const;
+
+    void set_group_leader(SourceOperatorFactory* parent);
+    SourceOperatorFactory* group_leader();
+
 protected:
     size_t _degree_of_parallelism = 1;
     bool _could_local_shuffle = true;
@@ -66,6 +109,11 @@ protected:
     MorselQueueFactory* _morsel_queue_factory = nullptr;
     // Because partition_exprs() returns const reference, we need a non-temporal empty vector here.
     const std::vector<ExprContext*> _empty_partition_exprs;
+
+    SourceOperatorFactory* _group_leader = this;
+    std::vector<const Pipeline*> _group_dependent_pipelines;
+    mutable bool _group_dependent_pipelines_ready = false;
+    mutable bool _group_dependent_pipelines_finished = false;
 };
 
 class SourceOperator : public Operator {
@@ -85,6 +133,9 @@ public:
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
     size_t degree_of_parallelism() const { return _source_factory()->degree_of_parallelism(); }
+    const std::vector<const Pipeline*>& group_dependent_pipelines() const {
+        return _source_factory()->group_dependent_pipelines();
+    }
 
 protected:
     const SourceOperatorFactory* _source_factory() const { return down_cast<const SourceOperatorFactory*>(_factory); }
