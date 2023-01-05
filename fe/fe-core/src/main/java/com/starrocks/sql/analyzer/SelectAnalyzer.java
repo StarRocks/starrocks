@@ -92,7 +92,16 @@ public class SelectAnalyzer {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
+<<<<<<< HEAD
             verifySourceAggregations(groupByExpressions, sourceExpressions, sourceScope, analyzeState);
+=======
+            if (!aggregates.isEmpty() && selectList.isDistinct()) {
+                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+            }
+
+            new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
+                    .verify(sourceExpressions);
+>>>>>>> 22a509594 ([BugFix] Fix distinct + having check (#16205))
 
             if (orderByElements.size() > 0) {
                 verifyOrderByAggregations(groupByExpressions, orderByExpressions, sourceScope, sourceAndOutputScope,
