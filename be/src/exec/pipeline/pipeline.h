@@ -101,6 +101,8 @@ public:
     Status reset_epoch(RuntimeState* state);
     void count_down_epoch_finished_driver(RuntimeState* state);
 
+    size_t output_amplification() const;
+
 private:
     uint32_t _id = 0;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;

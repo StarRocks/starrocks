@@ -73,6 +73,7 @@ void CollectStatsSourceOperatorFactory::close(RuntimeState* state) {
 }
 
 OperatorPtr CollectStatsSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    _ctx->set_source_dop(degree_of_parallelism);
     return std::make_shared<CollectStatsSourceOperator>(this, _id, _plan_node_id, driver_sequence, _ctx.get());
 }
 
@@ -83,8 +84,53 @@ SourceOperatorFactory::AdaptiveState CollectStatsSourceOperatorFactory::adaptive
     return SourceOperatorFactory::AdaptiveState::NOT_READY;
 }
 
+/// Recompute DOP when its group is ready.
+/// - DOP should multiply by output_amplification of dependent pipelines.
+/// - Some constraints:
+///   - DOP <= CollectStatsSinkOperatorFactory::degree_of_parallelism.
+///   - DOP >= DOP of dependent pipelines.
 size_t CollectStatsSourceOperatorFactory::degree_of_parallelism() const {
-    return _ctx->source_dop();
+    if (!is_adaptive_group_ready()) {
+        return _ctx->source_dop();
+    }
+
+    if (_adjusted_dop != ABSENT_ADJUSTED_DOP) {
+        return _adjusted_dop;
+    }
+
+    _adjusted_dop = _ctx->source_dop();
+    const size_t sink_dop = _ctx->sink_dop();
+    const auto& dependent_pipelines = group_dependent_pipelines();
+
+    // _adjusted_dop reaches the max dop (sink_dop).
+    if (_adjusted_dop == sink_dop) {
+        return _adjusted_dop;
+    }
+
+    size_t max_dependent_dop = 1;
+    for (const auto& pipeline : dependent_pipelines) {
+        max_dependent_dop = std::max(max_dependent_dop, pipeline->degree_of_parallelism());
+    }
+    // max(_adjusted_dop, max_dependent_dop) reaches the max dop (sink_dop).
+    if (max_dependent_dop >= sink_dop) {
+        _adjusted_dop = sink_dop;
+        return _adjusted_dop;
+    }
+
+    size_t output_amplification = 1;
+    for (const auto& dependent_pipeline : dependent_pipelines) {
+        output_amplification *= dependent_pipeline->output_amplification();
+    }
+    if (output_amplification != 1) {
+        _adjusted_dop *= output_amplification;
+        _adjusted_dop = compute_max_le_power2(_adjusted_dop);
+    }
+
+    _adjusted_dop = std::max<size_t>(1, _adjusted_dop);
+    _adjusted_dop = std::max<size_t>(_adjusted_dop, max_dependent_dop);
+    _adjusted_dop = std::min<size_t>(_adjusted_dop, sink_dop);
+
+    return _adjusted_dop;
 }
 
 } // namespace starrocks::pipeline

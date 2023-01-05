@@ -30,6 +30,19 @@ void NLJoinContext::close(RuntimeState* state) {
     _build_chunks.clear();
 }
 
+void NLJoinContext::incr_builder() {
+    ++_num_right_sinkers;
+    _input_chunks.emplace_back();
+}
+void NLJoinContext::incr_prober() {
+    ++_num_left_probers;
+}
+void NLJoinContext::decr_prober(RuntimeState* state) {
+    if (++_num_closed_left_probers == _num_left_probers) {
+        unref(state);
+    }
+}
+
 Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
     ChunkPtr one_row_chunk = nullptr;
     size_t num_rows = 0;
