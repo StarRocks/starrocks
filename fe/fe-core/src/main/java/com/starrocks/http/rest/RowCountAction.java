@@ -36,6 +36,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -72,7 +73,12 @@ public class RowCountAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
+        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            checkUserOwnsAdminRole(currentUser);
+        } else {
+            checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
+        }
 
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {

@@ -37,6 +37,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -45,7 +46,9 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -72,7 +75,12 @@ public class CheckDecommissionAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException {
-        checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.OPERATOR);
+        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            checkActionOnSystem(currentUser, PrivilegeType.SystemAction.OPERATE);
+        } else {
+            checkGlobalAuth(currentUser, PrivPredicate.OPERATOR);
+        }
 
         String hostPorts = request.getSingleParameter(HOST_PORTS);
         if (Strings.isNullOrEmpty(hostPorts)) {
