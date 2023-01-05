@@ -152,7 +152,7 @@ public class RefreshMaterializedViewTest {
         refreshMaterializedView("test", "mv_to_refresh");
         MaterializedView mv1 = getMv("test", "mv_to_refresh");
         Set<String> partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv();
-        Assert.assertTrue(partitionsToRefresh1.toString(), partitionsToRefresh1.isEmpty());
+        Assert.assertTrue(partitionsToRefresh1.isEmpty());
         refreshMaterializedView("test", "mv2_to_refresh");
         MaterializedView mv2 = getMv("test", "mv2_to_refresh");
         Set<String> partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv();
