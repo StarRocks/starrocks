@@ -2794,10 +2794,13 @@ public class PlanFragmentBuilder {
                     !(rightFragmentPlanRoot instanceof ExchangeNode)) {
                 if (isColocateJoin(optExpr)) {
                     distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
+                        rightFragmentPlanRoot.canDoReplicatedJoin()) {
+                    distributionMode = JoinNode.DistributionMode.REPLICATED;
                 } else if (isShuffleJoin(optExpr)) {
                     distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
-                    Preconditions.checkState(false, "Must be bucket join or colocate join");
+                    Preconditions.checkState(false, "Must be colocate/bucket/replicate join");
                     distributionMode = JoinNode.DistributionMode.COLOCATE;
                 }
             } else if (isShuffleJoin(optExpr)) {
