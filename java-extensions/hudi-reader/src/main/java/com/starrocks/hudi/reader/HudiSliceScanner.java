@@ -49,23 +49,23 @@ import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
 
-    protected final String basePath;
-    protected final String hiveColumnNames;
-    protected final String[] hiveColumnTypes;
-    protected final String[] requiredFields;
-    protected final String instantTime;
-    protected final String[] deltaFilePaths;
-    protected final String dataFilePath;
-    protected final long dataFileLenth;
-    protected final String serde;
-    protected final String inputFormat;
-    protected RecordReader<NullWritable, ArrayWritable> reader;
-    protected StructObjectInspector rowInspector;
-    protected ObjectInspector[] fieldInspectors;
-    protected StructField[] structFields;
-    protected Deserializer deserializer;
-    protected final int fetchSize;
-    protected final ClassLoader classLoader;
+    private final String basePath;
+    private final String hiveColumnNames;
+    private final String[] hiveColumnTypes;
+    private final String[] requiredFields;
+    private final String instantTime;
+    private final String[] deltaFilePaths;
+    private final String dataFilePath;
+    private final long dataFileLenth;
+    private final String serde;
+    private final String inputFormat;
+    private RecordReader<NullWritable, ArrayWritable> reader;
+    private StructObjectInspector rowInspector;
+    private ObjectInspector[] fieldInspectors;
+    private StructField[] structFields;
+    private Deserializer deserializer;
+    private final int fetchSize;
+    private final ClassLoader classLoader;
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -255,5 +255,9 @@ public class HudiSliceScanner extends ConnectorScanner {
         sb.append(inputFormat);
         sb.append("\n");
         return sb.toString();
+    }
+
+    public String getRequiredField(int i) {
+        return requiredFields[i];
     }
 }

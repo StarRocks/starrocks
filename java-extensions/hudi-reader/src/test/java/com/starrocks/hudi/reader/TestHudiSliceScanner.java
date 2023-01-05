@@ -34,7 +34,7 @@ public class TestHudiSliceScanner {
             StringBuffer sb = new StringBuffer();
             sb.append("{\n");
             buffer.forEach((k, values) -> {
-                String columnName = requiredFields[k];
+                String columnName = getRequiredField(k);
                 sb.append("column = " + columnName + ", datta = [");
                 int i = 0;
                 for (Object obj : values) {
