@@ -21,16 +21,20 @@ StatusOr<ChunkPtr> ExceptBuildSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ExceptBuildSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    return _except_ctx->append_chunk_to_ht(state, chunk, _dst_exprs);
+    return _except_ctx->append_chunk_to_ht(state, chunk, _dst_exprs, _buffer_state.get());
 }
 
 Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
-    return _except_ctx->prepare(state, _dst_exprs);
+    RETURN_IF_ERROR(_except_ctx->prepare(state, _dst_exprs));
+    RETURN_IF_ERROR(_buffer_state->init(state));
+
+    return Status::OK();
 }
 
 void ExceptBuildSinkOperator::close(RuntimeState* state) {
+    _buffer_state.reset();
     _except_ctx->unref(state);
     Operator::close(state);
 }
