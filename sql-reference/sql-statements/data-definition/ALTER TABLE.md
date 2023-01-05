@@ -213,7 +213,7 @@ ALTER TABLE [database.]table DROP ROLLUP r1, r2;
 
 注意：
 
-1. 不能删除 base index
+不能删除 base index。
 
 ### **schema change**
 
@@ -235,7 +235,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 ```plain text
 1. 聚合模型如果增加 value 列，需要指定 agg_type。
-2. 非聚合模型（如 DUPLICATE KEY）如果增加key列，需要指定KEY关键字。
+2. 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 ```
 
@@ -268,8 +268,8 @@ DROP COLUMN column_name
 
 注意：
 
-1. 不能删除分区列
-2. 如果是从 base index 中删除列，则如果 rollup index 中包含该列，也会被删除
+1. 不能删除分区列。
+2. 如果是从 base index 中删除列，则如果 rollup index 中包含该列，也会被删除。
 
 #### 修改指定 index 的列类型以及列位置
 
@@ -316,8 +316,8 @@ ORDER BY (column_name1, column_name2, ...)
 
 注意：
 
-1. index 中的所有列都要写出来
-2. value 列在 key 列之后
+1. index 中的所有列都要写出来。
+2. value 列在 key 列之后。
 
 #### 修改 table 的属性
 
@@ -374,8 +374,8 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 注意：
 
 ```plain text
-1. 目前仅支持bitmap 索引
-2. BITMAP 索引仅在单列上创建
+1. 目前仅支持bitmap 索引。
+2. BITMAP 索引仅在单列上创建。
 ```
 
 #### 删除索引
@@ -423,7 +423,7 @@ SWAP WITH table_name;
     ADD PARTITION p1 VALUES LESS THAN ("2014-01-01");
     ```
 
-2. 增加分区，使用新的分桶数
+2. 增加分区，使用新的分桶数。
 
     ```sql
     ALTER TABLE example_db.my_table
