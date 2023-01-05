@@ -11,11 +11,7 @@
 
 ## 开启 CBO 优化器
 
-使用 Lateral Join 功能前，您需要开启 CBO 优化器。
-
-~~~SQL
-SET global enable_cbo = true;
-~~~
+StarRocks 2.4 版本已集成并启用 CBO 优化器，您无需进行额外操作。
 
 ## 使用 Lateral Join
 
