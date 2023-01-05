@@ -139,4 +139,9 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         planNode.setNode_type(TPlanNodeType.NESTLOOP_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+
+    @Override
+    public boolean canUseAdaptiveDop() {
+        return getChildren().stream().allMatch(PlanNode::canUseAdaptiveDop);
+    }
 }

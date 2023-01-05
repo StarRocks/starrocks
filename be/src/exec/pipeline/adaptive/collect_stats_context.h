@@ -73,6 +73,7 @@ public:
     bool is_source_ready() const;
     size_t sink_dop() const { return _sink_dop; }
     size_t source_dop() const { return _source_dop; }
+    void set_source_dop(size_t source_dop) { _source_dop = source_dop; }
 
 private:
     using BufferChunkQueue = std::queue<ChunkPtr>;

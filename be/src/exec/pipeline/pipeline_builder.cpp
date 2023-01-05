@@ -192,7 +192,7 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState* state, OpFactories& pred_operators) {
-    if (!_fragment_context->enable_adaptive_dop()) {
+    if (_force_disable_adaptive_dop || !_fragment_context->enable_adaptive_dop()) {
         return pred_operators;
     }
 
