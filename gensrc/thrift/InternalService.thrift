@@ -296,6 +296,10 @@ enum InternalServiceVersion {
   V1
 }
 
+struct TAdaptiveDopParam {
+  1: optional i64 max_block_rows_per_driver_seq
+}
+
 // ExecPlanFragment
 
 struct TExecPlanFragmentParams {
@@ -350,6 +354,8 @@ struct TExecPlanFragmentParams {
   
   // Sharing data between drivers of same scan operator
   56: optional bool enable_shared_scan
+
+  57: optional TAdaptiveDopParam adaptive_dop_param
 }
 
 struct TExecPlanFragmentResult {

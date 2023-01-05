@@ -181,4 +181,9 @@ public class HudiScanNode extends ScanNode {
     public boolean canUsePipeLine() {
         return true;
     }
+
+    @Override
+    public boolean canUseAdaptiveDop() {
+        return true;
+    }
 }

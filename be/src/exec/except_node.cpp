@@ -246,7 +246,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     this->init_runtime_filter_for_operator(ops_with_except_build_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(ops_with_except_build_sink);
 
-    // Use the rest children to erase keys from the hast table by ExceptProbeSinkOperator.
+    // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         OpFactories ops_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
         ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
@@ -264,7 +264,8 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
-    except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
+    context->inherit_upstream_source_properties(except_output_source.get(),
+                                                context->source_operator(ops_with_except_build_sink));
     ops_with_except_output_source.emplace_back(std::move(except_output_source));
     if (limit() != -1) {
         ops_with_except_output_source.emplace_back(
