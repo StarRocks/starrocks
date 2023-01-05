@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_traits.h"
 
 namespace starrocks {
 
@@ -82,28 +83,6 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
                                      ColumnPtr* dst) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
-
-protected:
-    // BinaryColumn column is special, the underlying _bytes and _offsets column don't resize
-    void get_slice_values(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
-        DCHECK_GT(end, start);
-        DCHECK(dst->is_nullable());
-        auto* nullable_column = down_cast<NullableColumn*>(dst);
-        NullData& null_data = nullable_column->null_column_data();
-        if (AggregateFunctionStateHelper<State>::data(state).is_null) {
-            nullable_column->append_nulls(end - start);
-            return;
-        }
-
-        for (size_t i = start; i < end; ++i) {
-            null_data.emplace_back(0);
-        }
-        Column* data_column = nullable_column->mutable_data_column();
-        auto* column = down_cast<BinaryColumn*>(data_column);
-        for (size_t i = start; i < end; ++i) {
-            column->append(AggregateFunctionStateHelper<State>::data(state).slice());
-        }
-    }
 };
 
 template <LogicalType PT, typename State, typename T = RunTimeCppType<PT>>
@@ -124,16 +103,14 @@ public:
         }
 
         Column* data_column = nullable_column->mutable_data_column();
-        T value = AggregateFunctionStateHelper<State>::data(state).value;
-
         InputColumnType* column = down_cast<InputColumnType*>(data_column);
+        auto value = AggregateFunctionStateHelper<State>::data(state).value;
         for (size_t i = start; i < end; ++i) {
-            if constexpr (!is_object_type(PT)) {
-                column->get_data()[i] = value;
+            // TODO: do not hack the string type
+            if constexpr (pt_is_string<PT>) {
+                AggDataTypeTraits<PT>::append_value(column, value);
             } else {
-                // For TYPE_HLL(HLL) AND and TYPE_OBJECT(BITMAP),
-                // we can't use get_data to write datas.
-                *column->get_object(i) = *value;
+                AggDataTypeTraits<PT>::assign_value(column, i, value);
             }
         }
     }
@@ -297,20 +274,11 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
     std::string get_name() const override { return "ntile"; }
 };
 
-template <LogicalType PT, typename = guard::Guard>
+template <LogicalType PT>
 struct FirstValueState {
-    using T = RunTimeCppType<PT>;
+    using T = AggDataValueType<PT>;
     T value;
     bool is_null = false;
-};
-
-// TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT>
-struct FirstValueState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
 
 template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
@@ -340,7 +308,8 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
-            this->data(state).value = column->get_data()[value_index];
+            AggDataTypeTraits<PT>::assign_value(this->data(state).value,
+                                                AggDataTypeTraits<PT>::get_row_ref(*column, value_index));
         }
     }
 
@@ -354,21 +323,12 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
 
 template <LogicalType PT, bool ignoreNulls, typename = guard::Guard>
 struct LastValueState {
-    using T = RunTimeCppType<PT>;
+    using T = AggDataValueType<PT>;
     T value;
     bool is_null = ignoreNulls;
 };
 
-// TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT, bool ignoreNulls>
-struct LastValueState<PT, ignoreNulls, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
-};
-
-template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>>
 class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT, ignoreNulls>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -393,7 +353,8 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
-            this->data(state).value = column->get_data()[value_index];
+            AggDataTypeTraits<PT>::assign_value(this->data(state).value,
+                                                AggDataTypeTraits<PT>::get_row_ref(*column, value_index));
         }
     }
 
@@ -407,24 +368,14 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
 
 template <LogicalType PT, typename = guard::Guard>
 struct LeadLagState {
-    using T = RunTimeCppType<PT>;
+    using T = AggDataValueType<PT>;
     T value;
     T default_value;
     bool is_null = false;
     bool defualt_is_null = false;
 };
 
-template <LogicalType PT>
-struct LeadLagState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> value;
-    Buffer<uint8_t> default_value;
-    bool is_null = false;
-    bool defualt_is_null = false;
-
-    Slice slice() const { return {value.data(), value.size()}; }
-};
-
-template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename T = RunTimeCppType<PT>>
 class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -437,7 +388,8 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
         if (default_column->is_nullable()) {
             this->data(state).defualt_is_null = true;
         } else {
-            this->data(state).default_value = default_column->get(0).get<T>();
+            auto value = ColumnHelper::get_const_value<PT>(arg2);
+            AggDataTypeTraits<PT>::assign_value(this->data(state).default_value, value);
         }
     }
 
@@ -463,145 +415,13 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
         this->data(state).is_null = false;
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
-        this->data(state).value = column->get_data()[frame_end - 1];
+        AggDataTypeTraits<PT>::assign_value(this->data(state).value,
+                                            AggDataTypeTraits<PT>::get_row_ref(*column, frame_end - 1));
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         this->get_values_helper(state, dst, start, end);
-    }
-
-    std::string get_name() const override { return "lead-lag"; }
-};
-
-// TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT, bool ignoreNulls>
-class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
-        : public WindowFunction<FirstValueState<PT>> {
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).buffer.clear();
-        this->data(state).is_null = false;
-    }
-
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
-        // For cases like: rows between 2 preceding and 1 preceding
-        // If frame_start ge frame_end, means the frame is empty
-        if (frame_start >= frame_end) {
-            this->data(state).is_null = true;
-            return;
-        }
-
-        size_t value_index =
-                !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
-        if (value_index == frame_end || columns[0]->is_null(value_index)) {
-            this->data(state).is_null = true;
-        } else {
-            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const auto* column = down_cast<const BinaryColumn*>(data_column);
-            Slice slice = column->get_slice(value_index);
-            const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
-            this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
-            this->data(state).is_null = false;
-        }
-    }
-
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
-                    size_t end) const override {
-        this->get_slice_values(state, dst, start, end);
-    }
-
-    std::string get_name() const override { return "nullable_first_value"; }
-};
-
-// TODO(murphy) refactor with AggDataTypeTraits
-template <LogicalType PT, bool ignoreNulls>
-class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
-        : public WindowFunction<LastValueState<PT, ignoreNulls>> {
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).buffer.clear();
-        this->data(state).is_null = ignoreNulls;
-    }
-
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
-        if (frame_start >= frame_end) {
-            this->data(state).is_null = true;
-            return;
-        }
-
-        size_t value_index =
-                !ignoreNulls ? frame_end - 1 : ColumnHelper::last_nonnull(columns[0], frame_start, frame_end);
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const auto* column = down_cast<const BinaryColumn*>(data_column);
-        if (value_index == frame_end || columns[0]->is_null(value_index)) {
-            this->data(state).is_null = true;
-        } else {
-            this->data(state).is_null = false;
-            Slice slice = column->get_slice(value_index);
-            const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
-            this->data(state).buffer.clear();
-            this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
-        }
-    }
-
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
-                    size_t end) const override {
-        this->get_slice_values(state, dst, start, end);
-    }
-
-    std::string get_name() const override { return "nullable_last_value"; }
-};
-
-template <LogicalType PT>
-class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LeadLagState<PT>> {
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value.clear();
-        this->data(state).is_null = false;
-        const Column* arg2 = args[2].get();
-        DCHECK(arg2->is_constant());
-        const auto* default_column = down_cast<const ConstColumn*>(arg2);
-        if (default_column->is_nullable()) {
-            this->data(state).defualt_is_null = true;
-        } else {
-            this->data(state).default_value.clear();
-            Slice slice = default_column->get(0).get<Slice>();
-            const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
-            this->data(state).default_value.insert(this->data(state).default_value.end(), p, p + slice.size);
-        }
-    }
-
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
-        // frame_end <= frame_start is for lag function
-        // frame_end > peer_group_end is for lead function
-        if ((frame_end <= frame_start) | (frame_end > peer_group_end)) {
-            if (this->data(state).defualt_is_null) {
-                this->data(state).is_null = true;
-            } else {
-                this->data(state).value = this->data(state).default_value;
-            }
-            return;
-        }
-
-        if (columns[0]->is_null(frame_end - 1)) {
-            this->data(state).is_null = true;
-            return;
-        }
-
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const auto* column = down_cast<const BinaryColumn*>(data_column);
-        Slice slice = column->get_slice(frame_end - 1);
-        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
-        this->data(state).value.insert(this->data(state).value.end(), p, p + slice.size);
-    }
-
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
-                    size_t end) const override {
-        this->get_slice_values(state, dst, start, end);
     }
 
     std::string get_name() const override { return "lead-lag"; }
