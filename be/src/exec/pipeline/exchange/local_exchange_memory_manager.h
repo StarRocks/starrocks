@@ -24,21 +24,25 @@ namespace starrocks::pipeline {
 class LocalExchangeMemoryManager {
 public:
     LocalExchangeMemoryManager(size_t max_input_dop) {
-        size_t limit_bytes = 128 * 1024 * 1024UL; // 128 MB
+        int64_t limit_bytes = 128 * 1024 * 1024UL; // 128 MB
         if (config::local_exchange_buffer_mem_limit_per_driver > 0) {
             limit_bytes = config::local_exchange_buffer_mem_limit_per_driver;
         } else {
             LOG(WARNING) << "invalid config::local_exchange_buffer_mem_limit_per_driver "
                          << config::local_exchange_buffer_mem_limit_per_driver;
         }
-        size_t res = max_input_dop * limit_bytes;
-        const size_t MAX_MEM_LIMIT = 128 * 1024 * 1024 * 1024UL; // 128GB limit
+        int64_t res = max_input_dop * limit_bytes;
+        const int64_t MAX_MEM_LIMIT = 128 * 1024 * 1024 * 1024UL; // 128GB limit
         _max_memory_bytes = res > MAX_MEM_LIMIT or res <= 0 ? MAX_MEM_LIMIT : res;
     }
 
-    void update_memory_usage(size_t memory_bytes) { _memory_bytes += memory_bytes; }
+    void update_memory_usage(int64_t memory_bytes) {
+        LOG(WARNING) << "local exchange " << (memory_bytes > 0 ? " + " : " - ") << std::to_string(memory_bytes)
+                     << " left " << std::to_string(_memory_bytes);
+        _memory_bytes += memory_bytes;
+    }
 
-    size_t get_memory_usage() const { return _memory_bytes; }
+    int64_t get_memory_usage() const { return _memory_bytes; }
 
     bool is_full() const { return _memory_bytes >= _max_memory_bytes; }
 
@@ -46,13 +50,14 @@ public:
     bool should_output() const {
         if (_memory_bytes >= _max_memory_bytes * 0.8) {
             LOG(WARNING) << _memory_bytes << " >= " << _max_memory_bytes * 0.8 << " in local exchange";
+            return true;
         }
         return false;
     };
 
 private:
-    size_t _max_memory_bytes;
+    int64_t _max_memory_bytes;
     // an estimated value for partitioned shuffle, as it reconstructs chunks.
-    std::atomic<size_t> _memory_bytes{0};
+    std::atomic<int64_t> _memory_bytes{0};
 };
 } // namespace starrocks::pipeline

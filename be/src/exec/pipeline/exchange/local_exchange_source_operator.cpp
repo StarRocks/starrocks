@@ -56,14 +56,20 @@ bool LocalExchangeSourceOperator::is_finished() const {
 bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
-    if (_memory_manager->should_output()) {
-        if (_partition_rows_num > 0 && _partition_rows_num < _factory->runtime_state()->chunk_size()) {
-            LOG(WARNING) << "local exchange should output although row size is small = " << _partition_rows_num;
+    if (!_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
+        (_is_finished && _partition_rows_num > 0)) {
+        return true;
+    } else {
+        if (_memory_manager->should_output()) {
+            if (_partition_rows_num > 0 && _partition_rows_num < _factory->runtime_state()->chunk_size()) {
+                LOG(WARNING) << "local exchange should output although row size is small = " << _partition_rows_num;
+            } else {
+                LOG(WARNING) << "local exchange unknown";
+            }
+            return true;
         }
     }
-
-    return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
-           (_is_finished && _partition_rows_num > 0) || _memory_manager->should_output();
+    return false;
 }
 
 Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
@@ -91,7 +97,6 @@ StatusOr<ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) 
     if (chunk == nullptr) {
         chunk = _pull_shuffle_chunk(state);
     }
-    _memory_manager->update_memory_usage(-(static_cast<size_t>(chunk->memory_usage())));
     return std::move(chunk);
 }
 
@@ -101,6 +106,7 @@ ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* stat
     if (!_full_chunk_queue.empty()) {
         ChunkPtr chunk = std::move(_full_chunk_queue.front());
         _full_chunk_queue.pop();
+        _memory_manager->update_memory_usage(-chunk->memory_usage());
         return chunk;
     }
 
@@ -110,6 +116,7 @@ ChunkPtr LocalExchangeSourceOperator::_pull_passthrough_chunk(RuntimeState* stat
 ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
     std::vector<PartitionChunk> selected_partition_chunks;
     size_t rows_num = 0;
+    int64_t memory_size = 0;
     // Lock during pop partition chunks from queue.
     {
         std::lock_guard<std::mutex> l(_chunk_lock);
@@ -119,12 +126,17 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         while (!_partition_chunk_queue.empty() &&
                rows_num + _partition_chunk_queue.front().size <= state->chunk_size()) {
             rows_num += _partition_chunk_queue.front().size;
+            memory_size += _partition_chunk_queue.front().chunk->bytes_usage(_partition_chunk_queue.front().from,
+                                                                             _partition_chunk_queue.front().size);
             selected_partition_chunks.emplace_back(std::move(_partition_chunk_queue.front()));
             _partition_chunk_queue.pop();
         }
         _partition_rows_num -= rows_num;
+        _memory_manager->update_memory_usage(-memory_size);
     }
-
+    if (selected_partition_chunks.empty()) {
+        throw std::runtime_error("local exchange gets empty shuffled chunk.");
+    }
     // Unlock during merging partition chunks into a full chunk.
     ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
     chunk->reserve(rows_num);
