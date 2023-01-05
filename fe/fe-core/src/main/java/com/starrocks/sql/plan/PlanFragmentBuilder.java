@@ -587,8 +587,7 @@ public class PlanFragmentBuilder {
                     }
                     totalTabletsNum += selectedTable.getTablets().size();
                     scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
-                    List<Tablet> tablets = selectTabletIds.stream().map(e -> selectedTable.getTablet(e))
-                            .collect(Collectors.toList());
+                    List<Tablet> tablets = selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
                     scanNode.addScanRangeLocations(partition, selectedTable, tablets, localBeId);
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);

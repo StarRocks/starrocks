@@ -313,19 +313,16 @@ public class OlapScanNode extends ScanNode {
     private Collection<Long> distributionPrune(
             MaterializedIndex table,
             DistributionInfo distributionInfo) throws AnalysisException {
-        DistributionPruner distributionPruner = null;
-        switch (distributionInfo.getType()) {
-            case HASH: {
-                HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                distributionPruner = new HashDistributionPruner(table.getTabletIdsInOrder(),
-                        info.getDistributionColumns(),
-                        columnFilters,
-                        info.getBucketNum());
-                return distributionPruner.prune();
-            }
-            default: {
-                return null;
-            }
+        DistributionPruner distributionPruner;
+        if(DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
+            HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
+            distributionPruner = new HashDistributionPruner(table.getTabletIdsInOrder(),
+                    info.getDistributionColumns(),
+                    columnFilters,
+                    info.getBucketNum());
+            return distributionPruner.prune();
+        } else {
+            return null;
         }
     }
 
@@ -926,12 +923,12 @@ public class OlapScanNode extends ScanNode {
                 tabletToPartitionMap.put(tabletId, partitionId);
             }
         }
-        Map<Long, List<Long>> partitionToScanTabletMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size() / 2);
+        Map<Long, List<Long>> partitionToTabletMap = Maps.newHashMapWithExpectedSize(selectedPartitionIds.size() / 2);
         for (Long tabletId : scanTabletIds) {
             long partitionId = tabletToPartitionMap.get(tabletId);
-            partitionToScanTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
+            partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }
 
-        return partitionToScanTabletMap;
+        return partitionToTabletMap;
     }
 }
