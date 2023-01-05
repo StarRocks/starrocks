@@ -11,7 +11,7 @@ ALTER ROUTINE LOAD FOR [db.]job_name
 [load_properties]
 [job_properties]
 FROM data_source
-[data_source_properties]
+[data_source_properties];
 ```
 
 1. **[db.] job_name**
@@ -115,13 +115,13 @@ FROM data_source
     2. `kafka_offsets`
     3. 自定义 property，如 `property.group.id`
 
-注：
+注意：
 
-1. `kafka_partitions` 和 `kafka_offsets` 用于修改待消费的 kafka partition 的 offset，仅能修改当前已经消费的 partition。不能新增 partition。
+`kafka_partitions` 和 `kafka_offsets` 用于修改待消费的 kafka partition 的 offset，仅能修改当前已经消费的 partition。不能新增 partition。
 
 ## 示例
 
-1. 将 `desired_concurrent_number` 修改为 1，调整该参数可调整消费 kafka 并行度，详细调节方式请参考: [通过调整并行度增加 Routine load 消费 kafka 数据速率](https://forum.starrocks.com/t/topic/1675)
+1. 将 `desired_concurrent_number` 修改为 1，调整该参数可调整消费 kafka 并行度，详细调节方式请参考: [通过调整并行度增加 Routine load 消费 kafka 数据速率](https://forum.starrocks.com/t/topic/1675)。
 
     ```sql
     ALTER ROUTINE LOAD FOR db1.label1
