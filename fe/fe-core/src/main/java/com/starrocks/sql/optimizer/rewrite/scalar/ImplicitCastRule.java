@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
@@ -124,6 +125,17 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         ScalarOperator rightChild = predicate.getChild(1);
         Type type1 = leftChild.getType();
         Type type2 = rightChild.getType();
+
+        // For a query like: select 'a' <=> NULL, we should cast Constant Null to the type of the other side
+        if (predicate.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ_FOR_NULL) {
+            if (leftChild.isConstantNull()) {
+                predicate.setChild(0, ConstantOperator.createNull(type2));
+            }
+            if (rightChild.isConstantNull()) {
+                predicate.setChild(1, ConstantOperator.createNull(type1));
+            }
+            return predicate;
+        }
 
         if (type1.matchesType(type2)) {
             return predicate;

@@ -118,6 +118,28 @@ public class ImplicitCastRuleTest {
     }
 
     @Test
+    public void testEqualForNullBinaryPredicate() {
+        BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                        ConstantOperator.createVarchar("a"),
+                        ConstantOperator.createNull(Type.DOUBLE)),
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                        ConstantOperator.createNull(Type.DOUBLE),
+                        ConstantOperator.createVarchar("a")),
+        };
+        for (BinaryPredicateOperator op : ops) {
+            ImplicitCastRule rule = new ImplicitCastRule();
+            ScalarOperator result = rule.apply(op, null);
+
+            assertTrue(result.getChild(0) instanceof ConstantOperator);
+            assertTrue(result.getChild(1) instanceof ConstantOperator);
+
+            assertEquals(PrimitiveType.VARCHAR, result.getChild(0).getType().getPrimitiveType());
+            assertEquals(PrimitiveType.VARCHAR, result.getChild(1).getType().getPrimitiveType());
+        }
+    }
+
+    @Test
     public void testCompoundPredicate() {
         CompoundPredicateOperator op =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
