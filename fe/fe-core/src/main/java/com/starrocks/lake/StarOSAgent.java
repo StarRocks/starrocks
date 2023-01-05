@@ -403,7 +403,7 @@ public class StarOSAgent {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
         // for debug
-        LOG.info("replicas size is {}", replicas);
+        LOG.info("replicas is {}", replicas);
 
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             for (ReplicaInfo replicaInfo : replicas) {
@@ -411,7 +411,7 @@ public class StarOSAgent {
                     WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
                     String workerAddr = workerInfo.getIpPort();
                     String host = workerAddr.split(":")[0];
-                    int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("BePort"));
+                    int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
                     // for debug
                     LOG.info("host is {}, bePort is {}", host, bePort);
                     return new TNetworkAddress(host, bePort);
