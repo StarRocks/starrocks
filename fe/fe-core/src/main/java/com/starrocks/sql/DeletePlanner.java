@@ -112,6 +112,7 @@ public class DeletePlanner {
                 sinkFragment.setHasOlapTableSink();
                 sinkFragment.setForceSetTableSinkDop();
                 sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                sinkFragment.disableAdaptiveDop();
             } else {
                 execPlan.getFragments().get(0).setPipelineDop(1);
             }

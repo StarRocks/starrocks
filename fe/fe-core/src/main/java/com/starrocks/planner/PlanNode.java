@@ -721,6 +721,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return false;
     }
 
+    public boolean canUseAdaptiveDop() {
+        return false;
+    }
+
     public boolean canPushDownRuntimeFilter() {
         // RuntimeFilter can only be pushed into multicast fragment iff.
         // this runtime filter is applied to all consumers. It's quite hard to do

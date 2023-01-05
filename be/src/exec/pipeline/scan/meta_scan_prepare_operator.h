@@ -50,6 +50,8 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
+    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::READY; }
+
 protected:
     std::shared_ptr<MetaScanContextFactory> _scan_ctx_factory;
 };
