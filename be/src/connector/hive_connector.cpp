@@ -375,7 +375,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         jni_scanner_params["input_format"] = hudi_table->get_input_format();
 
 #ifndef NDEBUG
-        for(const auto& it: jni_scanner_params ) {
+        for (const auto& it : jni_scanner_params) {
             VLOG_FILE << "jni scanner params. key = " << it.first << ", value = " << it.second;
         }
 #endif
