@@ -467,8 +467,10 @@ public class HiveMetaClient {
         Map<String, List<ColumnStatisticsObj>> partitionColumnStats;
         try (AutoCloseClient client = getClient()) {
             // there is only non-partition-key column stats in hive metastore
+            List<String> dataColumnNames = new ArrayList<>(columnNames);
+            dataColumnNames.removeAll(partColumnNames);
             partitionColumnStats =
-                    client.hiveClient.getPartitionColumnStatistics(dbName, tableName, partNames, columnNames);
+                    client.hiveClient.getPartitionColumnStatistics(dbName, tableName, partNames, dataColumnNames);
         } catch (Exception e) {
             throw new DdlException("get partition column statistics from hive metastore failed: " + e.getMessage());
         }
