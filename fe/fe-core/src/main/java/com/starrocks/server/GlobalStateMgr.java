@@ -144,7 +144,6 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
@@ -2231,14 +2230,20 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
-            // in memory
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
+            // compression type
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
                     .append("\" = \"");
-            sb.append(olapTable.isInMemory()).append("\"");
+            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
+                sb.append("LZ4").append("\"");
+            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
+                sb.append("LZ4").append("\"");
+            } else {
+                sb.append(olapTable.getCompressionType()).append("\"");
+            }
 
             // enable storage cache && cache ttl
             if (table.isLakeTable()) {
-                Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
+                Map<String, String> storageProperties = olapTable.getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
@@ -2253,52 +2258,46 @@ public class GlobalStateMgr {
                         .append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
-            }
-
-            // storage type
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
-                    .append("\" = \"");
-            sb.append(olapTable.getStorageFormat()).append("\"");
-
-            // enable_persistent_index
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                    .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
-                    .append("\" = \"");
-            sb.append(olapTable.enablePersistentIndex()).append("\"");
-
-            // replicated_storage
-            if (olapTable.enableReplicatedStorage()) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
-                        .append("\" = \"");
-                sb.append(olapTable.enableReplicatedStorage()).append("\"");
-            }
-
-            // write quorum
-            if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
-                        .append("\" = \"");
-                sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
-            }
-
-            // compression type
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
-                    .append("\" = \"");
-            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
-                sb.append("LZ4").append("\"");
-            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
-                sb.append("LZ4").append("\"");
             } else {
-                sb.append(olapTable.getCompressionType()).append("\"");
-            }
-
-            // storage media
-            Map<String, String> properties = olapTable.getTableProperty().getProperties();
-
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                // enable_persistent_index
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                         .append("\" = \"");
-                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                // in memory
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
+                        .append("\" = \"");
+                sb.append(olapTable.isInMemory()).append("\"");
+
+                // storage type
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
+                        .append("\" = \"");
+                sb.append(olapTable.getStorageFormat()).append("\"");
+
+                // replicated_storage
+                if (olapTable.enableReplicatedStorage()) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                            .append("\" = \"");
+                    sb.append(olapTable.enableReplicatedStorage()).append("\"");
+                }
+
+                // write quorum
+                if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
+                            .append("\" = \"");
+                    sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+                }
+
+                // storage media
+                Map<String, String> properties = olapTable.getTableProperty().getProperties();
+
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                }
             }
 
             if (table.getType() == TableType.OLAP_EXTERNAL) {
