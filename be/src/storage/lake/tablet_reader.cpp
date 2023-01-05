@@ -377,7 +377,7 @@ Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const Olap
     std::vector<Datum> values;
     values.reserve(input.size());
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<VectorizedField>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
+        auto f = std::make_shared<VectorizedField>(ChunkHelper::convert_field(i, tablet_schema.column(i)));
         schema.append(f);
         values.emplace_back(Datum());
         if (input.is_null(i)) {

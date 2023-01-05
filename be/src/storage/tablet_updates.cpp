@@ -2527,7 +2527,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
 
     OlapReaderStatistics stats;
 
@@ -2664,10 +2664,10 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                                                 const std::vector<ChunkIteratorPtr>& seg_iterators,
                                                 ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    VectorizedSchema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
+    VectorizedSchema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -2736,7 +2736,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     std::vector<ChunkPtr> chunk_arr;
 
-    VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     ChunkSorter chunk_sorter(_chunk_allocator);
 
     OlapReaderStatistics stats;
@@ -2779,7 +2779,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-        VectorizedSchema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
+        VectorizedSchema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
         ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
         for (auto& seg_iterator : seg_iterators) {

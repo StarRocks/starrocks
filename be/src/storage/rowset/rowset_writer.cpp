@@ -93,15 +93,6 @@ RowsetWriter::RowsetWriter(const RowsetWriterContext& context)
         : _context(context), _num_rows_written(0), _total_row_size(0), _total_data_size(0), _total_index_size(0) {}
 
 Status RowsetWriter::init() {
-    DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
-             _context.tablet_schema->contains_format_v2_column()));
-    // StarRocks has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
-    // When loading data into a tablet created by Apache Doris, the real data format will
-    // be different from the tablet schema, so here we create a new schema matched with the
-    // real data format to init `SegmentWriter`.
-    if (_context.tablet_schema->contains_format_v1_column()) {
-        _rowset_schema = _context.tablet_schema->convert_to_format(kDataFormatV2);
-    }
     _rowset_meta_pb = std::make_unique<RowsetMetaPB>();
     _rowset_meta_pb->set_deprecated_rowset_id(0);
     _rowset_meta_pb->set_rowset_id(_context.rowset_id.to_string());
@@ -373,7 +364,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
         path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     }
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
-    const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
+    const auto* schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     ++_num_segment;
@@ -588,7 +579,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                     _context.tablet_schema->num_columns(), _context.tablet_schema->sort_key_idxes(),
                     config::vertical_compaction_max_columns_per_group, &column_groups);
         }
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
+        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[0]);
         if (!_context.merge_condition.empty()) {
             for (int i = _context.tablet_schema->num_key_columns(); i < _context.tablet_schema->num_columns(); ++i) {
                 if (_context.tablet_schema->schema()->field(i)->name() == _context.merge_condition) {
@@ -699,7 +690,7 @@ Status HorizontalRowsetWriter::_final_merge() {
 
             seg_iterators.clear();
 
-            auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[i]);
+            auto schema = ChunkHelper::convert_schema(*_context.tablet_schema, column_groups[i]);
 
             for (const auto& segment : segments) {
                 auto res = segment->new_iterator(schema, seg_options);
@@ -770,7 +761,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                   << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
                   << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
     } else {
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
+        auto schema = ChunkHelper::convert_schema(*_context.tablet_schema);
 
         for (const auto& segment : segments) {
             auto res = segment->new_iterator(schema, seg_options);
@@ -1057,7 +1048,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_w
     std::lock_guard<std::mutex> l(_lock);
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_file_path(_context.rowset_path_prefix,
                                                                                   _context.rowset_id, _num_segment)));
-    const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
+    const auto* schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     ++_num_segment;

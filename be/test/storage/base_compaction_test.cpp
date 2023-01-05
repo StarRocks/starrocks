@@ -118,7 +118,7 @@ public:
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
-        auto schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
+        auto schema = ChunkHelper::convert_schema(*_tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
