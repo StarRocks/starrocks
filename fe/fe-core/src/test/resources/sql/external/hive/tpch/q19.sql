@@ -47,6 +47,7 @@ RESULT SINK
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
 8:EXCHANGE
+distribution type: GATHER
 cardinality: 1
 
 PLAN FRAGMENT 1(F04)
@@ -56,17 +57,19 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 08
 
 7:AGGREGATE (update serialize)
-|  aggregate: sum[([26: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[(cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [7: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 1.0] ESTIMATE
 |
 6:Project
 |  output columns:
-|  26 <-> cast([6: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [7: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
-|  cardinality: 25518
+|  6 <-> [6: l_extendedprice, DECIMAL64(15,2), true]
+|  7 <-> [7: l_discount, DECIMAL64(15,2), true]
+|  cardinality: 19277
 |  column statistics:
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 2856.1332873207584] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 2856.1332873207584] ESTIMATE
+|  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 5:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -75,7 +78,7 @@ OutPut Exchange Id: 08
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (17: p_partkey), remote = true
 |  output columns: 6, 7
-|  cardinality: 25518
+|  cardinality: 19277
 |  column statistics:
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2856.1332873207584] ESTIMATE
 |  * l_quantity-->[5.0, 35.0, 0.0, 8.0, 50.0] ESTIMATE
@@ -88,9 +91,13 @@ OutPut Exchange Id: 08
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 2856.1332873207584] ESTIMATE
 |
 |----4:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [17: p_partkey, INT, true]
 |       cardinality: 5714286
 |
 2:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [2: l_partkey, INT, true]
 cardinality: 26240725
 
 PLAN FRAGMENT 2(F02)

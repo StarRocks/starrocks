@@ -120,7 +120,6 @@ CREATE EXTERNAL TABLE elastic_search_external_table
     k5 DATETIME
 )
 ENGINE=ELASTICSEARCH
-()
 PROPERTIES (
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
     "user" = "root",
@@ -570,10 +569,10 @@ Description:
 
 > Note:
 >
-> * Hive table schema changes **will not be automatically synchronized to the external table**. You must create another Hive external table in StarRocks.
 > * Currently, the supported Hive storage formats are Parquet, ORC, and CSV.
 If the storage format is CSV, quotation marks cannot be used as escape characters.
 > * The SNAPPY and LZ4 compression formats are supported.
+> * The maximum length of a Hive string column that can be queried is 1 MB. If a string column exceeds 1 MB, it will be processed as a null column.
 
 ### Use a Hive external table
 

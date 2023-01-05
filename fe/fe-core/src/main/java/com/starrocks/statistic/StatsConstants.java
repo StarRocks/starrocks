@@ -21,6 +21,7 @@ public class StatsConstants {
     public static final int STATISTIC_DATA_VERSION = 1;
     public static final int STATISTIC_DICT_VERSION = 101;
     public static final int STATISTIC_HISTOGRAM_VERSION = 2;
+    public static final int STATISTIC_TABLE_VERSION = 3;
 
     public static final String STATISTICS_DB_NAME = "_statistics_";
     public static final String SAMPLE_STATISTICS_TABLE_NAME = "table_statistic_v1";
@@ -32,6 +33,12 @@ public class StatsConstants {
     public static final int CROSS_JOIN_COST_PENALTY = 100000000;
     public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 1000 * 10000;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
+
+    public static final double MAXIMUM_COST = Double.MAX_VALUE / Math.pow(10, 50);
+
+    public static final double MAXIMUM_ROW_COUNT = Double.MAX_VALUE / Math.pow(10, 100);
+
+    public static final double MAXIMUM_OUTPUT_SIZE = Double.MAX_VALUE / Math.pow(10, 80);
 
     //Statistics collection threshold
     public static final String STATISTIC_AUTO_COLLECT_RATIO = "statistic_auto_collect_ratio";

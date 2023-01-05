@@ -47,6 +47,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "output: variance(1: v1)");
 
         sql = "select count_if(v1) from t0;";
-        assertPlanContains(sql, "<slot 4> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)", "output: count(4: case)");
+        assertPlanContains(sql, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
     }
 }

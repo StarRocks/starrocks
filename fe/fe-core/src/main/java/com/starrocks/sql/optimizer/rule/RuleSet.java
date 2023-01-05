@@ -277,9 +277,6 @@ public class RuleSet {
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
                 PushDownPredicateScanRule.BINLOG_SCAN,
-                // Commented out because of UTs in `ExternalTableTest.java`
-                // PushDownPredicateScanRule.MYSQL_SCAN,
-                // PushDownPredicateScanRule.JDBC_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),

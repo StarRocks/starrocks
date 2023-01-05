@@ -67,12 +67,12 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
             size_t input_chunk_size = input_chunk->num_rows();
             _aggregator->update_num_input_rows(input_chunk_size);
             COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-            RETURN_IF_ERROR(_aggregator->evaluate_exprs(input_chunk.get()));
+            RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(input_chunk.get()));
 
             if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
                 // force execute streaming
                 SCOPED_TIMER(_aggregator->streaming_timer());
-                _aggregator->output_chunk_by_streaming(chunk);
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(input_chunk.get(), chunk));
                 break;
             } else if (_aggregator->streaming_preaggregation_mode() ==
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
@@ -123,9 +123,10 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                         SCOPED_TIMER(_aggregator->streaming_timer());
                         size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
                         if (zero_count == 0) {
-                            _aggregator->output_chunk_by_streaming(chunk);
+                            RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(input_chunk.get(), chunk));
                         } else if (zero_count != _aggregator->streaming_selection().size()) {
-                            _aggregator->output_chunk_by_streaming_with_selection(chunk);
+                            RETURN_IF_ERROR(
+                                    _aggregator->output_chunk_by_streaming_with_selection(input_chunk.get(), chunk));
                         }
                     }
 

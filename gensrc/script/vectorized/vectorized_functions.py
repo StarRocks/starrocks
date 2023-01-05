@@ -262,9 +262,20 @@ vectorized_functions = [
     [30151, 'ucase', 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
 
     [30160, 'reverse', 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
-    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim'],
-    [30180, 'ltrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::ltrim'],
-    [30190, 'rtrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::rtrim'],
+    
+    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim', 
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30171, 'trim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30180, 'ltrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::ltrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30181, 'ltrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30190, 'rtrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::rtrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30191, 'rtrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    
     [30200, 'ascii', 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -828,4 +839,7 @@ vectorized_functions = [
     [170000, 'map_size', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
     [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
     [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
+    [170003, 'map_from_arrays', 'ANY_MAP', ['ANY_ARRAY', 'ANY_ARRAY'], 'MapFunctions::map_from_arrays'],
+    # struct functions
+    [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

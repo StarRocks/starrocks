@@ -93,7 +93,7 @@ public class FunctionPEntryObject implements PEntryObject {
             return databaseId == other.databaseId;
         }
         return other.databaseId == this.databaseId &&
-               other.functionSig.equals(this.functionSig);
+                other.functionSig.equals(this.functionSig);
     }
 
     @Override
@@ -111,14 +111,31 @@ public class FunctionPEntryObject implements PEntryObject {
         for (Function f : db.getFunctions()) {
             if (f.signatureString().equals(this.functionSig)) {
                 targetFunc = f;
+                break;
             }
         }
         return targetFunc != null;
     }
 
     @Override
-    public int compareTo(PEntryObject o) {
-        return 0;
+    public int compareTo(PEntryObject obj) {
+        if (!(obj instanceof FunctionPEntryObject)) {
+            throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
+        }
+        FunctionPEntryObject o = (FunctionPEntryObject) obj;
+        if (this.databaseId > o.databaseId) {
+            return 1;
+        } else if (this.databaseId < o.databaseId) {
+            return -1;
+        } else {
+            if (functionSig.equals(ALL_FUNCTIONS_SIG)) {
+                return -1;
+            } else if (o.functionSig.equals(ALL_FUNCTIONS_SIG)) {
+                return 1;
+            } else {
+                return functionSig.compareTo(o.functionSig);
+            }
+        }
     }
 
     @Override
@@ -136,7 +153,7 @@ public class FunctionPEntryObject implements PEntryObject {
         }
         FunctionPEntryObject that = (FunctionPEntryObject) obj;
         return Objects.equal(functionSig, that.functionSig) &&
-               Objects.equal(databaseId, that.databaseId);
+                Objects.equal(databaseId, that.databaseId);
     }
 
     @Override

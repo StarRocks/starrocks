@@ -25,6 +25,9 @@ class StructColumn final : public ColumnFactory<Column, StructColumn> {
 public:
     using Container = Buffer<std::string>;
 
+    // Used to construct an unnamed struct
+    StructColumn(Columns fields) : _fields(std::move(fields)) {}
+
     StructColumn(Columns fields, std::vector<std::string> field_names)
             : _fields(std::move(fields)), _field_names(std::move(field_names)) {
         // Struct must have at least one field.
@@ -157,11 +160,15 @@ public:
     // Struct Column own functions
     const Columns& fields() const;
 
+    bool is_unnamed_struct() const { return _field_names.empty(); }
+
     Columns& fields_column();
 
     ColumnPtr field_column(const std::string& field_name);
 
     const std::vector<std::string>& field_names() const { return _field_names; }
+
+    Status unfold_const_children(const TypeDescriptor& type) override;
 
 private:
     // A collection that contains StructType's subfield column.
@@ -172,4 +179,5 @@ private:
     // _field_names will not participate in serialization because it is created based on meta information
     std::vector<std::string> _field_names;
 };
+
 } // namespace starrocks

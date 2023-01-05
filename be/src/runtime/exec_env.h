@@ -94,6 +94,7 @@ class DriverLimiter;
 namespace lake {
 class LocationProvider;
 class TabletManager;
+class UpdateManager;
 } // namespace lake
 
 // Execution environment for queries/plan fragments.
@@ -217,6 +218,8 @@ public:
 
     lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
 
+    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
+
     AgentServer* agent_server() const { return _agent_server; }
 
     int64_t get_storage_page_cache_size();
@@ -336,6 +339,7 @@ private:
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
     lake::LocationProvider* _lake_location_provider = nullptr;
+    lake::UpdateManager* _lake_update_manager = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;

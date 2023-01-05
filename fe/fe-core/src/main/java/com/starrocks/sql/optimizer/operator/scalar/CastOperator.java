@@ -45,7 +45,7 @@ public class CastOperator extends CallOperator {
     @Override
     public boolean isNullable() {
         ScalarOperator fromOperator = getChild(0);
-        if (ScalarType.isImplicitlyCastable(fromOperator.getType(), getType(), true)) {
+        if (ScalarType.isFullyCompatible(fromOperator.getType(), getType())) {
             return fromOperator.isNullable();
         }
         return true;

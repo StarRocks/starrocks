@@ -40,6 +40,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -299,9 +300,15 @@ public class QueryAnalyzer {
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
 
-            for (Column column : table.getFullSchema()) {
+            List<Column> fullSchema = node.isBinlogQuery()
+                    ? BinlogScanNode.appendBinlogMetaColumns(table.getFullSchema())
+                    : table.getFullSchema();
+            List<Column> baseSchema = node.isBinlogQuery()
+                    ? BinlogScanNode.appendBinlogMetaColumns(table.getBaseSchema())
+                    : table.getBaseSchema();
+            for (Column column : fullSchema) {
                 Field field;
-                if (table.getBaseSchema().contains(column)) {
+                if (baseSchema.contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
                             new SlotRef(tableName, column.getName(), column.getName()), true);
                 } else {

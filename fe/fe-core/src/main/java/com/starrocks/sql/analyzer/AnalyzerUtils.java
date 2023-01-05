@@ -45,6 +45,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -146,19 +147,20 @@ public class AnalyzerUtils {
             return null;
         }
 
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
-                        ErrorType.USER_ERROR);
-            }
-        } else {
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             // check SELECT action on any object(table/view/mv) in db
             if (!PrivilegeManager.checkActionInDb(session, dbName, "SELECT")) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
                                 "Found UDF: %s and need the SELECT action on any object(table/view/mv) in db %s",
                         fnName, dbName), ErrorType.USER_ERROR);
             }
+        } else {
+            if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
+                throw new StarRocksPlannerException(String.format("Access denied. " +
+                        "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                        ErrorType.USER_ERROR);
+            }
+
         }
         return fn;
     }
@@ -172,14 +174,20 @@ public class AnalyzerUtils {
             return null;
         }
 
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!session.getGlobalStateMgr().getAuth().checkGlobalPriv(session, PrivPredicate.USAGE)) {
+        String name = fn.signatureString();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            if (!PrivilegeManager.checkGlobalFunctionAction(session, name,
+                    PrivilegeType.GlobalFunctionAction.USAGE)) {
                 throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE priv for GLOBAL", fnName),
-                        ErrorType.USER_ERROR);
+                                "Found UDF: %s and need the USAGE priv for GLOBAL FUNCTION",
+                        name), ErrorType.USER_ERROR);
             }
         } else {
-            // TODO(yanz): priv check V2 for using global function.
+            if (!session.getGlobalStateMgr().getAuth().checkGlobalPriv(session, PrivPredicate.USAGE)) {
+                throw new StarRocksPlannerException(String.format("Access denied. " +
+                        "Found UDF: %s and need the USAGE priv for GLOBAL", name),
+                        ErrorType.USER_ERROR);
+            }
         }
         return fn;
     }

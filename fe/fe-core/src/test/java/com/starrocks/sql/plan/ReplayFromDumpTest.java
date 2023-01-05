@@ -221,6 +221,7 @@ public class ReplayFromDumpTest {
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----24:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 65744\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
@@ -241,8 +242,9 @@ public class ReplayFromDumpTest {
                 "  |  38 <-> [38: c_city, VARCHAR, false]\n" +
                 "  |  46 <-> [46: s_city, VARCHAR, false]\n" +
                 "  |  cardinality: 28532"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----7:EXCHANGE\n"
-                + "  |       cardinality: 30"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----7:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
+                "  |       cardinality: 30"));
     }
 
     @Test
@@ -259,6 +261,7 @@ public class ReplayFromDumpTest {
                 "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----48:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  41:Project\n" +
@@ -280,11 +283,14 @@ public class ReplayFromDumpTest {
                 "  |  * expr-->[1.0, 2401.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----39:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  32:OlapScanNode\n" +
-                "     table: date_dim, rollup: date_dim"));
+                "     table: date_dim, rollup: date_dim\n"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----18:EXCHANGE\n" +
+                "  |       distribution type: SHUFFLE\n" +
+                "  |       partition exprs: [796: cs_bill_customer_sk, INT, true]\n" +
                 "  |       cardinality: 6304\n" +
                 "  |    \n" +
                 "  2:OlapScanNode\n" +
@@ -397,6 +403,7 @@ public class ReplayFromDumpTest {
                 "  |  * d_date_sk-->[2450815.0, 2452635.0, 0.0, 4.0, 260.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 335"));
     }
 
@@ -604,7 +611,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 38:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 40:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
 
@@ -613,7 +620,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  193:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  206:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
 
@@ -625,15 +632,14 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second, replayPair.second.contains(" 22:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: if(20: c_0_0 != 1: c_0_0, 4: c_0_3, 21: c_0_3) = '1969-12-28', " +
-                "CASE WHEN (22: countRows IS NULL) OR (22: countRows = 0) THEN FALSE " +
-                "WHEN 1: c_0_0 IS NULL THEN NULL WHEN 16: c_0_0 IS NOT NULL THEN TRUE " +
-                "WHEN 23: countNotNulls < 22: countRows THEN NULL ELSE FALSE END IS NULL"));
+                "  |  other join predicates: if(19: c_0_0 != 1: c_0_0, 4: c_0_3, 20: c_0_3) = '1969-12-28', " +
+                "CASE WHEN (21: countRows IS NULL) OR (21: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL " +
+                "WHEN 16: c_0_0 IS NOT NULL THEN TRUE WHEN 22: countNotNulls < 21: countRows THEN NULL ELSE FALSE END IS NULL"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 16: c_0_0 = 1: c_0_0\n" +
-                "  |  other join predicates: if(16: c_0_0 != 1: c_0_0, 4: c_0_3, 18: c_0_3) = '1969-12-28'"));
+                "  |  equal join conjunct: 1: c_0_0 = 16: c_0_0\n" +
+                "  |  other join predicates: if(16: c_0_0 != 1: c_0_0, 4: c_0_3, 17: c_0_3) = '1969-12-28'"));
     }
 
     @Test
@@ -684,4 +690,35 @@ public class ReplayFromDumpTest {
                 "  |      [2, DATE, false] | [7, BIGINT, true] | [8, DECIMAL128(27,19), true]\n" +
                 "  |      [9, DATE, false] | [14, BIGINT, true] | [15, DECIMAL128(27,19), true]"));
     }
+
+    @Test
+    public void testMultiSubqueries() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/subquery_statistics"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("96:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]\n" +
+                "  |  hasNullableGenerateChild: true\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * count-->[0.0, 1.0420273298435367, 0.0, 8.0, 1.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  95:Project\n" +
+                "  |  output columns:\n" +
+                "  |  548 <-> 1\n" +
+                "  |  hasNullableGenerateChild: true\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE"));
+    }
+
+
+    @Test
+    public void testCorrelatedPredicateRewrite() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("1110:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
+    }
+
 }

@@ -15,7 +15,7 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.qe.CoordinatorPreprocessor;
@@ -28,6 +28,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -41,7 +42,16 @@ class MVMaintenanceJobTest {
         view.setId(1024);
         view.setName("view1");
         view.setMaintenancePlan(new ExecPlan());
-        view.setBaseTableIds(ImmutableSet.of(1L, 2L, 3L));
+
+        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        MaterializedView.BaseTableInfo baseTableInfo1 = new MaterializedView.BaseTableInfo(100L, 1L);
+        baseTableInfos.add(baseTableInfo1);
+        MaterializedView.BaseTableInfo baseTableInfo2 = new MaterializedView.BaseTableInfo(100L, 2L);
+        baseTableInfos.add(baseTableInfo2);
+        MaterializedView.BaseTableInfo baseTableInfo3 = new MaterializedView.BaseTableInfo(100L, 2L);
+        baseTableInfos.add(baseTableInfo3);
+
+        view.setBaseTableInfos(baseTableInfos);
 
         MVMaintenanceJob job = new MVMaintenanceJob(view);
         assertFalse(job.isRunnable());

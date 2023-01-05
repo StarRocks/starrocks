@@ -106,6 +106,88 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSelectAnalytic() throws Exception {
+        String sql = "select sum(v1) over(partition by v2) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ]\n" +
+                "  |  partition by: 2: v2");
+
+        sql = "select sum(v1) over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select lead(v1,1,0) over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, lead(1: v1, 1, 0), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING");
+
+        sql = "select lag(v1) over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, lag(1: v1, 1, NULL), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING");
+
+        sql = "select first_value(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded " +
+                "following) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, first_value(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select last_value(v1) over(partition by v2 order by v3 rows 6 preceding) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, last_value(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: ROWS BETWEEN 6 PRECEDING AND CURRENT ROW");
+
+        sql = "select row_number() over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select rank() over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, "3:ANALYTIC\n" +
+                "  |  functions: [, rank(), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select dense_rank() over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, " 3:ANALYTIC\n" +
+                "  |  functions: [, dense_rank(), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded following) " +
+                "from t0";
+        assertPlanContains(sql, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
+
+        sql = "select count(v1) over(partition by v2 order by v3 rows between unbounded preceding and unbounded following) " +
+                "from t0";
+        assertPlanContains(sql, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
+
+        sql = "select min(v1) over(partition by v2 order by v3 rows current row) from t0";
+        assertPlanContains(sql, "window: ROWS BETWEEN CURRENT ROW AND CURRENT ROW");
+
+        sql = "select min(v1) over(partition by v2 order by v3 range UNBOUNDED PRECEDING) from t0";
+        assertPlanContains(sql, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select min(v1) over(partition by v2 order by v3 rows 10 PRECEDING) from t0";
+        assertPlanContains(sql, "window: ROWS BETWEEN 10 PRECEDING AND CURRENT ROW");
+    }
+
+    @Test
     public void testSelectGroupBy() throws Exception {
         String sql = "select v1, count(v2) from t0 group by v1";
         assertPlanContains(sql, "output: count(2: v2)\n" +
@@ -203,10 +285,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "output: sum(2: v2)");
 
         sql = "select sum(case v1 when false then v2 when v2 then 1 else NULL end) from t0";
-        assertPlanContains(sql, "<slot 4> : CASE 1: v1 WHEN 0 THEN 2: v2 WHEN 2: v2 THEN 1 ELSE NULL END");
+        assertPlanContains(sql, "output: sum(CASE 1: v1 WHEN 0 THEN 2: v2 WHEN 2: v2 THEN 1 ELSE NULL END)");
 
         sql = "select count(case when v1 then 1 end) from t0";
-        assertPlanContains(sql, "<slot 4> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)", "output: count(4: case)");
+        assertPlanContains(sql, "<slot 1> : 1: v1", "output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
     }
 
 

@@ -20,6 +20,8 @@
 #include "butil/time.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -49,6 +51,8 @@ TEST_F(StringFunctionTrimTest, trimTest) {
 
     columns.emplace_back(str);
 
+    ctx->set_constant_columns(columns);
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
 
@@ -56,6 +60,82 @@ TEST_F(StringFunctionTrimTest, trimTest) {
 
     for (int k = 0; k < 4096; ++k) {
         ASSERT_EQ("abcd" + std::to_string(k), v->get_data()[k].to_string());
+    }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+}
+
+TEST_F(StringFunctionTrimTest, trimCharTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // string column
+    auto str_col = BinaryColumn::create();
+    for (int j = 0; j < 4096; ++j) {
+        std::string spaces(j, ' ');
+        str_col->append(spaces + "abcd" + std::to_string(j) + spaces);
+    }
+
+    // remove character column
+    auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(" ab", 4096);
+
+    std::vector<ColumnPtr> columns{str_col, remove_col};
+    ctx->set_constant_columns(columns);
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+    ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
+    ASSERT_EQ(4096, result->size());
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    for (int k = 0; k < 4096; ++k) {
+        ASSERT_EQ("cd" + std::to_string(k), v->get_data()[k].to_string());
+    }
+
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+    {
+        // Trim utf-8 characters
+        for (int i = 0; i < 10; i++) {
+            auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("🙂🐶e", 1);
+            auto str_col = BinaryColumn::create();
+            std::string str = "abc🐱🐷";
+            for (int j = 0; j < i; j++) {
+                str += "e🙂🐶";
+                str = "🙂🐶e" + str;
+            }
+            str_col->append(str);
+            Columns columns{str_col, remove_col};
+            ctx->set_constant_columns(columns);
+            ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+            auto maybe_result = StringFunctions::trim(ctx.get(), columns);
+            ASSERT_OK(maybe_result.status());
+            Slice result = *ColumnHelper::get_cpp_data<TYPE_VARCHAR>(maybe_result.value());
+            ASSERT_EQ("abc🐱🐷", std::string(result));
+            ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+        }
+    }
+
+    {
+        // The 2rd parameter must be const
+        auto remove_col = BinaryColumn::create();
+        remove_col->append("ab");
+        ctx->set_constant_columns({nullptr, remove_col});
+        Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+        EXPECT_TRUE(st.is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter of trim only accept literal value", st.to_string());
+    }
+
+    {
+        // The 2rd parameter must not be empty
+        auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 4096);
+        ctx->set_constant_columns({nullptr, remove_col});
+        Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+        EXPECT_TRUE(st.is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter should not be empty string", st.to_string());
+    }
+    {
+        // The 2rd parameter must not be null
+        auto remove_col = ColumnHelper::create_const_null_column(4096);
+        ctx->set_constant_columns({nullptr, remove_col});
+        Status st = StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+        EXPECT_TRUE(st.is_invalid_argument());
+        EXPECT_EQ("Invalid argument: The second parameter should not be null", st.to_string());
     }
 }
 
@@ -67,6 +147,8 @@ TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
 
     columns.emplace_back(str);
 
+    ctx->set_constant_columns(columns);
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -81,6 +163,7 @@ TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
     ASSERT_EQ(1, result->size());
     v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     ASSERT_EQ(v->get_slice(0).size, 0);
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, ltrimTest) {
@@ -94,6 +177,8 @@ TEST_F(StringFunctionTrimTest, ltrimTest) {
 
     columns.emplace_back(str);
 
+    ctx->set_constant_columns(columns);
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::ltrim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
 
@@ -103,6 +188,7 @@ TEST_F(StringFunctionTrimTest, ltrimTest) {
         std::string spaces(k, ' ');
         ASSERT_EQ("abcd" + std::to_string(k) + spaces, v->get_data()[k].to_string());
     }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, rtrimTest) {
@@ -116,6 +202,8 @@ TEST_F(StringFunctionTrimTest, rtrimTest) {
 
     columns.emplace_back(str);
 
+    ctx->set_constant_columns(columns);
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::rtrim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
 
@@ -125,6 +213,7 @@ TEST_F(StringFunctionTrimTest, rtrimTest) {
         std::string spaces(k, ' ');
         ASSERT_EQ(spaces + "abcd" + std::to_string(k), v->get_data()[k].to_string());
     }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
 TEST_F(StringFunctionTrimTest, trimSpacesTest) {
@@ -144,6 +233,8 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
 
     columns.emplace_back(NullableColumn::create(str, nulls));
 
+    ctx->set_constant_columns(columns);
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr rtrim_result = StringFunctions::rtrim(ctx.get(), columns).value();
     ColumnPtr ltrim_result = StringFunctions::ltrim(ctx.get(), columns).value();
     ColumnPtr trim_result = StringFunctions::trim(ctx.get(), columns).value();
@@ -168,5 +259,6 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
             ASSERT_EQ(std::string(), trim_result->get(k).get_slice().to_string());
         }
     }
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 } // namespace starrocks

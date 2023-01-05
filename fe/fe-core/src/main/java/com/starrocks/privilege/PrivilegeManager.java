@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.privilege;
 
 import com.google.common.cache.CacheBuilder;
@@ -141,7 +140,8 @@ public class PrivilegeManager {
                 // GRANT ALL ON ALL
                 for (String typeStr : provider.getAllTypes()) {
                     PrivilegeType t = PrivilegeType.valueOf(typeStr);
-                    initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
+                    initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t,
+                            new ArrayList<>(t.getActionMap().keySet()));
                 }
                 rolePrivilegeCollection.disableMutable();  // not mutable
             }
@@ -153,9 +153,12 @@ public class PrivilegeManager {
                 // ALL system but GRANT AND NODE
                 List<String> actionWithoutNodeGrant = systemTypes.getActionMap().keySet().stream().filter(
                         x -> !x.equals("GRANT") && !x.equals("NODE")).collect(Collectors.toList());
-                initPrivilegeCollections(rolePrivilegeCollection, systemTypes.name(), actionWithoutNodeGrant, null, false);
-                for (PrivilegeType t : Arrays.asList(PrivilegeType.DATABASE, PrivilegeType.TABLE, PrivilegeType.VIEW)) {
-                    initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
+                initPrivilegeCollections(rolePrivilegeCollection, systemTypes.name(), actionWithoutNodeGrant, null,
+                        false);
+                for (PrivilegeType t : Arrays.asList(PrivilegeType.DATABASE, PrivilegeType.TABLE,
+                        PrivilegeType.VIEW, PrivilegeType.MATERIALIZED_VIEW)) {
+                    initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t,
+                            new ArrayList<>(t.getActionMap().keySet()));
                 }
                 rolePrivilegeCollection.disableMutable(); // not mutable
             }
@@ -184,7 +187,8 @@ public class PrivilegeManager {
                         null,
                         false);
                 PrivilegeType t = PrivilegeType.USER;
-                initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
+                initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t,
+                        new ArrayList<>(t.getActionMap().keySet()));
                 rolePrivilegeCollection.disableMutable(); // not mutable
             }
 
@@ -196,7 +200,8 @@ public class PrivilegeManager {
                 List<PEntryObject> object = Arrays.asList(new TablePEntryObject(
                         SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
                 short tableTypeId = provider.getTypeIdByName(PrivilegeType.TABLE.name());
-                ActionSet selectAction = analyzeActionSet(tableTypeId, Arrays.asList(PrivilegeType.TableAction.SELECT.name()));
+                ActionSet selectAction =
+                        analyzeActionSet(tableTypeId, Arrays.asList(PrivilegeType.TableAction.SELECT.name()));
                 rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
             }
 
@@ -248,6 +253,7 @@ public class PrivilegeManager {
             case RESOURCE:
             case CATALOG:
             case RESOURCE_GROUP:
+            case GLOBAL_FUNCTION:
                 objects.add(provider.generateObject(
                         type.name(),
                         Arrays.asList(type.getPlural()),
@@ -268,7 +274,7 @@ public class PrivilegeManager {
 
     // called by initBuiltinRolesAndUsers()
     private RolePrivilegeCollection initBuiltinRoleUnlocked(long roleId, String name) {
-        if (! roleNameToId.containsKey(name)) {
+        if (!roleNameToId.containsKey(name)) {
             RolePrivilegeCollection collection = new RolePrivilegeCollection(
                     name, RolePrivilegeCollection.RoleFlags.MUTABLE);
             roleIdToPrivilegeCollection.put(roleId, collection);
@@ -630,7 +636,8 @@ public class PrivilegeManager {
         }
     }
 
-    public static boolean checkResourceAction(ConnectContext context, String name, PrivilegeType.ResourceAction action) {
+    public static boolean checkResourceAction(ConnectContext context, String name,
+                                              PrivilegeType.ResourceAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
@@ -664,6 +671,18 @@ public class PrivilegeManager {
             return manager.checkResourceGroupAction(collection, name, action);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on resource group {}", action, name, e);
+            return false;
+        }
+    }
+
+    public static boolean checkGlobalFunctionAction(ConnectContext context, String name,
+                                                    PrivilegeType.GlobalFunctionAction action) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            return manager.checkGlobalFunctionAction(collection, name, action);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when checking action[{}] on global function {}", action, name, e);
             return false;
         }
     }
@@ -716,7 +735,7 @@ public class PrivilegeManager {
             return manager.checkMaterializedViewAction(collection, db, materializedView, action);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on materialized view {}.{}",
-                     action, db, materializedView, e);
+                    action, db, materializedView, e);
             return false;
         }
     }
@@ -730,7 +749,7 @@ public class PrivilegeManager {
             return manager.checkFunctionAction(collection, db, functionSig, action);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on function {}.{}",
-                     action, db, functionSig, e);
+                    action, db, functionSig, e);
             return false;
         }
     }
@@ -741,7 +760,8 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             PEntryObject materializedViewObject = manager.provider.generateObject(
-                    PrivilegeType.MATERIALIZED_VIEW.name(), Arrays.asList(db, materializedView), manager.globalStateMgr);
+                    PrivilegeType.MATERIALIZED_VIEW.name(), Arrays.asList(db, materializedView),
+                    manager.globalStateMgr);
             short mvTypeId = manager.analyzeType(PrivilegeType.MATERIALIZED_VIEW.name());
             return manager.provider.searchAnyActionOnObject(mvTypeId, materializedViewObject, collection);
         } catch (PrivilegeException e) {
@@ -907,6 +927,17 @@ public class PrivilegeManager {
         }
     }
 
+    public static Set<Long> getOwnedRolesByUser(UserIdentity userIdentity) throws PrivilegeException {
+        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+        try {
+            manager.userReadLock();
+            UserPrivilegeCollection userCollection = manager.getUserPrivilegeCollectionUnlocked(userIdentity);
+            return userCollection.getAllRoles();
+        } finally {
+            manager.userReadUnlock();
+        }
+    }
+
     protected boolean checkAction(
             PrivilegeCollection collection, PrivilegeType type, String actionName, List<String> objectNames)
             throws PrivilegeException {
@@ -937,7 +968,8 @@ public class PrivilegeManager {
         return checkAction(collection, PrivilegeType.DATABASE, action.name(), Arrays.asList(db));
     }
 
-    protected boolean checkResourceAction(PrivilegeCollection collection, String name, PrivilegeType.ResourceAction action)
+    protected boolean checkResourceAction(PrivilegeCollection collection, String name,
+                                          PrivilegeType.ResourceAction action)
             throws PrivilegeException {
         return checkAction(collection, PrivilegeType.RESOURCE, action.name(), Arrays.asList(name));
     }
@@ -948,6 +980,12 @@ public class PrivilegeManager {
         return checkAction(collection, PrivilegeType.RESOURCE_GROUP, action.name(), Arrays.asList(name));
     }
 
+    protected boolean checkGlobalFunctionAction(PrivilegeCollection collection, String name,
+                                                PrivilegeType.GlobalFunctionAction action)
+            throws PrivilegeException {
+        return checkAction(collection, PrivilegeType.GLOBAL_FUNCTION, action.name(), Arrays.asList(name));
+    }
+
     protected boolean checkCatalogAction(PrivilegeCollection collection, String name,
                                          PrivilegeType.CatalogAction action)
             throws PrivilegeException {
@@ -956,24 +994,24 @@ public class PrivilegeManager {
 
     protected boolean checkViewAction(
             PrivilegeCollection collection, String db, String view, PrivilegeType.ViewAction action)
-        throws PrivilegeException {
+            throws PrivilegeException {
         return checkAction(collection, PrivilegeType.VIEW, action.name(), Arrays.asList(db, view));
     }
 
     protected boolean checkMaterializedViewAction(
             PrivilegeCollection collection, String db, String materializeView,
             PrivilegeType.MaterializedViewAction action)
-        throws PrivilegeException {
+            throws PrivilegeException {
         return checkAction(collection, PrivilegeType.MATERIALIZED_VIEW, action.name(),
-                           Arrays.asList(db, materializeView));
+                Arrays.asList(db, materializeView));
     }
 
     protected boolean checkFunctionAction(
             PrivilegeCollection collection, String db, String functionSig,
             PrivilegeType.FunctionAction action)
-        throws PrivilegeException {
+            throws PrivilegeException {
         return checkAction(collection, PrivilegeType.FUNCTION, action.name(),
-                           Arrays.asList(db, functionSig));
+                Arrays.asList(db, functionSig));
     }
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
@@ -1093,6 +1131,7 @@ public class PrivilegeManager {
                 if (roleIds == null) {
                     roleIds = userCollection.getAllRoles();
                 }
+
                 // 2. get all predecessors base on step 1
                 roleIds = getAllPredecessorsUnlocked(roleIds);
 
@@ -1152,7 +1191,8 @@ public class PrivilegeManager {
         }
     }
 
-    protected UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity) throws PrivilegeException {
+    protected UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
+            throws PrivilegeException {
         UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
         if (userCollection == null) {
             throw new PrivilegeException("cannot find " + userIdentity.toString());
@@ -1236,7 +1276,7 @@ public class PrivilegeManager {
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
                     roleNameToId.put(privilegeCollection.getName(), roleId);
                 }
-                LOG.info("replayed update role {}",  roleId);
+                LOG.info("replayed update role {}", roleId);
             }
         } finally {
             roleWriteUnlock();
@@ -1255,7 +1295,8 @@ public class PrivilegeManager {
             }
             roleIdToPrivilegeCollection.remove(roleId);
             roleNameToId.remove(roleName);
-            globalStateMgr.getEditLog().logDropRole(roleId, collection, provider.getPluginId(), provider.getPluginVersion());
+            globalStateMgr.getEditLog()
+                    .logDropRole(roleId, collection, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("dropped role {}[{}]", roleName, roleId);
         } catch (PrivilegeException e) {
             throw new DdlException("failed to drop role: " + e.getMessage(), e);
@@ -1373,7 +1414,7 @@ public class PrivilegeManager {
 
     /**
      * remove invalid object periodically
-     *
+     * <p>
      * lock order should always be:
      * AuthenticationManager.lock -> PrivilegeManager.userLock -> PrivilegeManager.roleLock
      */

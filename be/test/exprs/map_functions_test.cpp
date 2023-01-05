@@ -22,6 +22,163 @@
 
 namespace starrocks {
 
+PARALLEL_TEST(MapFunctionsTest, test_map) {
+    TypeDescriptor input_keys_type;
+    input_keys_type.type = LogicalType::TYPE_ARRAY;
+    input_keys_type.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor input_values_type;
+    input_values_type.type = LogicalType::TYPE_ARRAY;
+    input_values_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    auto input_keys = ColumnHelper::create_column(input_keys_type, true);
+    // keys:   [[1,2,3], NULL, [4,5], [6,7], NULL, [9]]
+    // values: [[a,b,c], [d],   NULL, [f,g], NULL, [h]]
+    {
+        // [1,2,3]
+        {
+            DatumArray datum{1, 2, 3};
+            input_keys->append_datum(datum);
+        }
+        // NULL
+        input_keys->append_nulls(1);
+        // [4, 5]
+        {
+            DatumArray datum{4, 5};
+            input_keys->append_datum(datum);
+        }
+        // [6, 7]
+        {
+            DatumArray datum{6, 7};
+            input_keys->append_datum(datum);
+        }
+        // NULL
+        input_keys->append_nulls(1);
+        // [9]
+        {
+            DatumArray datum{9};
+            input_keys->append_datum(datum);
+        }
+    }
+    auto input_values = ColumnHelper::create_column(input_values_type, true);
+    {
+        // [a,b,c]
+        {
+            DatumArray datum{"a", "b", "c"};
+            input_values->append_datum(datum);
+        }
+        // [d]
+        {
+            DatumArray datum{"d"};
+            input_values->append_datum(datum);
+        }
+        // NULL
+        input_values->append_nulls(1);
+        // [f,g]
+        {
+            DatumArray datum{"f", "g"};
+            input_values->append_datum(datum);
+        }
+        // NULL
+        input_values->append_nulls(1);
+        // [h]
+        {
+            DatumArray datum{"h"};
+            input_values->append_datum(datum);
+        }
+    }
+    auto ret = MapFunctions::map_from_arrays(nullptr, {input_keys, input_values});
+    EXPECT_TRUE(ret.ok());
+    auto result = std::move(ret.value());
+    EXPECT_EQ(6, result->size());
+
+    EXPECT_STREQ("{1:'a',2:'b',3:'c'}", result->debug_item(0).c_str());
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_TRUE(result->is_null(2));
+    EXPECT_STREQ("{6:'f',7:'g'}", result->debug_item(3).c_str());
+    EXPECT_TRUE(result->is_null(4));
+    EXPECT_STREQ("{9:'h'}", result->debug_item(5).c_str());
+}
+
+PARALLEL_TEST(MapFunctionsTest, test_map_mismatch1) {
+    TypeDescriptor input_keys_type;
+    input_keys_type.type = LogicalType::TYPE_ARRAY;
+    input_keys_type.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor input_values_type;
+    input_values_type.type = LogicalType::TYPE_ARRAY;
+    input_values_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    auto input_keys = ColumnHelper::create_column(input_keys_type, true);
+    // keys:   [[1,2,3], NULL, [4,5]]
+    // values: [[a,b,c], [d],  [h]]
+    {
+        // [1,2,3]
+        {
+            DatumArray datum{1, 2, 3};
+            input_keys->append_datum(datum);
+        }
+        // NULL
+        input_keys->append_nulls(1);
+        // [4, 5]
+        {
+            DatumArray datum{4, 5};
+            input_keys->append_datum(datum);
+        }
+    }
+    auto input_values = ColumnHelper::create_column(input_values_type, true);
+    {
+        // [a,b,c]
+        {
+            DatumArray datum{"a", "b", "c"};
+            input_values->append_datum(datum);
+        }
+        // [d]
+        {
+            DatumArray datum{"d"};
+            input_values->append_datum(datum);
+        }
+        // [h]
+        {
+            DatumArray datum{"h"};
+            input_values->append_datum(datum);
+        }
+    }
+    auto ret = MapFunctions::map_from_arrays(nullptr, {input_keys, input_values});
+    EXPECT_FALSE(ret.ok());
+}
+
+PARALLEL_TEST(MapFunctionsTest, test_map_mismatch2) {
+    TypeDescriptor input_keys_type;
+    input_keys_type.type = LogicalType::TYPE_ARRAY;
+    input_keys_type.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor input_values_type;
+    input_values_type.type = LogicalType::TYPE_ARRAY;
+    input_values_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    auto input_keys = ColumnHelper::create_column(input_keys_type, true);
+    // keys:   [[1,2,3]]
+    // values: [[a]]
+    {
+        // [1,2,3]
+        {
+            DatumArray datum{1, 2, 3};
+            input_keys->append_datum(datum);
+        }
+    }
+    auto input_values = ColumnHelper::create_column(input_values_type, true);
+    {
+        // [a]
+        {
+            DatumArray datum{"a"};
+            input_values->append_datum(datum);
+        }
+    }
+    auto ret = MapFunctions::map_from_arrays(nullptr, {input_keys, input_values});
+    EXPECT_FALSE(ret.ok());
+}
+
 PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     TypeDescriptor type_map_int_int;
     type_map_int_int.type = LogicalType::TYPE_MAP;

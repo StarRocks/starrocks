@@ -172,14 +172,14 @@ public:
 
     static AggregateFunctionPtr MakeNtileWindowFunction();
 
-    template <LogicalType PT>
+    template <LogicalType PT, bool ignoreNulls>
     static AggregateFunctionPtr MakeFirstValueWindowFunction() {
-        return std::make_shared<FirstValueWindowFunction<PT>>();
+        return std::make_shared<FirstValueWindowFunction<PT, ignoreNulls>>();
     }
 
-    template <LogicalType PT>
+    template <LogicalType PT, bool ignoreNulls>
     static AggregateFunctionPtr MakeLastValueWindowFunction() {
-        return std::make_shared<LastValueWindowFunction<PT>>();
+        return std::make_shared<LastValueWindowFunction<PT, ignoreNulls>>();
     }
 
     template <LogicalType PT>

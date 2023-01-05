@@ -37,12 +37,13 @@ EXCHANGE ID: 07
 UNPARTITIONED
 
 6:AGGREGATE (update serialize)
-|  output: sum(28: case), sum(29: expr)
+|  output: sum(if(22: P_TYPE LIKE 'PROMO%', 34: multiply, 0.0)), sum(29: expr)
 |  group by:
 |
 5:Project
-|  <slot 28> : if(22: P_TYPE LIKE 'PROMO%', 34: multiply, 0.0)
+|  <slot 22> : 22: P_TYPE
 |  <slot 29> : 34: multiply
+|  <slot 34> : 34: multiply
 |  common expressions:
 |  <slot 33> : 1.0 - 7: L_DISCOUNT
 |  <slot 34> : 6: L_EXTENDEDPRICE * 33: subtract
@@ -60,7 +61,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: part
 tabletRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=20000000
 avgRowSize=33.0
 numNodes=0
@@ -85,7 +85,6 @@ PREDICATES: 11: L_SHIPDATE >= '1997-02-01', 11: L_SHIPDATE < '1997-03-01'
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=6653465
 avgRowSize=28.0
 numNodes=0

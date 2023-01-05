@@ -79,7 +79,7 @@ public class PlanTestBase {
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
+
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
@@ -1076,6 +1076,8 @@ public class PlanTestBase {
                 ");");
 
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
+        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
     @AfterClass
@@ -1148,6 +1150,21 @@ public class PlanTestBase {
         return planCount;
     }
 
+
+    public String getSQLFile(String filename) {
+        String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
+        File file = new File(path + "/" + filename + ".sql");
+
+        String sql;
+        try (BufferedReader re = new BufferedReader(new FileReader(file))) {
+            sql = re.lines().collect(Collectors.joining());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        return sql;
+    }
+
     public void runFileUnitTest(String filename, boolean debug) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
@@ -1161,6 +1178,7 @@ public class PlanTestBase {
         StringBuilder fragmentStatistics = new StringBuilder();
         StringBuilder dumpInfoString = new StringBuilder();
         StringBuilder planEnumerate = new StringBuilder();
+        StringBuilder exceptString = new StringBuilder();
 
         boolean isDebug = debug;
         boolean isComment = false;
@@ -1250,9 +1268,21 @@ public class PlanTestBase {
                         mode = "dump";
                         isDump = true;
                         continue;
+                    case "[except]":
+                        exceptString = new StringBuilder();
+                        mode = "except";
+                        continue;
                     case "[end]":
-                        Pair<String, ExecPlan> pair =
-                                UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        Pair<String, ExecPlan> pair = null;
+                        try {
+                            pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+                        } catch (Exception ex) {
+                            if (!exceptString.toString().isEmpty()) {
+                                Assert.assertEquals(ex.getMessage(), exceptString.toString());
+                                continue;
+                            }
+                            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+                        }
 
                         try {
                             String fra = null;
@@ -1324,6 +1354,9 @@ public class PlanTestBase {
                         break;
                     case "enum":
                         planEnumerate.append(tempStr).append("\n");
+                        break;
+                    case "except":
+                        exceptString.append(tempStr);
                         break;
                 }
             }

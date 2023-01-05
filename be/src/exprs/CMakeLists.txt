@@ -44,6 +44,7 @@ set(EXPR_FILES
   case_expr.cpp
   cast_expr.cpp
   cast_expr_array.cpp
+  cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
   dictmapping_expr.cpp
@@ -68,6 +69,7 @@ set(EXPR_FILES
   locate.cpp
   map_element_expr.cpp
   map_functions.cpp
+  struct_functions.cpp
   math_functions.cpp
   percentile_functions.cpp
   runtime_filter_bank.cpp

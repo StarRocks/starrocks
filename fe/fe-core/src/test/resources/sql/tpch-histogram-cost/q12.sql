@@ -34,6 +34,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 10:MERGING-EXCHANGE
+distribution type: GATHER
 cardinality: 2
 column statistics:
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
@@ -65,6 +66,8 @@ OutPut Exchange Id: 10
 |  * sum-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
 |
 7:EXCHANGE
+distribution type: SHUFFLE
+partition exprs: [25: L_SHIPMODE, VARCHAR, false]
 cardinality: 2
 
 PLAN FRAGMENT 2(F00)
@@ -110,6 +113,8 @@ OutPut Exchange Id: 07
 |  * case-->[-Infinity, Infinity, 0.0, 8.0, 2.0] ESTIMATE
 |
 |----3:EXCHANGE
+|       distribution type: SHUFFLE
+|       partition exprs: [11: L_ORDERKEY, INT, false]
 |       cardinality: 6508504
 |
 0:OlapScanNode

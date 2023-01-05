@@ -107,13 +107,13 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         }
         if (st.ok() && iter->chunk != nullptr && iter->indexes_size > 0) {
             st = delta_writer->write(*iter->chunk, iter->indexes, iter->indexes_size);
-            LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id=" << delta_writer->tablet_id()
-                                    << " txn_id=" << delta_writer->txn_id() << ": " << st;
+            LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
+                                    << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
         if (st.ok() && iter->finish_after_write) {
             st = delta_writer->finish();
-            LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id=" << delta_writer->tablet_id()
-                                    << " txn_id=" << delta_writer->txn_id() << ": " << st;
+            LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
+                                    << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
         iter->cb(st);
     }

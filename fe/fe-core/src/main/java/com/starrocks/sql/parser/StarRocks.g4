@@ -1234,16 +1234,18 @@ grantPrivilegeStatement
     : GRANT IMPERSONATE ON user TO grantRevokeClause                                                     #grantImpersonateBrief
     | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause                   #grantTablePrivBrief
     | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause         #grantPrivWithType
-    | GRANT privilegeActionList ON privilegeType qualifiedName '(' typeList ')' TO grantRevokeClause     #grantPrivWithFunc
+    | GRANT privilegeActionList ON GLOBAL? privilegeType qualifiedName '(' typeList ')' TO grantRevokeClause     #grantPrivWithFunc
     | GRANT privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? TO grantRevokeClause   #grantOnAll
+    | GRANT privilegeActionList ON ALL GLOBAL FUNCTIONS TO grantRevokeClause   #grantOnAllGlobalFunctions
     ;
 
 revokePrivilegeStatement
     : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                                  #revokeImpersonateBrief
     | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause                #revokeTablePrivBrief
     | REVOKE privilegeActionList ON privilegeType (privilegeObjectNameList)? FROM grantRevokeClause      #revokePrivWithType
-    | REVOKE privilegeActionList ON privilegeType qualifiedName '(' typeList ')' FROM grantRevokeClause  #revokePrivWithFunc
+    | REVOKE privilegeActionList ON GLOBAL? privilegeType qualifiedName '(' typeList ')' FROM grantRevokeClause  #revokePrivWithFunc
     | REVOKE privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? FROM grantRevokeClause  #revokeOnAll
+    | REVOKE privilegeActionList ON ALL GLOBAL FUNCTIONS FROM grantRevokeClause   #revokeOnAllGlobalFunctions
     ;
 
 grantRoleStatement
@@ -1678,6 +1680,11 @@ booleanExpression
 
 predicate
     : valueExpression (predicateOperations[$valueExpression.ctx])?
+    | tupleInSubquery
+    ;
+
+tupleInSubquery
+    : '(' expression (',' expression)+ ')' NOT? IN '(' queryRelation ')'
     ;
 
 predicateOperations [ParserRuleContext value]
@@ -1824,8 +1831,8 @@ windowFunction
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
-    | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
-    | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
+    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     ;
 
 whenClause
@@ -1838,6 +1845,10 @@ over
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
+    ;
+
+ignoreNulls
+    : IGNORE NULLS
     ;
 
 windowFrame
@@ -2039,16 +2050,16 @@ mapType
     : MAP '<' type ',' type '>'
     ;
 
-columnNameColonType
-    : identifier ':' type comment?
+subfieldDesc
+    : identifier type
     ;
 
-columnNameColonTypeList
-    : columnNameColonType (',' columnNameColonType)*
+subfieldDescs
+    : subfieldDesc (',' subfieldDesc)*
     ;
 
 structType
-    : STRUCT '<' columnNameColonTypeList '>'
+    : STRUCT '<' subfieldDescs '>'
     ;
 
 typeParameter
@@ -2144,16 +2155,16 @@ nonReserved
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
+    | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
-    | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
+    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

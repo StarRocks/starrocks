@@ -1,5 +1,18 @@
 # StarRocks version 2.3
 
+## 2.3.7
+
+Release date: December 30, 2022
+
+### Bug fixes
+
+The following bugs are fixed:
+
+- The column that is allowed to be NULL in a StarRocks table is incorrectly set to NOT NULL in a view created from that table. [#15749](https://github.com/StarRocks/starrocks/pull/15749)
+- A new tablet version is generated when data is loaded into StarRocks. However, the FE may not yet detect the new tablet version and still requires BEs to read the historical version of the tablet. If the garbage collection mechanism removes the historical version, the query cannot find the historical version and an error "Not found: get_applied_rowsets(version xxxx) failed tablet:xxx #version:x [xxxxxxx]" is returned. [#15726](https://github.com/StarRocks/starrocks/pull/15726)
+- FE takes up too much memory when data is frequently loaded. [#15377](https://github.com/StarRocks/starrocks/pull/15377)
+- For aggregate queries and multi-table JOIN queries, the statistics are not collected accurately and CROSS JOIN occurs in the execution plans, resulting in long query latency. [#12067](https://github.com/StarRocks/starrocks/pull/12067)  [#14780](https://github.com/StarRocks/starrocks/pull/14780)
+
 ## 2.3.6
 
 Release date: December 22, 2022
@@ -14,7 +27,6 @@ Release date: December 22, 2022
 The following bugs are fixed:
 
 - BEs may hang up when the resource group feature is enabled and multiple resource groups run queries at the same time. [#14905](https://github.com/StarRocks/starrocks/pull/14905)
-- For aggregation queries and multi-table JOIN queries, the statistics are not collected accurately and CROSS JOIN occurs in the execution plan, resulting in long query latency. [#15497](https://github.com/StarRocks/starrocks/pull/15497)
 - When you create a materialized view by using CREATE MATERIALIZED VIEW AS SELECT, if the SELECT clause does not use aggregate functions, and uses GROUP BY, for example `CREATE MATERIALIZED VIEW test_view AS SELECT a,b from test group by b,a order by a;`, then the BE nodes all crash. [#13743](https://github.com/StarRocks/starrocks/pull/13743)
 - If you restart the BE immediately after you use INSERT INTO to frequently load data into the primary key table to make data changes, the BE may restart very slowly. [#15128](https://github.com/StarRocks/starrocks/pull/15128)
 - If only JRE is installed on the environment and JDK is not installed, queries fail after FE restarts. After the bug is fixed, FE cannot restart in that environment and it returns error `JAVA_HOME can not be jre`. To successfully restart FE, you need to install JDK on the environment. [#14332](https://github.com/StarRocks/starrocks/pull/14332)

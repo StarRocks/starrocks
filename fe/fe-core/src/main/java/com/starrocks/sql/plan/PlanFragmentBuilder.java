@@ -965,7 +965,7 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(predicates);
-                icebergScanNode.getScanRangeLocations();
+                icebergScanNode.setupScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
@@ -1841,6 +1841,9 @@ public class PlanFragmentBuilder {
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
             sortNode.setHasNullableGenerateChild();
             sortNode.computeStatistics(optExpr.getStatistics());
+            if (shouldBuildGlobalRuntimeFilter()) {
+                sortNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl());
+            }
 
             inputFragment.setPlanRoot(sortNode);
             return inputFragment;
@@ -1947,7 +1950,7 @@ public class PlanFragmentBuilder {
             }
 
             if (shouldBuildGlobalRuntimeFilter()) {
-                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
+                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl());
             }
 
             leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
@@ -2084,7 +2087,7 @@ public class PlanFragmentBuilder {
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
 
             if (shouldBuildGlobalRuntimeFilter()) {
-                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
+                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, context.getDescTbl());
             }
 
             return buildJoinFragment(context, leftFragment, rightFragment, distributionMode, joinNode);
@@ -2852,15 +2855,12 @@ public class PlanFragmentBuilder {
 
             BinlogScanNode binlogScanNode = new BinlogScanNode(context.getNextNodeId(), tupleDescriptor);
             binlogScanNode.computeStatistics(optExpr.getStatistics());
-
-            // Add OPS column of binlog
-            SlotDescriptor opsSlot = context.getDescTbl().addSlotDescriptor(tupleDescriptor);
-            opsSlot.setIsNullable(false);
-            opsSlot.setType(Type.TINYINT);
-            opsSlot.setLabel("ops");
-            ColumnRefOperator columnRef =
-                    new ColumnRefOperator(opsSlot.getId().asInt(), opsSlot.getType(), "ops", opsSlot.getIsNullable());
-            context.getColRefToExpr().put(columnRef, new SlotRef(opsSlot.getLabel(), opsSlot));
+            try {
+                binlogScanNode.computeScanRanges();
+            } catch (UserException e) {
+                throw new StarRocksPlannerException(
+                        "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
+            }
 
             // Add slots from table
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {

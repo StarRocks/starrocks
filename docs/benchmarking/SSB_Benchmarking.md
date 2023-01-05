@@ -32,7 +32,7 @@ In the SSB single-table test and low-cardinality aggregation test, three cloud h
 
 StarRocks, Apache Druid, and ClickHouse are deployed on hosts of the same configurations.
 
-- StarRocks: three BE nodes and one FE node
+- StarRocks: three BEs and one FE. The FE can be separately deployed or hybrid deployed with BEs.
 - ClickHouse: three nodes with distributed tables
 - Apache Druid has an additional 8-core master host deployed with Broker, Coordinator, Overlord, and Router. However, we will not pressure test  the master host and the impact is negligible. Historical and MiddleManager processes are hybrid deployed on hosts that have the same configuration as StarRocks and ClickHouse.
 

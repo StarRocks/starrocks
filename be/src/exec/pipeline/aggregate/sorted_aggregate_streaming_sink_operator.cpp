@@ -57,7 +57,8 @@ Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, con
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
+    RETURN_IF_ERROR(_aggregator->evaluate_agg_fn_exprs(chunk.get()));
     _aggregator->streaming_compute_agg_state(chunk_size);
     return Status::OK();
 }

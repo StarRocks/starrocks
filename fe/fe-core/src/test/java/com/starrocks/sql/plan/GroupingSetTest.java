@@ -288,6 +288,9 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  <slot 11> : datediff(CAST(split(9: array_join, ',')[2] AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
                 "  |  \n" +
                 "  5:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [BIGINT]\n" +
                 "  |  \n" +
                 "  4:Project\n" +
                 "  |  <slot 6> : 6: array_agg\n" +

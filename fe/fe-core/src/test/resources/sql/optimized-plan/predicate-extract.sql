@@ -22,7 +22,7 @@ where
 [result]
 AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(29: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(28: expr)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(multiply(6: L_EXTENDEDPRICE, subtract(1.0, 7: L_DISCOUNT)))}] group by [[]] having [null]
             INNER JOIN (join-predicate [2: L_PARTKEY = 18: P_PARTKEY] post-join-predicate [null])
                 SCAN (columns[2: L_PARTKEY, 6: L_EXTENDEDPRICE, 7: L_DISCOUNT, 14: L_SHIPINSTRUCT] predicate[14: L_SHIPINSTRUCT = DELIVER IN PERSON])
                 EXCHANGE BROADCAST
@@ -55,7 +55,7 @@ where
 [result]
 AGGREGATE ([GLOBAL] aggregate [{29: sum=sum(29: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
-        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(28: expr)}] group by [[]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{29: sum=sum(multiply(6: L_EXTENDEDPRICE, subtract(1.0, 7: L_DISCOUNT)))}] group by [[]] having [null]
             INNER JOIN (join-predicate [18: P_PARTKEY = 2: L_PARTKEY AND 21: P_BRAND = Brand#45 AND 24: P_CONTAINER IN (SM CASE, SM BOX, SM PACK, SM PKG) AND 5: L_QUANTITY >= 5.0 AND 5: L_QUANTITY <= 15.0 AND 23: P_SIZE >= 1 AND 23: P_SIZE <= 5 AND 15: L_SHIPMODE IN (AIR, AIR REG) AND 14: L_SHIPINSTRUCT = DELIVER IN PERSON OR 21: P_BRAND = Brand#11 AND 24: P_CONTAINER IN (MED BAG, MED BOX, MED PKG, MED PACK)] post-join-predicate [null])
                 SCAN (columns[2: L_PARTKEY, 5: L_QUANTITY, 6: L_EXTENDEDPRICE, 7: L_DISCOUNT, 14: L_SHIPINSTRUCT, 15: L_SHIPMODE] predicate[null])
                 EXCHANGE BROADCAST

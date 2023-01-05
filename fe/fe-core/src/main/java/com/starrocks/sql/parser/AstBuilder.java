@@ -57,6 +57,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OdbcScalarFunctionCall;
 import com.starrocks.analysis.OrderByElement;
@@ -93,6 +94,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -3560,9 +3562,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds);
         if (context.bracketHint() != null) {
             for (Identifier identifier : visit(context.bracketHint().identifier(), Identifier.class)) {
-                if (identifier.getValue().equals("_META_")) {
-                    tableRelation.setMetaQuery(true);
-                }
+                // just ignore the hint if failed to add it which is the same as the previous behaviour
+                tableRelation.addTableHint(identifier.getValue());
             }
         }
 
@@ -3740,6 +3741,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QueryRelation query = (QueryRelation) visit(context.queryRelation());
 
         return new InPredicate((Expr) visit(context.value), new Subquery(new QueryStatement(query)), isNotIn);
+    }
+
+    @Override
+    public ParseNode visitTupleInSubquery(StarRocksParser.TupleInSubqueryContext context) {
+        boolean isNotIn = context.NOT() != null;
+        QueryRelation query = (QueryRelation) visit(context.queryRelation());
+        List<Expr> tupleExpressions = visit(context.expression(), Expr.class);
+
+        return new MultiInPredicate(tupleExpressions, new Subquery(new QueryStatement(query)), isNotIn);
     }
 
     @Override
@@ -4114,6 +4124,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
     }
 
+    public String extendPrivilegeType(boolean isGlobal, String type) {
+        if (isGlobal) {
+            if (type.equals("FUNCTIONS") || type.equals("FUNCTION")) {
+                return "GLOBAL_" + type;
+            }
+        }
+        return type;
+    }
+
     @Override
     public ParseNode visitGrantOnAll(StarRocksParser.GrantOnAllContext context) {
         GrantRevokePrivilegeObjects objects =
@@ -4121,6 +4140,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String type = ((Identifier) visit(context.privilegeType(0))).getValue().toUpperCase();
         return newGrantRevokePrivilegeStmt(
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, true);
+    }
+
+    public ParseNode visitAllGlobalFunctions(StarRocksParser.GrantRevokeClauseContext grantRevokeClauseContext,
+                                             StarRocksParser.PrivilegeActionListContext privilegeActionListContext,
+                                             boolean isGrant) {
+        String type = PrivilegeType.GLOBAL_FUNCTION.getPlural();
+        List<String> allTypes = ImmutableList.of(type);
+        GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
+        objects.setAll(allTypes, null, null);
+        return newGrantRevokePrivilegeStmt(
+                type, privilegeActionListContext, grantRevokeClauseContext, objects, isGrant);
+    }
+
+    @Override
+    public ParseNode visitGrantOnAllGlobalFunctions(StarRocksParser.GrantOnAllGlobalFunctionsContext context) {
+        return visitAllGlobalFunctions(context.grantRevokeClause(), context.privilegeActionList(), true);
+    }
+
+    @Override
+    public ParseNode visitRevokeOnAllGlobalFunctions(StarRocksParser.RevokeOnAllGlobalFunctionsContext context) {
+        return visitAllGlobalFunctions(context.grantRevokeClause(), context.privilegeActionList(), false);
     }
 
     @Override
@@ -4135,6 +4175,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantPrivWithFunc(StarRocksParser.GrantPrivWithFuncContext context) {
         String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        type = extendPrivilegeType(context.GLOBAL() != null, type);
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
         FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
@@ -4147,6 +4188,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitRevokePrivWithFunc(StarRocksParser.RevokePrivWithFuncContext context) {
         String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        type = extendPrivilegeType(context.GLOBAL() != null, type);
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
         FunctionArgsDef argsDef = getFunctionArgsDef(context.typeList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
@@ -4282,6 +4324,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitPredicate(StarRocksParser.PredicateContext context) {
         if (context.predicateOperations() != null) {
             return visit(context.predicateOperations());
+        } else if (context.tupleInSubquery() != null) {
+            return visit(context.tupleInSubquery());
         } else {
             return visit(context.valueExpression());
         }
@@ -4556,6 +4600,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
+        if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
+            if (context.expression().size() < 1) {
+                throw new ParsingException("Arithmetic expression least one parameter");
+            }
+            
+            Expr e1 = (Expr) visit(context.expression(0));
+            Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
+            return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2);
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
         if (context.over() != null) {
@@ -4607,8 +4661,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
         if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
-            return new FunctionCallExpr(context.name.getText().toLowerCase(),
+            FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
+            functionCallExpr.setIgnoreNulls(context.ignoreNulls() != null);
+            return functionCallExpr;
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
     }
@@ -5519,12 +5575,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public StructType getStructType(StarRocksParser.StructTypeContext context) {
         ArrayList<StructField> fields = new ArrayList<>();
-        List<StarRocksParser.ColumnNameColonTypeContext> typeLists =
-                context.columnNameColonTypeList().columnNameColonType();
-        for (StarRocksParser.ColumnNameColonTypeContext type : typeLists) {
-            String comment = (type.comment() == null) ? null :
-                    ((StringLiteral) visit(type.comment().string())).getStringValue();
-            fields.add(new StructField(type.identifier().getText(), getType(type.type()), comment));
+        List<StarRocksParser.SubfieldDescContext> subfields =
+                context.subfieldDescs().subfieldDesc();
+        for (StarRocksParser.SubfieldDescContext type : subfields) {
+            fields.add(new StructField(type.identifier().getText(), getType(type.type()), null));
         }
 
         return new StructType(fields);

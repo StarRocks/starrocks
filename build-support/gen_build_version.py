@@ -14,15 +14,11 @@
 # limitations under the License.
 
 import argparse
+import hashlib
 import os
 import subprocess
 
 from datetime import datetime
-
-def func(a, *args, **kwargs):
-    print(a)
-    print(args)
-    print(kwargs)
 
 def get_version():
     version = os.getenv("STARROCKS_VERSION")
@@ -34,7 +30,7 @@ def get_commit_hash():
     git_res = subprocess.Popen(["git", "rev-parse", "--short", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = git_res.communicate()
 
-    commit_hash = ''
+    commit_hash = u''
     if git_res.returncode == 0:
         commit_hash = out.decode('utf-8').strip()
     return commit_hash
@@ -70,7 +66,21 @@ def get_java_version():
         return out.decode('utf-8').replace("\"", "\\\"").strip()
     return "unknown jdk"
 
-def write_file(file_name, file_content):
+def get_fingerprint(items):
+    if not isinstance(items, list):
+        items = [items]
+    return hashlib.md5(",".join(items).encode()).hexdigest()
+
+def skip_write_if_fingerprint_unchanged(file_name, file_content, fingerprint):
+    if os.path.exists(file_name):
+        with open(file_name) as fh:
+            data = fh.read()
+            import re
+            m = re.search(r"FINGERPRINT: (?P<fingerprint>\w+)", data)
+            old_fingerprint = m.group('fingerprint') if m else None
+            print('gen_build_version.py {}: old fingerprint = {}, new fingerprint = {}'.format(file_name, old_fingerprint, fingerprint))
+            if old_fingerprint == fingerprint:
+                return
     with open(file_name, 'w') as fh:
         fh.write(file_content)
 
@@ -94,7 +104,7 @@ package com.starrocks.common;
 // limitations under the License.
 
 // This is a generated file, DO NOT EDIT IT.
-// COMMIT_HASH: {COMMIT_HASH}
+// FINGERPRINT: {FINGERPRINT}
 
 public class Version {{
     public static final String STARROCKS_VERSION = "{VERSION}";
@@ -106,15 +116,17 @@ public class Version {{
     public static final String STARROCKS_JAVA_COMPILE_VERSION = "{JAVA_VERSION}";
 }}
 '''
-    file_content = file_format.format(VERSION = version, COMMIT_HASH = commit_hash,
-            BUILD_TYPE = build_type, BUILD_TIME = build_time, BUILD_USER=user, BUILD_HOST=host,
-            JAVA_VERSION = java_version)
+    fingerprint = get_fingerprint([version, commit_hash, build_type, user, host, java_version])
+    file_content = file_format.format(VERSION=version, COMMIT_HASH=commit_hash,
+                                      BUILD_TYPE=build_type, BUILD_TIME=build_time,
+                                      BUILD_USER=user, BUILD_HOST=host,
+                                      JAVA_VERSION=java_version, FINGERPRINT=fingerprint)
 
     file_name = java_path + "/com/starrocks/common/Version.java"
     d = os.path.dirname(file_name)
     if not os.path.exists(d):
         os.makedirs(d)
-    write_file(file_name, file_content)
+    skip_write_if_fingerprint_unchanged(file_name, file_content, fingerprint)
 
 def generate_cpp_file(cpp_path, version, commit_hash, build_type, build_time, user, host):
     file_format = '''
@@ -133,28 +145,28 @@ def generate_cpp_file(cpp_path, version, commit_hash, build_type, build_time, us
 // limitations under the License.
 
 // NOTE: This is a generated file, DO NOT EDIT IT
-// COMMIT_HASH: {COMMIT_HASH}
+// FINGERPRINT: {FINGERPRINT}
 
 namespace starrocks {{
 
 const char* STARROCKS_VERSION = "{VERSION}";
 const char* STARROCKS_COMMIT_HASH = "{COMMIT_HASH}";
-const char* STARROCKS_BUILD_TYPE = "{BUILD_TYPE}";
 const char* STARROCKS_BUILD_TIME = "{BUILD_TIME}";
 const char* STARROCKS_BUILD_USER = "{BUILD_USER}";
 const char* STARROCKS_BUILD_HOST = "{BUILD_HOST}";
 }}
 
 '''
-    file_content = file_format.format(VERSION = version, COMMIT_HASH = commit_hash,
-            BUILD_TYPE = build_type, BUILD_TIME = build_time,
-            BUILD_USER = user, BUILD_HOST = host)
+    fingerprint = get_fingerprint([version, commit_hash, build_type, user, host])
+    file_content = file_format.format(VERSION=version, COMMIT_HASH=commit_hash,
+                                      BUILD_TYPE=build_type, BUILD_TIME=build_time,
+                                      BUILD_USER=user, BUILD_HOST=host, FINGERPRINT=fingerprint)
 
     file_name = cpp_path + "/version.cpp"
     d = os.path.dirname(file_name)
     if not os.path.exists(d):
         os.makedirs(d)
-    write_file(file_name, file_content)
+    skip_write_if_fingerprint_unchanged(file_name, file_content, fingerprint)
 
 def main():
     parser = argparse.ArgumentParser()

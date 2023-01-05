@@ -107,6 +107,10 @@ public class SelectAnalyzer {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
+            if (!aggregates.isEmpty() && selectList.isDistinct()) {
+                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+            }
+
             new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
                     .verify(sourceExpressions);
 
@@ -244,7 +248,6 @@ public class SelectAnalyzer {
                 } else {
                     name = item.getAlias() == null ? AstToStringBuilder.toString(item.getExpr()) : item.getAlias();
                 }
-
 
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
