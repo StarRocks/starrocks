@@ -140,7 +140,7 @@ enum AggrAutoState { INIT_PREAGG = 0, ADJUST, PASS_THROUGH, FORCE_PREAGG, PREAGG
 
 struct AggrAutoContext {
     constexpr static size_t ContinuousUpperLimit = 100000;
-    constexpr static int BuildLimit = 3;
+    constexpr static int PreaggLimit = 3;
     constexpr static double LowReduction = 0.3;
     constexpr static double HighReduction = 0.8;
     constexpr static size_t MaxHtSize = 100 * 1024 * 1024;

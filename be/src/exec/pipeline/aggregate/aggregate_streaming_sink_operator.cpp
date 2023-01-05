@@ -125,6 +125,21 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(C
     return Status::OK();
 }
 
+/* A state machine autoly chooses different preaggregation modes. If the initial preaggregation cannot insert
+ * more data into hash table, the state shifts from INIT_PREAGG to ADJUST. The ADJUST state has 3 branches:
+ * (1) If continuous AggrAutoContext::AdjustLimit chunks are lowly aggregated, shifting to PASS_THROUGH state;
+ * (2) Else if continuous AggrAutoContext::AdjustLimit chunks are highly aggregated, shifting to PREAGG state;
+ * (3) otherwise or the ADJUST state sustains continuous_limit times, shifting to SELECTIVE_PREAGG state.
+ *
+ * PASS_THROUGH state sustains continuous_limit times, it will force doing preaggregation if the hash table's size <
+ * MaxHtSize, otherwise it will go to ADJUST state. Doing FORCE_PREAGG aims freshening the hash table with new coming
+ * rows, helping to aggregating new coming chunks with limiting the size of hash table.
+ *
+ * FORCE_PREAGG/PREAGG state aggregates AggrAutoContext::PreaggLimit chunks, then going to ADJUST state. PreaggLimit
+ * should be small enough to limit the size of hash table.
+ *
+ * SELECTIVE_PREAGG state aggregates continuous_limit chunks, then shifting to ADJUST state.
+ */
 Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const size_t chunk_size) {
     size_t allocated_bytes = _aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool());
     const size_t continuous_limit = _auto_context.get_continuous_limit();
@@ -232,20 +247,20 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(ChunkPtr chunk, const
         RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk_size));
         _auto_context.preagg_count++;
         if (_auto_state == AggrAutoState::FORCE_PREAGG) {
-            if (_auto_context.preagg_count > AggrAutoContext::BuildLimit) {
+            if (_auto_context.preagg_count > AggrAutoContext::PreaggLimit) {
                 _auto_state = AggrAutoState::ADJUST;
                 _auto_context.preagg_count = 0;
                 _auto_context.adjust_count = 0;
-                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::BuildLimit << " "
+                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::PreaggLimit << " "
                           << _auto_context.get_auto_state_string(AggrAutoState::FORCE_PREAGG) << " -> "
                           << _auto_context.get_auto_state_string(_auto_state);
             }
         } else {
-            if (_auto_context.preagg_count > AggrAutoContext::AdjustLimit + AggrAutoContext::BuildLimit) {
+            if (_auto_context.preagg_count > AggrAutoContext::AdjustLimit + AggrAutoContext::PreaggLimit) {
                 _auto_state = AggrAutoState::ADJUST;
                 _auto_context.preagg_count = 0;
                 _auto_context.adjust_count = 0;
-                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::AdjustLimit + AggrAutoContext::BuildLimit
+                LOG(INFO) << "auto agg: continuous " << AggrAutoContext::AdjustLimit + AggrAutoContext::PreaggLimit
                           << " " << _auto_context.get_auto_state_string(AggrAutoState::PREAGG) << " -> "
                           << _auto_context.get_auto_state_string(_auto_state);
             }
