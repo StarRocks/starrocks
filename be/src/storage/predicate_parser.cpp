@@ -96,4 +96,8 @@ StatusOr<ColumnPredicate*> PredicateParser::parse_expr_ctx(const SlotDescriptor&
     return ColumnExprPredicate::make_column_expr_predicate(type_info, column_id, state, expr_ctx, &slot_desc);
 }
 
+uint32_t PredicateParser::column_id(const SlotDescriptor& slot_desc) {
+    return _schema.field_index(slot_desc.col_name());
+}
+
 } // namespace starrocks
