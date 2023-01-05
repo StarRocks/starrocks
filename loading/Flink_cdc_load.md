@@ -355,7 +355,11 @@
    Job ID: 5ae005c4b3425d8bb13fe660260a35da
    ```
 
-   如果您只需要同步部分数据，例如支付时间在2021年12月21日之后的数据，则可以在 `INSERT INTO SELECT` 语句中使用 `WHERE` 子句设置过滤条件，例如  `WHERE pay_dt >'2021-12-21'`。不满足该条件的数据，即支付时间在2021年12月21日或者之前的数据不会同步至StarRocks。
+   如果您只需要同步部分数据，例如支付时间在 2021 年 01 月 01 日之后的数据，则可以在 INSERT INTO SELECT 语句中使用 WHERE order_date >'2021-01-01' 设置过滤条件。不满足该条件的数据，即支付时间在 2021 年 01 月 01 日或者之前的数据不会同步至 StarRocks。
+
+   ```sql
+   INSERT INTO `default_catalog`.`demo`.`orders_sink` SELECT product_id,product_name, COUNT(*) AS cnt FROM `default_catalog`.`demo`.`orders_src` WHERE order_date >'2021-01-01 00:00:01' GROUP BY product_id,product_name;
+   ```
 
    如果返回如下结果，则表示 Flink job 已经提交，开始同步全量和增量数据。
 
