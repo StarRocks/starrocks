@@ -2,7 +2,7 @@
 
 ## 功能
 
-该语法用于修改已经创建的例行导入作业，且只能修改处于 **PAUSED** 状态的作业。通过 [PAUSE](../data-manipulation/PAUSE%20ROUTINE%20LOAD.md) 命令可以暂停导入的任务，进行`ALTER ROUTINE LOAD`操作。
+该语法用于修改已经创建的例行导入作业，且只能修改处于 **PAUSED** 状态的作业。通过 [PAUSE](../data-manipulation/PAUSE%20ROUTINE%20LOAD.md) 命令可以暂停导入的任务，进行 `ALTER ROUTINE LOAD` 操作。
 
 ## 语法
 
@@ -34,13 +34,13 @@ FROM data_source
 
     1. 设置列分隔符
 
-        对于 csv 格式的数据，可以指定列分隔符，例如，将列分隔符指定为逗号 ","
+        对于 csv 格式的数据，可以指定列分隔符，例如，将列分隔符指定为逗号 ","。
 
         ```sql
         COLUMNS TERMINATED BY ","
         ```
 
-        默认为：\t
+        默认为：\t。
 
     2. 指定列映射关系
 
@@ -67,7 +67,7 @@ FROM data_source
             COLUMNS (k2, k1, xxx, v1, v2 = k1 + k2);
             ```
 
-        对于 csv 格式的数据，COLUMNS 中的映射列的个数必须要与数据中的列个数一致
+        对于 csv 格式的数据，COLUMNS 中的映射列的个数必须要与数据中的列个数一致。
 
     3. 指定过滤条件
 
@@ -131,7 +131,7 @@ FROM data_source
     );
     ```
 
-2. 将 `desired_concurrent_number` 修改为 10，修改 partition 的 offset，修改 group id.
+2. 将 `desired_concurrent_number` 修改为 10，修改 partition 的 offset，修改 group id。
 
     ```sql
     ALTER ROUTINE LOAD FOR db1.label1
@@ -147,7 +147,7 @@ FROM data_source
     );
     ```
 
-3. 更改导入的过滤条件为 `a > 0`，并且指定导入的 partition 为 `p1`
+3. 更改导入的过滤条件为 `a > 0`，并且指定导入的 partition 为 `p1`。
 
     ```sql
     ALTER ROUTINE LOAD FOR db1.label1
