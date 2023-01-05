@@ -94,6 +94,10 @@ public abstract class ConnectorScanner {
         return tableSize;
     }
 
+    public OffHeapTable getOffHeapTable() {
+        return offHeapTable;
+    }
+
     public long getNextOffHeapChunk() throws IOException {
         initOffHeapTable();
         int numRows = 0;

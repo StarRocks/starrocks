@@ -1,5 +1,9 @@
 package com.starrocks.hudi.reader;
 
+import com.starrocks.jni.connector.OffHeapTable;
+import com.starrocks.utils.Platform;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -9,6 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class TestHudiSliceScanner {
+
     public class LocalHudiScanner extends HudiSliceScanner {
         public Map<Integer, ArrayList<Object>> buffer;
 
@@ -46,8 +51,14 @@ public class TestHudiSliceScanner {
         }
     }
 
-    public LocalHudiScanner createHudiSliceScanner(int fetchSize, Map<String, String> params) {
-        return new LocalHudiScanner(fetchSize, params);
+    @Before
+    public void setUp() {
+        Platform.enableUnsafeMemoryTracker();
+    }
+
+    @After
+    public void tearDown() {
+        Platform.disableUnsafeMemoryTracker();
     }
 
     /*
@@ -70,8 +81,8 @@ TBLPROPERTIES (
   _hoodie_commit_time     _hoodie_commit_seqno    _hoodie_record_key      _hoodie_partition_path  _hoodie_file_name       uuid    ts      a       b       c       d       e
 20230105143305070       20230105143305070_0_10  AA0             64798197-be6a-4eca-9898-0c2ed75b9d65-0  AA0     20      1       hello   [10,20,30]      {"key1":1,"key2":2}     {"a":10,"b":"world"}
      */
-    @Test
-    public void doScanTest() throws IOException {
+
+    Map<String, String> createScanTestParams() {
         Map<String, String> params = new HashMap<>();
         URL resource = TestHudiSliceScanner.class.getResource("/test_hudi_mor");
         String basePath = resource.getPath().toString();
@@ -89,7 +100,13 @@ TBLPROPERTIES (
         params.put("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
         params.put("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
         params.put("required_fields", "a,b");
-        LocalHudiScanner scanner = createHudiSliceScanner(4096, params);
+        return params;
+    }
+
+    @Test
+    public void doScanTest0() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        LocalHudiScanner scanner = new LocalHudiScanner(4096, params);
 
         System.out.println(scanner.toString());
         scanner.open();
@@ -100,6 +117,24 @@ TBLPROPERTIES (
             }
         }
         System.out.println(scanner.dumpBuffer());
+        scanner.close();
+    }
+
+    @Test
+    public void doScanTest1() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        HudiSliceScanner scanner = new HudiSliceScanner(4096, params);
+
+        System.out.println(scanner.toString());
+        scanner.open();
+        while (true) {
+            scanner.getNextOffHeapChunk();
+            OffHeapTable table = scanner.getOffHeapTable();
+            if (table.getNumRows() == 0) {
+                break;
+            }
+            table.show(10);
+        }
         scanner.close();
     }
 }

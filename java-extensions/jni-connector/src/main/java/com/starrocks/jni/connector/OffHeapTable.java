@@ -143,6 +143,10 @@ public class OffHeapTable {
         this.numRows = numRows;
     }
 
+    public int getNumRows() {
+        return this.numRows;
+    }
+
     public long getMetaNativeAddress() {
         meta.appendLong(numRows);
         for (int i = 0; i < types.length; i++) {
