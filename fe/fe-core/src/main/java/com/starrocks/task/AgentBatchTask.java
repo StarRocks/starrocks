@@ -95,7 +95,14 @@ public class AgentBatchTask implements Runnable {
         tasks.add(agentTask);
     }
 
-
+    public void addTasks(Long backendId, List<AgentTask> agentTasks) {
+        if (agentTasks == null) {
+            return;
+        }
+        List<AgentTask> tasks = backendIdToTasks.computeIfAbsent(backendId, k -> new ArrayList<>());
+        tasks.addAll(agentTasks);
+    }
+    
     public List<AgentTask> getAllTasks() {
         List<AgentTask> tasks = new ArrayList<>(getTaskNum());
         for (Map.Entry<Long, List<AgentTask>> entry : this.backendIdToTasks.entrySet()) {
