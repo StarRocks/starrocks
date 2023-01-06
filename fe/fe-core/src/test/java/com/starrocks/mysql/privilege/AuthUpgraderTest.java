@@ -659,7 +659,7 @@ public class AuthUpgraderTest {
             // alter system
             sqlList.addAll(Arrays.asList(
                     "ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
-                    "CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";"
+                    "CANCEL DECOMMISSION BACKEND \"27.0.0.1:9010\", \"27.0.0.1:9011\";"
             ));
             // kill, set, show proc
             sqlList.addAll(Arrays.asList(
