@@ -2230,17 +2230,6 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
-            // compression type
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
-                    .append("\" = \"");
-            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
-                sb.append("LZ4").append("\"");
-            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
-                sb.append("LZ4").append("\"");
-            } else {
-                sb.append(olapTable.getCompressionType()).append("\"");
-            }
-
             // enable storage cache && cache ttl
             if (table.isLakeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
@@ -2259,12 +2248,6 @@ public class GlobalStateMgr {
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
             } else {
-                // enable_persistent_index
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
-                        .append("\" = \"");
-                sb.append(olapTable.enablePersistentIndex()).append("\"");
-
                 // in memory
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
                         .append("\" = \"");
@@ -2274,6 +2257,12 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
                         .append("\" = \"");
                 sb.append(olapTable.getStorageFormat()).append("\"");
+
+                // enable_persistent_index
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
 
                 // replicated_storage
                 if (olapTable.enableReplicatedStorage()) {
@@ -2298,6 +2287,17 @@ public class GlobalStateMgr {
                             .append("\" = \"");
                     sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
                 }
+            }
+
+            // compression type
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
+                    .append("\" = \"");
+            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
+                sb.append("LZ4").append("\"");
+            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
+                sb.append("LZ4").append("\"");
+            } else {
+                sb.append(olapTable.getCompressionType()).append("\"");
             }
 
             if (table.getType() == TableType.OLAP_EXTERNAL) {
