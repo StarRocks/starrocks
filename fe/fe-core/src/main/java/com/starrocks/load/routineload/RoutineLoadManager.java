@@ -219,6 +219,7 @@ public class RoutineLoadManager implements Writable {
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }
 
+    // 一条create routine load语句到这一个函数应该就结束了，关于job的执行，可能是一个异步的过程。
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
         writeLock();
         try {

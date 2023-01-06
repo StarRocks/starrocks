@@ -387,6 +387,9 @@ public class StreamLoadInfo {
         if (routineLoadJob.getFormat().equals("json")) {
             fileFormatType = TFileFormatType.FORMAT_JSON;
         }
+        if (routineLoadJob.getFormat().equals("avro_confluent")) {
+            fileFormatType = TFileFormatType.FORMAT_AVRO_CONFLUENT;
+        }
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(dummyId, -1L /* dummy txn id */,
                 TFileType.FILE_STREAM, fileFormatType);
         streamLoadInfo.setOptionalFromRoutineLoadJob(routineLoadJob);

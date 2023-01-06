@@ -986,6 +986,59 @@ build_streamvbyte() {
     make install
 }
 
+# jasson
+build_jasson() {
+    check_if_source_exist $JANSSON_SOURCE
+    cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
+    mkdir -p build
+    cd build
+    cmake .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    make -j$PARALLEL
+    make install
+}
+
+# avro-cpp
+build_avro_cpp() {
+    check_if_source_exist $AVRO_SOURCE
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
+    mkdir -p build
+    cd build
+    cmake -G "Unix Makefiles" ..
+    make -j$PARALLEL
+    make install
+}
+
+# avro-c
+build_avro_c() {
+    check_if_source_exist $AVRO_SOURCE
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
+    mkdir -p build
+    cd build
+    cmake .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_BUILD_TYPE=Release
+    make -j$PARALLEL
+    make install
+}
+
+# serders
+build_serdes() {
+    OLD_CFLAGS=$CFLAGS
+    unset CFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    check_if_source_exist $SERDES_SOURCE
+    cd $TP_SOURCE_DIR/$SERDES_SOURCE
+    export LIBS="-lrt -lpthread -lcurl -lssl -lcrypto -ldl -ljansson -lavrocpp -lavro -lz" 
+    ./configure --prefix=${TP_INSTALL_DIR} \
+                --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
+                --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
+                --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
+                --enable-static \
+                --disable-shared
+    make -j$PARALLEL
+    make install
+    unset LIBS
+    export CFLAGS=$OLD_CFLAGS
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
 export CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -1036,6 +1089,10 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
+build_jasson
+build_avro_cpp
+build_avro_c
+build_serdes
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

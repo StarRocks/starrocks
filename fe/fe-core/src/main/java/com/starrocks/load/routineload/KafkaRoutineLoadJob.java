@@ -94,7 +94,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     public static final String KAFKA_FILE_CATALOG = "kafka";
 
     private static final String PROPERTY_KAFKA_GROUP_ID = "group.id";
-
     private String brokerList;
     private String topic;
     // optional, user want to load partitions.
@@ -106,6 +105,16 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     // kafka properties, property prefix will be mapped to kafka custom parameters, which can be extended in the future
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
+
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    private String confluentSchemaRegistryUrl = null;
 
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
@@ -464,6 +473,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
         if (!stmt.getCustomKafkaProperties().isEmpty()) {
             setCustomKafkaProperties(stmt.getCustomKafkaProperties());
+        }
+
+        if (stmt.getConfluentSchemaRegistryUrl() != null) {
+            setConfluentSchemaRegistryUrl(stmt.getConfluentSchemaRegistryUrl());
         }
 
         setDefaultKafkaGroupID();

@@ -305,6 +305,9 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     }
 }
 
+// 1. registry url放到fe和be之间哪个参数里
+// 2. 哪里初始化这个url
+// 3. 是否需要再封装一个类
 void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool* consumer_pool,
                                         const ExecFinishCallback& cb) {
 #define HANDLE_ERROR(stmt, err_msg)                                                        \
