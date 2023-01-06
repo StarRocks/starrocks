@@ -11,8 +11,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及�
 
     > **说明**
     >
-    > - 查询命中不支持的数据类型会报错。
-    > - StarRocks 当前仅支持查询 Parquet 和 ORC 格式的 MAP 和 STRUCT 类型数据。
+    > 查询命中不支持的数据类型会报错。
 
 - StarRocks 2.4 及以上版本支持使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hive 表结构。查看时，不支持的数据类型会显示成`unknown`。
 
