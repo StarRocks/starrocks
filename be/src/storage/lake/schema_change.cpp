@@ -16,9 +16,12 @@
 
 #include <memory>
 
+#include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/schema_change_utils.h"
@@ -131,8 +134,7 @@ Status ConvertedSchemaChange::init() {
     _read_params.use_page_cache = false;
 
     ASSIGN_OR_RETURN(auto base_tablet_schema, _base_tablet->get_schema());
-    _base_schema =
-            ChunkHelper::convert_schema(*base_tablet_schema, *_chunk_changer->get_mutable_selected_column_indexs());
+    _base_schema = ChunkHelper::convert_schema(*base_tablet_schema, _chunk_changer->get_selected_column_indexes());
     ASSIGN_OR_RETURN(_new_tablet_schema, _new_tablet->get_schema());
     _new_schema = ChunkHelper::convert_schema(*_new_tablet_schema);
 
@@ -351,8 +353,10 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
     }
     RETURN_IF_ERROR(sc_procedure->init());
 
+    ASSIGN_OR_RETURN(auto base_metadata, base_tablet->get_metadata(alter_version));
+
     // convert rowsets
-    ASSIGN_OR_RETURN(auto rowsets, base_tablet->get_rowsets(alter_version));
+    ASSIGN_OR_RETURN(auto rowsets, base_tablet->get_rowsets(base_metadata.get()));
     for (const auto& rowset : rowsets) {
         auto st = sc_procedure->process(rowset, op_schema_change->add_rowsets());
         if (!st.ok()) {
@@ -362,6 +366,16 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
             LOG(WARNING) << err_msg;
             return st;
         }
+    }
+
+    // copy delete vector files if necessary
+    if (op_schema_change->linked_segment() && base_metadata->has_delvec_meta()) {
+        for (const auto& delvec : base_metadata->delvec_meta().delvecs()) {
+            auto src = base_tablet->del_location(tablet_delvec_filename(base_tablet->id(), delvec.page().version()));
+            auto dst = new_tablet->del_location(tablet_delvec_filename(new_tablet->id(), delvec.page().version()));
+            RETURN_IF_ERROR(fs::copy_file(src, dst));
+        }
+        op_schema_change->mutable_delvec_meta()->CopyFrom(base_metadata->delvec_meta());
     }
 
     LOG(INFO) << "finish convert historical rowsets from base tablet to new tablet. "

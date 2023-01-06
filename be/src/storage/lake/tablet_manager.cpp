@@ -592,6 +592,9 @@ static Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_c
             }
         }
     }
+    if (op_schema_change.has_delvec_meta()) {
+        metadata->mutable_delvec_meta()->CopyFrom(op_schema_change.delvec_meta());
+    }
     return Status::OK();
 }
 
@@ -614,6 +617,9 @@ Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata* metad
                         int64_t base_version) {
     if (log.has_op_write()) {
         RETURN_IF_ERROR(apply_pk_write_log(log.op_write(), tablet, metadata, builder, base_version));
+    }
+    if(log.has_op_schema_change()) {
+        RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change(), metadata));
     }
     return Status::OK();
 }
