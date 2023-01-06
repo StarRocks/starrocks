@@ -94,6 +94,10 @@ public class SelectAnalyzer {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
+            if (!aggregates.isEmpty() && selectList.isDistinct()) {
+                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+            }
+
             new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
                     .verify(sourceExpressions);
 
