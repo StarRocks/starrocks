@@ -328,7 +328,7 @@ public class Optimizer {
     private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
         OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
-        validator.visit(tree, null);
+        validator.validate(result);
         return result;
     }
 
@@ -376,6 +376,11 @@ public class Optimizer {
                 }
                 context.getRuleSet().addJoinTransformationRules();
             }
+        }
+
+        if (sessionVariable.isEnableOuterJoinReorder() &&
+                Utils.capableOuterReorder(tree, sessionVariable.getCboReorderThresholdUseExhaustive())) {
+            context.getRuleSet().addOuterJoinTransformationRules();
         }
 
         if (!sessionVariable.isMVPlanner()) {

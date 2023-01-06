@@ -48,6 +48,11 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
         sqlMode = ConnectContext.get() == null ? 0 : ConnectContext.get().getSessionVariable().getSqlMode();
     }
 
+    public void validate(OptExpression root) {
+        root.initRowOutputInfo();
+        visit(root, null);
+    }
+
     @Override
     public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
         return commonValidate(optExpression);

@@ -216,10 +216,10 @@ public class PredicateStatisticsCalculator {
             ScalarOperator leftChild = predicate.getChild(0);
             ScalarOperator rightChild = predicate.getChild(1);
             Preconditions.checkState(!(leftChild.isConstantRef() && rightChild.isConstantRef()),
-                    "ConstantRef-cmp-ConstantRef not supported here, should be eliminated earlier: " +
-                            predicate.toString());
+                    "ConstantRef-cmp-ConstantRef not supported here, %s should be eliminated earlier",
+                            predicate);
             Preconditions.checkState(!(leftChild.isConstant() && rightChild.isVariable()),
-                    "Constant-cmp-Column not supported here, should be deal earlier: " + predicate.toString());
+                    "Constant-cmp-Column not supported here, %s should be deal earlier", predicate);
             // For CastOperator, we need use child as column statistics
             leftChild = getChildForCastOperator(leftChild);
             rightChild = getChildForCastOperator(rightChild);
