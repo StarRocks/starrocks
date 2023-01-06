@@ -521,7 +521,7 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         rowid_t upper_rowid = num_rows();
 
         if (!range.upper().empty()) {
-            _init_column_iterators<false>(range.lower().schema());
+            _init_column_iterators<false>(range.upper().schema());
             RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
         }
         if (!range.lower().empty() && upper_rowid > 0) {
