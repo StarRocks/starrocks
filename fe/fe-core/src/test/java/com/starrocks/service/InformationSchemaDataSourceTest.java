@@ -88,7 +88,7 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals("OLAP", tableConfig.getTable_engine());
         Assert.assertEquals("PRIMARY_KEYS", tableConfig.getTable_model());
         Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getPrimary_key());
-        Assert.assertEquals("NULL", tableConfig.getPartition_key());
+        Assert.assertEquals("", tableConfig.getPartition_key());
         Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getDistribute_key());
         Assert.assertEquals("HASH", tableConfig.getDistribute_type());
         Assert.assertEquals(3, tableConfig.getDistribute_bucket());

@@ -65,9 +65,8 @@ public class InformationSchemaDataSource {
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
 
     private static final String DEF = "def";
-    private static final String DEF_NULL = "NULL";
-    // If a column uses this as a default value means that the column will be displayed as NULL
-    private static final long DEF_NULL_NUM = -1L;
+    private static final String DEFAULT_EMPTY_STRING = "";
+    private static final long DEFAULT_EMPTY_NUM = -1L;
     private static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
     private static List<String> getAuthorizedDbs(TAuthInfo authInfo) throws TException {
@@ -132,13 +131,7 @@ public class InformationSchemaDataSource {
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
-                            tableConfigInfo = genNormalTableConfigInfo(table, tableConfigInfo);
-                        } else {
-                            // SCHEMA (use default)
-                            // INLINE_VIEW (use default)
-                            // VIEW (use default)
-                            // BROKER (use default)                           
-                            tableConfigInfo = genDefaultConfigInfo(tableConfigInfo);
+                            genNormalTableConfigInfo(table, tableConfigInfo);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
@@ -239,11 +232,11 @@ public class InformationSchemaDataSource {
                     idx++;
                 }
             } catch (NotImplementedException e) {
-                partitionKeySb.append(DEF_NULL);
+                partitionKeySb.append(DEFAULT_EMPTY_STRING);
                 LOG.warn("The partition of type range seems not implement getPartitionColumns");
             }            
         } else {
-            partitionKeySb.append(DEF_NULL);
+            partitionKeySb.append(DEFAULT_EMPTY_STRING);
         }
 
         // PRIMARY KEYS
@@ -255,7 +248,7 @@ public class InformationSchemaDataSource {
         }
         String pkSb = Joiner.on(", ").join(keysColumnNames);
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
-                                       || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEF_NULL);
+                                       || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
@@ -269,24 +262,8 @@ public class InformationSchemaDataSource {
                 sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
             }
             tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
-        } else {
-            tableConfigInfo.setSort_key(DEF_NULL);
         }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
-        return tableConfigInfo;
-    }
-
-
-    private static TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
-        tableConfigInfo.setTable_engine(DEF);
-        tableConfigInfo.setTable_model(DEF);
-        tableConfigInfo.setPrimary_key(DEF);
-        tableConfigInfo.setPartition_key(DEF);
-        tableConfigInfo.setDistribute_bucket(0);
-        tableConfigInfo.setDistribute_type(DEF);
-        tableConfigInfo.setDistribute_key(DEF);
-        tableConfigInfo.setSort_key(DEF);
-        tableConfigInfo.setProperties(DEF);
         return tableConfigInfo;
     }
 
@@ -310,21 +287,19 @@ public class InformationSchemaDataSource {
                         info.setTable_name(table.getName());
                         info.setTable_type(transferTableTypeToAdaptMysql(table.getType()));
                         info.setEngine(table.getEngine());
-                        info.setVersion(DEF_NULL_NUM);
-                        info.setRow_format(DEF_NULL);
+                        info.setVersion(DEFAULT_EMPTY_NUM);
                         // TABLE_ROWS (depend on the table type)
                         // AVG_ROW_LENGTH (depend on the table type)
                         // DATA_LENGTH (depend on the table type)
-                        info.setMax_data_length(DEF_NULL_NUM);
-                        info.setIndex_length(DEF_NULL_NUM);
-                        info.setData_free(DEF_NULL_NUM);
-                        info.setAuto_increment(DEF_NULL_NUM);
+                        info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                        info.setIndex_length(DEFAULT_EMPTY_NUM);
+                        info.setData_free(DEFAULT_EMPTY_NUM);
+                        info.setAuto_increment(DEFAULT_EMPTY_NUM);
                         info.setCreate_time(table.getCreateTime());
                         // UPDATE_TIME (depend on the table type)
                         info.setCheck_time(table.getLastCheckTime() / 1000);
                         info.setTable_collation(UTF8_GENERAL_CI);
-                        info.setChecksum(DEF_NULL_NUM);
-                        info.setCreate_options(DEF_NULL);
+                        info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
 
                         if (table.isOlapOrLakeTable() || 
@@ -334,13 +309,13 @@ public class InformationSchemaDataSource {
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
-                            info = genNormalTableInfo(table, info);
+                            genNormalTableInfo(table, info);
                         } else {
                             // SCHEMA (use default)
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
                             // BROKER (use default)                           
-                            info = genDefaultConfigInfo(info);
+                            genDefaultConfigInfo(info);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
@@ -409,10 +384,10 @@ public class InformationSchemaDataSource {
     }
 
     private static TTableInfo genDefaultConfigInfo(TTableInfo info) {
-        info.setTable_rows(DEF_NULL_NUM);
-        info.setAvg_row_length(DEF_NULL_NUM);
-        info.setData_length(DEF_NULL_NUM);
-        info.setUpdate_time(DEF_NULL_NUM);
+        info.setTable_rows(DEFAULT_EMPTY_NUM);
+        info.setAvg_row_length(DEFAULT_EMPTY_NUM);
+        info.setData_length(DEFAULT_EMPTY_NUM);
+        info.setUpdate_time(DEFAULT_EMPTY_NUM);
         return info;
     }
 }
